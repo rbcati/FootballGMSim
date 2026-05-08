@@ -6744,7 +6744,7 @@ function recalculateTeamCap(teamId, { debugReason = '' } = {}) {
   });
 
   if (isDev && debugReason === 'load-save') {
-    console.info(`[load-save] ${team?.abbr ?? team?.name ?? teamId} payroll`, {
+    console.info('[load-save] %s payroll', team?.abbr ?? team?.name ?? teamId, {
       playerPayroll: payroll.playerPayroll,
       staffPayroll: payroll.staffPayroll,
       deadCap: payroll.deadCap,
