@@ -22,6 +22,23 @@ describe('buildLeagueStatsHubModel', () => {
     expect(model.playerTables.receiving[0].recYds).toBe(20);
   });
 
+  it('de-dupes completed games by game id across schedule shapes', () => {
+    const sharedGame = { id: 's1_w1_1_2', played: true, homeId: 1, awayId: 2, homeScore: 21, awayScore: 14, teamStats:{ home:{ passYd:200,rushYd:40 }, away:{ passYd:150,rushYd:30 } } };
+    const league = {
+      teams: [{ id: 1, abbr: 'AAA' }, { id: 2, abbr: 'BBB' }],
+      schedule: {
+        weeks: [{ week: 1, games: [sharedGame] }],
+      },
+    };
+    // Also include legacy flat schedule referencing the same object (should not double count)
+    league.scheduleLegacy = [sharedGame];
+    // pass both shapes into buildLeagueStatsHubModel via spread
+    const model = buildLeagueStatsHubModel({ ...league, schedule: [...(league.scheduleLegacy ?? []), ...(league.schedule.weeks[0].games ?? [])] });
+    const offense = model.teamRankings.offense.find((r) => r.teamId === 1);
+    expect(offense.g).toBe(1);
+    expect(offense.ppg).toBe(21);
+  });
+
   it('leader cards prefer non-zero leaders', () => {
     const model = buildLeagueStatsHubModel({ teams:[{id:1,abbr:'AAA',roster:[{id:1,name:'A',position:'QB',seasonStats:{passYards:0}},{id:2,name:'B',position:'QB',seasonStats:{passYards:100}}]}], schedule:[] });
     expect(model.playerLeaders.passing[0].name).toBe('B');

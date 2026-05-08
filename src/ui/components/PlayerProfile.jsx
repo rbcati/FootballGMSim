@@ -578,12 +578,56 @@ export default function PlayerProfile({
 
   const profileAnalysis = useMemo(() => buildPlayerProfileAnalysis({ player: effectivePlayer, team: resolvedProfile.team, league, context: profileContext ?? {} }), [effectivePlayer, resolvedProfile.team, league, profileContext]);
   const playerGameLogs = useMemo(() => getPlayerGameLogs(league, effectivePlayer), [league, effectivePlayer]);
+  const currentSeasonTotals = useMemo(() => {
+    if (!league || !playerGameLogs.length) return null;
+    const seenGames = new Set();
+    const totals = {
+      gamesPlayed: 0,
+      passAtt: 0,
+      passComp: 0,
+      passYd: 0,
+      passTD: 0,
+      interceptions: 0,
+      rushAtt: 0,
+      rushYd: 0,
+      rushTD: 0,
+      receptions: 0,
+      targets: 0,
+      recYd: 0,
+      recTD: 0,
+      tackles: 0,
+      sacks: 0,
+    };
+    for (const row of playerGameLogs) {
+      const gameKey = row.gameId ? String(row.gameId) : `w${row.week}`;
+      if (seenGames.has(gameKey)) continue;
+      seenGames.add(gameKey);
+      const s = row.stats ?? {};
+      totals.gamesPlayed += 1;
+      totals.passAtt += Number(s.passAtt ?? 0);
+      totals.passComp += Number(s.passComp ?? 0);
+      totals.passYd += Number(s.passYd ?? 0);
+      totals.passTD += Number(s.passTD ?? 0);
+      totals.interceptions += Number(s.interceptions ?? 0);
+      totals.rushAtt += Number(s.rushAtt ?? 0);
+      totals.rushYd += Number(s.rushYd ?? 0);
+      totals.rushTD += Number(s.rushTD ?? 0);
+      totals.receptions += Number(s.receptions ?? 0);
+      totals.targets += Number(s.targets ?? 0);
+      totals.recYd += Number(s.recYd ?? 0);
+      totals.recTD += Number(s.recTD ?? 0);
+      totals.tackles += Number(s.tackles ?? 0);
+      totals.sacks += Number(s.sacks ?? 0);
+    }
+    return totals;
+  }, [league, playerGameLogs]);
   const contextStatLine = profileContext?.statLine ?? profileContext?.player?.stats ?? null;
   const hasThisWeekContext = Boolean(profileContext?.source === 'game-book' || profileContext?.source === 'weekly-results' || profileContext?.gameId);
   const thisWeekLine = contextStatLine && hasRecordedStats(contextStatLine) ? summarizeTrackedStats(contextStatLine, player?.pos ?? player?.position) : null;
   const thisWeekSummary = hasThisWeekContext ? buildImpactSummary(player, profileContext, contextStatLine) : null;
   const quickTags = getQuickTags(player);
-  const seasonStatsRecorded = hasRecordedStats(latestTotals);
+  const primarySeasonTotals = (currentSeasonTotals && hasRecordedStats(currentSeasonTotals)) ? currentSeasonTotals : latestTotals;
+  const seasonStatsRecorded = hasRecordedStats(primarySeasonTotals);
   const gmContext = profileAnalysis?.recommendationContext ?? {};
   const hasGmContext = Boolean(
     gmContext?.sourceLabel || gmContext?.reason || gmContext?.comparisonReceipt || gmContext?.recommendation || gmContext?.fitScore != null || gmContext?.capImpactLabel || gmContext?.valueLabel
@@ -978,7 +1022,7 @@ export default function PlayerProfile({
           <section className="card-enter" data-testid="player-profile-season-stats">
             <h3 style={sectionLabelStyle}>Season Stats</h3>
             {seasonStatsRecorded ? (
-              <div className="stat-box" style={{ padding: 8 }}>{summarizeTrackedStats(latestTotals, player?.pos ?? player?.position) ?? 'Tracked season totals are available.'}</div>
+              <div className="stat-box" style={{ padding: 8 }}>{summarizeTrackedStats(primarySeasonTotals, player?.pos ?? player?.position) ?? 'Tracked season totals are available.'}</div>
             ) : (
               <EmptyState icon="📊" title="No tracked season stats yet" subtitle="Season stats will appear after this player records tracked stats." />
             )}
