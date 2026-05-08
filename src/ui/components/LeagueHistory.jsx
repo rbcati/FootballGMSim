@@ -70,12 +70,14 @@ function buildChampionMap(seasons = []) {
 
 function summarizeSeasonStoryline(season, userTeamId) {
   if (!season) return "Season summary is not yet archived.";
-  const champion = season?.champion?.name ?? season?.champion?.abbr ?? "Unknown champion";
+  const champion = season?.champion?.name ?? season?.champion?.abbr ?? null;
   const runnerUp = season?.runnerUp?.name ?? season?.runnerUp?.abbr;
   const userRow = (season?.standings ?? []).find((row) => Number(row?.id) === Number(userTeamId));
   const mvp = season?.awards?.mvp?.name;
   const lines = [
-    `${season.year}: ${champion}${runnerUp ? ` defeated ${runnerUp}` : ""}.`,
+    champion
+      ? `${season.year}: ${champion}${runnerUp ? ` defeated ${runnerUp}` : ""}.`
+      : `${season.year}: Championship result is unavailable in this archive.`,
     mvp ? `${mvp} defined the regular season as MVP.` : "Award winners were recorded for this season archive.",
   ];
   if (userRow) {
@@ -84,7 +86,7 @@ function summarizeSeasonStoryline(season, userTeamId) {
   return lines.join(" ");
 }
 
-export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenBoxScore }) {
+export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenBoxScore, initialSelectedSeasonId = null }) {
   const api = actions ?? NOOP_ACTIONS;
   const [seasons, setSeasons] = useState([]);
   const [records, setRecords] = useState(null);
@@ -144,7 +146,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
         </TabsList>
 
         <TabsContent value="seasons">
-          <SeasonExplorer seasons={seasons} onPlayerSelect={onPlayerSelect} onOpenBoxScore={onOpenBoxScore} league={league} />
+          <SeasonExplorer seasons={seasons} onPlayerSelect={onPlayerSelect} onOpenBoxScore={onOpenBoxScore} league={league} initialSelectedSeasonId={initialSelectedSeasonId} />
         </TabsContent>
 
         <TabsContent value="records">
@@ -235,12 +237,16 @@ function DraftHistoryExplorer({ seasons, league, onPlayerSelect }) {
   );
 }
 
-function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league }) {
-  const [selectedSeasonId, setSelectedSeasonId] = useState(seasons?.[0]?.id ?? null);
+function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league, initialSelectedSeasonId = null }) {
+  const [selectedSeasonId, setSelectedSeasonId] = useState(initialSelectedSeasonId ?? seasons?.[0]?.id ?? null);
 
   useEffect(() => {
+    if (initialSelectedSeasonId != null) {
+      setSelectedSeasonId(initialSelectedSeasonId);
+      return;
+    }
     if (!selectedSeasonId && seasons.length) setSelectedSeasonId(seasons[0].id);
-  }, [seasons, selectedSeasonId]);
+  }, [initialSelectedSeasonId, seasons, selectedSeasonId]);
 
   if (!seasons?.length) {
     return (
@@ -311,7 +317,7 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league }) {
               >
                 Week {championshipGame.week} · {championshipGame.awayScore ?? "—"}-{championshipGame.homeScore ?? "—"} (open Game Book)
               </button>
-            ) : "Unavailable in this archive."}
+            ) : "Unavailable in this archive. This season may be missing explicit postseason metadata."}
           </div>
 
           <section>

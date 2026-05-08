@@ -186,6 +186,8 @@ export function validateNetlifyRules({ repoRoot = process.cwd() } = {}) {
   }
 
   const { resolvedPublishDir, publish } = publishInfo;
+  const tomlPath = path.resolve(repoRoot, 'netlify.toml');
+  const tomlContent = fs.readFileSync(tomlPath, 'utf8');
   const headersPath = path.join(resolvedPublishDir, '_headers');
   const redirectsPath = path.join(resolvedPublishDir, '_redirects');
   const indexPath = path.join(resolvedPublishDir, 'index.html');
@@ -204,6 +206,17 @@ export function validateNetlifyRules({ repoRoot = process.cwd() } = {}) {
     // Optional in Netlify builds.
   } else {
     failures.push(...validateRedirectsContent(readLines(redirectsPath), path.basename(redirectsPath)));
+  }
+
+  // Netlify preview checks have proven brittle when routing/headers are split
+  // between toml + publish files; enforce one source of truth.
+  const hasTomlHeaders = /\[\[headers\]\]/.test(tomlContent);
+  const hasTomlRedirects = /\[\[redirects\]\]/.test(tomlContent);
+  if (hasTomlHeaders && fs.existsSync(headersPath)) {
+    failures.push('Define headers in only one place: either netlify.toml or public/_headers.');
+  }
+  if (hasTomlRedirects && fs.existsSync(redirectsPath)) {
+    failures.push('Define redirects in only one place: either netlify.toml or public/_redirects.');
   }
 
   return {

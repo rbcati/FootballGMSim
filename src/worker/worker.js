@@ -7736,8 +7736,28 @@ function calculateLeaders(stats) {
 
 function calculateSeasonAwardsV1(stats, teams, year) {
   const rows = (stats || []).filter((s) => s?.totals);
-  if (!rows.length) return {};
+  const emptyAwards = {
+    mvp: null,
+    opoy: null,
+    dpoy: null,
+    roty: null,
+    oroy: null,
+    droy: null,
+    bestQB: null,
+    bestRB: null,
+    bestWrTe: null,
+    bestDefensivePlayer: null,
+    bestKicker: null,
+  };
+  if (!rows.length) return emptyAwards;
   const teamById = new Map((teams || []).map((t) => [Number(t.id), t]));
+  const statValue = (totals, keys) => {
+    for (const key of keys) {
+      const value = Number(totals?.[key] ?? 0);
+      if (Number.isFinite(value) && value !== 0) return value;
+    }
+    return 0;
+  };
   const byScore = (candidates, scoreFn) =>
     [...candidates]
       .map((row) => ({ row, score: scoreFn(row) }))
@@ -7748,57 +7768,120 @@ function calculateSeasonAwardsV1(stats, teams, year) {
   const teamWins = (row) => Number(teamById.get(Number(row?.teamId))?.wins ?? 0);
   const isRookie = (row) => row?.draftYear != null && Number(row.draftYear) === Number(year);
 
-  const all = rows;
   const offense = rows.filter((row) => ['QB', 'RB', 'WR', 'TE'].includes(String(row?.pos ?? '').toUpperCase()));
   const defense = rows.filter((row) => ['DL', 'DE', 'DT', 'EDGE', 'LB', 'CB', 'S', 'SS', 'FS'].includes(String(row?.pos ?? '').toUpperCase()));
   const rookiesOff = offense.filter(isRookie);
   const rookiesDef = defense.filter(isRookie);
+  const hasOffenseStats = (row) => {
+    const totals = t(row);
+    return statValue(totals, ['passYd', 'passingYards', 'rushYd', 'rushingYards', 'recYd', 'receivingYards', 'passTD', 'passingTd', 'rushTD', 'rushingTd', 'recTD', 'receivingTd']) > 0;
+  };
+  const hasDefenseStats = (row) => {
+    const totals = t(row);
+    return statValue(totals, ['tackles', 'sacks', 'interceptions', 'defInterceptions', 'forcedFumbles']) > 0;
+  };
+  const offensiveCandidates = offense.filter(hasOffenseStats);
+  const defensiveCandidates = defense.filter(hasDefenseStats);
+  const passingInts = (row) => statValue(t(row), ['passInt', 'interceptionsThrown', 'interceptions']);
+  const defensiveInts = (row) => statValue(t(row), ['defInterceptions', 'interceptions']);
+  const kickingMade = (row) => statValue(t(row), ['fgMade', 'fieldGoalsMade']);
+  const extraPointsMade = (row) => statValue(t(row), ['xpMade', 'extraPointsMade']);
 
-  const mvp = byScore(all, (row) =>
-    (Number(t(row).passYd ?? 0) / 25) +
-    (Number(t(row).passTD ?? 0) * 6) +
-    (Number(t(row).rushYd ?? 0) / 10) +
-    (Number(t(row).rushTD ?? 0) * 6) +
-    (Number(t(row).recYd ?? 0) / 10) +
-    (Number(t(row).recTD ?? 0) * 6) -
-    (Number(t(row).interceptions ?? 0) * 3) +
+  const mvp = byScore(offensiveCandidates, (row) =>
+    (statValue(t(row), ['passYd', 'passingYards']) / 25) +
+    (statValue(t(row), ['passTD', 'passingTd']) * 6) +
+    (statValue(t(row), ['rushYd', 'rushingYards']) / 10) +
+    (statValue(t(row), ['rushTD', 'rushingTd']) * 6) +
+    (statValue(t(row), ['recYd', 'receivingYards']) / 10) +
+    (statValue(t(row), ['recTD', 'receivingTd']) * 6) -
+    (passingInts(row) * 3) +
     (teamWins(row) * 1.5),
   );
-  const opoy = byScore(offense, (row) =>
-    (Number(t(row).passYd ?? 0) / 23) +
-    (Number(t(row).passTD ?? 0) * 5.5) +
-    (Number(t(row).rushYd ?? 0) / 10) +
-    (Number(t(row).rushTD ?? 0) * 6) +
-    (Number(t(row).recYd ?? 0) / 10) +
-    (Number(t(row).recTD ?? 0) * 6) +
+  const opoy = byScore(offensiveCandidates, (row) =>
+    (statValue(t(row), ['passYd', 'passingYards']) / 23) +
+    (statValue(t(row), ['passTD', 'passingTd']) * 5.5) +
+    (statValue(t(row), ['rushYd', 'rushingYards']) / 10) +
+    (statValue(t(row), ['rushTD', 'rushingTd']) * 6) +
+    (statValue(t(row), ['recYd', 'receivingYards']) / 10) +
+    (statValue(t(row), ['recTD', 'receivingTd']) * 6) +
     (teamWins(row) * 0.8),
   );
-  const dpoy = byScore(defense, (row) =>
+  const dpoy = byScore(defensiveCandidates, (row) =>
     (Number(t(row).tackles ?? 0) * 1) +
     (Number(t(row).sacks ?? 0) * 5.5) +
-    (Number(t(row).interceptions ?? 0) * 6.5) +
+    (defensiveInts(row) * 6.5) +
     (Number(t(row).forcedFumbles ?? 0) * 4),
   );
-  const oroy = rookiesOff.length ? byScore(rookiesOff, (row) => (Number(t(row).passYd ?? 0) / 25) + (Number(t(row).rushYd ?? 0) / 10) + (Number(t(row).recYd ?? 0) / 10) + (Number(t(row).passTD ?? 0) * 5) + (Number(t(row).rushTD ?? 0) * 6) + (Number(t(row).recTD ?? 0) * 6)) : null;
-  const droy = rookiesDef.length ? byScore(rookiesDef, (row) => (Number(t(row).tackles ?? 0) * 1) + (Number(t(row).sacks ?? 0) * 6) + (Number(t(row).interceptions ?? 0) * 7)) : null;
-  const bestQB = byScore(rows.filter((row) => String(row?.pos ?? '').toUpperCase() === 'QB'), (row) => Number(t(row).passYd ?? 0) + Number(t(row).passTD ?? 0) * 60 - Number(t(row).interceptions ?? 0) * 35);
-  const bestRB = byScore(rows.filter((row) => String(row?.pos ?? '').toUpperCase() === 'RB'), (row) => Number(t(row).rushYd ?? 0) + Number(t(row).rushTD ?? 0) * 80 + Number(t(row).recYd ?? 0) * 0.4);
-  const bestWrTe = byScore(rows.filter((row) => ['WR', 'TE'].includes(String(row?.pos ?? '').toUpperCase())), (row) => Number(t(row).recYd ?? 0) + Number(t(row).recTD ?? 0) * 90 + Number(t(row).receptions ?? 0) * 3);
-  const bestDefensivePlayer = byScore(defense, (row) => Number(t(row).sacks ?? 0) * 6 + Number(t(row).interceptions ?? 0) * 6 + Number(t(row).tackles ?? 0) * 0.7 + Number(t(row).forcedFumbles ?? 0) * 4);
-  const kickers = rows.filter((row) => String(row?.pos ?? '').toUpperCase() === 'K' && Number(t(row).fgMade ?? 0) > 0);
-  const bestKicker = kickers.length ? byScore(kickers, (row) => Number(t(row).fgMade ?? 0) * 3 + Number(t(row).xpMade ?? 0)) : null;
+  const oroy = rookiesOff.length ? byScore(rookiesOff.filter(hasOffenseStats), (row) => (statValue(t(row), ['passYd', 'passingYards']) / 25) + (statValue(t(row), ['rushYd', 'rushingYards']) / 10) + (statValue(t(row), ['recYd', 'receivingYards']) / 10) + (statValue(t(row), ['passTD', 'passingTd']) * 5) + (statValue(t(row), ['rushTD', 'rushingTd']) * 6) + (statValue(t(row), ['recTD', 'receivingTd']) * 6)) : null;
+  const droy = rookiesDef.length ? byScore(rookiesDef.filter(hasDefenseStats), (row) => (Number(t(row).tackles ?? 0) * 1) + (Number(t(row).sacks ?? 0) * 6) + (defensiveInts(row) * 7)) : null;
+  const bestQB = byScore(rows.filter((row) => String(row?.pos ?? '').toUpperCase() === 'QB' && hasOffenseStats(row)), (row) => statValue(t(row), ['passYd', 'passingYards']) + statValue(t(row), ['passTD', 'passingTd']) * 60 - passingInts(row) * 35);
+  const bestRB = byScore(rows.filter((row) => String(row?.pos ?? '').toUpperCase() === 'RB' && hasOffenseStats(row)), (row) => statValue(t(row), ['rushYd', 'rushingYards']) + statValue(t(row), ['rushTD', 'rushingTd']) * 80 + statValue(t(row), ['recYd', 'receivingYards']) * 0.4);
+  const bestWrTe = byScore(rows.filter((row) => ['WR', 'TE'].includes(String(row?.pos ?? '').toUpperCase()) && hasOffenseStats(row)), (row) => statValue(t(row), ['recYd', 'receivingYards']) + statValue(t(row), ['recTD', 'receivingTd']) * 90 + Number(t(row).receptions ?? 0) * 3);
+  const bestDefensivePlayer = byScore(defensiveCandidates, (row) => Number(t(row).sacks ?? 0) * 6 + defensiveInts(row) * 6 + Number(t(row).tackles ?? 0) * 0.7 + Number(t(row).forcedFumbles ?? 0) * 4);
+  const kickers = rows.filter((row) => String(row?.pos ?? '').toUpperCase() === 'K' && (kickingMade(row) > 0 || extraPointsMade(row) > 0));
+  const bestKicker = kickers.length ? byScore(kickers, (row) => kickingMade(row) * 3 + extraPointsMade(row)) : null;
 
   return {
+    ...emptyAwards,
     mvp: toAward(mvp),
     opoy: toAward(opoy),
     dpoy: toAward(dpoy),
-    ...(oroy ? { oroy: toAward(oroy), roty: toAward(oroy) } : {}),
-    ...(droy ? { droy: toAward(droy) } : {}),
+    ...(oroy ? { oroy: toAward(oroy), roty: toAward(oroy) } : { roty: null, oroy: null }),
+    ...(droy ? { droy: toAward(droy) } : { droy: null }),
     bestQB: toAward(bestQB),
     bestRB: toAward(bestRB),
     bestWrTe: toAward(bestWrTe),
     bestDefensivePlayer: toAward(bestDefensivePlayer),
-    ...(bestKicker ? { bestKicker: toAward(bestKicker) } : {}),
+    ...(bestKicker ? { bestKicker: toAward(bestKicker) } : { bestKicker: null }),
+  };
+}
+
+function isCompletedGame(game) {
+  return Number.isFinite(Number(game?.homeScore)) && Number.isFinite(Number(game?.awayScore));
+}
+
+function isPostseasonGame(game) {
+  const round = String(game?.playoffRound ?? game?.round ?? game?.stage ?? '').toLowerCase();
+  return Boolean(game?.isPlayoff || game?.isPostseason || ['wildcard', 'divisional', 'conference', 'conference_final', 'final', 'championship', 'superbowl', 'super_bowl'].includes(round));
+}
+
+function isChampionshipGameMarker(game) {
+  const round = String(game?.playoffRound ?? game?.round ?? game?.stage ?? '').toLowerCase();
+  const week = Number(game?.week ?? 0);
+  return Boolean(
+    game?.isChampionshipGame ||
+    game?.isFinal ||
+    ['superbowl', 'super_bowl', 'championship', 'final', 'playoff_final'].includes(round) ||
+    (isPostseasonGame(game) && week >= 22)
+  );
+}
+
+function resolveGameWinnerLoser(game) {
+  if (!isCompletedGame(game)) return { winnerId: null, loserId: null };
+  const homeScore = Number(game.homeScore);
+  const awayScore = Number(game.awayScore);
+  if (homeScore === awayScore) return { winnerId: null, loserId: null };
+  if (homeScore > awayScore) return { winnerId: Number(game.homeId), loserId: Number(game.awayId) };
+  return { winnerId: Number(game.awayId), loserId: Number(game.homeId) };
+}
+
+function inferChampionshipOutcome({ seasonGames = [], meta = {} }) {
+  const completedGames = seasonGames.filter(isCompletedGame);
+  const postseasonGames = completedGames.filter(isPostseasonGame);
+  const explicitChampionshipGame = [...postseasonGames]
+    .filter(isChampionshipGameMarker)
+    .sort((a, b) => Number(b?.week ?? 0) - Number(a?.week ?? 0))[0] ?? null;
+  const fallbackPostseasonFinal = explicitChampionshipGame
+    ? null
+    : [...postseasonGames]
+      .sort((a, b) => Number(b?.week ?? 0) - Number(a?.week ?? 0))[0] ?? null;
+  const resolvedGame = explicitChampionshipGame ?? fallbackPostseasonFinal;
+  const fromGame = resolveGameWinnerLoser(resolvedGame);
+  const championTeamId = fromGame.winnerId ?? (meta?.championTeamId != null ? Number(meta.championTeamId) : null);
+  return {
+    championshipGame: resolvedGame,
+    championTeamId: Number.isFinite(championTeamId) ? championTeamId : null,
+    runnerUpTeamId: fromGame.loserId ?? null,
   };
 }
 
@@ -8237,6 +8320,13 @@ async function archiveSeason(seasonId) {
   try {
     let meta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
     const teams = cache.getAllTeams();
+    const seasonGames = await Games.bySeason(seasonId).catch(() => []);
+    const completedPostseasonGames = seasonGames.filter((g) => isCompletedGame(g) && isPostseasonGame(g));
+    const canArchiveSeason = completedPostseasonGames.length > 0 || meta?.championTeamId != null;
+    if (!canArchiveSeason) {
+      console.warn(`[Worker] Skipping archive for season ${seasonId}: season completion markers are missing.`);
+      return;
+    }
 
     // 1. Ensure DB is up to date
     await flushDirty();
@@ -8317,23 +8407,11 @@ async function archiveSeason(seasonId) {
 
     // 4. Determine Champion and runner-up from season games when possible.
     const year = meta.year;
-    const seasonGames = await Games.bySeason(seasonId).catch(() => []);
-    const completedGames = seasonGames.filter((g) => Number.isFinite(Number(g?.homeScore)) && Number.isFinite(Number(g?.awayScore)));
-    const championshipGame = [...completedGames]
-      .sort((a, b) => Number(b?.week ?? 0) - Number(a?.week ?? 0))[0] ?? null;
-    const championshipWinnerId = championshipGame
-      ? (Number(championshipGame.homeScore) >= Number(championshipGame.awayScore)
-          ? Number(championshipGame.homeId)
-          : Number(championshipGame.awayId))
-      : null;
-    const championshipLoserId = championshipGame
-      ? (championshipWinnerId === Number(championshipGame.homeId)
-          ? Number(championshipGame.awayId)
-          : Number(championshipGame.homeId))
-      : null;
-    const championId = championshipWinnerId ?? meta.championTeamId ?? null;
+    const championshipInference = inferChampionshipOutcome({ seasonGames, meta });
+    const championshipGame = championshipInference.championshipGame;
+    const championId = championshipInference.championTeamId;
     const champion = teams.find(t => Number(t.id) === Number(championId)) ?? null;
-    const runnerUpTeamFromFinal = teams.find((t) => Number(t.id) === Number(championshipLoserId)) ?? null;
+    const runnerUpTeamFromFinal = teams.find((t) => Number(t.id) === Number(championshipInference.runnerUpTeamId)) ?? null;
 
     // 5. Standings (snapshot before reset)
     const standings = buildStandings();
@@ -8429,7 +8507,7 @@ async function archiveSeason(seasonId) {
     await flushDirty();
 
     const championSummary = champion ? { id: champion.id, name: champion.name, abbr: champion.abbr, wins: champion.wins ?? null } : null;
-    const runnerUpTeam = runnerUpTeamFromFinal ?? (champion ? standings.find((s) => Number(s.id) !== Number(champion.id) && (s.wins ?? 0) >= 10) : null);
+    const runnerUpTeam = runnerUpTeamFromFinal ?? null;
     const runnerUpSummary = runnerUpTeam ? { id: runnerUpTeam.id, name: runnerUpTeam.name, abbr: runnerUpTeam.abbr } : null;
     const standingsRows = standings.map(s => ({
       id: s.id, name: s.name, abbr: s.abbr, wins: s.wins, losses: s.losses, ties: s.ties, pct: s.pct, pf: s.pf, pa: s.pa

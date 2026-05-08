@@ -26,7 +26,7 @@ import RookieDraft from "./RookieDraft.jsx";
 import Coaches from "./Coaches.jsx";
 import FreeAgency from "./FreeAgency.jsx";
 import GameDetailScreen from "./GameDetailScreen.jsx";
-import History from "./History.jsx";
+import LeagueHistory from "./LeagueHistory.jsx";
 import TeamHistoryScreen from "./TeamHistoryScreen.jsx";
 import AwardsRecordsScreen from "./AwardsRecordsScreen.jsx";
 import HallOfFame from "./HallOfFame.jsx";
@@ -547,6 +547,7 @@ export default function LeagueDashboard({
   const [rosterInitialState, setRosterInitialState] = useState({ view: "table", filter: "ALL" });
   const [rosterInitialView, setRosterInitialView] = useState("table");
   const [statsInitialFamily, setStatsInitialFamily] = useState("passing");
+  const [historySelectedSeasonId, setHistorySelectedSeasonId] = useState(null);
   const [leagueInitialSection, setLeagueInitialSection] = useState("Overview");
   const [teamInitialSection, setTeamInitialSection] = useState("Overview");
   const [newsSubtab, setNewsSubtab] = useState("All");
@@ -1188,12 +1189,18 @@ export default function LeagueDashboard({
         )}
         {activeTab === "History Hub" && (
           <TabErrorBoundary label="History Hub">
-            <HistoryHub onNavigate={setActiveTab} actions={actions} />
+            <HistoryHub onNavigate={setActiveTab} actions={actions} onSelectSeason={setHistorySelectedSeasonId} />
           </TabErrorBoundary>
         )}
         {activeTab === "History" && (
           <TabErrorBoundary label="History">
-            <History league={league} onNavigatePlayer={handlePlayerSelect} onNavigateTeam={(teamId) => { setSelectedTeamId?.(teamId); setActiveTab("Team"); }} />
+            <LeagueHistory
+              league={league}
+              actions={actions}
+              initialSelectedSeasonId={historySelectedSeasonId}
+              onPlayerSelect={handlePlayerSelect}
+              onOpenBoxScore={(gameId) => openGameDetail(gameId, "History")}
+            />
           </TabErrorBoundary>
         )}
         {activeTab === "Team History" && (

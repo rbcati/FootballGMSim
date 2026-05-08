@@ -3,35 +3,34 @@ import { filterAwardRows } from '../utils/historyDestinations.js';
 import { ScreenHeader, SectionCard, StickySubnav, EmptyState } from './ScreenSystem.jsx';
 import { getStickyTopOffset } from '../utils/screenSystem.js';
 import { AWARD_DISPLAY_NAMES, AWARDS_HISTORY_ORDER } from '../../core/footballMeta';
+const AWARDS_V1_ORDER = [...AWARDS_HISTORY_ORDER, 'oroy', 'droy', 'bestQB', 'bestRB', 'bestWrTe', 'bestDefensivePlayer', 'bestKicker'];
+const AWARDS_V1_LABELS = {
+  bestQB: 'Best QB',
+  bestRB: 'Best RB',
+  bestWrTe: 'Best WR/TE',
+  bestDefensivePlayer: 'Best Defensive Player',
+  bestKicker: 'Best Kicker',
+};
 
 export default function AwardsRecordsScreen({ actions, league, onPlayerSelect, onBack }) {
   const [seasons, setSeasons] = useState([]);
-  const [records, setRecords] = useState(null);
   const [scope, setScope] = useState('all');
-  const [recordScope, setRecordScope] = useState('singleSeason');
 
   useEffect(() => {
     Promise.all([
       actions?.getAllSeasons?.() ?? Promise.resolve({ payload: { seasons: [] } }),
-      actions?.getRecords?.() ?? Promise.resolve({ payload: { records: null } }),
-    ]).then(([seasonRes, recordsRes]) => {
+    ]).then(([seasonRes]) => {
       setSeasons(seasonRes?.payload?.seasons ?? []);
-      setRecords(recordsRes?.payload?.records ?? null);
     });
   }, [actions]);
 
-  const awardRows = useMemo(() => (seasons ?? []).flatMap((s) => AWARDS_HISTORY_ORDER.map((k) => ({
+  const awardRows = useMemo(() => (seasons ?? []).flatMap((s) => AWARDS_V1_ORDER.map((k) => ({
     season: s.year,
-    award: AWARD_DISPLAY_NAMES[k] ?? k.toUpperCase(),
+    award: AWARD_DISPLAY_NAMES[k] ?? AWARDS_V1_LABELS[k] ?? k.toUpperCase(),
     ...s?.awards?.[k],
   }))).filter((r) => r?.name), [seasons]);
 
   const filteredAwardRows = filterAwardRows(awardRows.slice().reverse(), scope);
-  const recordRows = useMemo(() => {
-    const source = recordScope === 'singleSeason' ? (records?.singleSeason ?? {}) : (records?.allTime ?? {});
-    return Object.entries(source).map(([k, rec]) => ({ key: k, ...rec }));
-  }, [records, recordScope]);
-
   return (
     <div className="app-screen-stack" style={{ '--screen-sticky-top': getStickyTopOffset('compact') }}>
       <ScreenHeader
@@ -61,24 +60,15 @@ export default function AwardsRecordsScreen({ actions, league, onPlayerSelect, o
         </SectionCard>
 
         <SectionCard title="League records">
-          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <button className={`standings-tab ${recordScope === 'singleSeason' ? 'active' : ''}`} onClick={() => setRecordScope('singleSeason')}>Single-season</button>
-            <button className={`standings-tab ${recordScope === 'career' ? 'active' : ''}`} onClick={() => setRecordScope('career')}>Career</button>
-          </div>
-          <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto' }}>
-            {recordRows.length === 0 ? <EmptyState title="No records yet." body="Record tables appear once this save archives statistical leaders." /> : recordRows.map((rec) => (
-              <div key={rec.key} style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: 8 }}>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{rec.key}</div>
-                <div style={{ fontWeight: 700 }}>{Number(rec.value ?? 0).toLocaleString()}</div>
-                <div style={{ fontSize: 12 }}>{rec.name ?? '—'} {rec.year ? `(${rec.year})` : ''}</div>
-              </div>
-            ))}
-          </div>
+          <EmptyState
+            title="Records coming later."
+            body="Season award history is fully archived in V1. Full all-time and validated record-book tracking will arrive in a later release."
+          />
         </SectionCard>
       </div>
 
       <SectionCard title="Franchise records (current user team)">
-        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{league?.teams?.find((t) => t.id === league?.userTeamId)?.name ?? 'Your team'} records are included in league record output when available in this save.</div>
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{league?.teams?.find((t) => t.id === league?.userTeamId)?.name ?? 'Your team'} records and all-time book tracking are intentionally deferred until the dedicated records milestone.</div>
       </SectionCard>
     </div>
   );

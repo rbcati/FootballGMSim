@@ -48,6 +48,25 @@ describe('league memory helpers', () => {
     expect(meta.franchiseHistoryByTeam['0'].milestones.length).toBe(1);
   });
 
+  it('keeps archive shape stable when championship data is unavailable', () => {
+    const season = buildSeasonArchiveSummary({
+      year: 2033,
+      seasonId: 's9',
+      standings: [],
+      awards: {},
+      leaders: {},
+      champion: null,
+      runnerUp: null,
+      userTeamId: 0,
+      games: [{ id: 's9_w18', week: 18, homeId: 1, awayId: 2, homeScore: 24, awayScore: 21 }],
+      seasonStats: [],
+    });
+    expect(season.schemaVersion).toBe(1);
+    expect(typeof season.completedAt).toBe('string');
+    expect(season.playoffSummary.finals).toBe(null);
+    expect(Array.isArray(season.notableGames)).toBe(true);
+  });
+
   it('updates record book and hall evaluations', () => {
     let meta = ensureLeagueMemoryMeta({});
     meta = updateRecordBook(meta, {
