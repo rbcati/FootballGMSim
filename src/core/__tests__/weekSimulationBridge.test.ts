@@ -85,6 +85,7 @@ describe('weekSimulationBridge', () => {
       },
       boxScore: { home: {}, away: {} },
       playDigest: [],
+      scoringSummary: [{ id: 'score_1', quarter: 1, clock: '12:00', teamId: 1, teamAbbr: 'HME', type: 'Touchdown', scoreType: 'touchdown', points: 7, text: 'TD', scoreAfter: { home: 7, away: 0 } }],
       playLogs: [],
       summary: { storyline: 'Key edge: Pocket survived pressure', headlineMoments: [] },
       recapText: 'Home wins with late pressure.',
@@ -96,6 +97,9 @@ describe('weekSimulationBridge', () => {
 
     expect(mapped.scoreHome).toBe(28);
     expect(mapped.boxScore).toEqual({ home: {}, away: {} });
+    expect(mapped.playerStats).toEqual({ home: {}, away: {} });
+    expect(mapped.teamStats.home.totalYards).toBe(370);
+    expect(mapped.scoringSummary).toHaveLength(1);
     expect(mapped.summary.storyline).toContain('Key edge');
   });
 

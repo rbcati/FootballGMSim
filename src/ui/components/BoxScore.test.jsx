@@ -24,10 +24,19 @@ describe('BoxScore game book rendering', () => {
   it('renders expanded stat tables when data exists', () => {
     const game = { homeId: 1, awayId: 2, homeScore: 21, awayScore: 17, quarterScores: { home: [7,7,7,0], away: [3,7,0,7] }, teamStats: { home: { passYards: 201 }, away: { passYards: 230 } }, playerStats: { home: { 11: { name: 'K', stats: { fieldGoalsAttempted: 2, fieldGoalsMade: 2, points: 6, punts: 2, puntYards: 90, kickReturns: 1, kickReturnYards: 20, passBlockAttempts: 10, passBlockWinRate: 0.9 } } }, away: { 22: { name: 'QB Away', stats: { passAtt: 24, passComp: 18, passYd: 200 } } } } };
     const html = renderToString(<BoxScore gameId="g3" league={{ ...baseLeague, gameById: { g3: game } }} embedded />);
+    expect(html).toContain('Passing');
+    expect(html).toContain('Special Teams');
     expect(html).toContain('Kicking');
     expect(html).toContain('Punting');
     expect(html).toContain('Returns');
     expect(html).toContain('Blocking');
+  });
+
+  it('uses placeholders for score-only games and omits stat tables', () => {
+    const html = renderToString(<BoxScore gameId="g4" league={{ ...baseLeague, gameById: { g4: { homeId: 1, awayId: 2, homeScore: 6, awayScore: 3 } } }} embedded />);
+    expect(html).toContain('Detailed box score data was not recorded for this game.');
+    expect(html).toContain('Scoring summary was not recorded for this game.');
+    expect(html).not.toContain('Special Teams');
   });
 
   it('player buttons trigger selection handlers when ids are present', () => {

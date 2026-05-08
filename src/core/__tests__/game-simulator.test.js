@@ -110,6 +110,71 @@ describe('commitGameResult archive shape', () => {
     expect(result.driveSummary).toHaveLength(1);
     expect(result.quarterScores.home[0]).toBe(7);
   });
+
+  it('persists canonical player and team box score stats for future aggregation', () => {
+    const league = {
+      week: 1,
+      year: 2030,
+      teams: [
+        {
+          id: 1,
+          name: 'Home',
+          abbr: 'HME',
+          roster: [
+            { id: 'qb1', name: 'Home QB', pos: 'QB' },
+            { id: 'rb1', name: 'Home RB', pos: 'RB' },
+            { id: 'k1', name: 'Home K', pos: 'K' },
+          ],
+        },
+        {
+          id: 2,
+          name: 'Away',
+          abbr: 'AWY',
+          roster: [
+            { id: 'qb2', name: 'Away QB', pos: 'QB' },
+            { id: 'edge2', name: 'Away Edge', pos: 'DL' },
+            { id: 'p2', name: 'Away P', pos: 'P' },
+          ],
+        },
+      ],
+      resultsByWeek: { 0: [] },
+    };
+
+    const result = commitGameResult(league, {
+      homeTeamId: 1,
+      awayTeamId: 2,
+      homeScore: 20,
+      awayScore: 13,
+      stats: {
+        home: {
+          players: {
+            qb1: { passComp: 18, passAtt: 28, passYd: 220, passTD: 0, interceptions: 2, sacks: 3 },
+            rb1: { rushAtt: 17, rushYd: 84, rushTD: 1, fumbles: 1 },
+            k1: { fgMade: 2, fgAttempts: 2, xpMade: 2, xpAttempts: 2 },
+          },
+        },
+        away: {
+          players: {
+            qb2: { passComp: 16, passAtt: 31, passYd: 188, passTD: 1, interceptions: 0 },
+            edge2: { tackles: 6, sacks: 3, tacklesForLoss: 2, forcedFumbles: 1, fumbleRecs: 1 },
+            p2: { punts: 4, puntYards: 184, avgPuntYards: 46, longestPunt: 58 },
+          },
+        },
+      },
+      scoringSummary: [{ quarter: 4, teamId: 1, scoreType: 'field_goal', points: 3, text: 'Late FG' }],
+      quarterScores: { home: [7, 3, 7, 3], away: [0, 7, 3, 3] },
+    }, { persist: false });
+
+    expect(result.playerStats.home.qb1.teamId).toBeUndefined();
+    expect(result.playerStats.home.qb1.stats.passerRating).toBeGreaterThan(0);
+    expect(result.playerStats.home.qb1.stats.sacked).toBe(3);
+    expect(result.playerStats.home.k1.stats.fieldGoalsMade).toBe(2);
+    expect(result.playerStats.away.edge2.stats.fumbleRecoveries).toBe(1);
+    expect(result.teamStats.home.passYards).toBe(220);
+    expect(result.teamStats.home.turnovers).toBe(3);
+    expect(result.teamStats.home.sacksAllowed).toBe(3);
+    expect(result.teamStats.away.sacks).toBe(3);
+  });
 });
 
 describe('immersive play helpers', () => {

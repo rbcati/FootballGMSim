@@ -80,6 +80,20 @@ describe('simulateRichGame', () => {
     expect(awayRushYd).toBe(summary.teamStats.away.rushYd);
   });
 
+  it('emits complete box score categories for future aggregation', () => {
+    const summary = simulateRichGame(buildPayload(909));
+    const allRows = [...Object.values(summary.boxScore.home), ...Object.values(summary.boxScore.away)];
+
+    expect(summary.scoringSummary.length).toBeGreaterThan(0);
+    expect(summary.teamStats.home.passYards).toBe(summary.teamStats.home.passYd);
+    expect(summary.teamStats.away.rushYards).toBe(summary.teamStats.away.rushYd);
+    expect(allRows.some((row) => Number(row.stats.passAtt ?? 0) > 0 && Number(row.stats.passerRating ?? 0) >= 0)).toBe(true);
+    expect(allRows.some((row) => Number(row.stats.rushAtt ?? 0) > 0 && row.stats.fumbles != null)).toBe(true);
+    expect(allRows.some((row) => Number(row.stats.targets ?? 0) > 0 && row.stats.drops != null)).toBe(true);
+    expect(allRows.some((row) => Number(row.stats.tackles ?? 0) > 0 && row.stats.tfl != null)).toBe(true);
+    expect(allRows.some((row) => Number(row.stats.fieldGoalsAttempted ?? 0) > 0 || Number(row.stats.punts ?? 0) > 0 || Number(row.stats.kickReturns ?? 0) > 0 || Number(row.stats.puntReturns ?? 0) > 0)).toBe(true);
+  });
+
   it('creates a mixed run/pass offense profile', () => {
     const summary = simulateRichGame(buildPayload(313));
     const homePassRate = summary.teamStats.home.passAtt / Math.max(1, summary.teamStats.home.plays);

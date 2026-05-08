@@ -15,9 +15,11 @@ export interface TeamStatLine {
   passAtt: number;
   passComp: number;
   passYd: number;
+  passYards: number;
   passTD: number;
   rushAtt: number;
   rushYd: number;
+  rushYards: number;
   rushTD: number;
   totalYards: number;
   yardsPerPlay: number;
@@ -29,6 +31,16 @@ export interface TeamStatLine {
   redZoneScores: number;
   explosivePlays: number;
   successRate: number;
+  fieldGoalsMade: number;
+  fieldGoalsAttempted: number;
+  extraPointsMade: number;
+  extraPointsAttempted: number;
+  punts: number;
+  puntYards: number;
+  kickReturns: number;
+  kickReturnYards: number;
+  puntReturns: number;
+  puntReturnYards: number;
 }
 
 export interface GameEventDigestItem {
@@ -62,6 +74,18 @@ export interface RichGameSummary {
     away: Record<string, { name: string; pos: string; stats: Record<string, number> }>;
   };
   playDigest: GameEventDigestItem[];
+  scoringSummary: Array<{
+    id: string;
+    quarter: number;
+    clock: string;
+    teamId: number;
+    teamAbbr: string;
+    type: string;
+    scoreType: string;
+    points: number;
+    text: string;
+    scoreAfter: { home: number; away: number };
+  }>;
   playLogs: Array<{ quarter: number; clockSec: number; text: string; scoreHomeAfter: number; scoreAwayAfter: number }>;
   summary: {
     storyline: string;
@@ -188,6 +212,8 @@ function defaultPlayers(teamId: number, side: 'home' | 'away'): SimPlayerRef[] {
     { id: `${teamId}-${prefix}-LB1`, name: `${prefix} LB1`, pos: 'LB', ovr: 75 },
     { id: `${teamId}-${prefix}-CB1`, name: `${prefix} CB1`, pos: 'CB', ovr: 77 },
     { id: `${teamId}-${prefix}-S1`, name: `${prefix} S1`, pos: 'S', ovr: 74 },
+    { id: `${teamId}-${prefix}-K1`, name: `${prefix} K1`, pos: 'K', ovr: 73 },
+    { id: `${teamId}-${prefix}-P1`, name: `${prefix} P1`, pos: 'P', ovr: 72 },
   ];
 }
 
@@ -238,6 +264,19 @@ function buildQbRating(passComp: number, passAtt: number, passYd: number, passTd
   return Math.round(clamp(rating, 20, 158.3) * 10) / 10;
 }
 
+function formatClock(clockSec: number): string {
+  const safe = Math.max(0, Math.round(clockSec));
+  const mins = Math.floor(safe / 60);
+  const secs = safe % 60;
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
+function addStats(target: Record<string, number>, patch: Record<string, number>) {
+  for (const [key, value] of Object.entries(patch)) {
+    target[key] = (target[key] ?? 0) + value;
+  }
+}
+
 function pushDigest(
   digest: GameEventDigestItem[],
   entry: Omit<GameEventDigestItem, 'homeScore' | 'awayScore'>,
@@ -270,8 +309,8 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   const awayPrep = payload.awayPrepMultipliers ?? NEUTRAL_PREP;
 
   const stats = {
-    home: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0 },
-    away: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0 },
+    home: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0, kickReturns: 0, kickReturnYards: 0, puntReturns: 0, puntReturnYards: 0 },
+    away: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0, kickReturns: 0, kickReturnYards: 0, puntReturns: 0, puntReturnYards: 0 },
   };
 
   while (state.quarter <= 4 && (stats.home.plays + stats.away.plays) < 184) {
@@ -343,6 +382,11 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       }
       if (playType === 'pass') offenseStats.passTD += 1;
       else offenseStats.rushTD += 1;
+      offenseStats.extraPointsMade += 1;
+      offenseStats.extraPointsAttempted += 1;
+      const returnStats = state.possession === 'home' ? stats.away : stats.home;
+      returnStats.kickReturns += 1;
+      returnStats.kickReturnYards += Math.max(12, Math.round(18 + rng() * 18));
       if (wasRedZone) offenseStats.redZoneScores += 1;
       pushDigest(digest, { quarter: state.quarter, clockSec: state.clockSec, team: state.possession, type: 'touchdown', text: `${state.possession === 'home' ? 'Home' : 'Away'} offense finished the drive with a touchdown.` }, state);
       state.possession = state.possession === 'home' ? 'away' : 'home';
@@ -352,6 +396,8 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     } else if (wasFourthDown && !result.success) {
       const fieldGoalRange = result.nextYardLine >= 68;
       if (fieldGoalRange && rng() <= (result.nextYardLine >= 82 ? 0.92 : 0.7)) {
+        offenseStats.fieldGoalsAttempted += 1;
+        offenseStats.fieldGoalsMade += 1;
         if (state.possession === 'home') {
           state.homeScore += 3;
           quarterScores.home[Math.max(0, priorQuarter - 1)] += 3;
@@ -366,6 +412,16 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
         state.distance = 10;
         state.yardLine = 25;
       } else {
+        if (fieldGoalRange) {
+          offenseStats.fieldGoalsAttempted += 1;
+        } else {
+          offenseStats.punts += 1;
+          offenseStats.puntYards += Math.max(34, Math.round(40 + rng() * 18));
+          const returnStats = state.possession === 'home' ? stats.away : stats.home;
+          const puntReturned = rng() < 0.55 ? 1 : 0;
+          returnStats.puntReturns += puntReturned;
+          returnStats.puntReturnYards += puntReturned ? Math.max(0, Math.round(rng() * 18)) : 0;
+        }
         state.possession = state.possession === 'home' ? 'away' : 'home';
         state.down = 1;
         state.distance = 10;
@@ -412,9 +468,11 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       passAtt: s.passAtt,
       passComp: s.passComp,
       passYd: s.passYd,
+      passYards: s.passYd,
       passTD: s.passTD,
       rushAtt: s.rushAtt,
       rushYd: s.rushYd,
+      rushYards: s.rushYd,
       rushTD: s.rushTD,
       totalYards,
       yardsPerPlay: Number((totalYards / Math.max(1, s.plays)).toFixed(2)),
@@ -426,6 +484,16 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       redZoneScores: s.redZoneScores,
       explosivePlays: s.explosivePlays,
       successRate: Number((s.success / Math.max(1, s.plays)).toFixed(3)),
+      fieldGoalsMade: s.fieldGoalsMade,
+      fieldGoalsAttempted: s.fieldGoalsAttempted,
+      extraPointsMade: s.extraPointsMade,
+      extraPointsAttempted: s.extraPointsAttempted,
+      punts: s.punts,
+      puntYards: s.puntYards,
+      kickReturns: s.kickReturns,
+      kickReturnYards: s.kickReturnYards,
+      puntReturns: s.puntReturns,
+      puntReturnYards: s.puntReturnYards,
     };
   };
 
@@ -454,6 +522,8 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       rushAtt: Math.max(0, Math.round(offense.rushAtt * 0.09)),
       rushYd: Math.max(0, Math.round(offense.rushYd * 0.07)),
       sacksTaken: offense.sacksAllowed,
+      sacked: offense.sacksAllowed,
+      passerRating: buildQbRating(offense.passComp, offense.passAtt, offense.passYd, offense.passTD, offense.turnovers),
     });
 
     const rushAttemptRemainder = Math.max(0, offense.rushAtt - Math.round(offense.rushAtt * 0.09));
@@ -466,6 +536,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       put(pid, {
         rushAtt: (statsById[pid]?.rushAtt ?? 0) + rushAttemptParts[i],
         rushYd: (statsById[pid]?.rushYd ?? 0) + rushYardParts[i],
+        fumbles: (statsById[pid]?.fumbles ?? 0) + (rushAttemptParts[i] >= 8 && rngFn() < 0.08 ? 1 : 0),
       });
     }
 
@@ -480,6 +551,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
         receptions: (statsById[pid]?.receptions ?? 0) + recParts[i],
         recYd: (statsById[pid]?.recYd ?? 0) + recYardParts[i],
         recTD: (statsById[pid]?.recTD ?? 0) + recTdParts[i],
+        drops: (statsById[pid]?.drops ?? 0) + Math.max(0, Math.round((recParts[i] + rngFn() * 2 - recParts[i]) * 0.35)),
       });
     }
 
@@ -497,6 +569,67 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       put(pid, { interceptions: (statsById[pid]?.interceptions ?? 0) + intParts[i] });
     }
 
+    const tacklerPool = players.filter((p) => ['LB', 'S', 'FS', 'SS', 'CB', 'EDGE', 'DE', 'DT'].includes(p.pos));
+    const defensePool = tacklerPool.length ? tacklerPool : players.slice(0, 6);
+    const tackleTotal = Math.max(38, Math.round(defense.plays * 0.82));
+    const tackleParts = distributeTotal(tackleTotal, defensePool, rngFn, (p) => (p.pos === 'LB' ? 2.6 : p.pos === 'S' ? 2.1 : p.pos === 'CB' ? 1.5 : 1.2) + (p.ovr ?? 70) / 80);
+    const tflParts = distributeTotal(Math.max(0, Math.round(defense.rushAtt * 0.09)), defensePool, rngFn, (p) => (['EDGE', 'DE', 'DT', 'LB'].includes(p.pos) ? 2.2 : 0.7) + (p.ovr ?? 70) / 90);
+    const pdParts = distributeTotal(Math.max(0, Math.round(defense.passAtt * 0.16)), intPool, rngFn, (p) => (['CB', 'S', 'FS', 'SS'].includes(p.pos) ? 2.2 : 0.9) + (p.ovr ?? 70) / 90);
+    const ffParts = distributeTotal(defense.turnovers, defensePool, rngFn, (p) => (['EDGE', 'DE', 'DT', 'LB'].includes(p.pos) ? 1.9 : 1.1) + (p.ovr ?? 70) / 90);
+    const frParts = distributeTotal(Math.max(0, defense.turnovers - defense.interceptions), defensePool, rngFn, (p) => 1 + (p.ovr ?? 70) / 100);
+    for (let i = 0; i < defensePool.length; i += 1) {
+      const pid = String(defensePool[i].id);
+      addStats(statsById[pid] ?? (statsById[pid] = {}), {
+        tackles: tackleParts[i] ?? 0,
+        tfl: tflParts[i] ?? 0,
+        tacklesForLoss: tflParts[i] ?? 0,
+        forcedFumbles: ffParts[i] ?? 0,
+        fumbleRecoveries: frParts[i] ?? 0,
+      });
+    }
+    for (let i = 0; i < intPool.length; i += 1) {
+      const pid = String(intPool[i].id);
+      addStats(statsById[pid] ?? (statsById[pid] = {}), {
+        passesDefended: pdParts[i] ?? 0,
+      });
+    }
+
+    const kicker = players.find((p) => p.pos === 'K');
+    if (kicker) {
+      const pid = String(kicker.id);
+      put(pid, {
+        fieldGoalsMade: offense.fieldGoalsMade,
+        fieldGoalsAttempted: offense.fieldGoalsAttempted,
+        extraPointsMade: offense.extraPointsMade,
+        extraPointsAttempted: offense.extraPointsAttempted,
+        fieldGoalPct: offense.fieldGoalsAttempted > 0 ? Number(((offense.fieldGoalsMade / offense.fieldGoalsAttempted) * 100).toFixed(1)) : 0,
+        points: offense.fieldGoalsMade * 3 + offense.extraPointsMade,
+      });
+    }
+
+    const punter = players.find((p) => p.pos === 'P');
+    if (punter) {
+      const pid = String(punter.id);
+      put(pid, {
+        punts: offense.punts,
+        puntYards: offense.puntYards,
+        puntAvg: offense.punts > 0 ? Number((offense.puntYards / offense.punts).toFixed(1)) : 0,
+        puntLong: offense.punts > 0 ? Math.max(34, Math.round(offense.puntYards / Math.max(1, offense.punts) + 8)) : 0,
+      });
+    }
+
+    const returnerPool = players.filter((p) => ['WR', 'RB', 'CB', 'S'].includes(p.pos));
+    const returner = returnerPool[0] ?? players[0];
+    if (returner) {
+      const pid = String(returner.id);
+      addStats(statsById[pid] ?? (statsById[pid] = {}), {
+        kickReturns: offense.kickReturns,
+        kickReturnYards: offense.kickReturnYards,
+        puntReturns: offense.puntReturns,
+        puntReturnYards: offense.puntReturnYards,
+      });
+    }
+
     return toBoxScore(players, statsById);
   };
 
@@ -510,6 +643,20 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     scoreHomeAfter: event.homeScore,
     scoreAwayAfter: event.awayScore,
   }));
+  const scoringSummary = digest
+    .filter((event) => event.type === 'touchdown' || event.type === 'field_goal')
+    .map((event, idx) => ({
+      id: `score_${idx}`,
+      quarter: event.quarter,
+      clock: formatClock(event.clockSec),
+      teamId: event.team === 'home' ? payload.homeTeamId : payload.awayTeamId,
+      teamAbbr: event.team === 'home' ? 'Home' : 'Away',
+      type: event.type === 'touchdown' ? 'Touchdown' : 'Field Goal',
+      scoreType: event.type,
+      points: event.type === 'touchdown' ? 7 : 3,
+      text: event.text,
+      scoreAfter: { home: event.homeScore, away: event.awayScore },
+    }));
 
   const recapText = `${state.homeScore > state.awayScore ? 'Home' : 'Away'} wins ${Math.max(state.homeScore, state.awayScore)}-${Math.min(state.homeScore, state.awayScore)}. ${topReasons[0] ?? 'Balanced execution'} set the tone.`;
 
@@ -531,6 +678,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     teamStats: { home: homeTeamLine, away: awayTeamLine },
     boxScore: { home: homeBox, away: awayBox },
     playDigest: digest.slice(0, 12),
+    scoringSummary,
     playLogs,
     summary: {
       storyline: recapText,

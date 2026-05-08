@@ -104,6 +104,28 @@ describe('gameArchive helpers', () => {
     expect(game.playerStats?.home?.qb1?.stats?.passYd).toBe(305);
   });
 
+  it('normalizes persisted boxScore aliases into playerStats and team totals', () => {
+    const game = normalizeArchivedGamePayload({
+      id: '2035_w1_1_2',
+      home: 1,
+      away: 2,
+      scoreHome: 17,
+      scoreAway: 14,
+      boxScore: {
+        home: { qb1: { name: 'Home QB', pos: 'QB', stats: { passAtt: 20, passYd: 180, sacked: 2, interceptions: 1 } } },
+        away: { ed1: { name: 'Away Edge', pos: 'DL', stats: { sacks: 2, tackles: 5 } } },
+      },
+      playLogs: [{ quarter: 2, text: 'Home touchdown', isTouchdown: true, possession: 'home', homeScore: 7, awayScore: 0 }],
+    });
+
+    expect(game.homeScore).toBe(17);
+    expect(game.playerStats?.home?.qb1?.stats?.passYd).toBe(180);
+    expect(game.teamStats?.home?.passYards).toBe(180);
+    expect(game.teamStats?.home?.turnovers).toBe(1);
+    expect(game.teamStats?.away?.sacks).toBe(2);
+    expect(game.playLog).toHaveLength(1);
+  });
+
   it('enriches legacy leader-only archives with playable fallback stats', () => {
     const game = enrichArchivedGamePayload({
       id: '2034_w9_10_11',

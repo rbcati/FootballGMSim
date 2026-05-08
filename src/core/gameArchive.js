@@ -31,22 +31,45 @@ export function deriveTeamStatsFromPlayerRows(playerRows = {}) {
   const rows = Object.values(playerRows ?? {});
   if (!rows.length) return null;
   const sum = (key) => rows.reduce((acc, row) => acc + (Number(row?.stats?.[key]) || 0), 0);
+  const sumIf = (key, predicate) => rows.reduce((acc, row) => {
+    const stats = row?.stats ?? {};
+    return predicate(stats) ? acc + (Number(stats?.[key]) || 0) : acc;
+  }, 0);
   const hasAnyStat = rows.some((row) => hasValues(row?.stats));
   if (!hasAnyStat) return null;
   const passYards = sum('passYd');
   const rushYards = sum('rushYd');
+  const passAtt = sum('passAtt');
+  const rushAtt = sum('rushAtt');
+  const plays = passAtt + rushAtt;
   return {
     totalYards: passYards + rushYards,
     passYards,
     rushYards,
-    turnovers: sum('interceptions') + sum('fumblesLost'),
-    sacks: sum('sacks'),
+    passAtt,
+    passComp: sum('passComp'),
+    rushAtt,
+    plays,
+    yardsPerPlay: plays > 0 ? Math.round(((passYards + rushYards) / plays) * 100) / 100 : 0,
+    turnovers: sumIf('interceptions', (stats) => Number(stats?.passAtt ?? 0) > 0) + sum('fumblesLost'),
+    sacksAllowed: sumIf('sacked', (stats) => Number(stats?.passAtt ?? 0) > 0) || sumIf('sacksTaken', (stats) => Number(stats?.passAtt ?? 0) > 0),
+    sacks: sumIf('sacks', (stats) => Number(stats?.passAtt ?? 0) === 0),
     firstDowns: sum('firstDowns'),
     thirdDownMade: sum('thirdDownMade'),
     thirdDownAtt: sum('thirdDownAtt'),
     redZoneMade: sum('redZoneMade'),
     redZoneAtt: sum('redZoneAtt'),
     penalties: sum('penalties'),
+    fieldGoalsMade: sum('fieldGoalsMade'),
+    fieldGoalsAttempted: sum('fieldGoalsAttempted'),
+    extraPointsMade: sum('extraPointsMade'),
+    extraPointsAttempted: sum('extraPointsAttempted'),
+    punts: sum('punts'),
+    puntYards: sum('puntYards'),
+    kickReturns: sum('kickReturns'),
+    kickReturnYards: sum('kickReturnYards'),
+    puntReturns: sum('puntReturns'),
+    puntReturnYards: sum('puntReturnYards'),
   };
 }
 
@@ -111,13 +134,17 @@ export function normalizeArchivedGamePayload(rawGame) {
     }
     return (typeof side === 'object') ? side : null;
   };
-  const playerStats = rawGame?.playerStats ?? (legacyStats ? {
-    home: coerceSideStats(legacyStats.home),
-    away: coerceSideStats(legacyStats.away),
-  } : null);
+  const playerStats = rawGame?.playerStats
+    ?? rawGame?.boxScore
+    ?? (legacyStats ? {
+      home: coerceSideStats(legacyStats.home),
+      away: coerceSideStats(legacyStats.away),
+    } : null);
 
   const playLog = Array.isArray(rawGame?.playLog)
     ? rawGame.playLog
+    : Array.isArray(rawGame?.playLogs)
+      ? rawGame.playLogs
     : Array.isArray(rawGame?.eventLog)
       ? rawGame.eventLog
       : Array.isArray(legacyStats?.playLogs)
@@ -141,8 +168,8 @@ export function normalizeArchivedGamePayload(rawGame) {
     phase: rawGame?.phase ?? null,
     homeId,
     awayId,
-    homeScore: asNumberOrNull(rawGame?.homeScore),
-    awayScore: asNumberOrNull(rawGame?.awayScore),
+    homeScore: asNumberOrNull(rawGame?.homeScore ?? rawGame?.scoreHome ?? rawGame?.score?.home),
+    awayScore: asNumberOrNull(rawGame?.awayScore ?? rawGame?.scoreAway ?? rawGame?.score?.away),
     quarterScores: normalizeQuarterScores(rawGame?.quarterScores ?? rawGame?.linescore),
     recap: rawGame?.recap ?? null,
     recapText: rawGame?.recapText ?? null,

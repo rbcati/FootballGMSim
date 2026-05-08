@@ -110,7 +110,7 @@ describe('WeeklyResultsCenter', () => {
     };
     const html = renderToString(<WeeklyResultsCenter league={legacyLeague} initialWeek={3} onGameSelect={() => {}} onNavigate={() => {}} />);
     expect(html).toContain('DAL won by 4 (3-7).');
-    expect(html).toContain('Game Book unavailable (Archive unavailable)');
+    expect(html).toContain('Open Game Book');
     expect(html).not.toContain('Game-plan impact recap');
   });
 

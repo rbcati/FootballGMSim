@@ -46,6 +46,16 @@ function computePasserRating({ comp = 0, att = 0, yds = 0, td = 0, ints = 0 } = 
   return U.round(((a + b + c + d) / 6) * 100, 1);
 }
 
+export function calculateQuarterbackRating({ completions = 0, attempts = 0, yards = 0, touchdowns = 0, interceptions = 0 } = {}) {
+  return computePasserRating({
+    comp: completions,
+    att: attempts,
+    yds: yards,
+    td: touchdowns,
+    ints: interceptions,
+  }) ?? 0;
+}
+
 const SIM_SPEED_TO_MS = {
   slow: 1400,
   medium: 800,
@@ -3070,20 +3080,52 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
     updateRivalries(home, away, homeScore, awayScore, isPlayoff);
 
     // 5. Create Result Object
+    const homeBoxScore = transformStatsForBoxScore(stats?.home?.players, home.roster);
+    const awayBoxScore = transformStatsForBoxScore(stats?.away?.players, away.roster);
+    const teamStats = buildCanonicalTeamStats({
+        home: homeBoxScore,
+        away: awayBoxScore,
+        teamDriveStats: gameData.teamDriveStats,
+        rawTeamStats: {
+            home: stats?.home?.team,
+            away: stats?.away?.team,
+        },
+    });
+
     const resultObj = {
         id: `g_final_${Date.now()}_${U.id()}`,
+        gameId: gameData.gameId ?? null,
         home: homeTeamId,
         away: awayTeamId,
+        homeId: homeTeamId,
+        awayId: awayTeamId,
         scoreHome: homeScore,
         scoreAway: awayScore,
+        homeScore,
+        awayScore,
         homeWin: homeScore > awayScore,
         homeTeamName: home.name,
         awayTeamName: away.name,
         homeTeamAbbr: home.abbr,
         awayTeamAbbr: away.abbr,
         boxScore: {
-            home: transformStatsForBoxScore(stats?.home?.players, home.roster),
-            away: transformStatsForBoxScore(stats?.away?.players, away.roster)
+            home: homeBoxScore,
+            away: awayBoxScore
+        },
+        playerStats: {
+            home: homeBoxScore,
+            away: awayBoxScore,
+        },
+        teamStats,
+        stats: {
+            home: homeBoxScore,
+            away: awayBoxScore,
+            players: {
+                home: homeBoxScore,
+                away: awayBoxScore,
+            },
+            team: teamStats,
+            playLogs: gameData.playLogs || [],
         },
         injuries: injuries || [],
         week: league.week,
@@ -3103,6 +3145,20 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         recapText: gameData.recapText || null,
         simSeed: gameData.simSeed ?? null,
     };
+
+    if (scheduledGame) {
+        scheduledGame.scoreHome = homeScore;
+        scheduledGame.scoreAway = awayScore;
+        scheduledGame.playerStats = resultObj.playerStats;
+        scheduledGame.teamStats = resultObj.teamStats;
+        scheduledGame.boxScore = resultObj.boxScore;
+        scheduledGame.scoringSummary = resultObj.scoringSummary;
+        scheduledGame.quarterScores = resultObj.quarterScores;
+        scheduledGame.driveSummary = resultObj.driveSummary;
+        scheduledGame.playLogs = resultObj.playLogs;
+        scheduledGame.playLog = resultObj.playLogs;
+        scheduledGame.recapText = resultObj.recapText;
+    }
 
     if (gameData.preGameContext) {
         const callbacks = generatePostGameCallbacks(gameData.preGameContext, stats, homeScore, awayScore);
@@ -3186,6 +3242,87 @@ function transformStatsForBoxScore(playerStatsMap, roster) {
     return box;
 }
 
+function sumPlayerStat(rows, key, predicate = () => true) {
+    return Object.values(rows ?? {}).reduce((acc, row) => {
+        const stats = row?.stats ?? row ?? {};
+        if (!predicate(stats, row)) return acc;
+        return acc + (Number(stats?.[key]) || 0);
+    }, 0);
+}
+
+function deriveCanonicalTeamSideStats(playerRows = {}, driveStats = {}, rawTeamStats = {}) {
+    const rows = playerRows ?? {};
+    const raw = rawTeamStats ?? {};
+    const drive = driveStats ?? {};
+    const offenseRow = (stats) => (
+        Number(stats?.passAtt ?? 0) > 0
+        || Number(stats?.rushAtt ?? 0) > 0
+        || Number(stats?.targets ?? 0) > 0
+        || Number(stats?.receptions ?? 0) > 0
+    );
+    const passYards = Number(drive?.passYards ?? drive?.passYd ?? drive?.passYds)
+        || sumPlayerStat(rows, 'passYd', offenseRow);
+    const rushYards = Number(drive?.rushYards ?? drive?.rushYd ?? drive?.rushYds)
+        || sumPlayerStat(rows, 'rushYd', offenseRow);
+    const passAtt = Number(drive?.passAtt) || sumPlayerStat(rows, 'passAtt', offenseRow);
+    const passComp = Number(drive?.passComp ?? drive?.comp) || sumPlayerStat(rows, 'passComp', offenseRow);
+    const rushAtt = Number(drive?.rushAtt) || sumPlayerStat(rows, 'rushAtt', offenseRow);
+    const totalYards = Number(drive?.totalYards) || passYards + rushYards;
+    const plays = Number(drive?.plays) || passAtt + rushAtt + Number(drive?.sacksAllowed ?? 0);
+    const offensiveInterceptions = sumPlayerStat(rows, 'interceptions', (stats) => Number(stats?.passAtt ?? 0) > 0);
+    const fumblesLost = sumPlayerStat(rows, 'fumblesLost', offenseRow)
+        || sumPlayerStat(rows, 'fumbles', offenseRow);
+    const sacksAllowed = Number(drive?.sacksAllowed)
+        || sumPlayerStat(rows, 'sacked', (stats) => Number(stats?.passAtt ?? 0) > 0)
+        || sumPlayerStat(rows, 'sacksTaken', (stats) => Number(stats?.passAtt ?? 0) > 0)
+        || sumPlayerStat(rows, 'sacks', (stats) => Number(stats?.passAtt ?? 0) > 0);
+
+    return {
+        ...raw,
+        plays,
+        firstDowns: Number(drive?.firstDowns ?? raw?.firstDowns ?? 0),
+        passAtt,
+        passComp,
+        passYards,
+        passYd: passYards,
+        passTD: Number(drive?.passTD ?? raw?.passTD ?? 0) || sumPlayerStat(rows, 'passTD', offenseRow),
+        rushAtt,
+        rushYards,
+        rushYd: rushYards,
+        rushTD: Number(drive?.rushTD ?? raw?.rushTD ?? 0) || sumPlayerStat(rows, 'rushTD', offenseRow),
+        totalYards,
+        yardsPerPlay: plays > 0 ? U.round(totalYards / plays, 2) : 0,
+        turnovers: Number(drive?.turnovers ?? raw?.turnovers ?? 0) || offensiveInterceptions + fumblesLost,
+        sacksAllowed,
+        sacks: sumPlayerStat(rows, 'sacks', (stats) => Number(stats?.passAtt ?? 0) === 0),
+        interceptions: offensiveInterceptions,
+        takeaways: sumPlayerStat(rows, 'interceptions', (stats) => Number(stats?.passAtt ?? 0) === 0) + sumPlayerStat(rows, 'fumbleRecoveries'),
+        fieldGoalsMade: sumPlayerStat(rows, 'fieldGoalsMade'),
+        fieldGoalsAttempted: sumPlayerStat(rows, 'fieldGoalsAttempted'),
+        extraPointsMade: sumPlayerStat(rows, 'extraPointsMade'),
+        extraPointsAttempted: sumPlayerStat(rows, 'extraPointsAttempted'),
+        punts: sumPlayerStat(rows, 'punts'),
+        puntYards: sumPlayerStat(rows, 'puntYards'),
+        kickReturns: sumPlayerStat(rows, 'kickReturns'),
+        kickReturnYards: sumPlayerStat(rows, 'kickReturnYards'),
+        puntReturns: sumPlayerStat(rows, 'puntReturns'),
+        puntReturnYards: sumPlayerStat(rows, 'puntReturnYards'),
+        thirdDownMade: Number(drive?.thirdDownMade ?? raw?.thirdDownMade ?? raw?.thirdDownConversions ?? 0),
+        thirdDownAtt: Number(drive?.thirdDownAtt ?? raw?.thirdDownAtt ?? raw?.thirdDownAttempts ?? 0),
+        redZoneMade: Number(drive?.redZoneMade ?? raw?.redZoneMade ?? raw?.redZoneTDs ?? 0),
+        redZoneAtt: Number(drive?.redZoneAtt ?? raw?.redZoneAtt ?? raw?.redZoneTrips ?? 0),
+        penalties: Number(drive?.penalties ?? raw?.penalties ?? 0),
+        timePossession: Number(drive?.timePossession ?? raw?.timePossession ?? 0),
+    };
+}
+
+function buildCanonicalTeamStats({ home = {}, away = {}, teamDriveStats = {}, rawTeamStats = {} } = {}) {
+    return {
+        home: deriveCanonicalTeamSideStats(home, teamDriveStats?.home, rawTeamStats?.home),
+        away: deriveCanonicalTeamSideStats(away, teamDriveStats?.away, rawTeamStats?.away),
+    };
+}
+
 function normalizeGameStatsForBoxScore(rawStats = {}) {
     const stats = { ...(rawStats || {}) };
 
@@ -3208,11 +3345,39 @@ function normalizeGameStatsForBoxScore(rawStats = {}) {
     alias('recTD', 'recTDs');
     alias('interceptions', 'INT', 'ints');
     alias('fumblesLost', 'fumbles');
+    alias('sacked', 'sacksTaken');
+    alias('rushLong', 'longestRun');
+    alias('recLong', 'longestCatch');
+    alias('tfl', 'tacklesForLoss');
+    alias('passesDefended', 'passDefls', 'passBreakups');
+    alias('fumbleRecoveries', 'fumbleRecs', 'fumblesRecovered');
+    alias('defTD', 'defTDs', 'intTDs', 'fumbleReturnTDs');
+    alias('fieldGoalsMade', 'fgMade');
+    alias('fieldGoalsAttempted', 'fgAttempts');
+    alias('extraPointsMade', 'xpMade');
+    alias('extraPointsAttempted', 'xpAttempts');
+    alias('puntAvg', 'avgPuntYards');
+    alias('puntLong', 'longestPunt');
+    alias('returnTD', 'returnTDs');
+
+    if (stats.passAtt > 0 && stats.sacked == null && stats.sacks != null) {
+        stats.sacked = stats.sacks;
+    }
 
     if (stats.completionPct == null) {
         const att = Number(stats.passAtt ?? 0);
         const comp = Number(stats.passComp ?? 0);
         stats.completionPct = att > 0 ? Math.round((comp / att) * 1000) / 10 : 0;
+    }
+
+    if (stats.passerRating == null) {
+        stats.passerRating = calculateQuarterbackRating({
+            completions: Number(stats.passComp ?? 0),
+            attempts: Number(stats.passAtt ?? 0),
+            yards: Number(stats.passYd ?? 0),
+            touchdowns: Number(stats.passTD ?? 0),
+            interceptions: Number(stats.interceptions ?? 0),
+        });
     }
 
     if (stats.ypc == null) {
@@ -3225,6 +3390,21 @@ function normalizeGameStatsForBoxScore(rawStats = {}) {
         const rec = Number(stats.receptions ?? 0);
         const recYd = Number(stats.recYd ?? 0);
         stats.ypr = rec > 0 ? Math.round((recYd / rec) * 100) / 100 : 0;
+    }
+
+    if (stats.fieldGoalPct == null) {
+        const fga = Number(stats.fieldGoalsAttempted ?? 0);
+        const fgm = Number(stats.fieldGoalsMade ?? 0);
+        stats.fieldGoalPct = fga > 0 ? Math.round((fgm / fga) * 1000) / 10 : 0;
+    }
+
+    if (stats.points == null) {
+        stats.points = (Number(stats.fieldGoalsMade ?? 0) * 3)
+            + Number(stats.extraPointsMade ?? 0)
+            + (Number(stats.recTD ?? 0) * 6)
+            + (Number(stats.rushTD ?? 0) * 6)
+            + (Number(stats.returnTD ?? 0) * 6)
+            + (Number(stats.defTD ?? 0) * 6);
     }
 
     return stats;
