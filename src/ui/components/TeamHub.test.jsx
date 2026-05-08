@@ -42,7 +42,7 @@ describe('TeamHub', () => {
       />,
     );
 
-    expect(html).toContain('Team Command Center');
+    expect(html).toContain('Lineup Check Before Kickoff');
     expect(html).toContain('Overview');
     expect(html).toContain('Roster / Depth');
     expect(html).toContain('Contracts');
