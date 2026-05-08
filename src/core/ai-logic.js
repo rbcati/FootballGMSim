@@ -15,6 +15,7 @@ import NewsEngine from './news-engine.js';
 import { getTeamContextForNegotiation } from './teamContext/negotiationContext.js';
 import { evaluateContractOffer } from './contracts/negotiation.js';
 import { evaluateReSigningPriority } from './retention/reSigning.js';
+import { buildFreeAgencyMarketAnalysis } from './freeAgency/freeAgencyMarketAnalysis.js';
 
 class AiLogic {
 
@@ -414,22 +415,58 @@ class AiLogic {
 
         if (highNeedPositions.length === 0) return;
 
-        // 2. Get Available FAs (use map if provided, otherwise build it inefficiently)
-        let getCandidates = (pos) => {
-             const allPlayers = cache.getAllPlayers();
-             return allPlayers
+        // 2. When we have a shared freeAgentsMap (from processFreeAgencyDay),
+        // build a richer market analysis so AI can reason about fit, bargains,
+        // and cap pressure instead of sorting purely by OVR.
+        let marketByPos = null;
+        if (freeAgentsMap) {
+            const flatFreeAgents = Object.values(freeAgentsMap).flat().filter(Boolean);
+            if (flatFreeAgents.length > 0) {
+                const roster = cache.getPlayersByTeam(teamId);
+                const analysis = buildFreeAgencyMarketAnalysis({
+                    team,
+                    roster,
+                    freeAgents: flatFreeAgents,
+                    cap: { capRoom: team.capRoom },
+                });
+                marketByPos = analysis?.marketRows?.reduce((acc, row) => {
+                    if (!row?.pos) return acc;
+                    if (!acc[row.pos]) acc[row.pos] = [];
+                    acc[row.pos].push(row);
+                    return acc;
+                }, {}) || null;
+                if (marketByPos) {
+                    for (const pos of Object.keys(marketByPos)) {
+                        marketByPos[pos].sort((a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0));
+                    }
+                }
+            }
+        }
+
+        // 3. Get Available FAs (fallback to legacy behaviour if needed)
+        const legacyGetCandidates = (pos) => {
+            const allPlayers = cache.getAllPlayers();
+            return allPlayers
                 .filter(p => (!p.teamId || p.status === 'free_agent') && p.pos === pos)
                 .sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
         };
 
-        if (freeAgentsMap) {
-            getCandidates = (pos) => freeAgentsMap[pos] || [];
-        }
+        const getCandidatesForPos = (pos) => {
+            if (marketByPos && marketByPos[pos]?.length) {
+                return marketByPos[pos]
+                    .filter(row => row.recommendation !== 'avoid' && row.capFit !== 'expensive')
+                    .map(row => row._player)
+                    .filter(Boolean);
+            }
+            if (freeAgentsMap) {
+                return freeAgentsMap[pos] || [];
+            }
+            return legacyGetCandidates(pos);
+        };
 
-        // 3. Attempt to fill each high need position
+        // 4. Attempt to fill each high need position
         for (const pos of highNeedPositions) {
-            // Get FAs at this pos, sorted by OVR
-            const candidates = getCandidates(pos);
+            const candidates = getCandidatesForPos(pos);
 
             if (!candidates || candidates.length === 0) continue;
 
@@ -437,14 +474,10 @@ class AiLogic {
             for (const fa of candidates) {
                 // Skip if OVR is too low
                 const minOvr = needs[pos] > 2.0 ? 60 : 70;
-                if ((fa.ovr ?? 0) < minOvr) break;
+                if ((fa.ovr ?? 0) < minOvr) continue;
 
                 // Check if we already have an active offer out to this player
                 if (fa.offers && fa.offers.find(o => o.teamId === teamId)) continue;
-
-                // Check if we have too many pending offers for this position?
-                // For simplicity, allow multiple offers, but maybe limit total pending cap?
-                // Ignoring complex pending cap logic for Phase 1.
 
                 // Calculate Ask / Offer
                 const demand = calculateExtensionDemand(fa);
@@ -453,7 +486,7 @@ class AiLogic {
                 const capHit = demand.baseAnnual + (demand.signingBonus / demand.yearsTotal);
 
                 // Check Cap
-                if (team.capRoom > (capHit + 1)) {
+                if ((team.capRoom ?? 0) > (capHit + 1)) {
                     // MAKE OFFER
                     const offer = {
                         teamId,
@@ -466,8 +499,6 @@ class AiLogic {
                     };
 
                     // Push to player's offer list (in cache)
-                    // We must clone the player offers array to trigger update if we were strictly reactive,
-                    // but here we are mutating the object reference in cache.
                     if (!fa.offers) fa.offers = [];
                     fa.offers.push(offer);
 
