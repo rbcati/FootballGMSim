@@ -45,7 +45,7 @@ describe('LeagueStats', () => {
 
     // Offense rankings should include AAA with visible PF/PPG context.
     expect(screen.getByText('League Stats')).toBeTruthy();
-    expect(screen.getByText(/AAA/)).toBeTruthy();
+  expect(screen.getAllByText(/^AAA$/).length).toBeGreaterThan(0);
   });
 });
 

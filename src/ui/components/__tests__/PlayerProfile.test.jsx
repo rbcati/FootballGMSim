@@ -126,7 +126,7 @@ describe('PlayerProfile', () => {
     // Navigate to Game Log tab
     fireEvent.click(screen.getByRole('button', { name: 'Game Log' }));
     expect(screen.getByTestId('player-profile-game-logs').textContent).toContain('W1');
-    expect(screen.getByTestId('player-profile-game-logs').textContent).toContain('DAL');
+    expect(screen.getByTestId('player-profile-game-logs').textContent).toContain('NYG');
   });
 
   it('return buttons navigate to Game Book and HQ', () => {

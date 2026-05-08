@@ -4,8 +4,11 @@ const mockCache = {
   getTeam: vi.fn(),
   getPlayersByTeam: vi.fn(),
   getAllPlayers: vi.fn(),
+  getAllTeams: vi.fn(),
   updatePlayer: vi.fn(),
+  updateTeam: vi.fn(),
   getMeta: vi.fn(),
+  setMeta: vi.fn(),
 };
 
 const mockBuildFreeAgencyMarketAnalysis = vi.fn();
@@ -145,6 +148,86 @@ describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
     expect(mockCache.updatePlayer).toHaveBeenCalledWith(
       12,
       expect.objectContaining({ offers: expect.any(Array) }),
+    );
+  });
+
+  it('processFreeAgencyDay carries stale-contract offer into evaluation and signing path', async () => {
+    const releasedVeteran = {
+      id: 21,
+      name: 'Released Veteran QB',
+      pos: 'QB',
+      status: 'free_agent',
+      teamId: null,
+      ovr: 77,
+      age: 33,
+      contract: { baseAnnual: 36, years: 1, yearsTotal: 1, signingBonus: 0 },
+      offers: [],
+    };
+    const team = { id: 1, name: 'Test Team', capRoom: 15 };
+    const userTeam = { id: 99, name: 'User Team', capRoom: 15 };
+    const cheapDemand = { years: 2, yearsTotal: 2, baseAnnual: 5, signingBonus: 2 };
+
+    mockCache.getMeta.mockReturnValue({ year: 2026, userTeamId: 99, currentSeasonId: 's1', currentWeek: 1, phase: 'free_agency' });
+    mockCache.getAllPlayers.mockReturnValue([releasedVeteran]);
+    mockCache.getAllTeams.mockReturnValue([team, userTeam]);
+    mockCache.getTeam.mockImplementation((id) => (Number(id) === 1 ? team : userTeam));
+    mockCalculateExtensionDemand.mockReturnValue(cheapDemand);
+    mockBuildFreeAgencyMarketAnalysis.mockImplementation(({ freeAgents }) => ({
+      marketRows: freeAgents.map((p) => ({
+        pos: p.pos,
+        recommendation: 'pursue',
+        // This is the stale-contract path that should still allow bidding.
+        capFit: 'expensive',
+        costSource: 'staleContract',
+        fitScore: 90,
+        _player: p,
+      })),
+    }));
+
+    const realMakeOffers = AiLogic.makeFreeAgencyOffers.bind(AiLogic);
+    const makeOffersSpy = vi
+      .spyOn(AiLogic, 'makeFreeAgencyOffers')
+      .mockImplementation((teamId, freeAgentsMap) => realMakeOffers(teamId, freeAgentsMap));
+    const evaluateSpy = vi.spyOn(AiLogic, 'evaluateOffers');
+
+    await AiLogic.processFreeAgencyDay(2);
+
+    // processFreeAgencyDay should build a shared freeAgentsMap and pass it to offer generation.
+    expect(makeOffersSpy).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        QB: expect.arrayContaining([expect.objectContaining({ id: 21 })]),
+      }),
+    );
+    // Offer creation happened for stale-contract affordable demand.
+    expect(mockCache.updatePlayer).toHaveBeenCalledWith(
+      21,
+      expect.objectContaining({
+        offers: expect.arrayContaining([
+          expect.objectContaining({
+            teamId: 1,
+            contract: expect.objectContaining({ baseAnnual: 5, yearsTotal: 2 }),
+          }),
+        ]),
+      }),
+    );
+    // The later evaluation stage saw the generated offer.
+    expect(evaluateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 21,
+        offers: expect.arrayContaining([expect.objectContaining({ teamId: 1 })]),
+      }),
+      2,
+    );
+    // Signing path executed when cap allows, replacing free-agent status.
+    expect(mockCache.updatePlayer).toHaveBeenCalledWith(
+      21,
+      expect.objectContaining({
+        teamId: 1,
+        status: 'active',
+        contract: expect.objectContaining({ baseAnnual: 5, yearsTotal: 2 }),
+        offers: [],
+      }),
     );
   });
 });
