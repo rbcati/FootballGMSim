@@ -1188,7 +1188,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "History Hub" && (
           <TabErrorBoundary label="History Hub">
-            <HistoryHub onNavigate={setActiveTab} />
+            <HistoryHub onNavigate={setActiveTab} actions={actions} />
           </TabErrorBoundary>
         )}
         {activeTab === "History" && (

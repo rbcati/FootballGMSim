@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScreenHeader, SectionCard } from './ScreenSystem.jsx';
 
 const DESTINATIONS = [
@@ -8,7 +8,24 @@ const DESTINATIONS = [
   { key: 'Awards & Records', title: 'Awards & Records', body: 'Who defined each season and who owns the book.' },
 ];
 
-export default function HistoryHub({ onNavigate }) {
+export default function HistoryHub({ onNavigate, actions }) {
+  const [seasons, setSeasons] = useState([]);
+  useEffect(() => {
+    let mounted = true;
+    (actions?.getAllSeasons?.() ?? Promise.resolve({ payload: { seasons: [] } }))
+      .then((res) => {
+        if (!mounted) return;
+        setSeasons(res?.payload?.seasons ?? []);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setSeasons([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [actions]);
+
   return (
     <div className="app-screen-stack">
       <ScreenHeader
@@ -29,6 +46,31 @@ export default function HistoryHub({ onNavigate }) {
           </button>
         ))}
         </div>
+      </SectionCard>
+      <SectionCard title="Archived seasons" subtitle="Recent dynasty memory snapshots.">
+        {seasons.length === 0 ? (
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+            No completed seasons are archived yet. History appears automatically after your first full season is completed.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {seasons.slice(0, 5).map((season) => (
+              <button
+                key={season.id ?? season.year}
+                className="card clickable-card"
+                style={{ padding: 'var(--space-3)', textAlign: 'left' }}
+                onClick={() => onNavigate?.('History')}
+              >
+                <div style={{ fontWeight: 800 }}>
+                  {season.year} · {season?.champion?.abbr ?? season?.champion?.name ?? 'Champion TBD'}
+                </div>
+                <div style={{ marginTop: 4, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                  Runner-up: {season?.runnerUp?.abbr ?? season?.runnerUp?.name ?? 'Unavailable'} · MVP: {season?.awards?.mvp?.name ?? 'Unavailable'}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </SectionCard>
       </div>
   );

@@ -391,7 +391,76 @@ function buildOffseasonRecommendations({ review, reportCards = [], teamRows = []
   };
 }
 
-export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [], teams = [], seasonStats = [] }) {
+function buildPlayerStatLeaders(seasonStats = []) {
+  const categories = [
+    ['passingYards', 'passYd'],
+    ['passingTd', 'passTD'],
+    ['rushingYards', 'rushYd'],
+    ['rushingTd', 'rushTD'],
+    ['receivingYards', 'recYd'],
+    ['receivingTd', 'recTD'],
+    ['tackles', 'tackles'],
+    ['sacks', 'sacks'],
+    ['interceptions', 'interceptions'],
+    ['fieldGoalsMade', 'fgMade'],
+  ];
+  const byKey = {};
+  for (const [label, key] of categories) {
+    const top = [...seasonStats]
+      .filter((row) => Number(row?.totals?.[key] ?? 0) > 0)
+      .sort((a, b) => Number(b?.totals?.[key] ?? 0) - Number(a?.totals?.[key] ?? 0))[0];
+    if (top) {
+      byKey[label] = {
+        playerId: top.playerId,
+        playerName: top.name,
+        teamId: top.teamId,
+        teamAbbr: top.teamAbbr ?? null,
+        position: top.pos,
+        value: Number(top?.totals?.[key] ?? 0),
+        stat: key,
+      };
+    }
+  }
+  return byKey;
+}
+
+function buildTeamStatLeaders(standings = []) {
+  const rows = [...(standings || [])];
+  const topBy = (selector, ascending = false) => {
+    if (!rows.length) return null;
+    const sorted = [...rows].sort((a, b) => {
+      const va = Number(selector(a) ?? 0);
+      const vb = Number(selector(b) ?? 0);
+      return ascending ? va - vb : vb - va;
+    });
+    return sorted[0] ?? null;
+  };
+  const withGames = rows.map((row) => ({ ...row, games: Number(row.wins ?? 0) + Number(row.losses ?? 0) + Number(row.ties ?? 0) }));
+  const teamPpg = topBy((row) => {
+    const games = Number(row.wins ?? 0) + Number(row.losses ?? 0) + Number(row.ties ?? 0);
+    return games > 0 ? Number(row.pf ?? 0) / games : 0;
+  });
+  const teamPa = topBy((row) => {
+    const games = Number(row.wins ?? 0) + Number(row.losses ?? 0) + Number(row.ties ?? 0);
+    return games > 0 ? Number(row.pa ?? 0) / games : 0;
+  }, true);
+  return {
+    pointsPerGame: teamPpg ? {
+      teamId: teamPpg.id,
+      teamName: teamPpg.name,
+      teamAbbr: teamPpg.abbr,
+      value: teamPpg.games > 0 ? Math.round((Number(teamPpg.pf ?? 0) / teamPpg.games) * 100) / 100 : 0,
+    } : null,
+    pointsAllowed: teamPa ? {
+      teamId: teamPa.id,
+      teamName: teamPa.name,
+      teamAbbr: teamPa.abbr,
+      value: teamPa.games > 0 ? Math.round((Number(teamPa.pa ?? 0) / teamPa.games) * 100) / 100 : 0,
+    } : null,
+  };
+}
+
+export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [], teams = [], seasonStats = [], championshipGameId = null }) {
   const sorted = [...(standings || [])].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
   const userRow = sorted.find((t) => Number(t.id) === Number(userTeamId)) || null;
   const userTeam = teams.find((t) => Number(t?.id) === Number(userTeamId)) ?? null;
@@ -401,14 +470,52 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
   const playerReportCards = userRow ? buildPlayerReportCards({ team: userTeam, teamRows: userRows, review: seasonReview }) : [];
   const offseasonPlan = seasonReview ? buildOffseasonRecommendations({ review: seasonReview, reportCards: playerReportCards, teamRows: userRows }) : null;
 
+  const playerStatLeaders = buildPlayerStatLeaders(seasonStats);
+  const teamStatLeaders = buildTeamStatLeaders(sorted);
+  const notableGames = [];
+  const championshipGame = (games || []).find((g) => String(g?.id ?? g?.gameId) === String(championshipGameId));
+  if (championshipGame) {
+    notableGames.push({
+      type: 'championship',
+      gameId: championshipGame.id ?? championshipGame.gameId,
+      week: championshipGame.week ?? null,
+      homeId: championshipGame.homeId,
+      awayId: championshipGame.awayId,
+      homeScore: championshipGame.homeScore,
+      awayScore: championshipGame.awayScore,
+    });
+  }
+  const highestScoring = [...(games || [])]
+    .filter((g) => Number.isFinite(Number(g?.homeScore)) && Number.isFinite(Number(g?.awayScore)))
+    .sort((a, b) => (Number(b?.homeScore ?? 0) + Number(b?.awayScore ?? 0)) - (Number(a?.homeScore ?? 0) + Number(a?.awayScore ?? 0)))[0];
+  if (highestScoring) {
+    notableGames.push({
+      type: 'highest_scoring',
+      gameId: highestScoring.id ?? highestScoring.gameId,
+      week: highestScoring.week ?? null,
+      homeId: highestScoring.homeId,
+      awayId: highestScoring.awayId,
+      homeScore: highestScoring.homeScore,
+      awayScore: highestScoring.awayScore,
+      totalPoints: Number(highestScoring.homeScore ?? 0) + Number(highestScoring.awayScore ?? 0),
+    });
+  }
+
   return {
     id: seasonId,
     year,
+    seasonId,
+    schemaVersion: 1,
+    completedAt: new Date().toISOString(),
     champion,
     runnerUp,
+    championshipGameId: championshipGameId ?? championshipGame?.id ?? championshipGame?.gameId ?? null,
     standings: sorted,
     awards,
     leaders,
+    playerStatLeaders,
+    teamStatLeaders,
+    notableGames,
     playoffSummary: {
       finals: champion && runnerUp ? `${champion.abbr} over ${runnerUp.abbr}` : null,
       wins: champion?.wins ?? null,

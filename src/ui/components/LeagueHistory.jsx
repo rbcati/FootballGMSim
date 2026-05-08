@@ -261,6 +261,8 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league }) {
   const awardLeaders = AWARD_KEYS
     .map((key) => ({ key, label: AWARD_DISPLAY_NAMES[key] ?? key.toUpperCase(), award: selected?.awards?.[key] }))
     .filter((entry) => entry.award?.name);
+  const championshipGame = (selected?.gameIndex ?? []).find((g) => String(g?.id) === String(selected?.championshipGameId)) ?? null;
+  const notableGames = Array.isArray(selected?.notableGames) ? selected.notableGames : [];
   const selectedSeasonIndex = seasons.findIndex((s) => s.id === selected?.id);
 
   return (
@@ -300,6 +302,16 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league }) {
             <SummaryBox label="Champion" value={selected?.champion?.name ?? "TBD"} />
             <SummaryBox label="Runner-up" value={selected?.runnerUp?.name ?? "—"} muted={!selected?.runnerUp} />
             <SummaryBox label="MVP" value={selected?.awards?.mvp?.name ?? "—"} onClick={selected?.awards?.mvp?.playerId != null ? () => onPlayerSelect?.(selected.awards.mvp.playerId) : undefined} />
+          </div>
+          <div className="text-xs text-[color:var(--text-muted)]">
+            Championship game: {championshipGame ? (
+              <button
+                className="text-[color:var(--accent)]"
+                onClick={() => openResolvedBoxScore(championshipGame, { seasonId: selected?.year, week: championshipGame?.week, source: "league_history_championship" }, onOpenBoxScore)}
+              >
+                Week {championshipGame.week} · {championshipGame.awayScore ?? "—"}-{championshipGame.homeScore ?? "—"} (open Game Book)
+              </button>
+            ) : "Unavailable in this archive."}
           </div>
 
           <section>
@@ -373,6 +385,21 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league }) {
               )}
             </div>
           </section>
+          {notableGames.length > 0 && (
+            <section>
+              <h4 className="text-sm font-bold mb-2">Notable games</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                {notableGames.map((game, idx) => (
+                  <div key={`${game.type}-${game.gameId ?? idx}`} className="rounded-md border border-[color:var(--hairline)] px-3 py-2">
+                    <div className="font-semibold">{game.type === 'highest_scoring' ? 'Highest scoring game' : 'Championship game'}</div>
+                    <div className="text-xs text-[color:var(--text-muted)]">
+                      Week {game.week ?? "—"} · {game.awayScore ?? "—"}-{game.homeScore ?? "—"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </CardContent>
       </Card>
     </div>

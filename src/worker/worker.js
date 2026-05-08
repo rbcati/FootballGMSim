@@ -7734,6 +7734,74 @@ function calculateLeaders(stats) {
   };
 }
 
+function calculateSeasonAwardsV1(stats, teams, year) {
+  const rows = (stats || []).filter((s) => s?.totals);
+  if (!rows.length) return {};
+  const teamById = new Map((teams || []).map((t) => [Number(t.id), t]));
+  const byScore = (candidates, scoreFn) =>
+    [...candidates]
+      .map((row) => ({ row, score: scoreFn(row) }))
+      .filter((item) => Number.isFinite(item.score) && item.score > 0)
+      .sort((a, b) => b.score - a.score)[0]?.row ?? null;
+  const toAward = (row) => (row ? { playerId: row.playerId, name: row.name, teamId: row.teamId, pos: row.pos, year } : null);
+  const t = (row) => row?.totals ?? {};
+  const teamWins = (row) => Number(teamById.get(Number(row?.teamId))?.wins ?? 0);
+  const isRookie = (row) => row?.draftYear != null && Number(row.draftYear) === Number(year);
+
+  const all = rows;
+  const offense = rows.filter((row) => ['QB', 'RB', 'WR', 'TE'].includes(String(row?.pos ?? '').toUpperCase()));
+  const defense = rows.filter((row) => ['DL', 'DE', 'DT', 'EDGE', 'LB', 'CB', 'S', 'SS', 'FS'].includes(String(row?.pos ?? '').toUpperCase()));
+  const rookiesOff = offense.filter(isRookie);
+  const rookiesDef = defense.filter(isRookie);
+
+  const mvp = byScore(all, (row) =>
+    (Number(t(row).passYd ?? 0) / 25) +
+    (Number(t(row).passTD ?? 0) * 6) +
+    (Number(t(row).rushYd ?? 0) / 10) +
+    (Number(t(row).rushTD ?? 0) * 6) +
+    (Number(t(row).recYd ?? 0) / 10) +
+    (Number(t(row).recTD ?? 0) * 6) -
+    (Number(t(row).interceptions ?? 0) * 3) +
+    (teamWins(row) * 1.5),
+  );
+  const opoy = byScore(offense, (row) =>
+    (Number(t(row).passYd ?? 0) / 23) +
+    (Number(t(row).passTD ?? 0) * 5.5) +
+    (Number(t(row).rushYd ?? 0) / 10) +
+    (Number(t(row).rushTD ?? 0) * 6) +
+    (Number(t(row).recYd ?? 0) / 10) +
+    (Number(t(row).recTD ?? 0) * 6) +
+    (teamWins(row) * 0.8),
+  );
+  const dpoy = byScore(defense, (row) =>
+    (Number(t(row).tackles ?? 0) * 1) +
+    (Number(t(row).sacks ?? 0) * 5.5) +
+    (Number(t(row).interceptions ?? 0) * 6.5) +
+    (Number(t(row).forcedFumbles ?? 0) * 4),
+  );
+  const oroy = rookiesOff.length ? byScore(rookiesOff, (row) => (Number(t(row).passYd ?? 0) / 25) + (Number(t(row).rushYd ?? 0) / 10) + (Number(t(row).recYd ?? 0) / 10) + (Number(t(row).passTD ?? 0) * 5) + (Number(t(row).rushTD ?? 0) * 6) + (Number(t(row).recTD ?? 0) * 6)) : null;
+  const droy = rookiesDef.length ? byScore(rookiesDef, (row) => (Number(t(row).tackles ?? 0) * 1) + (Number(t(row).sacks ?? 0) * 6) + (Number(t(row).interceptions ?? 0) * 7)) : null;
+  const bestQB = byScore(rows.filter((row) => String(row?.pos ?? '').toUpperCase() === 'QB'), (row) => Number(t(row).passYd ?? 0) + Number(t(row).passTD ?? 0) * 60 - Number(t(row).interceptions ?? 0) * 35);
+  const bestRB = byScore(rows.filter((row) => String(row?.pos ?? '').toUpperCase() === 'RB'), (row) => Number(t(row).rushYd ?? 0) + Number(t(row).rushTD ?? 0) * 80 + Number(t(row).recYd ?? 0) * 0.4);
+  const bestWrTe = byScore(rows.filter((row) => ['WR', 'TE'].includes(String(row?.pos ?? '').toUpperCase())), (row) => Number(t(row).recYd ?? 0) + Number(t(row).recTD ?? 0) * 90 + Number(t(row).receptions ?? 0) * 3);
+  const bestDefensivePlayer = byScore(defense, (row) => Number(t(row).sacks ?? 0) * 6 + Number(t(row).interceptions ?? 0) * 6 + Number(t(row).tackles ?? 0) * 0.7 + Number(t(row).forcedFumbles ?? 0) * 4);
+  const kickers = rows.filter((row) => String(row?.pos ?? '').toUpperCase() === 'K' && Number(t(row).fgMade ?? 0) > 0);
+  const bestKicker = kickers.length ? byScore(kickers, (row) => Number(t(row).fgMade ?? 0) * 3 + Number(t(row).xpMade ?? 0)) : null;
+
+  return {
+    mvp: toAward(mvp),
+    opoy: toAward(opoy),
+    dpoy: toAward(dpoy),
+    ...(oroy ? { oroy: toAward(oroy), roty: toAward(oroy) } : {}),
+    ...(droy ? { droy: toAward(droy) } : {}),
+    bestQB: toAward(bestQB),
+    bestRB: toAward(bestRB),
+    bestWrTe: toAward(bestWrTe),
+    bestDefensivePlayer: toAward(bestDefensivePlayer),
+    ...(bestKicker ? { bestKicker: toAward(bestKicker) } : {}),
+  };
+}
+
 /**
  * determine MVP and other awards based on stats and team performance.
  * @param {Array} stats - Enriched player stats.
@@ -8206,7 +8274,7 @@ async function archiveSeason(seasonId) {
     await Promise.all(seasonStats.map(async (s) => {
       const p = await resolvePlayer(s.playerId);
       if (p) {
-        populatedStats.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId, age: p.age });
+        populatedStats.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId, age: p.age, draftYear: p.year ?? null });
       }
     }));
 
@@ -8247,9 +8315,25 @@ async function archiveSeason(seasonId) {
       }
     }
 
-    // 4. Determine Champion
-    const championId = meta.championTeamId;
-    const champion = teams.find(t => t.id === championId);
+    // 4. Determine Champion and runner-up from season games when possible.
+    const year = meta.year;
+    const seasonGames = await Games.bySeason(seasonId).catch(() => []);
+    const completedGames = seasonGames.filter((g) => Number.isFinite(Number(g?.homeScore)) && Number.isFinite(Number(g?.awayScore)));
+    const championshipGame = [...completedGames]
+      .sort((a, b) => Number(b?.week ?? 0) - Number(a?.week ?? 0))[0] ?? null;
+    const championshipWinnerId = championshipGame
+      ? (Number(championshipGame.homeScore) >= Number(championshipGame.awayScore)
+          ? Number(championshipGame.homeId)
+          : Number(championshipGame.awayId))
+      : null;
+    const championshipLoserId = championshipGame
+      ? (championshipWinnerId === Number(championshipGame.homeId)
+          ? Number(championshipGame.awayId)
+          : Number(championshipGame.homeId))
+      : null;
+    const championId = championshipWinnerId ?? meta.championTeamId ?? null;
+    const champion = teams.find(t => Number(t.id) === Number(championId)) ?? null;
+    const runnerUpTeamFromFinal = teams.find((t) => Number(t.id) === Number(championshipLoserId)) ?? null;
 
     // 5. Standings (snapshot before reset)
     const standings = buildStandings();
@@ -8261,15 +8345,16 @@ async function archiveSeason(seasonId) {
     const legacyAwards = calculateAwards(populatedStats, teams);
     const staffRows = teams.map((t) => ({ teamId: t.id, name: t?.staff?.headCoach?.name ?? `${t?.abbr ?? 'Team'} HC` }));
     const seasonAwards = calculateSeasonAwards({ stats: populatedStats, teams, year, coaches: staffRows });
+    const v1Awards = calculateSeasonAwardsV1(populatedStats, teams, year);
     const awards = {
       ...legacyAwards,
       ...seasonAwards,
+      ...v1Awards,
       roty: seasonAwards?.roty ?? legacyAwards?.roty ?? null,
       allPro: seasonAwards?.allPro ?? { firstTeamOffense: [], firstTeamDefense: [] },
     };
 
     // 8. Write accolades to player objects
-    const year = meta.year;
 
     if (awards.mvp?.playerId != null) {
       await grantAccolade(awards.mvp.playerId, { type: 'MVP', year, seasonId });
@@ -8344,7 +8429,7 @@ async function archiveSeason(seasonId) {
     await flushDirty();
 
     const championSummary = champion ? { id: champion.id, name: champion.name, abbr: champion.abbr, wins: champion.wins ?? null } : null;
-    const runnerUpTeam = champion ? standings.find((s) => Number(s.id) !== Number(champion.id) && (s.wins ?? 0) >= 10) : null;
+    const runnerUpTeam = runnerUpTeamFromFinal ?? (champion ? standings.find((s) => Number(s.id) !== Number(champion.id) && (s.wins ?? 0) >= 10) : null);
     const runnerUpSummary = runnerUpTeam ? { id: runnerUpTeam.id, name: runnerUpTeam.name, abbr: runnerUpTeam.abbr } : null;
     const standingsRows = standings.map(s => ({
       id: s.id, name: s.name, abbr: s.abbr, wins: s.wins, losses: s.losses, ties: s.ties, pct: s.pct, pf: s.pf, pa: s.pa
@@ -8358,7 +8443,8 @@ async function archiveSeason(seasonId) {
       champion: championSummary,
       runnerUp: runnerUpSummary,
       userTeamId: meta.userTeamId,
-      games: await Games.bySeason(seasonId).catch(() => []),
+      championshipGameId: championshipGame?.id ?? championshipGame?.gameId ?? null,
+      games: seasonGames,
       transactions: await Transactions.bySeason(seasonId).catch(() => []),
       teams,
       seasonStats: populatedStats,

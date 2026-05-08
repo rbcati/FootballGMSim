@@ -22,15 +22,27 @@ describe('league memory helpers', () => {
       year: 2031,
       seasonId: 's7',
       standings: [{ id: 0, name: 'Boston', abbr: 'BOS', wins: 13, losses: 4, ties: 0, pf: 410, pa: 280 }],
-      awards: {},
+      awards: { mvp: { playerId: 'p1', name: 'Ace QB' } },
       leaders: {},
       champion: { id: 0, name: 'Boston', abbr: 'BOS' },
       runnerUp: null,
       userTeamId: 0,
-      games: [{ id: 's7_w1_0_1', week: 1, homeId: 0, awayId: 1, homeScore: 24, awayScore: 17 }],
+      championshipGameId: 's7_w22_0_1',
+      games: [
+        { id: 's7_w1_0_1', week: 1, homeId: 0, awayId: 1, homeScore: 24, awayScore: 17 },
+        { id: 's7_w22_0_1', week: 22, homeId: 0, awayId: 1, homeScore: 31, awayScore: 28 },
+      ],
+      seasonStats: [
+        { playerId: 10, name: 'Ace QB', pos: 'QB', teamId: 0, totals: { passYd: 4500, passTD: 35 } },
+        { playerId: 11, name: 'Top RB', pos: 'RB', teamId: 0, totals: { rushYd: 1500, rushTD: 13 } },
+      ],
     });
-    expect(season.gameIndex).toHaveLength(1);
+    expect(season.gameIndex).toHaveLength(2);
     expect(season.gameIndex[0].id).toBe('s7_w1_0_1');
+    expect(season.schemaVersion).toBe(1);
+    expect(season.championshipGameId).toBe('s7_w22_0_1');
+    expect(season.playerStatLeaders.passingYards.playerName).toBe('Ace QB');
+    expect(season.notableGames.length).toBeGreaterThan(0);
     meta = updateFranchiseHistory(meta, season, []);
     expect(meta.franchiseHistoryByTeam['0'].totals.championships).toBe(1);
     expect(meta.franchiseHistoryByTeam['0'].milestones.length).toBe(1);
