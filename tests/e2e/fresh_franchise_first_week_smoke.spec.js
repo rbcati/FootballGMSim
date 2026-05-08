@@ -47,23 +47,50 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   );
   await goToTab(page, 'weekly-results');
 
-  const completedGameLink = page.getByTestId('completed-game-link').first();
+  await expect(page.getByTestId('weekly-results')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  await expect(page.getByTestId('user-game-result-card')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  await expect(page.getByTestId('user-game-result-card')).toContainText(/\b\d+\s*-\s*\d+\b/);
+  const completedGameLink = page.getByTestId('game-book-primary-cta').first();
   await expect(completedGameLink).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await completedGameLink.click();
 
   await expect(page.getByTestId('game-book')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('game-book-final-score')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  await expect(page.getByTestId('game-book-decision-summary')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+
+  const gameBookPlayerLink = page.getByTestId('game-book-top-performer-link').first().or(page.getByTestId('game-book-player-link').first());
+  if (await gameBookPlayerLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await gameBookPlayerLink.click();
+    await expect(page.getByTestId('player-profile')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+    await expect(page.getByTestId('player-profile-summary')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+    await expect(page.getByTestId('player-profile-game-impact')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+    await page.getByTestId('player-profile-return-to-game-book').click();
+    await expect(page.getByTestId('game-book')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  }
 
   await page.getByTestId('return-to-hq').click();
   if (!(await page.getByTestId('franchise-hq').isVisible({ timeout: 3000 }).catch(() => false))) {
     await page.getByRole('button', { name: /^Back to HQ$/i }).click();
   }
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  await expect(page.getByTestId('hq-last-result')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  await expect(page.getByTestId('hq-next-action')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+
+  const hqNextAction = page.getByTestId('hq-next-action');
+  const reviewGameBookCta = hqNextAction.getByRole('button', { name: /Review Game Book/i });
+  if (await reviewGameBookCta.isVisible().catch(() => false)) {
+    await reviewGameBookCta.click();
+    await expect(page.getByTestId('game-book')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+    await expect(page.getByTestId('game-book-final-score')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+    await page.getByTestId('return-to-hq').click();
+    await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  }
 
   await page.reload();
   await expect(page.getByTestId('app-bootstrap-loading')).toBeHidden({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  await expect(page.getByTestId('hq-last-result')).toBeVisible({ timeout: SMOKE_TIMEOUT });
 
   expect(consoleErrors.join('\n')).not.toMatch(/Uncaught|TypeError|ReferenceError/);
 });

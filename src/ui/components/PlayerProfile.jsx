@@ -321,6 +321,49 @@ function AttrRow({ label, value }) {
   );
 }
 
+
+function hasRecordedStats(stats = {}) {
+  return Object.values(stats || {}).some((value) => Number(value) > 0);
+}
+
+function summarizeTrackedStats(stats = {}, position = '') {
+  const pos = String(position || '').toUpperCase();
+  const parts = [];
+  if (Number(stats.passAtt ?? 0) > 0) parts.push(`${stats.passComp ?? 0}/${stats.passAtt ?? 0}, ${stats.passYd ?? 0} pass yds, ${stats.passTD ?? 0} TD, ${stats.interceptions ?? 0} INT`);
+  if (Number(stats.rushAtt ?? 0) > 0) parts.push(`${stats.rushAtt ?? 0} car, ${stats.rushYd ?? 0} rush yds, ${stats.rushTD ?? 0} TD`);
+  if (Number(stats.targets ?? 0) > 0 || Number(stats.receptions ?? 0) > 0) parts.push(`${stats.receptions ?? 0}/${stats.targets ?? 0} rec, ${stats.recYd ?? 0} rec yds, ${stats.recTD ?? 0} TD`);
+  if (Number(stats.tackles ?? 0) > 0 || Number(stats.sacks ?? 0) > 0 || Number(stats.interceptions ?? 0) > 0) parts.push(`${stats.tackles ?? 0} tackles, ${stats.sacks ?? 0} sacks, ${stats.interceptions ?? 0} INT`);
+  if (Number(stats.fieldGoalsAttempted ?? 0) > 0 || Number(stats.extraPointsAttempted ?? 0) > 0) parts.push(`${stats.fieldGoalsMade ?? 0}/${stats.fieldGoalsAttempted ?? 0} FG, ${stats.extraPointsMade ?? 0}/${stats.extraPointsAttempted ?? 0} XP`);
+  if (Number(stats.punts ?? 0) > 0) parts.push(`${stats.punts ?? 0} punts, ${stats.puntYards ?? 0} yards`);
+  if (parts.length) return parts.join(' · ');
+  if (pos === 'QB') return null;
+  return null;
+}
+
+function buildImpactSummary(player, context, statLine) {
+  if (!hasRecordedStats(statLine)) return 'Detailed per-player stats were not recorded for this game.';
+  const name = player?.name ?? 'This player';
+  const line = summarizeTrackedStats(statLine, player?.pos ?? player?.position);
+  if (Number(statLine.passYd ?? 0) > 0) return `${name} mattered this week by driving the passing offense: ${line}.`;
+  if (Number(statLine.rushYd ?? 0) > 0) return `${name} mattered this week by creating rushing production: ${line}.`;
+  if (Number(statLine.recYd ?? 0) > 0 || Number(statLine.receptions ?? 0) > 0) return `${name} mattered this week as a receiving target: ${line}.`;
+  if (Number(statLine.sacks ?? 0) > 0 || Number(statLine.interceptions ?? 0) > 0 || Number(statLine.tackles ?? 0) > 0) return `${name} mattered this week on defense: ${line}.`;
+  return `${name} had a tracked contribution this week: ${line}.`;
+}
+
+function getQuickTags(player) {
+  const tags = [];
+  const age = Number(player?.age);
+  const ovr = Number(player?.ovr);
+  const pot = Number(player?.potential);
+  if (Number.isFinite(age) && age <= 23) tags.push('rookie/developing');
+  if (Number.isFinite(age) && age >= 30) tags.push('veteran');
+  if (Number.isFinite(ovr) && ovr >= 85) tags.push('star');
+  if (Number.isFinite(pot) && Number.isFinite(ovr) && pot >= ovr + 8) tags.push('developing upside');
+  if (player?.depthRank === 1 || player?.starter === true || player?.isStarter === true) tags.push('starter');
+  return tags;
+}
+
 const sectionLabelStyle = {
   margin: "0 0 var(--space-2)",
   fontSize: "var(--text-xs)",
@@ -397,9 +440,10 @@ export default function PlayerProfile({
   useEffect(() => {
     if (fetchedData) setData(fetchedData);
   }, [fetchedData]);
-  const player = data?.player;
+  const fetchedPlayer = data?.player;
   const resolvedProfile = useMemo(() => resolvePlayerForProfile({ playerId, league, context: profileContext ?? {} }), [playerId, league, profileContext]);
-  const effectivePlayer = player ?? resolvedProfile.player;
+  const player = fetchedPlayer ?? resolvedProfile.player;
+  const effectivePlayer = player;
   const playerView = effectivePlayer;
   const playerMissing = !loading && !effectivePlayer;
   const loadErrorMessage = requestError?.message || data?.error || null;
@@ -534,6 +578,12 @@ export default function PlayerProfile({
 
   const profileAnalysis = useMemo(() => buildPlayerProfileAnalysis({ player: effectivePlayer, team: resolvedProfile.team, league, context: profileContext ?? {} }), [effectivePlayer, resolvedProfile.team, league, profileContext]);
   const playerGameLogs = useMemo(() => getPlayerGameLogs(league, effectivePlayer), [league, effectivePlayer]);
+  const contextStatLine = profileContext?.statLine ?? profileContext?.player?.stats ?? null;
+  const hasThisWeekContext = Boolean(profileContext?.source === 'game-book' || profileContext?.source === 'weekly-results' || profileContext?.gameId);
+  const thisWeekLine = contextStatLine && hasRecordedStats(contextStatLine) ? summarizeTrackedStats(contextStatLine, player?.pos ?? player?.position) : null;
+  const thisWeekSummary = hasThisWeekContext ? buildImpactSummary(player, profileContext, contextStatLine) : null;
+  const quickTags = getQuickTags(player);
+  const seasonStatsRecorded = hasRecordedStats(latestTotals);
   const gmContext = profileAnalysis?.recommendationContext ?? {};
   const hasGmContext = Boolean(
     gmContext?.sourceLabel || gmContext?.reason || gmContext?.comparisonReceipt || gmContext?.recommendation || gmContext?.fitScore != null || gmContext?.capImpactLabel || gmContext?.valueLabel
@@ -583,6 +633,7 @@ export default function PlayerProfile({
 
   return (
     <div
+      data-testid="player-profile"
       onClick={onClose}
       style={{
         position: "fixed",
@@ -655,6 +706,7 @@ export default function PlayerProfile({
 
         {/* ── Header ── */}
         <div
+          data-testid="player-profile-summary"
           style={{
             padding: "var(--space-4) var(--space-4)",
             borderBottom: "1px solid var(--hairline)",
@@ -700,10 +752,10 @@ export default function PlayerProfile({
                     marginTop: 4,
                   }}
                 >
-                  {playerView.pos} · Age {playerView.age} ·{" "}
-                  {playerView.status === "active"
+                  {playerView.pos ?? playerView.position ?? "POS —"} · Age {playerView.age ?? "—"} ·{" "}
+                  {playerView.teamId != null
                     ? getTeamName(playerView.teamId, teams)
-                    : "Retired"}
+                    : playerView.status === "retired" ? "Retired" : "Team unavailable"}
                 </div>
 
                 {/* OVR + progression delta + potential */}
@@ -735,7 +787,7 @@ export default function PlayerProfile({
                         {playerView.progressionDelta})
                       </span>
                     )}
-                  {playerView.potential && (
+                  {playerView.potential != null && (
                     <span
                       style={{
                         color: "var(--text-muted)",
@@ -748,6 +800,13 @@ export default function PlayerProfile({
                   )}
                 </div>
 
+
+                <div style={{ marginTop: "var(--space-2)", display: "flex", gap: 6, flexWrap: "wrap", fontSize: "var(--text-xs)" }}>
+                  <span className="status-chip info">Contract: {summaryChips.find((chip) => chip.label === "Contract")?.value ?? "Not available"}</span>
+                  <span className="status-chip muted">Status: {playerView.injuryWeeksRemaining > 0 ? `Out ${playerView.injuryWeeksRemaining}w` : "Available"}</span>
+                  {playerView.draftYear || playerView.draftRound || playerView.draftPick ? <span className="status-chip muted">Draft: {playerView.draftYear ?? "—"} R{playerView.draftRound ?? "—"} P{playerView.draftPick ?? "—"}</span> : null}
+                  {quickTags.map((tag) => <span key={tag} className="status-chip success">{tag}</span>)}
+                </div>
 
                 {playerView.developmentContext && (
                   <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
@@ -883,6 +942,15 @@ export default function PlayerProfile({
 
         {/* ── Body ── */}
         <div style={{ padding: "var(--space-4)", flex: 1, display: "grid", gap: "var(--space-4)" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {profileContext?.source === 'game-book' || profileContext?.returnTo === 'game-book' ? (
+              <Button size="sm" variant="outline" data-testid="player-profile-return-to-game-book" onClick={() => { if (profileContext?.gameId) onOpenBoxScore?.(profileContext.gameId); onClose?.(); }}>Return to Game Book</Button>
+            ) : null}
+            {profileContext?.source === 'weekly-results' || profileContext?.returnTo === 'weekly-results' ? (
+              <Button size="sm" variant="outline" onClick={() => { onNavigate?.('Weekly Results'); onClose?.(); }}>Return to Weekly Results</Button>
+            ) : null}
+            <Button size="sm" variant="outline" onClick={() => { onNavigate?.('HQ'); onClose?.(); }}>Return to HQ</Button>
+          </div>
           <div className="standings-tabs profile-tab-row" style={{ gap: 6, flexWrap: "nowrap" }}>
             {["Overview", "Career Stats", "Game Log"].map((tab) => (
               <button
@@ -896,6 +964,25 @@ export default function PlayerProfile({
           </div>
           {activeProfileTab === "Overview" && (
             <>
+          {hasThisWeekContext && (
+            <section className="card-enter" data-testid="player-profile-game-impact">
+              <h3 style={sectionLabelStyle}>This Week / Game Impact</h3>
+              <div style={{ fontSize: "var(--text-sm)", fontWeight: 800 }}>{profileContext?.role ?? (profileContext?.source === 'weekly-results' ? 'From Weekly Results' : 'From Game Book')}</div>
+              <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", marginTop: 4 }}>
+                {profileContext?.week ? `From Week ${profileContext.week} ${profileContext?.source === 'game-book' ? 'Game Book' : 'Weekly Results'}` : 'From recent game context'}
+              </div>
+              <p style={{ marginTop: 8 }}>{thisWeekSummary}</p>
+              {thisWeekLine ? <div className="stat-box" style={{ padding: 8 }}>{thisWeekLine}</div> : null}
+            </section>
+          )}
+          <section className="card-enter" data-testid="player-profile-season-stats">
+            <h3 style={sectionLabelStyle}>Season Stats</h3>
+            {seasonStatsRecorded ? (
+              <div className="stat-box" style={{ padding: 8 }}>{summarizeTrackedStats(latestTotals, player?.pos ?? player?.position) ?? 'Tracked season totals are available.'}</div>
+            ) : (
+              <EmptyState icon="📊" title="No tracked season stats yet" subtitle="Season stats will appear after this player records tracked stats." />
+            )}
+          </section>
           {!loading && hasGmContext && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Why this player?</h3>
@@ -1564,10 +1651,10 @@ export default function PlayerProfile({
             </>
           )}
           {activeProfileTab === "Game Log" && (
-            <section className="card-enter">
+            <section className="card-enter" data-testid="player-profile-game-logs">
               <h3 style={sectionLabelStyle}>Game Log</h3>
               {playerGameLogs.length === 0 ? (
-                <EmptyState title="No game logs recorded yet." body="Game logs will appear once this player has archived game stats." />
+                <EmptyState title="No game logs recorded yet." subtitle="Game logs will appear after this player records tracked stats." />
               ) : (
                 <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
                   <Table className="standings-table" style={{ width: "100%", minWidth: 760 }}>

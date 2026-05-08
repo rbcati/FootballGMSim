@@ -45,7 +45,7 @@ describe('WeeklyResultsCenter', () => {
   it('renders weekly recap, spotlight, and the user-team game card', () => {
     render(<WeeklyResultsCenter league={league} onGameSelect={() => {}} onNavigate={() => {}} />);
 
-    expect(screen.getByText('Your Game')).toBeTruthy();
+    expect(screen.getByText('Your Game Result')).toBeTruthy();
     expect(screen.getByText(/loss.*vs wsh/i)).toBeTruthy();
     expect(screen.getByText('Weekly League Recap')).toBeTruthy();
     expect(screen.getByText('Weekly Spotlight')).toBeTruthy();
@@ -80,7 +80,7 @@ describe('WeeklyResultsCenter', () => {
     const onGameSelect = vi.fn();
     render(<WeeklyResultsCenter league={league} initialWeek={2} onGameSelect={onGameSelect} onNavigate={() => {}} />);
 
-    const userGameSection = screen.getByText('Your Game').closest('section');
+    const userGameSection = screen.getByText('Your Game Result').closest('section');
     fireEvent.click(within(userGameSection).getByRole('button', { name: /^open game book$/i }));
 
     expect(onGameSelect).toHaveBeenCalledTimes(1);
@@ -123,4 +123,27 @@ describe('WeeklyResultsCenter', () => {
     expect(onGameSelect).toHaveBeenCalledTimes(1);
     expect(onGameSelect.mock.calls[0][0]).toMatch(/2026_w2_/);
   });
+  it('opens player profile from weekly top performer when player stats have ids', () => {
+    const onPlayerSelect = vi.fn();
+    const leagueWithStats = {
+      ...league,
+      teams: league.teams.map((team) => team.id === 1 ? { ...team, roster: [{ id: 101, name: 'Dak Test', pos: 'QB', teamId: 1, ovr: 80, potential: 85, contract: { years: 2 } }] } : team),
+      schedule: {
+        weeks: [
+          { week: 2, games: [{
+            gameId: '2026_w2_1_4', home: 1, away: 4, played: true, homeScore: 28, awayScore: 21,
+            quarterScores: { home: [7, 7, 7, 7], away: [7, 7, 0, 7] },
+            teamStats: { home: { passYards: 260 }, away: {} },
+            playerStats: { home: { 101: { name: 'Dak Test', stats: { passAtt: 31, passComp: 21, passYd: 260, passTD: 3 } } }, away: {} },
+          }] },
+        ],
+      },
+    };
+    render(<WeeklyResultsCenter league={leagueWithStats} initialWeek={2} onGameSelect={() => {}} onNavigate={() => {}} onPlayerSelect={onPlayerSelect} />);
+
+    fireEvent.click(screen.getByTestId('weekly-results-top-performer-link'));
+    expect(onPlayerSelect.mock.calls[0][0]).toBe(101);
+    expect(onPlayerSelect.mock.calls[0][1]).toMatchObject({ source: 'weekly-results', gameId: '2026_w2_1_4', week: 2 });
+  });
+
 });

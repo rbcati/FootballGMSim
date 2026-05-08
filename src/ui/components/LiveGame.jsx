@@ -238,6 +238,7 @@ function MatchupCard({ event, userTeamId, pending, onOpenBoxScore }) {
         cursor: interactive ? "pointer" : "default",
       }}
       {...interactiveProps}
+      {...(interactive ? { "data-testid": "completed-game-link" } : {})}
     >
       {/* Away team */}
       <TeamBadge abbr={awayAbbr} size={32} isUser={Number(awayId) === numericUserTeamId} />

@@ -33,6 +33,11 @@ export function buildGameBookStory(vm) {
   const lastScore = vm?.scoringSummary?.[vm.scoringSummary.length - 1];
   if (lastScore?.teamAbbr || lastScore?.team) bullets.push(`Last scoring play: ${(lastScore.teamAbbr ?? lastScore.team)} ${lastScore.type ?? "score"} (${lastScore.time ?? lastScore.clock ?? "time unknown"}).`);
 
-  if (!bullets.length && winner && loser) bullets.push(`No detailed team/player stats were recorded for this game.`);
+  const awayScore = n(vm?.finalScore?.away);
+  const homeScore = n(vm?.finalScore?.home);
+  if (!bullets.length && awayScore != null && homeScore != null) {
+    if (awayScore === homeScore) bullets.push(`${away} and ${home} finished tied; no detailed team/player stats were recorded to explain the draw.`);
+    else bullets.push(`${winner} won by ${Math.abs(awayScore - homeScore)}; detailed team/player stats were not recorded for deeper explanation.`);
+  }
   return bullets;
 }

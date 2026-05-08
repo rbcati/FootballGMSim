@@ -7,6 +7,7 @@ import { buildWeeklyCommandHub } from '../utils/weeklyCommandHub.js';
 import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda, CompactNewsCard } from './ScreenSystem.jsx';
 import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
+import { buildGameBookDestination } from '../utils/managementScreenRouting.js';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -135,6 +136,26 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
     lastGame,
   }), [league, userTeam, command, hqTeamBuilder, decisionReview, lastGame]);
 
+
+  const hqNextAction = useMemo(() => {
+    const roster = Array.isArray(userTeam?.roster) ? userTeam.roster : [];
+    const injuredCount = roster.filter((player) => safeNum(player?.injuryWeeksRemaining, 0) > 0).length;
+    if (decisionReview?.recommendedAction?.label && decisionReview?.recommendedAction?.route) {
+      return {
+        label: decisionReview.recommendedAction.label,
+        route: decisionReview.recommendedAction.route,
+        reason: decisionReview.recommendedAction.reason ?? 'Review last week before locking the next plan.',
+      };
+    }
+    if (injuredCount > 0) {
+      return { label: 'Check injuries', route: 'Team:Injuries', reason: `${injuredCount} roster player${injuredCount === 1 ? '' : 's'} listed with injury time.` };
+    }
+    if (hqTeamBuilder.biggestNeed && hqTeamBuilder.biggestNeed !== 'Needs more data') {
+      return { label: 'Open Team Builder', route: 'Team:Roster / Team Builder', reason: hqTeamBuilder.nextAction };
+    }
+    return { label: 'Advance next week', route: null, reason: 'No roster blocker is visible from current HQ data.' };
+  }, [decisionReview?.recommendedAction, hqTeamBuilder.biggestNeed, hqTeamBuilder.nextAction, userTeam?.roster]);
+
   const nextOpponents = useMemo(() => (league?.schedule?.weeks ?? [])
     .filter((week) => safeNum(week?.week, 0) >= safeNum(league?.week, 1))
     .flatMap((week) => (week?.games ?? []).map((game) => ({ ...game, week: week.week })))
@@ -168,7 +189,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       momentumLabel: command.momentum?.label ?? 'No trend yet',
       filmLabel: lastGame ? lastGameDisplay.heroLine : 'Kickoff ahead',
       filmDetail: lastGame ? 'Open the latest final before changing next week.' : 'Scout the opponent and lock a plan before kickoff.',
-      filmRoute: gameId ? `Game Book:${gameId}` : 'Weekly Prep',
+      filmRoute: gameId ? buildGameBookDestination(gameId) : 'Weekly Prep',
       filmCta: gameId ? 'Open Game Book' : 'Open Weekly Prep',
       rosterNeed: hqTeamBuilder.biggestNeed ?? 'No urgent need',
       rosterDetail: hqTeamBuilder.nextAction ?? 'Review team builder for leverage.',
@@ -249,6 +270,39 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
 
         <p className="app-hq-hero-footnote">Sim to Sunday • {footerDays} days until kickoff</p>
       </section>
+
+
+      {lastGame ? (
+        <SectionCard title="Next Action" subtitle="Postgame handoff from the latest completed week." variant="info">
+          <div className="app-hq-next-action-panel" data-testid="hq-next-action">
+            <article data-testid="hq-last-result">
+              <span>Last result</span>
+              <strong>{lastGameDisplay.heroLine}</strong>
+              <small>{postAdvanceNote.takeaway}</small>
+            </article>
+            <article>
+              <span>Current record</span>
+              <strong>{formatRecordInline(command.teamRecord)}</strong>
+              <small>{postAdvanceNote.recordDelta}</small>
+            </article>
+            <article>
+              <span>Next scheduled game</span>
+              <strong>{postAdvanceNote.nextOpponent}</strong>
+              <small>{nextOpponentDisplay.detail}</small>
+            </article>
+            <article>
+              <span>Recommended action</span>
+              <strong>{hqNextAction.label}</strong>
+              <small>{hqNextAction.reason}</small>
+              {hqNextAction.route ? (
+                <button type="button" className="btn btn-sm" onClick={() => onNavigate?.(hqNextAction.route)}>{hqNextAction.label}</button>
+              ) : (
+                <button type="button" className="btn btn-sm" onClick={onAdvanceWeek} disabled={busy || simulating}>{busy || simulating ? 'Advancing…' : 'Advance Week'}</button>
+              )}
+            </article>
+          </div>
+        </SectionCard>
+      ) : null}
 
       <SectionCard title={command.weeklyIntelligence?.heading ?? 'Coordinator Brief'} subtitle="Matchup intel for this week’s decision loop." variant="compact">
         <div className="app-hq-intel-list" role="list" aria-label="Weekly intelligence">

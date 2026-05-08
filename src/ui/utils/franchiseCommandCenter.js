@@ -22,8 +22,8 @@ function getScoreDiffs(teamId, scheduleWeeks = []) {
   for (const week of [...scheduleWeeks].sort((a, b) => safeNum(a?.week) - safeNum(b?.week))) {
     for (const game of week?.games ?? []) {
       if (!game?.played) continue;
-      const homeId = Number(game?.home?.id ?? game?.home);
-      const awayId = Number(game?.away?.id ?? game?.away);
+      const homeId = Number(game?.homeId ?? game?.home?.id ?? game?.home);
+      const awayId = Number(game?.awayId ?? game?.away?.id ?? game?.away);
       if (homeId !== Number(teamId) && awayId !== Number(teamId)) continue;
       const homeScore = safeNum(game?.homeScore ?? game?.score?.home);
       const awayScore = safeNum(game?.awayScore ?? game?.score?.away);
@@ -158,8 +158,8 @@ function getPrevGame(league) {
     const games = [...(week?.games ?? [])].reverse();
     for (const game of games) {
       if (!game?.played) continue;
-      const homeId = Number(game?.home?.id ?? game?.home);
-      const awayId = Number(game?.away?.id ?? game?.away);
+      const homeId = Number(game?.homeId ?? game?.home?.id ?? game?.home);
+      const awayId = Number(game?.awayId ?? game?.away?.id ?? game?.away);
       if (homeId !== Number(league?.userTeamId) && awayId !== Number(league?.userTeamId)) continue;
       return { ...game, week: Number(week?.week ?? league?.week ?? 1), homeId, awayId };
     }
@@ -389,6 +389,8 @@ export function selectFranchiseHQViewModel(league) {
   const fallbackLastGame = previousScheduledGame
     ? {
       id: previousScheduledGame?.id,
+      homeId: previousScheduledGame?.homeId,
+      awayId: previousScheduledGame?.awayId,
       homeAbbr: previousScheduledGame?.home?.abbr ?? 'HOME',
       awayAbbr: previousScheduledGame?.away?.abbr ?? 'AWAY',
       score: {
