@@ -2420,9 +2420,9 @@ class GameController {
         const btnDashboard = document.getElementById('btnDashboard');
         if (btnDashboard) {
             this.addEventListener(btnDashboard, 'click', () => {
-                if (window.show) window.show('leagueDashboard');
-                if (window.renderDashboard) window.renderDashboard();
-
+                // Route navigation correctly
+                location.hash = '#/leagueDashboard';
+                this.router('leagueDashboard');
                 // Close menu if open (standardized for mobile/legacy)
                 const sidebar = document.getElementById('nav-sidebar');
                 if (window.toggleNavigation && sidebar && (sidebar.classList.contains('nav-open') || sidebar.classList.contains('active'))) {
