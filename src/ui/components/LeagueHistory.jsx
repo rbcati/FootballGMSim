@@ -48,6 +48,27 @@ const STAT_LABELS = {
 };
 const NOOP_ACTIONS = {};
 const AWARD_KEYS = ["mvp", "opoy", "dpoy", "roty", "sbMvp"];
+const AWARDS_V1_EXTRA = ["oroy", "droy", "bestQB", "bestRB", "bestWrTe", "bestDefensivePlayer", "bestKicker"];
+const AWARDS_V1_LABELS = {
+  bestQB: "Best QB",
+  bestRB: "Best RB",
+  bestWrTe: "Best WR/TE",
+  bestDefensivePlayer: "Best Defensive Player",
+  bestKicker: "Best Kicker",
+};
+
+const PLAYER_LEADER_LABELS = {
+  passingYards: "Passing yards",
+  passingTd: "Passing TD",
+  rushingYards: "Rushing yards",
+  rushingTd: "Rushing TD",
+  receivingYards: "Receiving yards",
+  receivingTd: "Receiving TD",
+  tackles: "Tackles",
+  sacks: "Sacks",
+  interceptions: "Interceptions",
+  fieldGoalsMade: "Field goals",
+};
 
 function pct(row) {
   const wins = Number(row?.wins ?? 0);
@@ -266,6 +287,11 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league, initi
   const championBoard = buildChampionMap(seasons).slice(0, 5);
   const playoffMentions = (selected?.standings ?? []).filter((row) => Number(row?.wins ?? 0) >= 10).slice(0, 6);
   const seasonStoryline = summarizeSeasonStoryline(selected, league?.userTeamId);
+  const teamLookup = (tid) => (selected?.standings ?? []).find((t) => Number(t?.id) === Number(tid));
+  const highScoreGame = (selected?.notableGames ?? []).find((g) => g?.type === "highest_scoring") ?? null;
+  const playerStatLeaders = selected?.playerStatLeaders && typeof selected.playerStatLeaders === "object" ? selected.playerStatLeaders : null;
+  const teamStatLeaders = selected?.teamStatLeaders && typeof selected.teamStatLeaders === "object" ? selected.teamStatLeaders : null;
+  const playoffSnap = selected?.playoffBracketSnapshot ?? null;
   const awardLeaders = AWARD_KEYS
     .map((key) => ({ key, label: AWARD_DISPLAY_NAMES[key] ?? key.toUpperCase(), award: selected?.awards?.[key] }))
     .filter((entry) => entry.award?.name);
@@ -305,6 +331,52 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league, initi
             <button className="btn" onClick={() => selectedSeasonIndex < seasons.length - 1 && setSelectedSeasonId(seasons[selectedSeasonIndex + 1].id)} disabled={selectedSeasonIndex >= seasons.length - 1}>Next season</button>
           </div>
           <div className="rounded-md border border-[color:var(--hairline)] px-3 py-2 text-sm text-[color:var(--text-muted)]">{seasonStoryline}</div>
+
+          <section className="rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface-strong)]/40 p-4 space-y-3" data-testid={`league-history-season-story-${selected?.id ?? 'none'}`}>
+            <div className="text-xs font-black uppercase tracking-wide text-[color:var(--text-subtle)]">Season story</div>
+            <div className="text-lg font-black text-[color:var(--text)]">
+              {selected?.champion?.abbr ?? selected?.champion?.name ?? "Champion TBD"}
+              {selected?.runnerUp?.abbr || selected?.runnerUp?.name ? (
+                <span className="text-[color:var(--text-muted)] font-semibold text-base"> over {selected?.runnerUp?.abbr ?? selected?.runnerUp?.name}</span>
+              ) : null}
+            </div>
+            <div className="text-sm text-[color:var(--text-muted)]">
+              MVP:{" "}
+              {selected?.awards?.mvp?.name ? (
+                <button type="button" className="text-[color:var(--accent)] font-semibold" onClick={() => onPlayerSelect?.(selected.awards.mvp.playerId)}>
+                  {selected.awards.mvp.name}
+                </button>
+              ) : (
+                "—"
+              )}
+            </div>
+            {highScoreGame ? (
+              <div className="text-sm">
+                <span className="text-[color:var(--text-muted)]">Highest-scoring game: </span>
+                <span className="font-semibold">
+                  {teamLookup(highScoreGame.awayId)?.abbr ?? "Away"} {highScoreGame.awayScore ?? "—"} at {teamLookup(highScoreGame.homeId)?.abbr ?? "Home"} {highScoreGame.homeScore ?? "—"}
+                </span>
+                {highScoreGame.totalPoints != null ? (
+                  <span className="text-[color:var(--text-muted)]"> ({highScoreGame.totalPoints} pts)</span>
+                ) : null}
+                {highScoreGame.gameId != null && onOpenBoxScore ? (
+                  <button type="button" className="ml-2 text-xs text-[color:var(--accent)]" onClick={() => openResolvedBoxScore({ id: highScoreGame.gameId, week: highScoreGame.week, homeId: highScoreGame.homeId, awayId: highScoreGame.awayId, homeScore: highScoreGame.homeScore, awayScore: highScoreGame.awayScore }, { seasonId: selected?.year, week: highScoreGame.week, source: "league_history_story" }, onOpenBoxScore)}>
+                    Game Book
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            {teamStatLeaders?.pointsPerGame?.teamAbbr ? (
+              <div className="text-sm text-[color:var(--text-muted)]">
+                Best offense (PPG): <span className="font-semibold text-[color:var(--text)]">{teamStatLeaders.pointsPerGame.teamAbbr}</span> ({teamStatLeaders.pointsPerGame.value})
+              </div>
+            ) : null}
+            {teamStatLeaders?.pointsAllowed?.teamAbbr ? (
+              <div className="text-sm text-[color:var(--text-muted)]">
+                Best defense (Pts allowed / game): <span className="font-semibold text-[color:var(--text)]">{teamStatLeaders.pointsAllowed.teamAbbr}</span> ({teamStatLeaders.pointsAllowed.value})
+              </div>
+            ) : null}
+          </section>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <SummaryBox label="Champion" value={selected?.champion?.name ?? "TBD"} />
@@ -350,6 +422,48 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league, initi
             </div>
           </section>
 
+          <section data-testid={`league-history-playoff-bracket-${selected?.id ?? 'none'}`}>
+            <h4 className="text-sm font-bold mb-2">Playoff snapshot</h4>
+            {!playoffSnap || playoffSnap.mode === "empty" ? (
+              <div className="text-xs text-[color:var(--text-muted)] rounded-md border border-[color:var(--hairline)] px-3 py-2">
+                No postseason bracket snapshot is stored for this season. Complete a playoff run and re-archive (or use a newer save) to see round-by-round results here.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {playoffSnap.note ? <div className="text-xs text-[color:var(--text-muted)]">{playoffSnap.note}</div> : null}
+                {(playoffSnap.rounds ?? []).map((round) => (
+                  <div key={round.label} className="rounded-md border border-[color:var(--hairline)] p-3 space-y-2">
+                    <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-subtle)]">{round.label}</div>
+                    <div className="grid gap-2">
+                      {(round.games ?? []).map((g) => {
+                        const presentation = buildCompletedGamePresentation(g, { seasonId: selected?.year, week: g?.week, source: "league_history_playoff" });
+                        const clickable = Boolean(presentation.canOpen && onOpenBoxScore && g.gameId != null);
+                        return (
+                          <div key={String(g.gameId ?? `${g.week}-${g.homeId}-${g.awayId}`)} className="flex flex-wrap items-center justify-between gap-2 text-sm border-b border-[color:var(--hairline)]/60 pb-2 last:border-0 last:pb-0">
+                            <div>
+                              <span className="text-[color:var(--text-muted)] text-xs">Wk {g.week ?? "—"}</span>{" "}
+                              <span className="font-semibold">{g.awayAbbr} {g.awayScore ?? "—"} @ {g.homeAbbr} {g.homeScore ?? "—"}</span>
+                              {g.winnerId != null ? (
+                                <span className="text-xs text-[color:var(--text-muted)]"> · Winner: {teamLookup(g.winnerId)?.abbr ?? g.winnerId}</span>
+                              ) : null}
+                            </div>
+                            {clickable ? (
+                              <button type="button" className="text-xs text-[color:var(--accent)] shrink-0" onClick={() => openResolvedBoxScore({ id: g.gameId, week: g.week, homeId: g.homeId, awayId: g.awayId, homeScore: g.homeScore, awayScore: g.awayScore }, { seasonId: selected?.year, week: g.week, source: "league_history_playoff" }, onOpenBoxScore)}>
+                                Game Book
+                              </button>
+                            ) : (
+                              <span className="text-xs text-[color:var(--text-muted)]">{presentation.statusLabel}</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section>
             <h4 className="text-sm font-bold mb-2">Awards & Leaders</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -365,10 +479,46 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league, initi
                 </button>
               ))}
             </div>
-            <div className="text-xs text-[color:var(--text-muted)] mt-2">
-              Playoff bracket/path is not currently stored in archived season summaries.
+            <div className="mt-3 rounded-md border border-[color:var(--hairline)] p-3" data-testid="league-history-award-winners-card">
+              <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-subtle)] mb-2">Full award sheet</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                {AWARDS_V1_EXTRA.map((k) => {
+                  const a = selected?.awards?.[k];
+                  if (!a?.name) return null;
+                  return (
+                    <div key={k} className="flex justify-between gap-2 border-b border-[color:var(--hairline)]/50 pb-1">
+                      <span className="text-[color:var(--text-muted)]">{AWARD_DISPLAY_NAMES[k] ?? AWARDS_V1_LABELS[k] ?? k}</span>
+                      <button type="button" className="font-semibold text-[color:var(--accent)] text-right" onClick={() => a.playerId != null && onPlayerSelect?.(a.playerId)}>
+                        {a.name}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </section>
+
+          {playerStatLeaders && Object.keys(playerStatLeaders).length > 0 ? (
+            <section data-testid={`league-history-player-stat-leaders-${selected?.id ?? 'none'}`}>
+              <h4 className="text-sm font-bold mb-2">Stat leaders</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                {Object.entries(playerStatLeaders).map(([key, row]) => {
+                  if (!row?.playerName) return null;
+                  return (
+                    <div key={key} className="rounded-md border border-[color:var(--hairline)] px-3 py-2 flex justify-between gap-2">
+                      <span className="text-[color:var(--text-muted)] text-xs uppercase">{PLAYER_LEADER_LABELS[key] ?? key}</span>
+                      <span className="text-right">
+                        <button type="button" className="text-[color:var(--accent)] font-semibold" onClick={() => row.playerId != null && onPlayerSelect?.(row.playerId)}>
+                          {row.playerName}
+                        </button>
+                        <span className="text-[color:var(--text-muted)] text-xs"> {row.value != null ? `· ${row.value}` : ""}</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
           <section>
             <h4 className="text-sm font-bold mb-2">Completed game archive</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">

@@ -28,6 +28,7 @@ import EmptyState from './EmptyState.jsx';
 import { buildRouteRequestKey, buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { getPlayerGameLogs } from "../utils/playerGameLogs.js";
+import { buildMergedPlayerAwardTimeline, buildPlayerAwardHeaderBadges } from "../../core/playerAwardTimeline.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -407,6 +408,7 @@ export default function PlayerProfile({
 }) {
 
   const [data, setData] = useState(null);
+  const [archivedSeasons, setArchivedSeasons] = useState([]);
   const [extending, setExtending] = useState(false);
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
@@ -435,6 +437,26 @@ export default function PlayerProfile({
       console.error("Failed to load player profile:", requestError);
     }
   }, [requestError]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!actions?.getAllSeasons || playerId == null) {
+      setArchivedSeasons([]);
+      return () => { cancelled = true; };
+    }
+    actions
+      .getAllSeasons()
+      .then((res) => {
+        if (cancelled) return;
+        setArchivedSeasons(res?.payload?.seasons ?? res?.seasons ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setArchivedSeasons([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [actions, playerId]);
 
 
   useEffect(() => {
@@ -481,6 +503,19 @@ export default function PlayerProfile({
   const nonRing = accolades
     .filter((a) => a.type !== "SB_RING")
     .sort((a, b) => b.year - a.year);
+  const mergedAwardTimeline = useMemo(
+    () => buildMergedPlayerAwardTimeline(
+      effectivePlayer?.id,
+      Array.isArray(effectivePlayer?.accolades) ? effectivePlayer.accolades : [],
+      archivedSeasons,
+      teams,
+    ),
+    [effectivePlayer?.id, effectivePlayer?.accolades, archivedSeasons, teams],
+  );
+  const awardHeaderBadges = useMemo(
+    () => buildPlayerAwardHeaderBadges(mergedAwardTimeline),
+    [mergedAwardTimeline],
+  );
   const summaryChips = getPlayerSummaryChips(player, ringCount, nonRing);
   const accoladesByYear = [...accolades].sort((a, b) => (a.year ?? 0) - (b.year ?? 0));
   const teamJourney = [...new Set((player?.careerStats ?? []).map((line) => line.team).filter(Boolean))];
@@ -886,7 +921,7 @@ export default function PlayerProfile({
                 )}
 
                 {/* ── Accolades / Legacy ── */}
-                {(ringCount > 0 || nonRing.length > 0) && (
+                {(ringCount > 0 || nonRing.length > 0 || awardHeaderBadges.length > 0) && (
                   <div
                     style={{
                       marginTop: "var(--space-3)",
@@ -900,21 +935,27 @@ export default function PlayerProfile({
                         🏆 {ringCount}x SB Champ
                       </span>
                     )}
-                    {nonRing.map((acc, i) => {
-                      const meta = ACCOLADE_META[acc.type];
-                      if (!meta) return null;
-                      return (
-                        <span
-                          key={i}
-                          style={badgeStyle(
-                            "var(--accent)",
-                            "var(--surface-strong)",
-                          )}
-                        >
-                          {meta.icon} {meta.label(acc.year)}
-                        </span>
-                      );
-                    })}
+                    {mergedAwardTimeline.rows.length > 0
+                      ? awardHeaderBadges.map((chip) => (
+                          <span key={chip.key} style={badgeStyle("var(--accent)", "var(--surface-strong)")}>
+                            {chip.text}
+                          </span>
+                        ))
+                      : nonRing.map((acc, i) => {
+                          const meta = ACCOLADE_META[acc.type];
+                          if (!meta) return null;
+                          return (
+                            <span
+                              key={i}
+                              style={badgeStyle(
+                                "var(--accent)",
+                                "var(--surface-strong)",
+                              )}
+                            >
+                              {meta.icon} {meta.label(acc.year)}
+                            </span>
+                          );
+                        })}
                   </div>
                 )}
 
@@ -1345,16 +1386,37 @@ export default function PlayerProfile({
             </section>
           )}
 
-          {accoladesByYear.length > 0 && (
-            <section className="card-enter">
-              <h3 style={sectionLabelStyle}>Awards Timeline</h3>
-              <div style={{ display: "grid", gap: 4 }}>
-                {accoladesByYear.slice(-12).map((acc, idx) => (
-                  <div key={`${acc.type}-${acc.year}-${idx}`} style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
-                    <strong style={{ color: "var(--text)" }}>{acc.year ?? "—"}</strong> · {acc.type}
-                  </div>
-                ))}
-              </div>
+          {!loading && playerView && (
+            <section className="card-enter" data-testid="player-profile-award-timeline">
+              <h3 style={sectionLabelStyle}>Awards &amp; honors</h3>
+              {mergedAwardTimeline.rows.length === 0 ? (
+                <p style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", margin: 0 }}>No archived awards yet.</p>
+              ) : (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {mergedAwardTimeline.rows.map((row, idx) => (
+                    <div
+                      key={`${row.year}-${row.canonical}-${idx}`}
+                      style={{
+                        fontSize: "var(--text-sm)",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        justifyContent: "space-between",
+                        gap: 8,
+                        borderBottom: "1px solid var(--hairline)",
+                        paddingBottom: 6,
+                      }}
+                    >
+                      <span>
+                        <strong style={{ color: "var(--text)" }}>{row.year}</strong>
+                        <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>{row.label}</span>
+                      </span>
+                      <span style={{ color: "var(--text-subtle)", fontSize: "var(--text-xs)" }}>
+                        {row.teamAbbr ? `${row.teamAbbr}` : "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 

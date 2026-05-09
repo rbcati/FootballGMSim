@@ -35,6 +35,38 @@ describe('HistoryHub', () => {
     await waitFor(() => {
       expect(screen.getByText(/2026 · DAL/)).toBeTruthy();
       expect(screen.getByText(/Runner-up: NYG · MVP: Ace QB/)).toBeTruthy();
+      expect(screen.getByText(/View season →/)).toBeTruthy();
+    });
+  });
+
+  it('shows user team record on archived cards when standings include the user franchise', async () => {
+    render(
+      <HistoryHub
+        league={{ userTeamId: 2 }}
+        onNavigate={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                {
+                  id: 's1',
+                  year: 2026,
+                  champion: { abbr: 'DAL' },
+                  runnerUp: { abbr: 'NYG' },
+                  awards: { mvp: { name: 'Ace QB' } },
+                  standings: [
+                    { id: 1, wins: 8, losses: 9 },
+                    { id: 2, wins: 11, losses: 6 },
+                  ],
+                },
+              ],
+            },
+          }),
+        }}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/Your team: 11-6/)).toBeTruthy();
     });
   });
 

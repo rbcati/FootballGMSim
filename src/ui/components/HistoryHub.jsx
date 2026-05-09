@@ -8,7 +8,7 @@ const DESTINATIONS = [
   { key: 'Awards & Records', title: 'Awards & Records', body: 'Who defined each season and who owns the book.' },
 ];
 
-export default function HistoryHub({ onNavigate, actions, onSelectSeason }) {
+export default function HistoryHub({ onNavigate, actions, onSelectSeason, league = null }) {
   const [seasons, setSeasons] = useState([]);
   useEffect(() => {
     let mounted = true;
@@ -53,12 +53,23 @@ export default function HistoryHub({ onNavigate, actions, onSelectSeason }) {
             No completed seasons are archived yet. History appears automatically after your first full season is completed.
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: 8 }}>
-            {seasons.slice(0, 5).map((season) => (
+          <div style={{ display: 'grid', gap: 8 }} data-testid="history-hub-archived-seasons">
+            {seasons.slice(0, 5).map((season) => {
+              const uid = league?.userTeamId;
+              const userRow = uid != null ? (season?.standings ?? []).find((r) => Number(r?.id) === Number(uid)) : null;
+              const userLine = userRow
+                ? `Your team: ${userRow.wins ?? 0}-${userRow.losses ?? 0}${userRow.ties ? `-${userRow.ties}` : ''}`
+                : season?.userTeamSummary?.record
+                  ? `Your team: ${season.userTeamSummary.record}`
+                  : uid != null
+                    ? 'Your team: —'
+                    : null;
+              return (
               <button
                 key={season.id ?? season.year}
                 className="card clickable-card"
                 style={{ padding: 'var(--space-3)', textAlign: 'left' }}
+                data-testid={`history-hub-season-${season.year}`}
                 onClick={() => {
                   onSelectSeason?.(season.id ?? season.seasonId ?? season.year ?? null);
                   onNavigate?.('History');
@@ -68,10 +79,14 @@ export default function HistoryHub({ onNavigate, actions, onSelectSeason }) {
                   {season.year} · {season?.champion?.abbr ?? season?.champion?.name ?? 'Champion TBD'}
                 </div>
                 <div style={{ marginTop: 4, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                  Runner-up: {season?.runnerUp?.abbr ?? season?.runnerUp?.name ?? 'Unavailable'} · MVP: {season?.awards?.mvp?.name ?? 'Unavailable'}
+                  Runner-up: {season?.runnerUp?.abbr ?? season?.runnerUp?.name ?? '—'} · MVP: {season?.awards?.mvp?.name ?? '—'}
                 </div>
+                {userLine ? (
+                  <div style={{ marginTop: 4, fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>{userLine}</div>
+                ) : null}
+                <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--accent)' }}>View season →</div>
               </button>
-            ))}
+            );})}
           </div>
         )}
       </SectionCard>
