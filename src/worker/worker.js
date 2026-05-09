@@ -110,6 +110,7 @@ import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer } from '../core/trade-logic.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot } from '../core/league-memory.js';
+import { inferChampionshipOutcome, isCompletedGame, isPostseasonGame } from '../core/championshipInference.js';
 import { repairDepthChart, validateDepthChart, optimizeDepthChartForPlan } from "../core/roster/depthChartManager.js";
 import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
 import { isValidSaveId, sanitizeSaveList } from './saveIntegrity.js';
@@ -2711,15 +2712,20 @@ async function handleAdvanceWeek(payload, id) {
     seasonEndFlag = true;
     // Find and announce the champion
     let sbChampId = null;
+    let sbRunnerUpId = null;
     if (results.length > 0) {
       const sbR = results[0];
       const hScore = sbR.scoreHome ?? sbR.homeScore ?? 0;
       const aScore = sbR.scoreAway ?? sbR.awayScore ?? 0;
       const rawW   = hScore >= aScore ? (sbR.home ?? sbR.homeTeamId) : (sbR.away ?? sbR.awayTeamId);
+      const rawL   = hScore >= aScore ? (sbR.away ?? sbR.awayTeamId) : (sbR.home ?? sbR.homeTeamId);
       const wId    = Number(typeof rawW === 'object' ? rawW?.id : rawW);
+      const lId    = Number(typeof rawL === 'object' ? rawL?.id : rawL);
       const champ  = cache.getTeam(wId);
+      const runner = cache.getTeam(lId);
       if (champ) {
         sbChampId = wId;
+        if (runner && Number.isFinite(lId)) sbRunnerUpId = lId;
         post(toUI.NOTIFICATION, { level: 'info', message: `🏆 ${champ.name} win the Super Bowl! Season complete.` });
         await NewsEngine.logAward('SUPER_BOWL', champ);
         const titleNews = createNewsItem('championship_won', { teamName: champ?.name, season: meta?.season, teamId: champ?.id }, week, meta?.season);
@@ -2734,6 +2740,7 @@ async function handleAdvanceWeek(payload, id) {
       phase: 'offseason_resign',
       currentWeek: 0,
       championTeamId: sbChampId,
+      runnerUpTeamId: sbRunnerUpId,
       offseasonProgressionDone: false,
       draftState: null,
       freeAgencyState: null,
@@ -7734,6 +7741,21 @@ function calculateLeaders(stats) {
   };
 }
 
+function seasonStatsHaveAwardEligibleTotals(populatedStats) {
+  const rows = (populatedStats || []).filter((s) => s?.totals && typeof s.totals === 'object');
+  if (!rows.length) return false;
+  const offensiveKeys = ['passYd', 'passingYards', 'rushYd', 'rushingYards', 'recYd', 'receivingYards', 'passTD', 'passingTd', 'rushTD', 'rushingTd', 'recTD', 'receivingTd'];
+  const defensiveKeys = ['tackles', 'sacks', 'defInterceptions', 'forcedFumbles'];
+  for (const row of rows) {
+    const totals = row.totals;
+    if (offensiveKeys.some((k) => Number(totals[k] ?? 0) !== 0)) return true;
+    if (defensiveKeys.some((k) => Number(totals[k] ?? 0) !== 0)) return true;
+    const pos = String(row?.pos ?? '').toUpperCase();
+    if (['DL', 'DE', 'DT', 'EDGE', 'LB', 'CB', 'S', 'SS', 'FS'].includes(pos) && Number(totals.interceptions ?? 0) !== 0) return true;
+  }
+  return false;
+}
+
 function calculateSeasonAwardsV1(stats, teams, year) {
   const rows = (stats || []).filter((s) => s?.totals);
   const emptyAwards = {
@@ -7782,8 +7804,19 @@ function calculateSeasonAwardsV1(stats, teams, year) {
   };
   const offensiveCandidates = offense.filter(hasOffenseStats);
   const defensiveCandidates = defense.filter(hasDefenseStats);
-  const passingInts = (row) => statValue(t(row), ['passInt', 'interceptionsThrown', 'interceptions']);
-  const defensiveInts = (row) => statValue(t(row), ['defInterceptions', 'interceptions']);
+  const passingInts = (row) => {
+    const qb = String(row?.pos ?? '').toUpperCase() === 'QB';
+    const keys = qb
+      ? ['passInt', 'interceptionsThrown', 'intsThrown', 'interceptions']
+      : ['passInt', 'interceptionsThrown', 'intsThrown'];
+    return statValue(t(row), keys);
+  };
+  const defensiveInts = (row) => {
+    const pos = String(row?.pos ?? '').toUpperCase();
+    const defPos = ['DL', 'DE', 'DT', 'EDGE', 'LB', 'CB', 'S', 'SS', 'FS'].includes(pos);
+    const keys = defPos ? ['defInterceptions', 'interceptions'] : ['defInterceptions'];
+    return statValue(t(row), keys);
+  };
   const kickingMade = (row) => statValue(t(row), ['fgMade', 'fieldGoalsMade']);
   const extraPointsMade = (row) => statValue(t(row), ['xpMade', 'extraPointsMade']);
 
@@ -7833,55 +7866,6 @@ function calculateSeasonAwardsV1(stats, teams, year) {
     bestWrTe: toAward(bestWrTe),
     bestDefensivePlayer: toAward(bestDefensivePlayer),
     ...(bestKicker ? { bestKicker: toAward(bestKicker) } : { bestKicker: null }),
-  };
-}
-
-function isCompletedGame(game) {
-  return Number.isFinite(Number(game?.homeScore)) && Number.isFinite(Number(game?.awayScore));
-}
-
-function isPostseasonGame(game) {
-  const round = String(game?.playoffRound ?? game?.round ?? game?.stage ?? '').toLowerCase();
-  return Boolean(game?.isPlayoff || game?.isPostseason || ['wildcard', 'divisional', 'conference', 'conference_final', 'final', 'championship', 'superbowl', 'super_bowl'].includes(round));
-}
-
-function isChampionshipGameMarker(game) {
-  const round = String(game?.playoffRound ?? game?.round ?? game?.stage ?? '').toLowerCase();
-  const week = Number(game?.week ?? 0);
-  return Boolean(
-    game?.isChampionshipGame ||
-    game?.isFinal ||
-    ['superbowl', 'super_bowl', 'championship', 'final', 'playoff_final'].includes(round) ||
-    (isPostseasonGame(game) && week >= 22)
-  );
-}
-
-function resolveGameWinnerLoser(game) {
-  if (!isCompletedGame(game)) return { winnerId: null, loserId: null };
-  const homeScore = Number(game.homeScore);
-  const awayScore = Number(game.awayScore);
-  if (homeScore === awayScore) return { winnerId: null, loserId: null };
-  if (homeScore > awayScore) return { winnerId: Number(game.homeId), loserId: Number(game.awayId) };
-  return { winnerId: Number(game.awayId), loserId: Number(game.homeId) };
-}
-
-function inferChampionshipOutcome({ seasonGames = [], meta = {} }) {
-  const completedGames = seasonGames.filter(isCompletedGame);
-  const postseasonGames = completedGames.filter(isPostseasonGame);
-  const explicitChampionshipGame = [...postseasonGames]
-    .filter(isChampionshipGameMarker)
-    .sort((a, b) => Number(b?.week ?? 0) - Number(a?.week ?? 0))[0] ?? null;
-  const fallbackPostseasonFinal = explicitChampionshipGame
-    ? null
-    : [...postseasonGames]
-      .sort((a, b) => Number(b?.week ?? 0) - Number(a?.week ?? 0))[0] ?? null;
-  const resolvedGame = explicitChampionshipGame ?? fallbackPostseasonFinal;
-  const fromGame = resolveGameWinnerLoser(resolvedGame);
-  const championTeamId = fromGame.winnerId ?? (meta?.championTeamId != null ? Number(meta.championTeamId) : null);
-  return {
-    championshipGame: resolvedGame,
-    championTeamId: Number.isFinite(championTeamId) ? championTeamId : null,
-    runnerUpTeamId: fromGame.loserId ?? null,
   };
 }
 
@@ -8364,7 +8348,9 @@ async function archiveSeason(seasonId) {
     await Promise.all(seasonStats.map(async (s) => {
       const p = await resolvePlayer(s.playerId);
       if (p) {
-        populatedStats.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId, age: p.age, draftYear: p.year ?? null });
+        const entryYear = Number(p?.year ?? 0);
+        const draftYear = entryYear === Number(year) ? year : null;
+        populatedStats.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId, age: p.age, draftYear });
       }
     }));
 
@@ -8423,12 +8409,12 @@ async function archiveSeason(seasonId) {
     const legacyAwards = calculateAwards(populatedStats, teams);
     const staffRows = teams.map((t) => ({ teamId: t.id, name: t?.staff?.headCoach?.name ?? `${t?.abbr ?? 'Team'} HC` }));
     const seasonAwards = calculateSeasonAwards({ stats: populatedStats, teams, year, coaches: staffRows });
-    const v1Awards = calculateSeasonAwardsV1(populatedStats, teams, year);
+    const awardSignal = seasonStatsHaveAwardEligibleTotals(populatedStats);
+    const v1Awards = calculateSeasonAwardsV1(awardSignal ? populatedStats : [], teams, year);
     const awards = {
       ...legacyAwards,
       ...seasonAwards,
       ...v1Awards,
-      roty: seasonAwards?.roty ?? legacyAwards?.roty ?? null,
       allPro: seasonAwards?.allPro ?? { firstTeamOffense: [], firstTeamDefense: [] },
     };
 
@@ -8630,6 +8616,7 @@ async function handleStartNewSeason(payload, id) {
     freeAgencyState:         null, // Reset FA state
     contractMarketMemory:    {},
     championTeamId:          null,
+    runnerUpTeamId:          null,
     offseasonProgressionDone:false,
     ownerGoals: generateOwnerGoals(),
     offseasonReleaseMap: {},

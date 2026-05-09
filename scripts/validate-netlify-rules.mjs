@@ -176,8 +176,27 @@ export function validateRedirectsContent(lines, fileLabel = '_redirects') {
   return errors;
 }
 
+/** Ensure Netlify matches GitHub Actions: skip default npm install, run npm ci in build.command. */
+export function validateNetlifyInstallParity(tomlRaw) {
+  const failures = [];
+  if (!/NETLIFY_INSTALL_JS_DEPENDENCIES\s*=\s*["']?false["']?/i.test(tomlRaw)) {
+    failures.push(
+      'netlify.toml must set NETLIFY_INSTALL_JS_DEPENDENCIES=false so the default npm install step is skipped (use npm ci in build.command).',
+    );
+  }
+  if (!/^\s*command\s*=\s*"npm\s+ci\s+&&/m.test(tomlRaw)) {
+    failures.push('netlify.toml [build].command must begin with npm ci && to match GitHub Actions (npm ci) and avoid flaky npm install.');
+  }
+  return failures;
+}
+
 export function validateNetlifyRules({ repoRoot = process.cwd() } = {}) {
   const failures = [];
+  const tomlPath = path.resolve(repoRoot, 'netlify.toml');
+  const tomlContent = fs.existsSync(tomlPath) ? fs.readFileSync(tomlPath, 'utf8') : '';
+  if (tomlContent) {
+    failures.push(...validateNetlifyInstallParity(tomlContent));
+  }
   const publishInfo = resolvePublishDirectory({ repoRoot });
 
   failures.push(...publishInfo.errors);
@@ -186,8 +205,6 @@ export function validateNetlifyRules({ repoRoot = process.cwd() } = {}) {
   }
 
   const { resolvedPublishDir, publish } = publishInfo;
-  const tomlPath = path.resolve(repoRoot, 'netlify.toml');
-  const tomlContent = fs.readFileSync(tomlPath, 'utf8');
   const headersPath = path.join(resolvedPublishDir, '_headers');
   const redirectsPath = path.join(resolvedPublishDir, '_redirects');
   const indexPath = path.join(resolvedPublishDir, 'index.html');

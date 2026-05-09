@@ -241,12 +241,14 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league, initi
   const [selectedSeasonId, setSelectedSeasonId] = useState(initialSelectedSeasonId ?? seasons?.[0]?.id ?? null);
 
   useEffect(() => {
+    if (!seasons?.length) return;
     if (initialSelectedSeasonId != null) {
-      setSelectedSeasonId(initialSelectedSeasonId);
+      const exists = seasons.some((s) => String(s?.id) === String(initialSelectedSeasonId));
+      setSelectedSeasonId(exists ? initialSelectedSeasonId : (seasons[0]?.id ?? null));
       return;
     }
-    if (!selectedSeasonId && seasons.length) setSelectedSeasonId(seasons[0].id);
-  }, [initialSelectedSeasonId, seasons, selectedSeasonId]);
+    setSelectedSeasonId((prev) => prev ?? seasons[0]?.id ?? null);
+  }, [initialSelectedSeasonId, seasons]);
 
   if (!seasons?.length) {
     return (

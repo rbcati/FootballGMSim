@@ -5,7 +5,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import AwardsRecordsScreen from '../AwardsRecordsScreen.jsx';
 
 describe('AwardsRecordsScreen', () => {
-  it('renders archived V1 award rows and honest records placeholder', async () => {
+  it('renders archived V1 awards by season and honest records placeholder', async () => {
     render(
       <AwardsRecordsScreen
         onBack={vi.fn()}
@@ -20,7 +20,7 @@ describe('AwardsRecordsScreen', () => {
                   mvp: { playerId: 1, name: 'Ace QB', pos: 'QB' },
                   opoy: { playerId: 2, name: 'Top RB', pos: 'RB' },
                   dpoy: { playerId: 3, name: 'Edge Star', pos: 'EDGE' },
-                  bestQB: { playerId: 1, name: 'Ace QB', pos: 'QB' },
+                  bestQB: { playerId: 4, name: 'Also QB', pos: 'QB' },
                 },
               }],
             },
@@ -30,8 +30,11 @@ describe('AwardsRecordsScreen', () => {
     );
 
     await waitFor(() => {
+      expect(screen.getByText(/By season/i)).toBeTruthy();
+      expect(screen.getByText(/Season 2031/i)).toBeTruthy();
+      expect(screen.getByText(/Most Valuable Player:/i)).toBeTruthy();
+      expect(screen.getAllByText(/Ace QB/i).length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText(/2031 · Most Valuable Player/i)).toBeTruthy();
-      expect(screen.getByText(/2031 · Best QB/i)).toBeTruthy();
       expect(screen.getByText(/Records coming later/i)).toBeTruthy();
     });
   });

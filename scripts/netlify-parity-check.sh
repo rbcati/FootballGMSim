@@ -43,7 +43,8 @@ echo "[netlify-parity] Cleaning publish directory"
 rm -rf "$NETLIFY_PUBLISH"
 
 echo "[netlify-parity] Building production bundle with Netlify-like env"
-CI=true NETLIFY=true CONTEXT=production npm run build
+# Match netlify.toml [build].command (includes npm ci when configured).
+CI=true NETLIFY=true CONTEXT=production bash -c "$NETLIFY_CMD"
 
 if [[ -f "public/sw.js" && ! -f "$NETLIFY_PUBLISH/sw.js" ]]; then
   echo "[netlify-parity] ERROR: $NETLIFY_PUBLISH/sw.js missing (public/sw.js should be copied)"
