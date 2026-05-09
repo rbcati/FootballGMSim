@@ -27,7 +27,10 @@ const league = {
   schedule: { weeks: [] },
 };
 
-const actions = { getPlayerCareer: vi.fn(async () => null) };
+const actions = {
+  getPlayerCareer: vi.fn(async () => null),
+  getAllSeasons: vi.fn(async () => ({ payload: { seasons: [] } })),
+};
 
 describe('PlayerProfile', () => {
   beforeEach(() => {
@@ -150,5 +153,42 @@ describe('PlayerProfile', () => {
     expect(onOpenBoxScore).toHaveBeenCalledWith('g1');
     fireEvent.click(screen.getByRole('button', { name: 'Return to HQ' }));
     expect(onNavigate).toHaveBeenCalledWith('HQ');
+  });
+
+  it('shows honest empty award timeline when no honors exist', async () => {
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={league} />);
+    await waitFor(() => expect(screen.getByTestId('player-profile-award-timeline')).toBeTruthy());
+    expect(screen.getByTestId('player-profile-award-timeline').textContent).toMatch(/No archived awards yet/i);
+  });
+
+  it('merges archived season awards with player accolades without duplicate MVP rows', async () => {
+    const careerActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: {
+          player: {
+            ...player,
+            accolades: [{ type: 'MVP', year: 2030, seasonId: 's1' }],
+          },
+          stats: [],
+          teammates: [],
+          meta: {},
+        },
+      })),
+      getAllSeasons: vi.fn(async () => ({
+        payload: {
+          seasons: [
+            {
+              id: 's1',
+              year: 2030,
+              awards: { mvp: { playerId: 11, name: 'Avery Fields', teamId: 1 } },
+            },
+          ],
+        },
+      })),
+    };
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={careerActions} teams={league.teams} league={league} />);
+    await waitFor(() => expect(screen.getByTestId('player-profile-award-timeline').textContent).toMatch(/Most Valuable Player/i));
+    const block = screen.getByTestId('player-profile-award-timeline').textContent;
+    expect((block.match(/Most Valuable Player/g) ?? []).length).toBe(1);
   });
 });

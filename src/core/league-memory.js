@@ -1,3 +1,5 @@
+import { buildPlayoffBracketSnapshot } from './playoffBracketSnapshot.js';
+
 const POSITION_HOF_BASELINE = {
   QB: 12000,
   RB: 8000,
@@ -472,6 +474,11 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
 
   const playerStatLeaders = buildPlayerStatLeaders(seasonStats);
   const teamStatLeaders = buildTeamStatLeaders(sorted);
+  const playoffBracketSnapshot = buildPlayoffBracketSnapshot({
+    games,
+    teams,
+    championshipGameId: championshipGameId ?? null,
+  });
   const notableGames = [];
   const championshipGame = (games || []).find((g) => String(g?.id ?? g?.gameId) === String(championshipGameId));
   if (championshipGame) {
@@ -520,6 +527,7 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
       finals: champion && runnerUp ? `${champion.abbr} over ${runnerUp.abbr}` : null,
       wins: champion?.wins ?? null,
     },
+    playoffBracketSnapshot,
     gameIndex: (games || []).map((g) => ({
       id: g.id,
       week: g.week,
