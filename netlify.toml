@@ -11,6 +11,8 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  # Large Vite bundles can OOM on smaller Netlify build runners; keep headroom.
+  NODE_OPTIONS = "--max-old-space-size=4096"
   # Skip Netlify's default npm install; build.command runs npm ci instead.
   NETLIFY_INSTALL_JS_DEPENDENCIES = "false"
 

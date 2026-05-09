@@ -141,8 +141,8 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
               <div key={c.classId ?? `hof-${c.year}`} className="border border-[color:var(--hairline)] rounded-lg p-3 space-y-2">
                 <div className="text-sm font-semibold">Class of {c.year}</div>
                 <ul className="space-y-2 text-sm">
-                  {(c.inductees ?? []).map((ind) => (
-                    <li key={String(ind.playerId)} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                  {(c.inductees ?? []).map((ind, idx) => (
+                    <li key={ind?.playerId != null ? String(ind.playerId) : `hof-${c.year ?? "y"}-${idx}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                       <button
                         type="button"
                         className="text-left font-medium text-[color:var(--accent)] hover:underline"

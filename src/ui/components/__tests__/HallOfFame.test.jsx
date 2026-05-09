@@ -22,6 +22,26 @@ describe('HallOfFame', () => {
     });
   });
 
+  it('renders class card when a class has empty inductees (no crash)', async () => {
+    render(
+      <HallOfFame
+        onPlayerSelect={vi.fn()}
+        actions={{
+          getHallOfFame: vi.fn().mockResolvedValue({
+            payload: {
+              players: [{ id: 'solo', name: 'Solo', pos: 'QB', legacyScore: 70, accoladeSummary: { mvps: 0, superBowls: 0, proBowls: 0 }, stats: {} }],
+              classes: [{ year: 2033, classId: 'hof-2033', inductees: [] }],
+            },
+          }),
+        }}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('hall-of-fame-classes')).toBeTruthy();
+      expect(screen.getAllByText(/Class of 2033/).length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   it('renders induction class list from payload', async () => {
     render(
       <HallOfFame
