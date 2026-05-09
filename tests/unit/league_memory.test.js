@@ -62,9 +62,13 @@ describe('league memory helpers', () => {
       seasonStats: [],
     });
     expect(season.schemaVersion).toBe(1);
+    expect(season.seasonId).toBe('s9');
+    expect(season.id).toBe('s9');
     expect(typeof season.completedAt).toBe('string');
     expect(season.playoffSummary.finals).toBe(null);
     expect(Array.isArray(season.notableGames)).toBe(true);
+    expect(season.awards).toEqual({});
+    expect(season.leaders).toEqual({});
   });
 
   it('updates record book and hall evaluations', () => {

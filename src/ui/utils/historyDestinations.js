@@ -7,6 +7,6 @@ export function resolveHistoryDestination(tab) {
 
 export function filterAwardRows(rows = [], scope = 'all') {
   if (scope === 'recent') return rows.slice(-24).reverse();
-  if (scope === 'mvp') return rows.filter((r) => r.award === 'MVP');
+  if (scope === 'mvp') return rows.filter((r) => r.awardKey === 'mvp' || r.award === 'Most Valuable Player');
   return rows;
 }

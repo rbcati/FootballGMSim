@@ -1,11 +1,18 @@
 # netlify.toml — Netlify configuration for Football GM SPA
+#
+# Netlify's default "npm install" has diverged from GitHub Actions ("npm ci")
+# and triggered npm/arborist ERR_INVALID_ARG_TYPE on some previews. We skip
+# the automatic JS dependency install and run `npm ci` inside build.command
+# so deploys match CI (see scripts/netlify-parity-check.sh).
 
 [build]
-  command   = "npm run build"
+  command   = "npm ci && npm run build"
   publish   = "dist"
 
 [build.environment]
   NODE_VERSION = "22"
+  # Skip Netlify's default npm install; build.command runs npm ci instead.
+  NETLIFY_INSTALL_JS_DEPENDENCIES = "false"
 
 # Redirect/header rules are defined in public/_redirects and public/_headers so
 # Netlify parses a single source of truth in deploy previews and production.

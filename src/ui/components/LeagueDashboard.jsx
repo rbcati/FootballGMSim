@@ -548,6 +548,13 @@ export default function LeagueDashboard({
   const [rosterInitialView, setRosterInitialView] = useState("table");
   const [statsInitialFamily, setStatsInitialFamily] = useState("passing");
   const [historySelectedSeasonId, setHistorySelectedSeasonId] = useState(null);
+
+  useEffect(() => {
+    if (activeTab === "History Hub") {
+      setHistorySelectedSeasonId(null);
+    }
+  }, [activeTab]);
+
   const [leagueInitialSection, setLeagueInitialSection] = useState("Overview");
   const [teamInitialSection, setTeamInitialSection] = useState("Overview");
   const [newsSubtab, setNewsSubtab] = useState("All");
