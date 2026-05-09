@@ -232,4 +232,40 @@ describe('PlayerProfile', () => {
     await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Avery Fields'));
     expect(screen.queryByTestId('player-profile-record-book')).toBeNull();
   });
+
+  it('shows legacy watch when career stats and accolades justify legacy scoring', async () => {
+    const careerPlayer = {
+      id: 22,
+      name: 'Star QB',
+      pos: 'QB',
+      age: 30,
+      ovr: 90,
+      teamId: 1,
+      status: 'active',
+      accolades: [{ type: 'MVP', year: 2025 }],
+      careerStats: Array.from({ length: 8 }).map((_, i) => ({ season: `s${i}`, passYds: 4200, ovr: 88 })),
+      contract: { years: 1, baseAnnual: 10 },
+      traits: [],
+      ratings: {},
+    };
+    const legacyActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: { player: careerPlayer, stats: [], meta: { userTeamId: 1, week: 5 } },
+      })),
+      getAllSeasons: vi.fn(async () => ({ payload: { seasons: [] } })),
+      getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+    };
+    const teamsWithStar = [{ id: 1, name: 'Dallas', abbr: 'DAL', roster: [careerPlayer] }];
+    render(
+      <PlayerProfile
+        playerId={22}
+        onClose={vi.fn()}
+        actions={legacyActions}
+        teams={teamsWithStar}
+        league={{ ...league, teams: teamsWithStar }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('player-profile-legacy-watch')).toBeTruthy());
+    expect(screen.getByText(/Legacy score/i)).toBeTruthy();
+  });
 });

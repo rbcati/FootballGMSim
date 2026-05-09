@@ -9,8 +9,24 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScreenHeader, EmptyState } from "./ScreenSystem.jsx";
 
+function resolvedLegacyScore(player) {
+  const n = Number(player?.legacyScore ?? player?.hofScore);
+  if (Number.isFinite(n) && n > 0) return n;
+  return getLegacyScoreFallback(player);
+}
+
+function getLegacyScoreFallback(player) {
+  const summary = player?.accoladeSummary ?? {};
+  const rings = summary.superBowls ?? 0;
+  const mvps = summary.mvps ?? 0;
+  const pro = summary.proBowls ?? 0;
+  const peak = player?.peakOvr ?? player?.ovr ?? 0;
+  return (rings * 12) + (mvps * 10) + (pro * 2) + Math.round(peak / 5);
+}
+
 export default function HallOfFame({ onPlayerSelect, actions }) {
   const [players, setPlayers] = useState(null);
+  const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [positionFilter, setPositionFilter] = useState("ALL");
   const [search, setSearch] = useState("");
@@ -26,6 +42,7 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
       .then((response) => {
         if (mounted) {
           setPlayers(response?.payload?.players ?? []);
+          setClasses(response?.payload?.classes ?? []);
           setLoading(false);
         }
       })
@@ -44,26 +61,48 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
     return ["ALL", ...[...set].sort()];
   }, [players]);
 
+  const classOptions = useMemo(() => {
+    const fromClasses = (classes ?? []).map((c) => String(c.year));
+    const fromPlayers = (players ?? []).map((p) => String(p.inductionYear ?? ""));
+    const merged = [...new Set([...fromClasses, ...fromPlayers].filter(Boolean))];
+    return ["ALL", ...merged.sort((a, b) => Number(b) - Number(a))];
+  }, [players, classes]);
+
   const filteredPlayers = useMemo(() => {
     const list = (players ?? []).filter((p) => {
       if (positionFilter !== "ALL" && p.pos !== positionFilter) return false;
-      if (classFilter !== "ALL" && String(p.inductionYear ?? "Unknown") !== classFilter) return false;
+      if (classFilter !== "ALL") {
+        const cls = (classes ?? []).find((c) => String(c.year) === classFilter);
+        const ids = new Set((cls?.inductees ?? []).map((i) => String(i.playerId)));
+        if (ids.size) {
+          if (!ids.has(String(p.id))) return false;
+        } else if (String(p.inductionYear ?? "") !== classFilter) {
+          return false;
+        }
+      }
       const q = search.trim().toLowerCase();
       if (!q) return true;
-      return [p.name, p.pos, p.primaryTeam]
+      return [p.name, p.pos, p.primaryTeam, p.primaryTeamAbbr]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q));
     });
     return [...list].sort((a, b) => sortHallPlayers(a, b, sortKey));
-  }, [players, positionFilter, classFilter, search, sortKey]);
-  const classOptions = useMemo(() => {
-    const years = [...new Set((players ?? []).map((p) => String(p.inductionYear ?? "Unknown")))];
-    return ["ALL", ...years.sort((a, b) => Number(b) - Number(a))];
-  }, [players]);
+  }, [players, classes, positionFilter, classFilter, search, sortKey]);
+
   const latestClass = useMemo(() => {
-    const yr = classOptions.find((value) => value !== "ALL" && value !== "Unknown");
-    return yr ? filteredPlayers.filter((p) => String(p.inductionYear) === yr).slice(0, 3) : filteredPlayers.slice(0, 3);
-  }, [classOptions, filteredPlayers]);
+    const sorted = [...(classes ?? [])].sort((a, b) => Number(b.year) - Number(a.year));
+    const yr = sorted[0]?.year;
+    if (yr == null) {
+      const yr2 = classOptions.find((value) => value !== "ALL");
+      return yr2 ? filteredPlayers.filter((p) => String(p.inductionYear) === yr2).slice(0, 3) : filteredPlayers.slice(0, 3);
+    }
+    return filteredPlayers.filter((p) => String(p.inductionYear) === String(yr)).slice(0, 3);
+  }, [classes, classOptions, filteredPlayers]);
+
+  const sortedClasses = useMemo(
+    () => [...(classes ?? [])].sort((a, b) => Number(b.year) - Number(a.year)),
+    [classes],
+  );
 
   if (loading) {
     return (
@@ -73,22 +112,61 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
     );
   }
 
-  if (!players || players.length === 0) {
+  const hasPlayers = players && players.length > 0;
+  const hasClasses = classes && classes.length > 0;
+  if (!hasPlayers && !hasClasses) {
     return (
-      <div className="app-screen-stack">
+      <div className="app-screen-stack" data-testid="hall-of-fame-empty">
         <ScreenHeader title="Hall of Fame" subtitle="Career achievement archive and notable induction classes." />
-        <EmptyState title="No inductees yet." body="Legendary players will be inducted here once great careers conclude." />
+        <EmptyState
+          title="No Hall of Fame classes yet."
+          body="Retired legends will appear here after their careers are complete."
+        />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 app-screen-stack">
+    <div className="space-y-4 app-screen-stack" data-testid="hall-of-fame-screen">
       <ScreenHeader
         title="Hall of Fame"
         subtitle="Explore inductions, teams, awards, and peak greatness."
-        metadata={[{ label: "Legends", value: `${filteredPlayers.length}/${players.length}` }]}
+        metadata={[{ label: "Legends", value: `${filteredPlayers.length}/${(players ?? []).length}` }]}
       />
+      {sortedClasses.length > 0 && (
+        <Card className="card-premium" data-testid="hall-of-fame-classes">
+          <CardContent className="p-4 space-y-3">
+            <div className="text-xs uppercase tracking-wide text-[color:var(--text-muted)]">Induction classes</div>
+            {sortedClasses.map((c) => (
+              <div key={c.classId ?? `hof-${c.year}`} className="border border-[color:var(--hairline)] rounded-lg p-3 space-y-2">
+                <div className="text-sm font-semibold">Class of {c.year}</div>
+                <ul className="space-y-2 text-sm">
+                  {(c.inductees ?? []).map((ind) => (
+                    <li key={String(ind.playerId)} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                      <button
+                        type="button"
+                        className="text-left font-medium text-[color:var(--accent)] hover:underline"
+                        onClick={() => onPlayerSelect?.(ind.playerId)}
+                      >
+                        {ind.name}
+                        <span className="text-[color:var(--text-muted)] font-normal"> · {ind.pos}</span>
+                        {ind.primaryTeamAbbr ? <span className="text-[color:var(--text-muted)] font-normal"> · {ind.primaryTeamAbbr}</span> : null}
+                      </button>
+                      <div className="flex flex-wrap gap-1 items-center text-xs text-[color:var(--text-muted)]">
+                        {ind.tier ? <Badge variant="outline" className="text-[10px]">{String(ind.tier)}</Badge> : null}
+                        <span>Legacy {ind.legacyScore ?? ind.score ?? "—"}</span>
+                        {Array.isArray(ind.reasons) && ind.reasons.length > 0 ? (
+                          <span className="hidden sm:inline">· {ind.reasons.slice(0, 3).join(" · ")}</span>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
       {latestClass.length > 0 && (
         <Card className="card-premium">
           <CardContent className="p-4 space-y-2">
@@ -105,69 +183,75 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
         </Card>
       )}
 
-      <Card className="card-premium">
-        <CardContent className="p-3 sm:p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search legends"
-              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
-            />
-            <select
-              value={positionFilter}
-              onChange={(e) => setPositionFilter(e.target.value)}
-              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
-            >
-              {positions.map((pos) => (
-                <option key={pos} value={pos}>{pos === "ALL" ? "All positions" : pos}</option>
-              ))}
-            </select>
-            <select
-              value={classFilter}
-              onChange={(e) => setClassFilter(e.target.value)}
-              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
-            >
-              {classOptions.map((option) => (
-                <option key={option} value={option}>{option === "ALL" ? "All classes" : `Class of ${option}`}</option>
-              ))}
-            </select>
-            <select
-              value={sortKey}
-              onChange={(e) => setSortKey(e.target.value)}
-              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
-            >
-              <option value="legacy">Sort: Legacy Score</option>
-              <option value="inductionYear">Sort: Induction Year</option>
-              <option value="awards">Sort: Awards</option>
-              <option value="rings">Sort: Rings</option>
-              <option value="peak">Sort: Peak OVR</option>
-            </select>
-            <div className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-xs text-[color:var(--text-muted)] flex items-center">
-              Click any card to open full player archive.
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {hasPlayers && (
+        <>
+          <Card className="card-premium">
+            <CardContent className="p-3 sm:p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search legends"
+                  className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+                />
+                <select
+                  value={positionFilter}
+                  onChange={(e) => setPositionFilter(e.target.value)}
+                  className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+                >
+                  {positions.map((pos) => (
+                    <option key={pos} value={pos}>{pos === "ALL" ? "All positions" : pos}</option>
+                  ))}
+                </select>
+                <select
+                  value={classFilter}
+                  onChange={(e) => setClassFilter(e.target.value)}
+                  className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+                >
+                  {classOptions.map((option) => (
+                    <option key={option} value={option}>{option === "ALL" ? "All classes" : `Class of ${option}`}</option>
+                  ))}
+                </select>
+                <select
+                  value={sortKey}
+                  onChange={(e) => setSortKey(e.target.value)}
+                  className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+                >
+                  <option value="legacy">Sort: Legacy Score</option>
+                  <option value="inductionYear">Sort: Induction Year</option>
+                  <option value="awards">Sort: Awards</option>
+                  <option value="rings">Sort: Rings</option>
+                  <option value="peak">Sort: Peak OVR</option>
+                </select>
+                <div className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-xs text-[color:var(--text-muted)] flex items-center sm:col-span-2">
+                  Click any card to open full player archive.
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredPlayers.map((player) => (
-          <HofCard
-            key={player.id}
-            player={player}
-            onPlayerSelect={onPlayerSelect}
-          />
-        ))}
-      </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="hall-of-fame-cards">
+            {filteredPlayers.map((player) => (
+              <HofCard
+                key={player.id}
+                player={player}
+                onPlayerSelect={onPlayerSelect}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 function HofCard({ player, onPlayerSelect }) {
-  const { stats, accoladeSummary } = player;
+  const { accoladeSummary } = player;
+  const summary = accoladeSummary ?? { mvps: 0, superBowls: 0, proBowls: 0 };
   const primaryStat = getPrimaryStat(player);
-  const legacyScore = getLegacyScore(player);
+  const legacyScore = resolvedLegacyScore(player);
+  const tier = player.tier;
 
   return (
     <Card
@@ -205,7 +289,7 @@ function HofCard({ player, onPlayerSelect }) {
               <div className="flex items-center gap-2 text-sm">
                 <span className="font-semibold text-[color:var(--accent)]">{player.pos}</span>
                 <span className="text-[color:var(--text-muted)]">&middot;</span>
-                <span className="text-[color:var(--text-muted)]">{player.primaryTeam || "N/A"}</span>
+                <span className="text-[color:var(--text-muted)]">{player.primaryTeam || player.primaryTeamAbbr || "N/A"}</span>
               </div>
               <div className="text-xs text-[color:var(--text-muted)] mt-0.5">
                 {player.seasonsPlayed > 0 && `${player.seasonsPlayed} season${player.seasonsPlayed !== 1 ? "s" : ""}`}
@@ -216,11 +300,12 @@ function HofCard({ player, onPlayerSelect }) {
         </div>
 
         <div className="px-4 py-3 space-y-3">
-          {(accoladeSummary.mvps > 0 || accoladeSummary.superBowls > 0 || accoladeSummary.proBowls > 0 || legacyScore > 0) && (
+          {(summary.mvps > 0 || summary.superBowls > 0 || summary.proBowls > 0 || legacyScore > 0 || tier) && (
             <div className="flex flex-wrap gap-1.5">
-              {accoladeSummary.mvps > 0 && <AccoladeBadge label={`${accoladeSummary.mvps}x MVP`} gold />}
-              {accoladeSummary.superBowls > 0 && <AccoladeBadge label={`${accoladeSummary.superBowls}x SB`} gold />}
-              {accoladeSummary.proBowls > 0 && <AccoladeBadge label={`${accoladeSummary.proBowls}x Pro Bowl`} />}
+              {tier ? <AccoladeBadge label={String(tier)} gold /> : null}
+              {summary.mvps > 0 && <AccoladeBadge label={`${summary.mvps}x MVP`} gold />}
+              {summary.superBowls > 0 && <AccoladeBadge label={`${summary.superBowls}x SB`} gold />}
+              {summary.proBowls > 0 && <AccoladeBadge label={`${summary.proBowls}x Pro Bowl`} />}
               {legacyScore > 0 && <AccoladeBadge label={`Legacy ${legacyScore}`} />}
             </div>
           )}
@@ -246,7 +331,7 @@ function HofCard({ player, onPlayerSelect }) {
           )}
           {Array.isArray(player.inductionReasons) && player.inductionReasons.length > 0 && (
             <div className="text-[10px] text-[color:var(--text-muted)]">
-              Why inducted: {player.inductionReasons.slice(0, 2).join(" · ")}
+              Why inducted: {player.inductionReasons.slice(0, 4).join(" · ")}
             </div>
           )}
         </div>
@@ -284,16 +369,7 @@ function sortHallPlayers(a, b, sortKey) {
   if (sortKey === "rings") return (b.accoladeSummary?.superBowls ?? 0) - (a.accoladeSummary?.superBowls ?? 0);
   if (sortKey === "awards") return ((b.accoladeSummary?.mvps ?? 0) + (b.accoladeSummary?.proBowls ?? 0)) - ((a.accoladeSummary?.mvps ?? 0) + (a.accoladeSummary?.proBowls ?? 0));
   if (sortKey === "peak") return (b.peakOvr ?? b.ovr ?? 0) - (a.peakOvr ?? a.ovr ?? 0);
-  return getLegacyScore(b) - getLegacyScore(a);
-}
-
-function getLegacyScore(player) {
-  const summary = player?.accoladeSummary ?? {};
-  const rings = summary.superBowls ?? 0;
-  const mvps = summary.mvps ?? 0;
-  const pro = summary.proBowls ?? 0;
-  const peak = player?.peakOvr ?? player?.ovr ?? 0;
-  return (rings * 12) + (mvps * 10) + (pro * 2) + Math.round(peak / 5);
+  return resolvedLegacyScore(b) - resolvedLegacyScore(a);
 }
 
 function getPrimaryStat(player) {
