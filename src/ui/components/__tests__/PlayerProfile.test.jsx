@@ -233,6 +233,65 @@ describe('PlayerProfile', () => {
     expect(screen.queryByTestId('player-profile-record-book')).toBeNull();
   });
 
+  it('renders active player with no careerStats, no accolades, and failed getRecords without crashing', async () => {
+    const bare = {
+      id: 99,
+      name: 'Sparse Active',
+      pos: 'WR',
+      age: 23,
+      ovr: 72,
+      teamId: 1,
+      status: 'active',
+      accolades: [],
+      contract: { years: 1, baseAnnual: 1 },
+      traits: [],
+      ratings: {},
+    };
+    const bareActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: { player: bare, stats: [], teammates: [], meta: { userTeamId: 1, week: 1 } },
+      })),
+      getAllSeasons: vi.fn(async () => ({ payload: { seasons: [] } })),
+      getRecords: vi.fn(async () => Promise.reject(new Error('idb'))),
+    };
+    const teams = [{ id: 1, name: 'Dallas', abbr: 'DAL', roster: [bare] }];
+    render(
+      <PlayerProfile playerId={99} onClose={vi.fn()} actions={bareActions} teams={teams} league={{ ...league, teams }} />,
+    );
+    await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Sparse Active'));
+    expect(screen.queryByTestId('player-profile-record-book')).toBeNull();
+  });
+
+  it('renders retired HOF inductee with no careerStats in payload without crashing', async () => {
+    const bareHof = {
+      id: 88,
+      name: 'Ghost Legend',
+      pos: 'RB',
+      age: 38,
+      ovr: 80,
+      teamId: null,
+      status: 'retired',
+      hof: true,
+      contract: null,
+      traits: [],
+      ratings: {},
+    };
+    const bareActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: { player: bareHof, stats: [], teammates: [], meta: { userTeamId: 1, week: 1 } },
+      })),
+      getAllSeasons: vi.fn(async () => ({ payload: { seasons: [] } })),
+      getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+    };
+    const teams = [{ id: 1, name: 'Dallas', abbr: 'DAL', roster: [] }];
+    render(
+      <PlayerProfile playerId={88} onClose={vi.fn()} actions={bareActions} teams={teams} league={{ ...league, teams }} />,
+    );
+    await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Ghost Legend'));
+    await waitFor(() => expect(screen.getByTestId('player-profile-legacy-watch')).toBeTruthy());
+    expect(screen.getByText(/Hall of Fame inductee/i)).toBeTruthy();
+  });
+
   it('shows legacy watch when career stats and accolades justify legacy scoring', async () => {
     const careerPlayer = {
       id: 22,

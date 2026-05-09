@@ -70,6 +70,67 @@ describe('HistoryHub', () => {
     });
   });
 
+  it('shows Hall of Fame preview when getHallOfFame returns players or classes', async () => {
+    render(
+      <HistoryHub
+        onNavigate={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
+          getHallOfFame: vi.fn().mockResolvedValue({
+            payload: {
+              players: [{ id: 'p1', name: 'Legend', legacyScore: 90, hofScore: 90 }],
+              classes: [{ year: 2031, classId: 'hof-2031', inductees: [{ playerId: 'p1', name: 'Legend', legacyScore: 90, score: 90 }] }],
+            },
+          }),
+        }}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('history-hub-hof-preview')).toBeTruthy();
+      expect(screen.getByText(/Class of 2031/)).toBeTruthy();
+    });
+  });
+
+  it('does not show HOF preview when getHallOfFame rejects', async () => {
+    render(
+      <HistoryHub
+        onNavigate={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
+          getHallOfFame: vi.fn().mockRejectedValue(new Error('worker')),
+        }}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId('history-hub-hof-preview')).toBeNull();
+    });
+  });
+
+  it('prefers latest class with inductees for HOF preview headline', async () => {
+    render(
+      <HistoryHub
+        onNavigate={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
+          getHallOfFame: vi.fn().mockResolvedValue({
+            payload: {
+              players: [],
+              classes: [
+                { year: 2032, classId: 'hof-2032', inductees: [] },
+                { year: 2030, classId: 'hof-2030', inductees: [{ playerId: 'x', name: 'Old Star', legacyScore: 88, score: 88 }] },
+              ],
+            },
+          }),
+        }}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('history-hub-hof-preview')).toBeTruthy();
+      expect(screen.getByText(/Class of 2030/)).toBeTruthy();
+      expect(screen.getByText(/Spotlight: Old Star/)).toBeTruthy();
+    });
+  });
+
   it('routes to history with selected season when preview clicked', async () => {
     const onNavigate = vi.fn();
     const onSelectSeason = vi.fn();

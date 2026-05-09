@@ -3902,9 +3902,15 @@ async function handleGetTransactions({ seasonId = null, teamId = null } = {}, id
 // ── Handler: GET_HALL_OF_FAME ────────────────────────────────────────────────
 
 async function handleGetHallOfFame(payload, id) {
+  try {
   const meta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
   // Collect all HOF players from DB (retired + any active HOF)
-  const allDBPlayers = await Players.loadAll();
+  let allDBPlayers = [];
+  try {
+    allDBPlayers = await Players.loadAll();
+  } catch (err) {
+    console.error('[Worker] Players.loadAll() failed in handleGetHallOfFame:', err);
+  }
   const hofPlayers = allDBPlayers.filter(p => p.hof === true);
 
   const teamAbbrMap = {};
@@ -4031,6 +4037,10 @@ async function handleGetHallOfFame(payload, id) {
   result.sort((a, b) => (Number(b.legacyScore ?? b.hofScore ?? 0) - Number(a.legacyScore ?? a.hofScore ?? 0)) || (Number(b.inductionYear ?? 0) - Number(a.inductionYear ?? 0)));
 
   post(toUI.HALL_OF_FAME, { players: result, classes: classesPayload }, id);
+  } catch (err) {
+    console.error('[Worker] handleGetHallOfFame failed:', err);
+    post(toUI.HALL_OF_FAME, { players: [], classes: [] }, id);
+  }
 }
 
 function getTeamColor(abbr, teams) {
@@ -8202,7 +8212,11 @@ async function handleAdvanceOffseason(payload, id) {
       // Sudden retirement — high-priority news
       await NewsEngine.logSuddenRetirement(ret);
     } else if (isHof) {
-      NewsEngine.logNews('HOF', `LEGEND CROWNED: ${player.pos} ${player.name} has been enshrined into the Hall of Fame, cementing an unforgettable legacy!`);
+      try {
+        await NewsEngine.logNews('HOF', `LEGEND CROWNED: ${player.pos} ${player.name} has been enshrined into the Hall of Fame, cementing an unforgettable legacy!`);
+      } catch (err) {
+        console.error('[Worker] HOF retirement news log failed (non-fatal):', err);
+      }
     } else if ((player.ovr >= 85) || (ret.age >= 35 && player.ovr >= 75)) {
       NewsEngine.logNews('RETIREMENT', `END OF AN ERA: ${player.pos} ${player.name} has officially announced their retirement from professional football.`);
     }
@@ -8623,13 +8637,20 @@ async function archiveSeason(seasonId) {
     const hofSync = syncHallOfFameAfterRecordBook(memoryMeta, cache.getAllPlayers(), year, { teams, teamAbbrMap: hofArchiveTeamAbbrMap });
     memoryMeta = hofSync.memoryMeta;
     for (const row of hofSync.newInductees) {
-      const pl = cache.getPlayer(row.playerId);
+      let pl = cache.getPlayer(row.playerId);
+      if (!pl) {
+        pl = await Players.load(row.playerId).catch(() => null);
+      }
       if (!pl || pl.hof === true) continue;
       const accoladeTrail = Array.isArray(pl.accolades)
         ? [...pl.accolades, { type: 'HOF', year, reasons: row.reasons, score: row.legacyScore }]
         : [{ type: 'HOF', year, reasons: row.reasons, score: row.legacyScore }];
       cache.updatePlayer(row.playerId, { hof: true, hofScore: row.legacyScore, hofReasons: row.reasons, accolades: accoladeTrail });
-      await NewsEngine.logNews('HOF', `LEGEND CROWNED: ${row.pos} ${row.name} has been enshrined into the Hall of Fame, cementing an unforgettable legacy!`);
+      try {
+        await NewsEngine.logNews('HOF', `LEGEND CROWNED: ${row.pos} ${row.name} has been enshrined into the Hall of Fame, cementing an unforgettable legacy!`);
+      } catch (err) {
+        console.error('[Worker] HOF archive news log failed (non-fatal):', err);
+      }
     }
     memoryMeta.seasonStorylines = buildSeasonStorylineSnapshot(memoryMeta, teams, meta.userTeamId);
     cache.setMeta({

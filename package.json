@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "type": "module",
   "description": "The ultimate browser-based American Football GM simulator",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -59,7 +59,8 @@ export default function HistoryHub({ onNavigate, actions, onSelectSeason, league
         <SectionCard title="Hall of Fame" subtitle="Latest induction class.">
           {(() => {
             const classes = [...(hofPreview.classes || [])].sort((a, b) => Number(b?.year ?? 0) - Number(a?.year ?? 0));
-            const latest = classes[0];
+            const latest =
+              classes.find((c) => Array.isArray(c?.inductees) && c.inductees.length > 0) ?? classes[0];
             const inductees = latest?.inductees ?? [];
             const top = [...(hofPreview.players || [])].sort((a, b) => Number(b?.legacyScore ?? b?.hofScore ?? 0) - Number(a?.legacyScore ?? a?.hofScore ?? 0))[0];
             const topName = inductees.length
