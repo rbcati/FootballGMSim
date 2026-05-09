@@ -30,6 +30,7 @@ import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { getPlayerGameLogs } from "../utils/playerGameLogs.js";
 import { buildMergedPlayerAwardTimeline, buildPlayerAwardHeaderBadges } from "../../core/playerAwardTimeline.js";
 import { buildPlayerRecordContext } from "../../core/recordBookV1.js";
+import { buildLegacyScoreReport, shouldShowLegacyProfileSection } from "../../core/legacyScore.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -490,6 +491,26 @@ export default function PlayerProfile({
     () => buildPlayerRecordContext(recordBook, effectivePlayer?.id ?? playerId),
     [recordBook, effectivePlayer?.id, playerId],
   );
+  const legacyReport = useMemo(() => {
+    if (!effectivePlayer) return null;
+    return buildLegacyScoreReport(effectivePlayer, {
+      recordBook,
+      archivedSeasons,
+      teams,
+    });
+  }, [effectivePlayer, recordBook, archivedSeasons, teams]);
+
+  const legacyStatusLabel = useMemo(() => {
+    if (!legacyReport || !playerView) return null;
+    if (playerView.hof) return "Hall of Fame inductee";
+    const st = String(playerView.status ?? "");
+    if (st !== "retired") {
+      return legacyReport.recommendation === "legacy_watch" ? "Legacy watch" : "Active — building résumé";
+    }
+    if (legacyReport.recommendation === "borderline") return "Borderline — résumé under review";
+    if (legacyReport.recommendation === "induct") return "Qualified résumé (enshrinement tracked in league history)";
+    return "Not in Hall of Fame — keep watching accolades and records";
+  }, [legacyReport, playerView]);
   const playerMissing = !loading && !effectivePlayer;
   const loadErrorMessage = requestError?.message || data?.error || null;
   const userTeam = useMemo(() => teams.find((t) => t.id === data?.meta?.userTeamId || t.id === player?.teamId), [teams, data?.meta?.userTeamId, player?.teamId]);
@@ -1370,16 +1391,23 @@ export default function PlayerProfile({
             </section>
           )}
 
-          {!loading && playerView && (
-            <section className="card-enter">
-              <h3 style={sectionLabelStyle}>Legacy Context</h3>
-              <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+          {!loading && playerView && shouldShowLegacyProfileSection(legacyReport, playerView) && legacyReport && (
+            <section className="card-enter" data-testid="player-profile-legacy-watch">
+              <h3 style={sectionLabelStyle}>Legacy &amp; Hall of Fame</h3>
+              <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
                 <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
-                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Hall of Fame</div>
-                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{player.hof ? "Inducted" : "Not inducted"}</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Legacy score</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>
+                    {legacyReport.legacyScore}
+                    {legacyReport.tier ? <span style={{ color: "var(--text-muted)", fontWeight: 600, marginLeft: 6 }}>({legacyReport.tier})</span> : null}
+                  </div>
                 </div>
                 <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
-                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Best Season</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Status</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{legacyStatusLabel}</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Best season</div>
                   <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{bestSeason ? seasonYear(bestSeason.seasonId) : "—"}</div>
                 </div>
                 <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
@@ -1387,10 +1415,23 @@ export default function PlayerProfile({
                   <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{ringCount}</div>
                 </div>
                 <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
-                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Team Journey</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Team journey</div>
                   <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{teamJourney.length ? teamJourney.join(" → ") : "Single team / N/A"}</div>
                 </div>
               </div>
+              {legacyReport.breakdown && (
+                <p style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginTop: 8, marginBottom: 0 }}>
+                  Breakdown: production {legacyReport.breakdown.production} · awards {legacyReport.breakdown.awards} · records {legacyReport.breakdown.records} ·
+                  titles {legacyReport.breakdown.championships} · longevity {legacyReport.breakdown.longevity} · peak {legacyReport.breakdown.peak}
+                </p>
+              )}
+              {Array.isArray(legacyReport.reasons) && legacyReport.reasons.length > 0 && (
+                <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: "var(--text-xs)", color: "var(--text-muted)", lineHeight: 1.45 }}>
+                  {legacyReport.reasons.slice(0, 4).map((r) => (
+                    <li key={r}>{r}</li>
+                  ))}
+                </ul>
+              )}
             </section>
           )}
 

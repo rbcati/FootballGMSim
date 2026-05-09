@@ -4,17 +4,12 @@ import {
   mirrorRecordBookForLegacyUi,
   defensiveInterceptionsSeasonValue,
 } from './recordBookV1.js';
-
-const POSITION_HOF_BASELINE = {
-  QB: 12000,
-  RB: 8000,
-  WR: 9000,
-  TE: 7000,
-  DL: 220,
-  LB: 260,
-  CB: 180,
-  S: 160,
-};
+import {
+  buildLegacyScoreReport,
+  HOF_LEGACY_INDUCT_THRESHOLD,
+  HOF_MIN_SEASONS,
+} from './legacyScore.js';
+import { getMostPlayedTeam } from './records.js';
 
 const REVIEW_PREMIUM_POSITIONS = new Set(['QB', 'WR', 'OT', 'EDGE', 'DE', 'CB']);
 
@@ -39,7 +34,7 @@ export function createLeagueMemoryDefaults() {
   return {
     leagueHistory: [],
     seasonStorylines: [],
-    hallOfFame: { classes: [], index: {} },
+    hallOfFame: { schemaVersion: 1, classes: [], index: {} },
     franchiseHistoryByTeam: {},
     recordBook: {
       singleGame: Object.fromEntries(RECORD_CATEGORIES.map((c) => [c.key, blankRecord()])),
@@ -68,6 +63,7 @@ export function ensureLeagueMemoryMeta(meta = {}) {
     leagueHistory: Array.isArray(meta.leagueHistory) ? meta.leagueHistory : defaults.leagueHistory,
     seasonStorylines: Array.isArray(meta.seasonStorylines) ? meta.seasonStorylines : defaults.seasonStorylines,
     hallOfFame: {
+      schemaVersion: meta?.hallOfFame?.schemaVersion ?? defaults.hallOfFame.schemaVersion,
       classes: Array.isArray(meta?.hallOfFame?.classes) ? meta.hallOfFame.classes : defaults.hallOfFame.classes,
       index: meta?.hallOfFame?.index && typeof meta.hallOfFame.index === 'object' ? meta.hallOfFame.index : defaults.hallOfFame.index,
     },
@@ -656,38 +652,115 @@ export function updateRecordBook(memoryMeta, { allPlayers = [] } = {}) {
   return { ...memoryMeta, recordBook: next, recordEvents: [] };
 }
 
-export function evaluateHallOfFameCandidate(player, year) {
-  const accolades = Array.isArray(player?.accolades) ? player.accolades : [];
-  const careerStats = Array.isArray(player?.careerStats) ? player.careerStats : [];
-  const seasons = careerStats.length;
-  const statTotal = player.pos === 'QB'
-    ? careerStats.reduce((s, line) => s + Number(line?.passYds ?? 0), 0)
-    : player.pos === 'RB'
-      ? careerStats.reduce((s, line) => s + Number(line?.rushYds ?? 0), 0)
-      : ['WR', 'TE'].includes(player.pos)
-        ? careerStats.reduce((s, line) => s + Number(line?.recYds ?? 0), 0)
-        : careerStats.reduce((s, line) => s + Number(line?.tackles ?? 0) + Number(line?.sacks ?? 0) * 8, 0);
-
-  const baseline = POSITION_HOF_BASELINE[player.pos] ?? 9000;
-  const mvps = accolades.filter((a) => a.type === 'MVP').length;
-  const titles = accolades.filter((a) => a.type === 'SB_RING').length;
-  const peak = careerStats.reduce((m, line) => Math.max(m, Number(line?.ovr ?? 0)), Number(player?.ovr ?? 0));
-  const score = (statTotal / baseline) * 60 + mvps * 12 + titles * 8 + Math.max(0, seasons - 8) * 1.5 + Math.max(0, peak - 82);
-  const inducted = score >= 78;
-  const reasons = [];
-  if (statTotal >= baseline) reasons.push('Elite career production for position');
-  if (mvps > 0) reasons.push(`${mvps} MVP award${mvps > 1 ? 's' : ''}`);
-  if (titles > 0) reasons.push(`${titles} championship ring${titles > 1 ? 's' : ''}`);
-  if (seasons >= 10) reasons.push(`Long career (${seasons} seasons)`);
-  if (peak >= 92) reasons.push(`Peak dominance (OVR ${peak})`);
-  return { inducted, score: Math.round(score * 10) / 10, reasons: reasons.slice(0, 4), year };
+/**
+ * @param {object} player — usually still active when called from retirement loop
+ * @param {number} year — class / evaluation year (league year)
+ * @param {{ recordBook?: object, archivedSeasons?: any[], teams?: any[] }} [options]
+ */
+export function evaluateHallOfFameCandidate(player, year, options = {}) {
+  const { recordBook = null, archivedSeasons = [], teams = [] } = options;
+  const report = buildLegacyScoreReport(player, { recordBook, archivedSeasons, teams, year });
+  const seasons = report.meta?.seasonsPlayed ?? 0;
+  const inducted = seasons >= HOF_MIN_SEASONS && report.legacyScore >= HOF_LEGACY_INDUCT_THRESHOLD;
+  return {
+    inducted,
+    score: report.legacyScore,
+    reasons: report.reasons.slice(0, 4),
+    year,
+    report,
+  };
 }
 
+export function rebuildHallOfFameIndexFromClasses(classes) {
+  const index = {};
+  for (const c of classes || []) {
+    for (const ind of c.inductees || []) {
+      if (ind?.playerId != null) index[String(ind.playerId)] = ind;
+    }
+  }
+  return index;
+}
+
+/**
+ * @param {object} player
+ * @param {ReturnType<typeof buildLegacyScoreReport>} report
+ * @param {{ teamAbbrMap?: Record<string|number, string>, teams?: any[] }} ctx
+ */
+export function buildHallOfFameInducteeRow(player, report, ctx = {}) {
+  const { teamAbbrMap = {}, teams = [] } = ctx;
+  const abbr = getMostPlayedTeam(player, teamAbbrMap) || null;
+  const team = (teams || []).find((t) => String(t?.abbr) === String(abbr));
+  const legacyScore = report.legacyScore;
+  return {
+    playerId: player.id,
+    name: player.name,
+    pos: player.pos,
+    primaryTeamId: team?.id ?? null,
+    primaryTeamAbbr: abbr,
+    legacyScore,
+    tier: report.tier,
+    reasons: (report.reasons || []).slice(0, 4),
+    score: legacyScore,
+    careerSummary: report.careerSummary || '',
+    awardsSummary: report.awardsSummary || '',
+    recordsSummary: report.recordsSummary || '',
+    breakdown: report.breakdown ?? null,
+  };
+}
+
+/**
+ * Merge inductees into the class for `classYear` (same playerId overwrites with newer fields).
+ */
 export function addHallOfFameClass(memoryMeta, classYear, inductees) {
   if (!inductees?.length) return memoryMeta;
-  const classes = [...memoryMeta.hallOfFame.classes.filter((c) => c.year !== classYear), { year: classYear, inductees }]
-    .sort((a, b) => b.year - a.year);
-  const index = { ...memoryMeta.hallOfFame.index };
-  for (const ind of inductees) index[String(ind.playerId)] = ind;
-  return { ...memoryMeta, hallOfFame: { classes, index } };
+  const prev = memoryMeta.hallOfFame?.classes ?? [];
+  const y = Number(classYear);
+  const existing = prev.find((c) => Number(c.year) === y);
+  const byId = new Map();
+  for (const x of existing?.inductees ?? []) {
+    if (x?.playerId != null) byId.set(String(x.playerId), { ...x });
+  }
+  for (const x of inductees) {
+    if (x?.playerId == null) continue;
+    const id = String(x.playerId);
+    byId.set(id, { ...(byId.get(id) || {}), ...x });
+  }
+  const merged = [...byId.values()];
+  if (!merged.length) return memoryMeta;
+  const classId = existing?.classId ?? `hof-${y}`;
+  const nextClass = { year: y, classId, inductees: merged };
+  const classes = [...prev.filter((c) => Number(c.year) !== y), nextClass].sort((a, b) => b.year - a.year);
+  const index = rebuildHallOfFameIndexFromClasses(classes);
+  return {
+    ...memoryMeta,
+    hallOfFame: {
+      schemaVersion: memoryMeta.hallOfFame?.schemaVersion ?? 1,
+      classes,
+      index,
+    },
+  };
+}
+
+/**
+ * After record book refresh, induct any retired greats not yet in the index.
+ * @returns {{ memoryMeta: object, newInductees: object[] }}
+ */
+export function syncHallOfFameAfterRecordBook(memoryMeta, allPlayers, classYear, opts = {}) {
+  const { teams = [], teamAbbrMap = {} } = opts;
+  const archivedSeasons = memoryMeta.leagueHistory ?? [];
+  const book = memoryMeta.recordBook;
+  const index = memoryMeta.hallOfFame?.index ?? {};
+  const toAdd = [];
+  for (const p of allPlayers || []) {
+    if (!p || String(p.status) !== 'retired') continue;
+    if (index[String(p.id)] != null) continue;
+    if (p.hof === true) continue;
+    const report = buildLegacyScoreReport(p, { recordBook: book, archivedSeasons, teams });
+    if ((report.meta?.seasonsPlayed ?? 0) < HOF_MIN_SEASONS) continue;
+    if (report.legacyScore < HOF_LEGACY_INDUCT_THRESHOLD) continue;
+    toAdd.push(buildHallOfFameInducteeRow(p, report, { teamAbbrMap, teams }));
+  }
+  if (!toAdd.length) return { memoryMeta, newInductees: [] };
+  const nextMeta = addHallOfFameClass(memoryMeta, classYear, toAdd);
+  return { memoryMeta: nextMeta, newInductees: toAdd };
 }

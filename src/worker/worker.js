@@ -109,7 +109,7 @@ import { derivePlayerVisibleRatingsPatch } from './playerDerivedRatings.js';
 import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer } from '../core/trade-logic.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
-import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot } from '../core/league-memory.js';
+import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot, buildHallOfFameInducteeRow, syncHallOfFameAfterRecordBook } from '../core/league-memory.js';
 import { rebuildRecordBookV1, mirrorRecordBookForLegacyUi, RECORD_BOOK_SCHEMA_VERSION } from '../core/recordBookV1.js';
 import { inferChampionshipOutcome, isCompletedGame, isPostseasonGame } from '../core/championshipInference.js';
 import { repairDepthChart, validateDepthChart, optimizeDepthChartForPlan } from "../core/roster/depthChartManager.js";
@@ -3954,6 +3954,7 @@ async function handleGetHallOfFame(payload, id) {
       .slice(-10);
 
     const classEntry = meta?.hallOfFame?.index?.[String(p.id)] ?? null;
+    const legacyScore = classEntry?.legacyScore ?? classEntry?.score ?? p?.hofScore ?? null;
     return {
       id: p.id,
       name: p.name,
@@ -3962,6 +3963,7 @@ async function handleGetHallOfFame(payload, id) {
       ovr: p.ovr,
       number: p.number ?? p.jerseyNum ?? null,
       primaryTeam,
+      primaryTeamAbbr: classEntry?.primaryTeamAbbr ?? primaryTeam,
       teamColor: getTeamColor(primaryTeam, cache.getAllTeams()),
       inductionYear,
       seasonsPlayed: careerStats.length,
@@ -3971,11 +3973,64 @@ async function handleGetHallOfFame(payload, id) {
       accoladeSummary: { mvps: mvpCount, superBowls: sbCount, proBowls: proCount },
       accoladeTimeline,
       inductionReasons: classEntry?.reasons ?? p?.hofReasons ?? [],
-      hofScore: classEntry?.score ?? p?.hofScore ?? null,
+      hofScore: legacyScore,
+      legacyScore,
+      tier: classEntry?.tier ?? null,
+      breakdown: classEntry?.breakdown ?? null,
+      careerSummary: classEntry?.careerSummary ?? null,
+      awardsSummary: classEntry?.awardsSummary ?? null,
+      recordsSummary: classEntry?.recordsSummary ?? null,
     };
-  }).sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+  });
 
-  post(toUI.HALL_OF_FAME, { players: result }, id);
+  const seenIds = new Set(result.map((r) => String(r.id)));
+  const allTeamsLocal = cache.getAllTeams();
+  const classesRaw = Array.isArray(meta?.hallOfFame?.classes) ? meta.hallOfFame.classes : [];
+  const classesPayload = classesRaw.slice(0, 40).map((c) => ({
+    year: c.year,
+    classId: c.classId ?? `hof-${c.year}`,
+    inductees: (c.inductees || []).map((ind) => ({ ...ind })),
+  }));
+  for (const c of classesRaw) {
+    const y = Number(c.year);
+    for (const ind of c.inductees || []) {
+      const pid = ind?.playerId;
+      if (pid == null || seenIds.has(String(pid))) continue;
+      seenIds.add(String(pid));
+      const abbr = ind.primaryTeamAbbr || '';
+      result.push({
+        id: pid,
+        name: ind.name,
+        pos: ind.pos,
+        age: null,
+        ovr: null,
+        number: null,
+        primaryTeam: abbr || null,
+        primaryTeamAbbr: abbr || null,
+        teamColor: getTeamColor(abbr, allTeamsLocal),
+        inductionYear: y,
+        seasonsPlayed: 0,
+        peakOvr: null,
+        teamHistory: abbr ? [abbr] : [],
+        stats: { passYds: 0, rushYds: 0, recYds: 0, passTDs: 0, sacks: 0, gamesPlayed: 0 },
+        accoladeSummary: { mvps: 0, superBowls: 0, proBowls: 0 },
+        accoladeTimeline: [],
+        inductionReasons: ind.reasons ?? [],
+        hofScore: ind.legacyScore ?? ind.score ?? null,
+        legacyScore: ind.legacyScore ?? ind.score ?? null,
+        tier: ind.tier ?? null,
+        breakdown: ind.breakdown ?? null,
+        careerSummary: ind.careerSummary ?? null,
+        awardsSummary: ind.awardsSummary ?? null,
+        recordsSummary: ind.recordsSummary ?? null,
+        fromClassOnly: true,
+      });
+    }
+  }
+
+  result.sort((a, b) => (Number(b.legacyScore ?? b.hofScore ?? 0) - Number(a.legacyScore ?? a.hofScore ?? 0)) || (Number(b.inductionYear ?? 0) - Number(a.inductionYear ?? 0)));
+
+  post(toUI.HALL_OF_FAME, { players: result, classes: classesPayload }, id);
 }
 
 function getTeamColor(abbr, teams) {
@@ -8122,6 +8177,15 @@ async function handleAdvanceOffseason(payload, id) {
   const agedPlayers = cache.getAllPlayers();
   const { retirements } = evaluateRetirements(agedPlayers);
 
+  const hofMemoryMeta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
+  const hofTeamAbbrMap = {};
+  allTeams.forEach((t) => { hofTeamAbbrMap[t.id] = t.abbr; });
+  const hofEvalContext = {
+    recordBook: hofMemoryMeta.recordBook,
+    archivedSeasons: hofMemoryMeta.leagueHistory ?? [],
+    teams: allTeams,
+  };
+
   const hofClass = [];
   for (const ret of retirements) {
     const player = cache.getPlayer(ret.id);
@@ -8130,7 +8194,7 @@ async function handleAdvanceOffseason(payload, id) {
     retired.push(ret);
     if (player.teamId != null) recalculateTeamCap(player.teamId);
 
-    const hofEval = evaluateHallOfFameCandidate(player, Number(meta?.year ?? 2025));
+    const hofEval = evaluateHallOfFameCandidate(player, Number(meta?.year ?? 2025), hofEvalContext);
     const isHof = hofEval.inducted;
 
     // Log news based on retirement type
@@ -8146,7 +8210,7 @@ async function handleAdvanceOffseason(payload, id) {
     if (isHof) {
       const accoladeTrail = Array.isArray(player.accolades) ? [...player.accolades, { type: 'HOF', year: Number(meta?.year ?? 2025), reasons: hofEval.reasons, score: hofEval.score }] : [{ type: 'HOF', year: Number(meta?.year ?? 2025), reasons: hofEval.reasons, score: hofEval.score }];
       cache.updatePlayer(player.id, { status: 'retired', teamId: null, hof: true, hofScore: hofEval.score, hofReasons: hofEval.reasons, accolades: accoladeTrail });
-      hofClass.push({ playerId: player.id, name: player.name, pos: player.pos, score: hofEval.score, reasons: hofEval.reasons });
+      hofClass.push(buildHallOfFameInducteeRow(player, hofEval.report, { teamAbbrMap: hofTeamAbbrMap, teams: allTeams }));
     } else {
       cache.updatePlayer(player.id, { status: 'retired', teamId: null, hof: false });
     }
@@ -8554,6 +8618,19 @@ async function archiveSeason(seasonId) {
     let memoryMeta = { ...meta, leagueHistory: historyRows };
     memoryMeta = updateFranchiseHistory(memoryMeta, seasonSummary, teams);
     memoryMeta = updateRecordBook(memoryMeta, { allPlayers: cache.getAllPlayers() });
+    const hofArchiveTeamAbbrMap = {};
+    teams.forEach((t) => { hofArchiveTeamAbbrMap[t.id] = t.abbr; });
+    const hofSync = syncHallOfFameAfterRecordBook(memoryMeta, cache.getAllPlayers(), year, { teams, teamAbbrMap: hofArchiveTeamAbbrMap });
+    memoryMeta = hofSync.memoryMeta;
+    for (const row of hofSync.newInductees) {
+      const pl = cache.getPlayer(row.playerId);
+      if (!pl || pl.hof === true) continue;
+      const accoladeTrail = Array.isArray(pl.accolades)
+        ? [...pl.accolades, { type: 'HOF', year, reasons: row.reasons, score: row.legacyScore }]
+        : [{ type: 'HOF', year, reasons: row.reasons, score: row.legacyScore }];
+      cache.updatePlayer(row.playerId, { hof: true, hofScore: row.legacyScore, hofReasons: row.reasons, accolades: accoladeTrail });
+      await NewsEngine.logNews('HOF', `LEGEND CROWNED: ${row.pos} ${row.name} has been enshrined into the Hall of Fame, cementing an unforgettable legacy!`);
+    }
     memoryMeta.seasonStorylines = buildSeasonStorylineSnapshot(memoryMeta, teams, meta.userTeamId);
     cache.setMeta({
       leagueHistory: memoryMeta.leagueHistory,
@@ -8561,6 +8638,7 @@ async function archiveSeason(seasonId) {
       recordBook: memoryMeta.recordBook,
       seasonStorylines: memoryMeta.seasonStorylines,
       history: archivedLeagueView.history,
+      hallOfFame: memoryMeta.hallOfFame,
     });
 
     await Seasons.save(seasonSummary);
