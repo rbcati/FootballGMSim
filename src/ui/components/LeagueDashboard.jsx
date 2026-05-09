@@ -1229,7 +1229,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Awards & Records" && (
           <TabErrorBoundary label="Awards & Records">
-            <AwardsRecordsScreen actions={actions} league={league} onPlayerSelect={handlePlayerSelect} onBack={() => setActiveTab("History Hub")} />
+            <AwardsRecordsScreen actions={actions} league={league} onPlayerSelect={handlePlayerSelect} onTeamSelect={setSelectedTeamId} onBack={() => setActiveTab("History Hub")} />
           </TabErrorBoundary>
         )}
         {activeTab === "Postseason" && (

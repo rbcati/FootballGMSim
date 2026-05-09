@@ -1,4 +1,9 @@
 import { buildPlayoffBracketSnapshot } from './playoffBracketSnapshot.js';
+import {
+  rebuildRecordBookV1,
+  mirrorRecordBookForLegacyUi,
+  defensiveInterceptionsSeasonValue,
+} from './recordBookV1.js';
 
 const POSITION_HOF_BASELINE = {
   QB: 12000,
@@ -27,6 +32,7 @@ const RECORD_CATEGORIES = [
   { key: 'tackles', label: 'Tackles', stat: 'tackles' },
   { key: 'sacks', label: 'Sacks', stat: 'sacks' },
   { key: 'interceptions', label: 'Interceptions', stat: 'interceptions' },
+  { key: 'fgMade', label: 'Field Goals Made', stat: 'fgMade' },
 ];
 
 export function createLeagueMemoryDefaults() {
@@ -46,6 +52,11 @@ export function createLeagueMemoryDefaults() {
       },
       franchiseByTeam: {},
       history: [],
+      schemaVersion: 0,
+      singleSeasonV1: {},
+      careerLeadersV1: {},
+      teamSeasonV1: {},
+      meta: {},
     },
   };
 }
@@ -70,6 +81,17 @@ export function ensureLeagueMemoryMeta(meta = {}) {
       team: { ...defaults.recordBook.team, ...(meta?.recordBook?.team || {}) },
       franchiseByTeam: meta?.recordBook?.franchiseByTeam && typeof meta.recordBook.franchiseByTeam === 'object' ? meta.recordBook.franchiseByTeam : {},
       history: Array.isArray(meta?.recordBook?.history) ? meta.recordBook.history : [],
+      schemaVersion: meta?.recordBook?.schemaVersion ?? defaults.recordBook.schemaVersion,
+      singleSeasonV1: meta?.recordBook?.singleSeasonV1 && typeof meta.recordBook.singleSeasonV1 === 'object'
+        ? { ...defaults.recordBook.singleSeasonV1, ...meta.recordBook.singleSeasonV1 }
+        : (meta?.recordBook?.singleSeasonV1 ?? defaults.recordBook.singleSeasonV1),
+      careerLeadersV1: meta?.recordBook?.careerLeadersV1 && typeof meta.recordBook.careerLeadersV1 === 'object'
+        ? meta.recordBook.careerLeadersV1
+        : (meta?.recordBook?.careerLeadersV1 ?? defaults.recordBook.careerLeadersV1),
+      teamSeasonV1: meta?.recordBook?.teamSeasonV1 && typeof meta.recordBook.teamSeasonV1 === 'object'
+        ? { ...defaults.recordBook.teamSeasonV1, ...meta.recordBook.teamSeasonV1 }
+        : (meta?.recordBook?.teamSeasonV1 ?? defaults.recordBook.teamSeasonV1),
+      meta: meta?.recordBook?.meta && typeof meta.recordBook.meta === 'object' ? meta.recordBook.meta : (meta?.recordBook?.meta ?? defaults.recordBook.meta),
     },
   };
 }
@@ -403,11 +425,29 @@ function buildPlayerStatLeaders(seasonStats = []) {
     ['receivingTd', 'recTD'],
     ['tackles', 'tackles'],
     ['sacks', 'sacks'],
-    ['interceptions', 'interceptions'],
+    ['interceptions', null],
     ['fieldGoalsMade', 'fgMade'],
   ];
   const byKey = {};
   for (const [label, key] of categories) {
+    if (label === 'interceptions') {
+      const top = [...seasonStats]
+        .filter((row) => defensiveInterceptionsSeasonValue(row) > 0)
+        .sort((a, b) => defensiveInterceptionsSeasonValue(b) - defensiveInterceptionsSeasonValue(a))[0];
+      if (top) {
+        const value = defensiveInterceptionsSeasonValue(top);
+        byKey[label] = {
+          playerId: top.playerId,
+          playerName: top.name,
+          teamId: top.teamId,
+          teamAbbr: top.teamAbbr ?? null,
+          position: top.pos,
+          value,
+          stat: 'defInterceptions',
+        };
+      }
+      continue;
+    }
     const top = [...seasonStats]
       .filter((row) => Number(row?.totals?.[key] ?? 0) > 0)
       .sort((a, b) => Number(b?.totals?.[key] ?? 0) - Number(a?.totals?.[key] ?? 0))[0];
@@ -593,54 +633,27 @@ export function updateFranchiseHistory(memoryMeta, seasonSummary, teams) {
   return { ...memoryMeta, franchiseHistoryByTeam: next };
 }
 
-function sumCareer(players, stat) {
-  let best = null;
-  for (const p of players) {
-    const total = (p.careerStats || []).reduce((s, line) => s + Number(line?.[stat] ?? 0), 0);
-    if (!best || total > best.value) best = { p, value: total };
-  }
-  return best;
-}
-
-export function updateRecordBook(memoryMeta, { seasonStats = [], allPlayers = [], year, standings = [] }) {
-  const next = structuredClone(memoryMeta.recordBook);
-  const broken = [];
-  for (const cat of RECORD_CATEGORIES) {
-    const seasonBest = seasonStats.reduce((best, s) => {
-      const val = Number(s?.totals?.[cat.stat] ?? 0);
-      if (val > (best?.value ?? -1)) return { s, value: val };
-      return best;
-    }, null);
-    if (seasonBest && seasonBest.value > Number(next.singleSeason?.[cat.key]?.value ?? 0)) {
-      next.singleSeason[cat.key] = {
-        holderId: seasonBest.s.playerId,
-        holderName: seasonBest.s.name,
-        teamId: seasonBest.s.teamId,
-        season: year,
-        value: seasonBest.value,
-      };
-      broken.push({ category: cat.label, value: seasonBest.value, holder: seasonBest.s.name, scope: 'single-season', year });
-    }
-
-    const career = sumCareer(allPlayers, `${cat.stat}${cat.stat.endsWith('TD') ? 's' : cat.stat.endsWith('Yd') ? 's' : ''}`);
-    if (career && career.value > Number(next.career?.[cat.key]?.value ?? 0)) {
-      next.career[cat.key] = {
-        holderId: career.p.id,
-        holderName: career.p.name,
-        teamId: career.p.teamId,
-        season: year,
-        value: career.value,
-      };
-      broken.push({ category: cat.label, value: career.value, holder: career.p.name, scope: 'career', year });
-    }
-  }
-
-  const bestWins = standings.reduce((best, t) => ((t.wins ?? 0) > (best?.value ?? -1) ? { teamId: t.id, teamAbbr: t.abbr, season: year, value: t.wins } : best), null);
-  if (bestWins && bestWins.value > Number(next.team.winsSeason?.value ?? 0)) {
-    next.team.winsSeason = { ...blankRecord(), ...bestWins };
-  }
-  next.history = [...next.history, ...broken].slice(-250);
-  return { ...memoryMeta, recordBook: next, recordEvents: broken };
+/**
+ * Rebuilds persisted record book from `leagueHistory` archives + roster career stats.
+ * `seasonStats` / `year` / `standings` are accepted for call-site compatibility; the
+ * authoritative snapshot is the latest `leagueHistory` entry after archiving.
+ */
+export function updateRecordBook(memoryMeta, { allPlayers = [] } = {}) {
+  const prevBook = memoryMeta.recordBook ? structuredClone(memoryMeta.recordBook) : {};
+  const v1 = rebuildRecordBookV1({
+    leagueHistory: memoryMeta.leagueHistory ?? [],
+    players: allPlayers,
+    previousRecordBook: prevBook,
+  });
+  const legacy = mirrorRecordBookForLegacyUi(v1);
+  const prevHistory = Array.isArray(prevBook.history) ? prevBook.history : [];
+  const next = {
+    ...prevBook,
+    ...v1,
+    ...legacy,
+    history: prevHistory,
+  };
+  return { ...memoryMeta, recordBook: next, recordEvents: [] };
 }
 
 export function evaluateHallOfFameCandidate(player, year) {

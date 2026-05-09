@@ -29,6 +29,7 @@ import { buildRouteRequestKey, buildLeagueCacheScopeKey } from "../utils/request
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { getPlayerGameLogs } from "../utils/playerGameLogs.js";
 import { buildMergedPlayerAwardTimeline, buildPlayerAwardHeaderBadges } from "../../core/playerAwardTimeline.js";
+import { buildPlayerRecordContext } from "../../core/recordBookV1.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -409,6 +410,7 @@ export default function PlayerProfile({
 
   const [data, setData] = useState(null);
   const [archivedSeasons, setArchivedSeasons] = useState([]);
+  const [recordBook, setRecordBook] = useState(null);
   const [extending, setExtending] = useState(false);
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
@@ -458,6 +460,23 @@ export default function PlayerProfile({
     };
   }, [actions, playerId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!actions?.getRecords || playerId == null) {
+      setRecordBook(null);
+      return () => { cancelled = true; };
+    }
+    actions
+      .getRecords()
+      .then((res) => {
+        if (cancelled) return;
+        setRecordBook(res?.payload?.recordBook ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setRecordBook(null);
+      });
+    return () => { cancelled = true; };
+  }, [actions, playerId]);
 
   useEffect(() => {
     if (fetchedData) setData(fetchedData);
@@ -467,6 +486,10 @@ export default function PlayerProfile({
   const player = fetchedPlayer ?? resolvedProfile.player;
   const effectivePlayer = player;
   const playerView = effectivePlayer;
+  const recordBookLines = useMemo(
+    () => buildPlayerRecordContext(recordBook, effectivePlayer?.id ?? playerId),
+    [recordBook, effectivePlayer?.id, playerId],
+  );
   const playerMissing = !loading && !effectivePlayer;
   const loadErrorMessage = requestError?.message || data?.error || null;
   const userTeam = useMemo(() => teams.find((t) => t.id === data?.meta?.userTeamId || t.id === player?.teamId), [teams, data?.meta?.userTeamId, player?.teamId]);
@@ -1417,6 +1440,17 @@ export default function PlayerProfile({
                   ))}
                 </div>
               )}
+            </section>
+          )}
+
+          {!loading && playerView && recordBookLines.length > 0 && (
+            <section className="card-enter" data-testid="player-profile-record-book">
+              <h3 style={sectionLabelStyle}>Record book</h3>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 'var(--text-sm)', lineHeight: 1.5, color: 'var(--text-muted)' }}>
+                {recordBookLines.map((line) => (
+                  <li key={`${line.kind}-${line.recordKey}-${line.text}`}>{line.text}</li>
+                ))}
+              </ul>
             </section>
           )}
 

@@ -72,13 +72,21 @@ describe('league memory helpers', () => {
   });
 
   it('updates record book and hall evaluations', () => {
-    let meta = ensureLeagueMemoryMeta({});
-    meta = updateRecordBook(meta, {
-      seasonStats: [{ playerId: 'p1', name: 'Ace QB', teamId: 0, totals: { passYd: 5200, passTD: 45 } }],
-      allPlayers: [{ id: 'p1', name: 'Ace QB', teamId: 0, careerStats: [{ passYds: 5200, passTDs: 45 }] }],
-      year: 2032,
-      standings: [{ id: 0, abbr: 'BOS', wins: 14 }],
+    let meta = ensureLeagueMemoryMeta({
+      leagueHistory: [{
+        year: 2032,
+        seasonId: 's5',
+        id: 's5',
+        playerStatLeaders: {
+          passingYards: { playerId: 'p1', playerName: 'Ace QB', teamId: 0, teamAbbr: 'BOS', position: 'QB', value: 5200, stat: 'passYd' },
+        },
+        standings: [{ id: 0, name: 'Boston', abbr: 'BOS', wins: 14, losses: 3, ties: 0, pf: 410, pa: 280 }],
+      }],
     });
+    meta = updateRecordBook(meta, {
+      allPlayers: [{ id: 'p1', name: 'Ace QB', teamId: 0, careerStats: [{ season: 's5', passYds: 5200, passTDs: 45 }] }],
+    });
+    expect(meta.recordBook.schemaVersion).toBe(1);
     expect(meta.recordBook.singleSeason.passYd.value).toBe(5200);
     expect(meta.recordBook.career.passYd.value).toBe(5200);
 
