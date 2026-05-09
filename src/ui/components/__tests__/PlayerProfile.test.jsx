@@ -191,4 +191,45 @@ describe('PlayerProfile', () => {
     const block = screen.getByTestId('player-profile-award-timeline').textContent;
     expect((block.match(/Most Valuable Player/g) ?? []).length).toBe(1);
   });
+
+  it('shows record book lines for record holders', async () => {
+    const recordActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: { player, stats: [], teammates: [], meta: {} },
+      })),
+      getAllSeasons: vi.fn(async () => ({ payload: { seasons: [] } })),
+      getRecords: vi.fn(async () => ({
+        payload: {
+          recordBook: {
+            schemaVersion: 1,
+            singleSeasonV1: {
+              passingYards: { value: 5200, playerId: 11, year: 2031 },
+            },
+            careerLeadersV1: {
+              passingYards: [{ playerId: 11, value: 15000, playerName: 'Avery Fields' }],
+            },
+          },
+        },
+      })),
+    };
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={recordActions} teams={league.teams} league={league} />);
+    await waitFor(() => expect(screen.getByTestId('player-profile-record-book')).toBeTruthy());
+    expect(screen.getByTestId('player-profile-record-book').textContent).toMatch(/Single-season passing yards record/i);
+    expect(screen.getByTestId('player-profile-record-book').textContent).toMatch(/Career passing yards leader/i);
+  });
+
+  it('hides record book when player has no record context', async () => {
+    const noRecordsActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: { player, stats: [], teammates: [], meta: {} },
+      })),
+      getAllSeasons: vi.fn(async () => ({ payload: { seasons: [] } })),
+      getRecords: vi.fn(async () => ({
+        payload: { recordBook: { schemaVersion: 1, singleSeasonV1: {}, careerLeadersV1: {} } },
+      })),
+    };
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={noRecordsActions} teams={league.teams} league={league} />);
+    await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Avery Fields'));
+    expect(screen.queryByTestId('player-profile-record-book')).toBeNull();
+  });
 });

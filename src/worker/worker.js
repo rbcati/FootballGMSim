@@ -110,6 +110,7 @@ import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer } from '../core/trade-logic.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot } from '../core/league-memory.js';
+import { rebuildRecordBookV1, mirrorRecordBookForLegacyUi, RECORD_BOOK_SCHEMA_VERSION } from '../core/recordBookV1.js';
 import { inferChampionshipOutcome, isCompletedGame, isPostseasonGame } from '../core/championshipInference.js';
 import { repairDepthChart, validateDepthChart, optimizeDepthChartForPlan } from "../core/roster/depthChartManager.js";
 import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
@@ -3803,7 +3804,19 @@ async function handleGetAllSeasons(payload, id) {
 // ── Handler: GET_RECORDS ──────────────────────────────────────────────────────
 
 async function handleGetRecords(payload, id) {
-  const meta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
+  let meta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
+  let recordBook = meta.recordBook ?? {};
+  if (!recordBook.schemaVersion || recordBook.schemaVersion < RECORD_BOOK_SCHEMA_VERSION) {
+    const v1 = rebuildRecordBookV1({
+      leagueHistory: meta.leagueHistory ?? [],
+      players: cache.getAllPlayers(),
+      previousRecordBook: recordBook,
+    });
+    recordBook = { ...recordBook, ...v1, ...mirrorRecordBookForLegacyUi(v1) };
+    cache.setMeta({ recordBook });
+    meta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
+    await flushDirty();
+  }
   const records = meta?.records ?? createEmptyRecords();
   post(toUI.RECORDS, { records, recordBook: meta?.recordBook ?? null }, id);
 }
@@ -8366,6 +8379,11 @@ async function archiveSeason(seasonId) {
       const totals = s.totals || {};
       const passAtt  = totals.passAtt  || 0;
       const passComp = totals.passComp || 0;
+      const posForDef = String((s.pos ?? p.pos) ?? '').toUpperCase();
+      const defIntPick = Number(totals.defInterceptions ?? totals.interceptionsDef ?? totals.interceptionsMade ?? 0)
+        || (['DL', 'DE', 'DT', 'EDGE', 'LB', 'CB', 'S', 'SS', 'FS'].includes(posForDef)
+          ? Number(totals.interceptions ?? 0)
+          : 0);
       const line = {
         season:      seasonId,
         team:        teamAbbrMap[s.teamId] ?? (s.teamId != null ? String(s.teamId) : 'FA'),
@@ -8381,6 +8399,8 @@ async function archiveSeason(seasonId) {
         recTDs:      totals.recTD       ?? 0,
         tackles:     totals.tackles     ?? 0,
         sacks:       totals.sacks       ?? 0,
+        fgMade:      totals.fgMade ?? totals.fieldGoalsMade ?? 0,
+        defInts:     defIntPick,
         ffum:        totals.forcedFumbles ?? 0,
         ovr:         p.ovr,
       };
@@ -8533,7 +8553,7 @@ async function archiveSeason(seasonId) {
       .slice(-160);
     let memoryMeta = { ...meta, leagueHistory: historyRows };
     memoryMeta = updateFranchiseHistory(memoryMeta, seasonSummary, teams);
-    memoryMeta = updateRecordBook(memoryMeta, { seasonStats: populatedStats, allPlayers: cache.getAllPlayers(), year, standings: standingsRows });
+    memoryMeta = updateRecordBook(memoryMeta, { allPlayers: cache.getAllPlayers() });
     memoryMeta.seasonStorylines = buildSeasonStorylineSnapshot(memoryMeta, teams, meta.userTeamId);
     cache.setMeta({
       leagueHistory: memoryMeta.leagueHistory,
