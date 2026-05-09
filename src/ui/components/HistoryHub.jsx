@@ -8,7 +8,7 @@ const DESTINATIONS = [
   { key: 'Awards & Records', title: 'Awards & Records', body: 'Who defined each season and who owns the book.' },
 ];
 
-export default function HistoryHub({ onNavigate, actions }) {
+export default function HistoryHub({ onNavigate, actions, onSelectSeason }) {
   const [seasons, setSeasons] = useState([]);
   useEffect(() => {
     let mounted = true;
@@ -59,7 +59,10 @@ export default function HistoryHub({ onNavigate, actions }) {
                 key={season.id ?? season.year}
                 className="card clickable-card"
                 style={{ padding: 'var(--space-3)', textAlign: 'left' }}
-                onClick={() => onNavigate?.('History')}
+                onClick={() => {
+                  onSelectSeason?.(season.id ?? season.seasonId ?? season.year ?? null);
+                  onNavigate?.('History');
+                }}
               >
                 <div style={{ fontWeight: 800 }}>
                   {season.year} · {season?.champion?.abbr ?? season?.champion?.name ?? 'Champion TBD'}
