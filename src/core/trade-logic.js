@@ -320,20 +320,26 @@ function safeWinPct(team) {
 }
 
 export function classifyTeamDirection(team, week = 1) {
-  const strategy = buildAiTeamStrategy({
-    team,
-    roster: cache.getPlayersByTeam(team?.id),
-    league: { year: cache.getMeta()?.year, phase: cache.getMeta()?.phase },
-    phase: cache.getMeta()?.phase,
-    year: cache.getMeta()?.year,
-  });
-  const archetype = strategy?.archetype;
-  if (archetype === 'contender') return 'contender';
-  if (archetype === 'playoff_hunt') return 'balanced';
-  if (archetype === 'middle') return 'balanced';
-  if (archetype === 'retool') return 'retool';
-  if (archetype === 'rebuild') return 'rebuilding';
-  if (archetype === 'development') return 'desperate';
+  const hasStableTeamId = Number.isFinite(Number(team?.id));
+  if (hasStableTeamId) {
+    const roster = cache.getPlayersByTeam(team?.id);
+    if (Array.isArray(roster) && roster.length > 0) {
+      const strategy = buildAiTeamStrategy({
+        team,
+        roster,
+        league: { year: cache.getMeta()?.year, phase: cache.getMeta()?.phase },
+        phase: cache.getMeta()?.phase,
+        year: cache.getMeta()?.year,
+      });
+      const archetype = strategy?.archetype;
+      if (archetype === 'contender') return 'contender';
+      if (archetype === 'playoff_hunt') return 'balanced';
+      if (archetype === 'middle') return 'balanced';
+      if (archetype === 'retool') return 'retool';
+      if (archetype === 'rebuild') return 'rebuilding';
+      if (archetype === 'development') return 'desperate';
+    }
+  }
   const winPct = safeWinPct(team);
   if (week <= 4) return winPct >= 0.7 ? 'contender' : winPct <= 0.3 ? 'retool' : 'balanced';
   if (winPct >= 0.62) return 'contender';

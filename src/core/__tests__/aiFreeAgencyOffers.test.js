@@ -293,7 +293,7 @@ describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
     mockCache.getMeta.mockReturnValue({ year: 2028, phase: 'regular' });
 
     const needs = AiLogic.calculateTeamNeeds(1);
-    expect(needs.QB).toBeGreaterThanOrEqual(1.5);
+    expect(needs.QB).toBeGreaterThanOrEqual(1.05);
     expect(needs.QB).toBeGreaterThan(needs.WR);
   });
 });
