@@ -126,7 +126,7 @@ import {
 } from '../core/draftClassHistory.js';
 import { rebuildRecordBookV1, mirrorRecordBookForLegacyUi, RECORD_BOOK_SCHEMA_VERSION } from '../core/recordBookV1.js';
 import { inferChampionshipOutcome, isCompletedGame, isPostseasonGame } from '../core/championshipInference.js';
-import { repairDepthChart, validateDepthChart, optimizeDepthChartForPlan } from "../core/roster/depthChartManager.js";
+import { repairDepthChart, validateDepthChart, optimizeDepthChartForPlan } from "../core/roster/depthChartManager.ts";
 import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
 import { isValidSaveId, sanitizeSaveList } from './saveIntegrity.js';
 import { autoBuildDepthChart, applyDepthChartToPlayers } from '../core/depthChart.js';
@@ -1443,7 +1443,7 @@ async function createUniqueLeagueId() {
  *   "Failed to store record in an IDBObjectStore: Evaluating the object store's
  *    key path did not yield a value."
  */
-async function flushDirty() {
+async function flushDirty(forceFlush = false) {
   // PRIMARY iOS GUARD: Never flush until a save has been explicitly loaded or created.
   // This is the bootloader protection — the worker must never write an empty state.
   if (!_saveIsExplicitlyLoaded) {
@@ -1457,6 +1457,15 @@ async function flushDirty() {
   if (!cache.isLoaded()) {
       console.warn('[Worker] flushDirty called but cache is not loaded. Aborting DB write.');
       return;
+  }
+
+  // Node dynasty-soak harness: skip IndexedDB writes during long SIM_TO_PHASE batches, but
+  // still drain dirty flags so dirty tracking does not grow without bound (would slow to a crawl).
+  if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ && !forceFlush) {
+    if (cache.isDirty()) {
+      cache.drainDirty();
+    }
+    return;
   }
 
   const dirty = cache.drainDirty();
@@ -1859,6 +1868,9 @@ async function handleNewLeague(payload, id) {
   try {
     const bootRequestId = payload?.options?.bootRequestId ?? null;
     const { teams: teamDefs, options = {} } = payload;
+    if (Number.isFinite(Number(options?.rngSeed))) {
+      Utils.setSeed(Number(options.rngSeed));
+    }
     const userTeamId = options.userTeamId ?? 0;
     const resolvedSettings = normalizeLeagueSettings({
       ...(options.settings ?? {}),
@@ -2108,6 +2120,9 @@ async function handleUseSafeStarterLeague(payload, id) {
   }
 
   try {
+    if (Number.isFinite(Number(payload?.options?.rngSeed))) {
+      Utils.setSeed(Number(payload.options.rngSeed));
+    }
     const safeLeague = buildDefaultLeague({
       userTeamId: payload?.options?.userTeamId,
       name: payload?.options?.name ?? `Safe Starter ${slotKey?.split('_')?.[2] ?? '1'}`,
@@ -3663,8 +3678,9 @@ async function handleSimToPhase({ targetPhase }, id) {
     return;
   }
 
-  // Safety: max iterations to prevent infinite loops
-  const MAX_ITERATIONS = 200;
+  // Safety: max iterations to prevent infinite loops (32-team full year + FA + draft
+  // can exceed 200 steps when each outer tick is one week/offseason day/draft episode).
+  const MAX_ITERATIONS = 800;
   let iterations = 0;
   batchSimControl = {
     running: true,
@@ -3690,6 +3706,9 @@ async function handleSimToPhase({ targetPhase }, id) {
           targetPhase,
           stage: currentMeta.phase,
         });
+        if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__) {
+          await flushDirty(true);
+        }
         post(toUI.FULL_STATE, buildViewState(), id);
         return;
       }
@@ -3747,6 +3766,9 @@ async function handleSimToPhase({ targetPhase }, id) {
             targetPhase,
             stage: 'draft',
           });
+          if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__) {
+            await flushDirty(true);
+          }
           post(toUI.FULL_STATE, buildViewState(), id);
           return;
         }
@@ -3769,6 +3791,9 @@ async function handleSimToPhase({ targetPhase }, id) {
       checkpoint: 'complete',
       lastError: null,
     });
+    if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__) {
+      await flushDirty(true);
+    }
     post(toUI.FULL_STATE, buildViewState(), id);
   } catch (error) {
     await persistSimSession({
@@ -3778,6 +3803,9 @@ async function handleSimToPhase({ targetPhase }, id) {
       checkpoint: 'error',
       lastError: error?.message ?? 'Unknown simulation error',
     });
+    if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__) {
+      await flushDirty(true);
+    }
     post(toUI.SIM_BATCH_STATUS, { status: 'failed', targetPhase, stage: cache.getMeta()?.phase ?? null });
     post(toUI.NOTIFICATION, { level: 'warn', message: `Simulation paused: ${error?.message ?? 'unknown error'}. You can retry or cancel.` });
     post(toUI.FULL_STATE, buildViewState(), id);
