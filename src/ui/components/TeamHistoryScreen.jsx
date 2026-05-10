@@ -29,7 +29,7 @@ function RecordRow({ label, value, detail }) {
   );
 }
 
-export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSelect, onBack, onOpenBoxScore }) {
+export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSelect, onBack, onOpenBoxScore, onOpenDraftHistory }) {
   const [seasons, setSeasons] = useState([]);
   const [hofPlayers, setHofPlayers] = useState([]);
   const [hofClasses, setHofClasses] = useState([]);
@@ -37,6 +37,7 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
   const [queryYear, setQueryYear] = useState('');
   const [scope, setScope] = useState('all');
   const [majorMoves, setMajorMoves] = useState([]);
+  const [draftFlash, setDraftFlash] = useState([]);
 
   const activeTeam = useMemo(
     () => (league?.teams ?? []).find((t) => Number(t.id) === Number(teamId ?? league?.userTeamId)),
@@ -86,6 +87,49 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
         if (!cancelled) setMajorMoves([]);
       });
     return () => { cancelled = true; };
+  }, [actions, activeTeam?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tid = Number(activeTeam?.id);
+    if (!Number.isFinite(tid) || !actions?.getDraftClasses || !actions?.getDraftClass) {
+      setDraftFlash([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+    (async () => {
+      try {
+        const res = await actions.getDraftClasses();
+        const list = res?.payload?.classes ?? [];
+        const mine = list.filter((c) => Array.isArray(c.teamIds) && c.teamIds.includes(tid)).slice(0, 4);
+        const rows = [];
+        for (const entry of mine) {
+          if (cancelled) return;
+          const mRes = await actions.getDraftClass({ seasonId: entry.seasonId }).catch(() => null);
+          const m = mRes?.payload?.model;
+          if (!m?.picks?.length) continue;
+          const g = (m.teamGrades || []).find((x) => Number(x.teamId) === tid);
+          const teamPicks = m.picks.filter((p) => Number(p.draftTeamId) === tid);
+          const best = [...teamPicks].sort((a, b) => Number(b.legacyScore ?? 0) - Number(a.legacyScore ?? 0))[0];
+          const steal = teamPicks.filter((p) => Number(p.redraftDelta) >= 40).sort((a, b) => Number(b.redraftDelta) - Number(a.redraftDelta))[0];
+          rows.push({
+            year: entry.year ?? m.year,
+            seasonId: entry.seasonId,
+            grade: g?.gradeLabel ?? '—',
+            bestName: best?.playerName,
+            stealName: steal?.playerName,
+            pickCount: teamPicks.length,
+          });
+        }
+        if (!cancelled) setDraftFlash(rows);
+      } catch {
+        if (!cancelled) setDraftFlash([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [actions, activeTeam?.id]);
 
   const model = useMemo(
@@ -227,6 +271,32 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
             ))}
           </ul>
         ) : null}
+      </SectionCard>
+
+      <SectionCard title="Draft classes" subtitle="Recent classes where this franchise held picks (from DRAFT transaction log).">
+        <div data-testid="team-history-draft-classes">
+        {draftFlash.length === 0 ? (
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+            No logged draft classes yet for this team, or data is still accumulating. Open Draft History for the full redraft board.
+          </div>
+        ) : (
+          <ul style={{ margin: 0, paddingLeft: 16, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+            {draftFlash.map((d) => (
+              <li key={d.seasonId} style={{ marginBottom: 8 }}>
+                <strong style={{ color: 'var(--text)' }}>{d.year ?? d.seasonId}</strong>
+                {` · Grade ${d.grade} · ${d.pickCount} pick${d.pickCount === 1 ? '' : 's'}`}
+                {d.bestName ? <span>{` · Best: ${d.bestName}`}</span> : null}
+                {d.stealName ? <span style={{ color: 'var(--success)' }}>{` · Value: ${d.stealName}`}</span> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        {typeof onOpenDraftHistory === 'function' ? (
+          <button type="button" className="btn btn-secondary" style={{ marginTop: 10 }} onClick={() => onOpenDraftHistory()}>
+            Open Draft History
+          </button>
+        ) : null}
+        </div>
       </SectionCard>
 
       <SectionCard title="Major moves" subtitle="Recent signings, trades, draft picks, and releases involving this franchise (from transaction log).">

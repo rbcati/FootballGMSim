@@ -13,6 +13,7 @@ describe('shell navigation mapping', () => {
     expect(getShellSectionForDashboardTab('Standings')).toBe('league');
     expect(getShellSectionForDashboardTab('Transactions')).toBe('league');
     expect(getShellSectionForDashboardTab('Season Recap')).toBe('league');
+    expect(getShellSectionForDashboardTab('Draft History')).toBe('league');
   });
 
   it('accepts legacy mobile ids as section inputs', () => {

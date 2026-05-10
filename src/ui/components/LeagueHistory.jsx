@@ -169,7 +169,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
         </TabsList>
 
         <TabsContent value="seasons">
-          <SeasonExplorer seasons={seasons} onPlayerSelect={onPlayerSelect} onOpenBoxScore={onOpenBoxScore} league={league} initialSelectedSeasonId={initialSelectedSeasonId} />
+          <SeasonExplorer seasons={seasons} actions={api} onPlayerSelect={onPlayerSelect} onOpenBoxScore={onOpenBoxScore} league={league} initialSelectedSeasonId={initialSelectedSeasonId} />
         </TabsContent>
 
         <TabsContent value="records">
@@ -260,7 +260,87 @@ function DraftHistoryExplorer({ seasons, league, onPlayerSelect }) {
   );
 }
 
-function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league, initialSelectedSeasonId = null }) {
+function SeasonDraftClassSnippet({ seasonId, year, actions, onPlayerSelect }) {
+  const [model, setModel] = useState(null);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    if (!seasonId || !actions?.getDraftClass) {
+      setModel(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setErr(false);
+    actions
+      .getDraftClass({ seasonId: String(seasonId) })
+      .then((res) => {
+        if (cancelled) return;
+        const m = res?.payload?.model;
+        if (!m?.picks?.length) {
+          setModel(null);
+          return;
+        }
+        setModel(m);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setErr(true);
+          setModel(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [seasonId, actions]);
+
+  if (err || !model?.picks?.length) return null;
+
+  const sortedByOvr = [...model.picks].sort((a, b) => Number(a?.overall ?? 999) - Number(b?.overall ?? 999));
+  const topPick = sortedByOvr[0];
+  const best = [...model.picks].sort((a, b) => Number(b?.legacyScore ?? 0) - Number(a?.legacyScore ?? 0))[0];
+  const status = model?.classSummary?.classLeagueStatus ?? '—';
+
+  return (
+    <section className="rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface-strong)]/30 p-4 space-y-2" data-testid="league-season-draft-snippet">
+      <div className="text-xs font-black uppercase tracking-wide text-[color:var(--text-subtle)]">Draft class memory</div>
+      <div className="text-sm text-[color:var(--text-muted)]">
+        Class status: <span className="font-semibold text-[color:var(--text)]">{status}</span>
+        {year != null ? <span> · {year} class</span> : null}
+      </div>
+      {topPick ? (
+        <div className="text-sm">
+          <span className="text-[color:var(--text-muted)]">Top pick (by slot): </span>
+          {topPick.playerId != null ? (
+            <button type="button" className="text-[color:var(--accent)] font-semibold" onClick={() => onPlayerSelect?.(topPick.playerId)}>
+              {topPick.playerName ?? '—'}
+            </button>
+          ) : (
+            <span className="font-semibold">{topPick.playerName ?? '—'}</span>
+          )}
+          <span className="text-[color:var(--text-muted)]"> #{topPick.overall ?? '—'}</span>
+        </div>
+      ) : null}
+      {best ? (
+        <div className="text-sm">
+          <span className="text-[color:var(--text-muted)]">Best résumé so far: </span>
+          {best.playerId != null ? (
+            <button type="button" className="text-[color:var(--accent)] font-semibold" onClick={() => onPlayerSelect?.(best.playerId)}>
+              {best.playerName ?? '—'}
+            </button>
+          ) : (
+            <span className="font-semibold">{best.playerName ?? '—'}</span>
+          )}
+          <span className="text-[color:var(--text-muted)]"> · {best.outcomeLabel ?? '—'}</span>
+        </div>
+      ) : null}
+      {model.classSummary?.isDevelopingClass ? (
+        <div className="text-xs text-[color:var(--text-muted)]">Developing class — redraft labels stay soft until more seasons pass.</div>
+      ) : null}
+    </section>
+  );
+}
+
+function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, league, initialSelectedSeasonId = null }) {
   const [selectedSeasonId, setSelectedSeasonId] = useState(initialSelectedSeasonId ?? seasons?.[0]?.id ?? null);
 
   useEffect(() => {
@@ -349,6 +429,8 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league, initi
             <button className="btn" onClick={() => selectedSeasonIndex < seasons.length - 1 && setSelectedSeasonId(seasons[selectedSeasonIndex + 1].id)} disabled={selectedSeasonIndex >= seasons.length - 1}>Next season</button>
           </div>
           <div className="rounded-md border border-[color:var(--hairline)] px-3 py-2 text-sm text-[color:var(--text-muted)]">{seasonStoryline}</div>
+
+          <SeasonDraftClassSnippet seasonId={selected?.id} year={selected?.year} actions={actions} onPlayerSelect={onPlayerSelect} />
 
           <section className="rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface-strong)]/40 p-4 space-y-3" data-testid={`league-history-season-story-${selected?.id ?? 'none'}`}>
             <div className="text-xs font-black uppercase tracking-wide text-[color:var(--text-subtle)]">Season story</div>

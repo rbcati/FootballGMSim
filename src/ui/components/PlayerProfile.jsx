@@ -416,6 +416,7 @@ export default function PlayerProfile({
   const [extending, setExtending] = useState(false);
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
+  const [draftContext, setDraftContext] = useState(null);
   const requestKey = useMemo(() => buildRouteRequestKey("player", playerId), [playerId]);
   const cacheScopeKey = useMemo(() => buildLeagueCacheScopeKey(league), [league]);
   const fetchProfileData = React.useCallback(async () => {
@@ -456,6 +457,28 @@ export default function PlayerProfile({
       })
       .catch(() => {
         if (!cancelled) setArchivedSeasons([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [actions, playerId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!actions?.getPlayerDraftContext || playerId == null) {
+      setDraftContext(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    actions
+      .getPlayerDraftContext(playerId)
+      .then((res) => {
+        if (cancelled) return;
+        setDraftContext(res?.payload?.context ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setDraftContext(null);
       });
     return () => {
       cancelled = true;
@@ -980,6 +1003,44 @@ export default function PlayerProfile({
                   {playerView.draftYear || playerView.draftRound || playerView.draftPick ? <span className="status-chip muted">Draft: {playerView.draftYear ?? "—"} R{playerView.draftRound ?? "—"} P{playerView.draftPick ?? "—"}</span> : null}
                   {quickTags.map((tag) => <span key={tag} className="status-chip success">{tag}</span>)}
                 </div>
+
+                {draftContext?.known ? (
+                  <div
+                    style={{
+                      marginTop: "var(--space-2)",
+                      padding: "var(--space-3)",
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--hairline)",
+                      background: "var(--surface-strong)",
+                      fontSize: "var(--text-xs)",
+                    }}
+                    data-testid="player-profile-draft-memory"
+                  >
+                    <div style={sectionLabelStyle}>Draft memory</div>
+                    <div style={{ color: "var(--text-muted)", lineHeight: 1.5 }}>
+                      {draftContext.draftedByAbbr ? (
+                        <span>
+                          Drafted by <strong style={{ color: "var(--text)" }}>{draftContext.draftedByAbbr}</strong>
+                          {draftContext.draftYear != null ? ` · ${draftContext.draftYear}` : ""}
+                          {draftContext.round != null ? ` · R${draftContext.round}` : ""}
+                          {draftContext.pickInRound != null ? ` pick ${draftContext.pickInRound}` : ""}
+                          {draftContext.overall != null ? ` (#${draftContext.overall})` : ""}
+                        </span>
+                      ) : (
+                        <span>Draft origin partially logged.</span>
+                      )}
+                    </div>
+                    {draftContext.redraftRank != null ? (
+                      <div style={{ marginTop: 6, color: "var(--text)" }}>
+                        Redraft rank (class): <strong>#{draftContext.redraftRank}</strong>
+                        {draftContext.outcomeLabel ? <span style={{ color: "var(--text-muted)" }}> · {draftContext.outcomeLabel}</span> : null}
+                      </div>
+                    ) : null}
+                    {draftContext.stealBustNote ? (
+                      <div style={{ marginTop: 6, color: "var(--text-subtle)" }}>{draftContext.stealBustNote}</div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {playerView.developmentContext && (
                   <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>

@@ -58,6 +58,7 @@ const TAB_TO_SECTION = Object.freeze({
   'Mock Draft': SHELL_SECTIONS.league,
 
   'History Hub': SHELL_SECTIONS.league,
+  'Draft History': SHELL_SECTIONS.league,
   History: SHELL_SECTIONS.league,
   'Team History': SHELL_SECTIONS.league,
   'Hall of Fame': SHELL_SECTIONS.league,
