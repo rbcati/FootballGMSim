@@ -28,6 +28,7 @@ import { Transactions } from '../db/index.js';
 import NewsEngine       from './news-engine.js';
 import { Constants }    from './constants.js';
 import { Utils as U }   from './utils.js';
+import { buildAiTeamStrategy } from './aiTeamStrategy.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -319,12 +320,22 @@ function safeWinPct(team) {
 }
 
 export function classifyTeamDirection(team, week = 1) {
+  const strategy = buildAiTeamStrategy({
+    team,
+    roster: cache.getPlayersByTeam(team?.id),
+    league: { year: cache.getMeta()?.year, phase: cache.getMeta()?.phase },
+    phase: cache.getMeta()?.phase,
+    year: cache.getMeta()?.year,
+  });
+  const archetype = strategy?.archetype;
+  if (archetype === 'contender') return 'contender';
+  if (archetype === 'playoff_hunt') return 'balanced';
+  if (archetype === 'middle') return 'balanced';
+  if (archetype === 'retool') return 'retool';
+  if (archetype === 'rebuild') return 'rebuilding';
+  if (archetype === 'development') return 'desperate';
   const winPct = safeWinPct(team);
-  if (week <= 4) {
-    if (winPct >= 0.7) return 'contender';
-    if (winPct <= 0.3) return 'retool';
-    return 'balanced';
-  }
+  if (week <= 4) return winPct >= 0.7 ? 'contender' : winPct <= 0.3 ? 'retool' : 'balanced';
   if (winPct >= 0.62) return 'contender';
   if (winPct <= 0.35) return 'rebuilding';
   if (winPct <= 0.45) return 'desperate';

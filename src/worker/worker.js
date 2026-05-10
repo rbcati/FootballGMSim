@@ -170,6 +170,7 @@ import {
 import { deriveGamePlanMultipliers } from '../core/sim/gamePlanMultipliers.ts';
 import { buildGamePlanNarrative } from '../core/narrative.js';
 import { buildRosterBuildingAnalysis } from '../core/rosterBuildingAnalysis.js';
+import { buildAiTeamStrategy } from '../core/aiTeamStrategy.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -7783,8 +7784,16 @@ async function handleSimDraftPick(payload, id) {
     if (pick.teamId === userTeamId) break;
 
     // AI selects by weighted board value (need, scheme fit, upside, combine/interview risk).
-    const needs = AiLogic.calculateTeamNeeds(pick.teamId);
     const team = cache.getTeam(pick.teamId);
+    const strategy = buildAiTeamStrategy({
+      team,
+      roster: cache.getPlayersByTeam(pick.teamId),
+      league: { year: meta?.year, phase: meta?.phase },
+      phase: meta?.phase,
+      year: meta?.year,
+    });
+    const needs = AiLogic.calculateTeamNeeds(pick.teamId);
+    const needPriorityByPos = new Map((strategy?.positionalNeeds ?? []).map((row) => [row.positionGroup, Number(row?.priority ?? 0)]));
     let bestProspect = null;
     let bestValue = -1;
     let bestIdx = -1;
@@ -7801,7 +7810,17 @@ async function handleSimDraftPick(payload, id) {
           schemeFit: p?.schemeFit ?? 65,
           archetypeTag: p?.archetypeTag ?? p?.pos,
         }, team, { teamNeeds: needs });
-        const val = Number(boardScore?.score ?? 0);
+        const posPriority = Number(needPriorityByPos.get(p?.pos) ?? 0);
+        const talentGapGuard = Math.max(0, Number((p?.ovr ?? 60) - 80));
+        const archetypeNeedFactor = strategy?.archetype === 'contender'
+          ? 0.05
+          : ['rebuild', 'development'].includes(strategy?.archetype)
+            ? 0.08
+            : 0.065;
+        const needBoost = Math.min(7.5, posPriority * archetypeNeedFactor);
+        // Keep BPA available: suppress need boost on clearly elite prospects.
+        const eliteProspectReduction = talentGapGuard >= 8 ? 0.25 : talentGapGuard >= 4 ? 0.55 : 1;
+        const val = Number(boardScore?.score ?? 0) + (needBoost * eliteProspectReduction);
 
         if (val > bestValue) {
             bestValue = val;
