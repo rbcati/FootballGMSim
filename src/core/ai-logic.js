@@ -11,6 +11,7 @@ import {
     inferTeamDirection,
     buildDecisionTiming,
 } from './contract-market.js';
+import { buildAiTeamStrategy } from './aiTeamStrategy.js';
 import NewsEngine from './news-engine.js';
 import { getTeamContextForNegotiation } from './teamContext/negotiationContext.js';
 import { evaluateContractOffer } from './contracts/negotiation.js';
@@ -18,6 +19,37 @@ import { evaluateReSigningPriority } from './retention/reSigning.js';
 import { buildFreeAgencyMarketAnalysis } from './freeAgency/freeAgencyMarketAnalysis.js';
 
 class AiLogic {
+    static NEED_GROUP_TO_POS = Object.freeze({
+        QB: ['QB'],
+        RB: ['RB'],
+        WR: ['WR'],
+        TE: ['TE'],
+        OL: ['OL', 'OT', 'OG', 'C', 'G', 'T'],
+        DL_EDGE: ['DL', 'DE', 'DT', 'EDGE', 'NT'],
+        LB: ['LB', 'MLB', 'OLB'],
+        CB: ['CB'],
+        S: ['S', 'SS', 'FS'],
+        KP: ['K', 'P'],
+    });
+
+    static _teamNeedsFromStrategy(strategy = null) {
+        const needs = {};
+        Constants.POSITIONS.forEach((pos) => { needs[pos] = 1.0; });
+        if (!strategy || !Array.isArray(strategy.positionalNeeds)) return needs;
+
+        const sevWeight = { critical: 1.0, high: 0.7, medium: 0.45, low: 0.2 };
+        for (const row of strategy.positionalNeeds) {
+            const group = String(row?.positionGroup ?? '');
+            const priority = Number(row?.priority ?? 0);
+            const severity = String(row?.severity ?? 'low').toLowerCase();
+            const positions = AiLogic.NEED_GROUP_TO_POS[group] ?? [group];
+            const multiplier = 1 + ((priority / 100) * (sevWeight[severity] ?? 0.2));
+            for (const pos of positions) {
+                if (pos in needs) needs[pos] = Math.max(needs[pos], Number(multiplier.toFixed(2)));
+            }
+        }
+        return needs;
+    }
 
     /**
      * Update a team's cap space based on current contracts.
@@ -234,65 +266,17 @@ class AiLogic {
      * Low Need (< 0.8): Starter > 85 OVR.
      */
     static calculateTeamNeeds(teamId) {
+        const team = cache.getTeam(teamId);
         const roster = cache.getPlayersByTeam(teamId);
-        const needs = {};
-        const STARTERS = Constants.LEAGUE_GEN_CONFIG.STARTERS_COUNT;
-
-        // Default multiplier is 1.0
-        Constants.POSITIONS.forEach(pos => {
-            needs[pos] = 1.0;
+        const meta = cache.getMeta();
+        const strategy = buildAiTeamStrategy({
+            team,
+            roster,
+            league: { year: meta?.year, phase: meta?.phase },
+            phase: meta?.phase,
+            year: meta?.year,
         });
-
-        // Group roster by position, sorted by OVR desc
-        const playersByPos = {};
-        roster.forEach(p => {
-            if (!playersByPos[p.pos]) playersByPos[p.pos] = [];
-            playersByPos[p.pos].push(p);
-        });
-
-        Object.keys(playersByPos).forEach(pos => {
-            playersByPos[pos].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
-        });
-
-        // Evaluate each position
-        Object.keys(STARTERS).forEach(pos => {
-            const count = STARTERS[pos];
-            const players = playersByPos[pos] || [];
-
-            // Check top N players (starters)
-            let weakStarters = 0;
-            let strongStarters = 0;
-            let missingStarters = Math.max(0, count - players.length);
-
-            for (let i = 0; i < count; i++) {
-                if (i < players.length) {
-                    const p = players[i];
-                    if ((p.ovr ?? 0) < 75) weakStarters++;
-                    if ((p.ovr ?? 0) > 85) strongStarters++;
-                }
-            }
-
-            // Logic for multiplier
-            let multiplier = 1.0;
-
-            if (missingStarters > 0) {
-                // Desperate need
-                multiplier = 2.0 + (missingStarters * 0.5);
-            } else if (weakStarters > 0) {
-                // High need
-                multiplier = 1.5 + (weakStarters * 0.2);
-            } else if (strongStarters === count) {
-                // Low need (all starters imply strength)
-                multiplier = 0.5;
-            } else if (strongStarters > 0) {
-                // Moderate need / strength mix
-                multiplier = 0.8;
-            }
-
-            needs[pos] = multiplier;
-        });
-
-        return needs;
+        return this._teamNeedsFromStrategy(strategy);
     }
 
     /**
@@ -408,9 +392,17 @@ class AiLogic {
     static async makeFreeAgencyOffers(teamId, freeAgentsMap = null) {
         const team = cache.getTeam(teamId);
         if (!team) return;
+        const meta = cache.getMeta();
+        const strategy = buildAiTeamStrategy({
+            team,
+            roster: cache.getPlayersByTeam(teamId),
+            league: { year: meta?.year, phase: meta?.phase },
+            phase: meta?.phase,
+            year: meta?.year,
+        });
 
         // 1. Identify Needs
-        const needs = this.calculateTeamNeeds(teamId);
+        const needs = this._teamNeedsFromStrategy(strategy);
         const highNeedPositions = Object.keys(needs).filter(pos => needs[pos] >= 1.2);
 
         if (highNeedPositions.length === 0) return;
@@ -486,7 +478,8 @@ class AiLogic {
             // Try to offer to the best affordable one
             for (const fa of candidates) {
                 // Skip if OVR is too low
-                const minOvr = needs[pos] > 2.0 ? 60 : 70;
+                const urgentPos = needs[pos] >= 1.7;
+                const minOvr = urgentPos ? 62 : 70;
                 if ((fa.ovr ?? 0) < minOvr) continue;
 
                 // Check if we already have an active offer out to this player
@@ -495,8 +488,20 @@ class AiLogic {
                 // Calculate Ask / Offer
                 const demand = demandByPlayerId.get(fa.id) ?? calculateExtensionDemand(fa);
                 if (!demand) continue;
+                const age = Number(fa?.age ?? 27);
+                const isVeteran = age >= 30;
+                const isExpensive = Number(demand?.baseAnnual ?? 0) >= 14;
+                const avoidVeteranSpend = ['rebuild', 'development'].includes(strategy?.archetype) && isVeteran && isExpensive;
+                if (avoidVeteranSpend) continue;
 
                 const capHit = demand.baseAnnual + (demand.signingBonus / demand.yearsTotal);
+                const capLimit = strategy?.archetype === 'contender'
+                    ? 0.8
+                    : ['rebuild', 'development'].includes(strategy?.archetype)
+                        ? 0.45
+                        : 0.65;
+                const maxAllowedHit = Math.max(3, Number(team.capRoom ?? 0) * capLimit);
+                if (!urgentPos && capHit > maxAllowedHit) continue;
 
                 // Check Cap
                 if ((team.capRoom ?? 0) > (capHit + 1)) {

@@ -52,3 +52,4 @@ describe('calculatePlayerValue', () => {
     expect(calculatePlayerValue(poorAsset)).toBeGreaterThanOrEqual(0);
   });
 });
+

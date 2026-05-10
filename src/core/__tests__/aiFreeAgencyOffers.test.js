@@ -151,6 +151,48 @@ describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
     );
   });
 
+  it('rebuild profile avoids old expensive veteran offers', async () => {
+    const veteran = {
+      id: 31,
+      name: 'Aging Star',
+      pos: 'QB',
+      status: 'free_agent',
+      ovr: 81,
+      age: 33,
+      offers: [],
+    };
+    const young = {
+      id: 32,
+      name: 'Young Value',
+      pos: 'QB',
+      status: 'free_agent',
+      ovr: 74,
+      age: 24,
+      offers: [],
+    };
+    mockCache.getTeam.mockReturnValue({
+      id: 1,
+      name: 'Rebuild Team',
+      abbr: 'REB',
+      wins: 3,
+      losses: 14,
+      capRoom: 24,
+      capUsed: 298,
+      deadCap: 18,
+    });
+    mockCache.getPlayersByTeam.mockReturnValue([{ id: 100, pos: 'QB', ovr: 62, age: 30, potential: 64, contract: { years: 1 } }]);
+    mockCalculateExtensionDemand.mockImplementation((player) => {
+      if (player.id === 31) return { years: 3, yearsTotal: 3, baseAnnual: 18, signingBonus: 8 };
+      return { years: 2, yearsTotal: 2, baseAnnual: 6, signingBonus: 1 };
+    });
+
+    await AiLogic.makeFreeAgencyOffers(1, { QB: [veteran, young] });
+
+    const updates = mockCache.updatePlayer.mock.calls.map((args) => args[0]);
+    expect(updates).toContain(32);
+    expect(updates).not.toContain(31);
+  });
+
   it('processFreeAgencyDay carries stale-contract offer into evaluation and signing path', async () => {
     const releasedVeteran = {
       id: 21,
@@ -229,5 +271,29 @@ describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
         offers: [],
       }),
     );
+  });
+
+  it('calculateTeamNeeds keeps QB as high priority when QB room is weak', () => {
+    mockCache.getTeam.mockReturnValue({
+      id: 1,
+      name: 'Need Team',
+      abbr: 'NED',
+      wins: 5,
+      losses: 12,
+      capRoom: 10,
+      capUsed: 296,
+      deadCap: 9,
+    });
+    mockCache.getPlayersByTeam.mockReturnValue([
+      { id: 1, pos: 'QB', ovr: 61, age: 30, potential: 65, contract: { years: 1 } },
+      { id: 2, pos: 'WR', ovr: 78, age: 26, potential: 82, contract: { years: 2 } },
+      { id: 3, pos: 'WR', ovr: 76, age: 25, potential: 80, contract: { years: 2 } },
+      { id: 4, pos: 'WR', ovr: 74, age: 24, potential: 79, contract: { years: 2 } },
+    ]);
+    mockCache.getMeta.mockReturnValue({ year: 2028, phase: 'regular' });
+
+    const needs = AiLogic.calculateTeamNeeds(1);
+    expect(needs.QB).toBeGreaterThanOrEqual(1.05);
+    expect(needs.QB).toBeGreaterThan(needs.WR);
   });
 });
