@@ -14,7 +14,8 @@ test('fresh franchise first-playable path reaches HQ without render boundary ove
 
   // land on HQ/dashboard without render boundary
   await expect(page.locator('.app-header')).toBeVisible({ timeout: 60000 });
-  await expect(page.locator('.franchise-hq, text=Franchise HQ')).toHaveCount(1);
+  await expect(page.locator('.franchise-hq')).toHaveCount(1);
+  await expect(page.getByTestId('franchise-hq')).toBeVisible();
 
   // verify no “Something went wrong” overlay
   await expect(page.locator('.app-error-boundary-overlay')).toHaveCount(0);

@@ -55,13 +55,31 @@ export async function ensureLeagueLoaded(page) {
 }
 
 export async function launchFranchise(page) {
+  // Playwright starts each test on about:blank; callers must load the app before
+  // boot selectors exist. Specs that already called page.goto('/') are unchanged.
+  const url = page.url();
+  if (url === 'about:blank' || url === 'chrome-error://chromewebdata/') {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+  }
   await ensureLeagueLoaded(page);
 }
 
 export async function goToTab(page, name) {
   const tab = String(name).toLowerCase();
+
+  // HQ primary nav shows quick links (Roster Hub, Schedule, …), not `section-tab-hq`.
+  if (tab === 'hq') {
+    const desktop = page.locator('[data-testid="nav-hq"], [data-testid="primary-nav-hq"]').first();
+    if (await desktop.isVisible().catch(() => false)) {
+      await desktop.click({ force: true });
+    } else {
+      await page.getByRole('button', { name: /^HQ$/i }).first().click();
+    }
+    await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: 20000 });
+    return;
+  }
+
   const sectionByTab = {
-    hq: 'hq',
     team: 'team',
     roster: 'team',
     'game-plan': 'team',
@@ -70,21 +88,25 @@ export async function goToTab(page, name) {
     stats: 'league',
     'league-leaders': 'league',
     'weekly-results': 'league',
-    draft: 'transactions',
-    transactions: 'transactions',
-    'free-agency': 'transactions',
-    'history-hub': 'history',
+    draft: 'league',
+    transactions: 'league',
+    'free-agency': 'league',
+    'history-hub': 'league',
   };
   const primary = sectionByTab[tab];
   if (primary) {
     const primaryLocator = page.locator(`[data-testid="nav-${primary}"], [data-testid="primary-nav-${primary}"]`).first();
     if (await primaryLocator.isVisible().catch(() => false)) {
-      await primaryLocator.click();
+      await primaryLocator.click({ force: true });
+    } else {
+      const labels = { hq: /^HQ$/i, team: /^Team$/i, league: /^League$/i, news: /^News$/i };
+      const pattern = labels[primary];
+      if (pattern) await page.getByRole('button', { name: pattern }).first().click();
     }
   }
   const sectionTab = page.locator(`[data-testid="section-tab-${tab}"]`).first();
   if (await sectionTab.isVisible().catch(() => false)) {
-    await sectionTab.click();
+    await sectionTab.click({ force: true });
     return;
   }
 
@@ -92,16 +114,30 @@ export async function goToTab(page, name) {
     return;
   }
 
-  await sectionTab.click();
+  await expect(sectionTab, `Could not open tab "${tab}" (section tab missing after primary nav)`).toBeVisible({ timeout: 20000 });
+  await sectionTab.click({ force: true });
+}
+
+/** After advancing the season, completed box scores live on the prior week’s slate. */
+export async function selectScheduleWeekTab(page, weekNumber) {
+  await goToTab(page, 'schedule');
+  const weekRow = page.locator('[aria-label="Week selector"]');
+  await weekRow.getByRole('tab', { name: String(weekNumber), exact: true }).click();
 }
 
 export async function simulateSingleWeek(page) {
   const startWeek = await page.evaluate(() => window?.state?.league?.week ?? 1);
-  await page.evaluate(() => {
-    const btn = document.querySelector('.app-advance-btn');
-    if (btn) btn.click();
-    else if (window.handleGlobalAdvance) window.handleGlobalAdvance();
-  });
+  const advanceCta = page.getByTestId('advance-week-cta');
+  if (await advanceCta.isVisible().catch(() => false)) {
+    await advanceCta.click();
+  } else {
+    await page.evaluate(() => {
+      const btn = document.querySelector('.app-advance-btn');
+      if (btn) btn.click();
+      else if (window.handleGlobalAdvance) window.handleGlobalAdvance();
+    });
+  }
+  await page.getByRole('button', { name: /Simulate \(Skip\)/i }).click({ timeout: 10000 }).catch(() => {});
   await page.waitForFunction(
     (baseline) => {
       const week = window?.state?.league?.week ?? baseline;

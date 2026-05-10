@@ -18,11 +18,12 @@ test('fresh franchise setup lands in playable HQ without render boundary', async
   expect(leagueReady).toBeTruthy();
 
   await goToTab(page, 'transactions');
-  await expect(page.locator('text=Trade Workspace')).toBeVisible({ timeout: 10000 });
-  await expect(page.locator('text=No offers right now')).toBeVisible();
+  await expect(page.getByText(/Trade Workspace/i).first()).toBeVisible({ timeout: 10000 });
+  await page.getByRole('button', { name: /^Offers$/i }).click();
+  await expect(page.getByText(/No offers right now/i)).toBeVisible();
 
   await goToTab(page, 'roster');
-  await expect(page.locator('text=Roster')).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('heading', { name: /Roster Operations/i })).toBeVisible({ timeout: 10000 });
 
   await goToTab(page, 'stats');
   await expect(page.locator('text=Player Stats')).toBeVisible({ timeout: 10000 });
