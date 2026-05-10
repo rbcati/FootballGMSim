@@ -155,6 +155,57 @@ describe('PlayerProfile', () => {
     expect(onNavigate).toHaveBeenCalledWith('HQ');
   });
 
+  it('renders season log from playerSeasonStatsV1 when careerStats is empty', async () => {
+    const logActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: {
+          player: { ...player, careerStats: [] },
+          stats: [],
+          teammates: [],
+          meta: {},
+        },
+      })),
+      getAllSeasons: vi.fn(async () => ({
+        payload: {
+          seasons: [{
+            id: 's1',
+            year: 2030,
+            playerSeasonStatsV1: {
+              schemaVersion: 1,
+              rows: [{
+                playerId: 11,
+                playerName: 'Avery Fields',
+                pos: 'QB',
+                teamId: 1,
+                teamAbbr: 'DAL',
+                year: 2030,
+                seasonId: 's1',
+                gamesPlayed: 12,
+                passYds: 4100,
+                passTDs: 31,
+                passInts: 9,
+                rushYds: 0,
+                rushTDs: 0,
+                recYds: 0,
+                recTDs: 0,
+                tackles: 0,
+                sacks: 0,
+                defInts: 0,
+                fgMade: 0,
+                xpMade: 0,
+              }],
+              meta: { source: 'seasonStats', partial: false, createdAt: 't' },
+            },
+          }],
+        },
+      })),
+      getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+    };
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={logActions} teams={league.teams} league={league} />);
+    await waitFor(() => expect(screen.getByText('Season Log')).toBeTruthy());
+    expect(screen.getByText('4,100')).toBeTruthy();
+  });
+
   it('shows honest empty award timeline when no honors exist', async () => {
     render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={league} />);
     await waitFor(() => expect(screen.getByTestId('player-profile-award-timeline')).toBeTruthy());

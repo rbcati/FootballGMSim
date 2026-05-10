@@ -117,6 +117,31 @@ describe('buildFranchiseHistoryModel', () => {
     expect(m.franchiseRecords.playerSingleSeason[RECORD_KEYS.passingTD]?.playerId).toBe('qb2');
   });
 
+  it('populates franchise career leaders from playerSeasonStatsV1 and dedupes same player/season', () => {
+    const m = buildFranchiseHistoryModel({
+      teamId: 7,
+      teamAbbr: 'SEA',
+      archivedSeasons: [{
+        year: 2051,
+        seasonId: 's51',
+        id: 's51',
+        standings: [{ id: 7, abbr: 'SEA', wins: 10, losses: 7, ties: 0, pf: 300, pa: 300 }],
+        playerSeasonStatsV1: {
+          schemaVersion: 1,
+          rows: [
+            { playerId: 'rb1', playerName: 'Runner', pos: 'RB', teamId: 7, teamAbbr: 'SEA', year: 2051, seasonId: 's51', gamesPlayed: 12, rushYds: 1200, rushTDs: 8, recYds: 200, recTDs: 1 },
+            { playerId: 'rb1', playerName: 'Runner', pos: 'RB', teamId: 7, teamAbbr: 'SEA', year: 2051, seasonId: 's51', gamesPlayed: 12, rushYds: 1200, rushTDs: 8, recYds: 200, recTDs: 1 },
+          ],
+          meta: { source: 'seasonStats', partial: false, createdAt: 'x' },
+        },
+      }],
+    });
+    expect(m.franchiseRecords.careerFranchiseLeadersAvailable).toBe(true);
+    const rush = m.franchiseRecords.careerFranchiseLeaders[RECORD_KEYS.rushingYards];
+    expect(rush?.[0]?.value).toBe(1200);
+    expect(rush?.[0]?.playerId).toBe('rb1');
+  });
+
   it('does not use QB thrown INT for defensive interceptions leader', () => {
     const m = buildFranchiseHistoryModel({
       teamId: 7,

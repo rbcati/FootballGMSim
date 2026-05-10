@@ -13,6 +13,12 @@ import {
   defensiveInterceptionsSeasonValue,
   leaderEntryToRecordRow,
 } from './recordBookV1.js';
+import {
+  getArchivedPlayerSeasonRows,
+  normalizeArchivedPlayerStatRow,
+  singleSeasonStatValueFromV1Row,
+  v1ArchiveRowToCareerLineInput,
+} from './playerSeasonStatsArchive.js';
 
 const PLAYOFF_CALIBER_WINS = 10;
 const ELITE_WINS = 12;
@@ -281,17 +287,46 @@ function archiveRowToCareerLine(row, seasonYear) {
   };
 }
 
+function franchiseStatSeasonDedupeKey(season, row) {
+  const pid = row?.playerId ?? row?.id ?? '';
+  const sid = row?.seasonId ?? season?.seasonId ?? season?.id ?? '';
+  const y = row?.year ?? Number(season?.year ?? 0) ?? '';
+  return `${pid}|${sid}|${y}`;
+}
+
 function buildFranchiseCareerLeadersFromArchives(seasons, teamId, teamAbbr) {
   const byPlayer = new Map();
+  const seenLine = new Set();
   for (const season of seasons || []) {
     const year = Number(season?.year ?? 0) || null;
     const seasonId = season?.seasonId ?? season?.id ?? null;
+    const v1rows = getArchivedPlayerSeasonRows(season);
+    const v1ForTeam = v1rows
+      .map((raw) => normalizeArchivedPlayerStatRow(raw))
+      .filter((row) => row && teamMatchesFranchise(row, teamId, teamAbbr));
+    if (v1ForTeam.length) {
+      for (const row of v1ForTeam) {
+        const pid = row.playerId;
+        if (pid == null) continue;
+        const pair = franchiseStatSeasonDedupeKey(season, row);
+        if (seenLine.has(pair)) continue;
+        seenLine.add(pair);
+        const key = String(pid);
+        if (!byPlayer.has(key)) byPlayer.set(key, { playerId: pid, name: row.playerName ?? null, pos: row.pos ?? null, lines: [] });
+        const conv = v1ArchiveRowToCareerLineInput(row);
+        if (conv) byPlayer.get(key).lines.push(conv);
+      }
+      continue;
+    }
     const pool = [...(season.playerStats ?? []), ...(season.seasonStats ?? [])];
     if (!Array.isArray(pool) || !pool.length) continue;
     for (const row of pool) {
       if (!teamMatchesFranchise(row, teamId, teamAbbr)) continue;
       const pid = row.playerId ?? row.id;
       if (pid == null) continue;
+      const pair = franchiseStatSeasonDedupeKey(season, row);
+      if (seenLine.has(pair)) continue;
+      seenLine.add(pair);
       const key = String(pid);
       if (!byPlayer.has(key)) byPlayer.set(key, { playerId: pid, name: row.name ?? null, pos: row.pos ?? null, lines: [] });
       byPlayer.get(key).lines.push(archiveRowToCareerLine(row, year ?? seasonId));
@@ -700,6 +735,32 @@ export function buildFranchiseHistoryModel({
       if (!best || row.value > best.value) best = row;
     }
     for (const season of seasonsSorted) {
+      const v1rows = getArchivedPlayerSeasonRows(season);
+      const v1ForTeam = v1rows
+        .map((raw) => normalizeArchivedPlayerStatRow(raw))
+        .filter((s) => s && teamMatchesFranchise(s, tid, ab));
+      if (v1ForTeam.length) {
+        for (const s of v1ForTeam) {
+          const v = num(singleSeasonStatValueFromV1Row(recordKey, s));
+          if (v <= 0) continue;
+          const year = Number(season?.year ?? 0) || null;
+          const cand = {
+            recordKey,
+            label: RECORD_LABELS[recordKey],
+            value: v,
+            playerId: s.playerId ?? null,
+            playerName: s.playerName ?? null,
+            position: s.pos ?? null,
+            teamId: s.teamId ?? null,
+            teamAbbr: s.teamAbbr ?? null,
+            year,
+            sourceSeasonId: season?.seasonId ?? season?.id ?? null,
+            source: 'archivedSeason',
+          };
+          if (!best || cand.value > best.value) best = cand;
+        }
+        continue;
+      }
       const pool = [...(season.playerStats ?? []), ...(season.seasonStats ?? [])];
       if (!Array.isArray(pool)) continue;
       const pick = STAT_ROW_VALUE[recordKey];

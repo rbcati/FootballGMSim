@@ -1347,6 +1347,10 @@ export default function LeagueDashboard({
               onNavigate={setActiveTab}
               profileContext={selectedPlayerContext}
               onOpenBoxScore={(gameId) => openGameDetail(gameId, selectedPlayerContext?.source === 'weekly-results' ? 'Weekly Results' : 'Game Detail')}
+              onFocusLeagueHistorySeason={(seasonId) => {
+                setHistorySelectedSeasonId(seasonId);
+                setActiveTab('History');
+              }}
             />
           </PlayerProfileModalBoundary>
         </TabErrorBoundary>

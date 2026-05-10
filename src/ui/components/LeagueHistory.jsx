@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
 import { AWARD_DISPLAY_NAMES } from '../../core/footballMeta';
+import { buildLeagueHistoryTopPerformers } from '../../core/playerSeasonStatsArchive.js';
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -298,6 +299,7 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league, initi
   const championshipGame = (selected?.gameIndex ?? []).find((g) => String(g?.id) === String(selected?.championshipGameId)) ?? null;
   const notableGames = Array.isArray(selected?.notableGames) ? selected.notableGames : [];
   const selectedSeasonIndex = seasons.findIndex((s) => s.id === selected?.id);
+  const topPerformers = useMemo(() => buildLeagueHistoryTopPerformers(selected, { perBucket: 2 }), [selected]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
@@ -498,6 +500,28 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league, initi
             </div>
           </section>
 
+          {topPerformers && Object.values(topPerformers).some((arr) => Array.isArray(arr) && arr.length) ? (
+            <section className="rounded-md border border-[color:var(--hairline)] p-3" data-testid={`league-history-top-performers-${selected?.id ?? 'none'}`}>
+              <h4 className="text-sm font-bold mb-2">Top performers (archived stat snapshots)</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {Object.entries(topPerformers).map(([bucket, arr]) => (
+                  (arr ?? []).length > 0 ? (
+                    <div key={bucket} className="space-y-1">
+                      <div className="font-semibold text-[color:var(--text-muted)] uppercase tracking-wide">{(arr[0] && arr[0].category) || bucket}</div>
+                      {(arr ?? []).map((r) => (
+                        <div key={`${bucket}-${r.playerId}`} className="flex justify-between gap-2 border-b border-[color:var(--hairline)]/40 pb-1 last:border-0">
+                          <button type="button" className="text-left text-[color:var(--accent)] font-semibold truncate" onClick={() => r.playerId != null && onPlayerSelect?.(r.playerId)}>
+                            {r.playerName ?? "—"}{r.pos ? ` · ${r.pos}` : ""}{r.teamAbbr ? ` (${r.teamAbbr})` : ""}
+                          </button>
+                          <span className="tabular-nums shrink-0">{r.value?.toLocaleString?.() ?? r.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null
+                ))}
+              </div>
+            </section>
+          ) : null}
           {playerStatLeaders && Object.keys(playerStatLeaders).length > 0 ? (
             <section data-testid={`league-history-player-stat-leaders-${selected?.id ?? 'none'}`}>
               <h4 className="text-sm font-bold mb-2">Stat leaders</h4>

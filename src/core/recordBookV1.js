@@ -3,6 +3,15 @@
  * Pure helpers; safe on partial / legacy saves.
  */
 
+import {
+  getArchivedPlayerSeasonRows,
+  normalizeArchivedPlayerStatRow,
+  singleSeasonStatValueFromV1Row,
+  collectArchiveOnlyCareerLinesForPlayer,
+  careerLineSeasonKey,
+  v1ArchiveRowToCareerLineInput,
+} from './playerSeasonStatsArchive.js';
+
 export const RECORD_BOOK_SCHEMA_VERSION = 1;
 
 /** Canonical record keys (persisted under singleSeason / careerLeaders) */
@@ -196,10 +205,15 @@ export function careerTotalsFromPlayer(player) {
   return out;
 }
 
-function topNPlayersByCareer(players, recordKey, n = 10) {
+function topNPlayersByCareer(players, leagueHistory, recordKey, n = 10) {
   const rows = [];
   for (const p of players || []) {
-    const totals = careerTotalsFromPlayer(p);
+    const deduped = dedupeCareerStatLines(p?.careerStats);
+    const existingKeys = deduped.map((l) => careerLineSeasonKey(l)).filter(Boolean);
+    const archiveOnly = collectArchiveOnlyCareerLinesForPlayer(p?.id ?? p?.playerId, leagueHistory, existingKeys);
+    const mergedLines = dedupeCareerStatLines([...deduped, ...archiveOnly]);
+    const synthetic = { ...p, careerStats: mergedLines };
+    const totals = careerTotalsFromPlayer(synthetic);
     const v = num(totals[recordKey]);
     if (v <= 0) continue;
     rows.push({
@@ -215,7 +229,7 @@ function topNPlayersByCareer(players, recordKey, n = 10) {
       year: null,
       sourceSeasonId: null,
       statKey: recordKey,
-      source: 'careerStats',
+      source: archiveOnly.length ? 'careerStats+archiveV1' : 'careerStats',
     });
   }
   rows.sort((a, b) => b.value - a.value);
@@ -267,6 +281,39 @@ function scanSeasonStatsForBest(leagueHistory, pickValueFn, recordKey) {
   return best;
 }
 
+function scanPlayerSeasonStatsV1ForBest(leagueHistory, recordKey) {
+  let best = null;
+  for (const season of leagueHistory || []) {
+    const rows = getArchivedPlayerSeasonRows(season);
+    if (!rows.length) continue;
+    const year = Number(season?.year ?? 0) || null;
+    const seasonId = season?.seasonId ?? season?.id ?? null;
+    for (const raw of rows) {
+      const r = normalizeArchivedPlayerStatRow(raw);
+      if (!r) continue;
+      const v = num(singleSeasonStatValueFromV1Row(recordKey, r));
+      if (v <= 0) continue;
+      const cand = {
+        recordKey,
+        label: RECORD_LABELS[recordKey],
+        value: v,
+        playerId: r.playerId ?? null,
+        playerName: r.playerName ?? null,
+        position: r.pos ?? null,
+        teamId: r.teamId ?? null,
+        teamName: null,
+        teamAbbr: r.teamAbbr ?? null,
+        year,
+        sourceSeasonId: seasonId,
+        statKey: recordKey,
+        source: 'archivedSeason',
+      };
+      if (!best || cand.value > best.value) best = cand;
+    }
+  }
+  return best;
+}
+
 function singleSeasonBestForKey(leagueHistory, recordKey) {
   const fromLeaders = bestSingleSeasonFromArchives(leagueHistory, recordKey);
   const pickFns = {
@@ -282,9 +329,10 @@ function singleSeasonBestForKey(leagueHistory, recordKey) {
     [RECORD_KEYS.fieldGoalsMade]: (s) => readFromTotals(s.totals, ['fgMade', 'fieldGoalsMade']),
   };
   const fromStats = scanSeasonStatsForBest(leagueHistory, pickFns[recordKey], recordKey);
-  if (!fromLeaders) return fromStats;
-  if (!fromStats) return fromLeaders;
-  return fromStats.value > fromLeaders.value ? fromStats : fromLeaders;
+  const fromV1 = scanPlayerSeasonStatsV1ForBest(leagueHistory, recordKey);
+  const candidates = [fromLeaders, fromStats, fromV1].filter(Boolean);
+  if (!candidates.length) return null;
+  return candidates.reduce((a, b) => (num(b.value) > num(a.value) ? b : a));
 }
 
 function mergeRecordRowPreferMax(existing, incoming) {
@@ -412,7 +460,7 @@ export function rebuildRecordBookV1({ leagueHistory = [], players = [], previous
 
   const careerLeaders = {};
   for (const key of PLAYER_STAT_ORDER) {
-    careerLeaders[key] = topNPlayersByCareer(players, key, 10);
+    careerLeaders[key] = topNPlayersByCareer(players, leagueHistory, key, 10);
   }
 
   const teamSeason = buildTeamSeasonBlock(leagueHistory);
@@ -554,6 +602,54 @@ export function mirrorRecordBookForLegacyUi(v1Book) {
     playoffStreak: { holderId: null, holderName: null, teamId: null, teamAbbr: null, season: null, value: 0 },
   };
   return { singleSeason, career, team };
+}
+
+/**
+ * Merge worker `player.careerStats` with compact `playerSeasonStatsV1` rows for profile season log.
+ * Player rows win when the same season bucket exists.
+ */
+export function mergePlayerProfileSeasonRows(player, leagueHistory) {
+  const bySeason = new Map();
+  for (const line of Array.isArray(player?.careerStats) ? player.careerStats : []) {
+    const k = careerLineSeasonKey(line);
+    if (k) bySeason.set(k, line);
+  }
+  const pid = player?.id ?? player?.playerId;
+  if (pid != null) {
+    for (const season of leagueHistory || []) {
+      for (const raw of getArchivedPlayerSeasonRows(season)) {
+        const row = normalizeArchivedPlayerStatRow(raw);
+        if (!row || String(row.playerId) !== String(pid)) continue;
+        const conv = v1ArchiveRowToCareerLineInput(row);
+        if (!conv) continue;
+        const k = careerLineSeasonKey(conv);
+        if (!k || bySeason.has(k)) continue;
+        bySeason.set(k, {
+          season: row.seasonId ?? row.year,
+          year: row.year,
+          team: row.teamAbbr ?? (row.teamId != null ? String(row.teamId) : 'FA'),
+          gamesPlayed: row.gamesPlayed,
+          passYds: row.passYds,
+          passTDs: row.passTDs,
+          ints: row.passInts,
+          compPct: 0,
+          rushYds: row.rushYds,
+          rushTDs: row.rushTDs,
+          receptions: 0,
+          recYds: row.recYds,
+          recTDs: row.recTDs,
+          tackles: row.tackles,
+          sacks: row.sacks,
+          defInts: row.defInts,
+          fgMade: row.fgMade,
+          xpMade: row.xpMade,
+          ffum: 0,
+          ovr: null,
+        });
+      }
+    }
+  }
+  return [...bySeason.values()].sort((a, b) => String(a.season).localeCompare(String(b.season)));
 }
 
 export function buildPlayerRecordContext(recordBook, playerId) {

@@ -29,7 +29,7 @@ import { buildRouteRequestKey, buildLeagueCacheScopeKey } from "../utils/request
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { getPlayerGameLogs } from "../utils/playerGameLogs.js";
 import { buildMergedPlayerAwardTimeline, buildPlayerAwardHeaderBadges } from "../../core/playerAwardTimeline.js";
-import { buildPlayerRecordContext } from "../../core/recordBookV1.js";
+import { buildPlayerRecordContext, mergePlayerProfileSeasonRows } from "../../core/recordBookV1.js";
 import { buildLegacyScoreReport, shouldShowLegacyProfileSection } from "../../core/legacyScore.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
@@ -209,7 +209,7 @@ const POS_COLUMNS = {
 const PASS_POSITIONS = ["QB"];
 const RUSH_POSITIONS = ["RB", "FB"];
 const REC_POSITIONS = ["WR", "TE"];
-const DEF_POSITIONS = ["CB", "S", "SS", "FS", "LB", "MLB", "OLB", "DE", "DT", "NT"];
+const DEF_POSITIONS = ["CB", "S", "SS", "FS", "LB", "MLB", "OLB", "DE", "DT", "NT", "DL", "EDGE"];
 const SPEC_POSITIONS = ["K", "P", "LS"];
 
 function getColumns(pos) {
@@ -407,6 +407,7 @@ export default function PlayerProfile({
   isUserOnClock = false,
   onDraftPlayer = null,
   profileContext = null,
+  onFocusLeagueHistorySeason = null,
 }) {
 
   const [data, setData] = useState(null);
@@ -562,10 +563,14 @@ export default function PlayerProfile({
   );
   const summaryChips = getPlayerSummaryChips(player, ringCount, nonRing);
   const accoladesByYear = [...accolades].sort((a, b) => (a.year ?? 0) - (b.year ?? 0));
-  const teamJourney = [...new Set((player?.careerStats ?? []).map((line) => line.team).filter(Boolean))];
+  const mergedProfileSeasonRows = useMemo(
+    () => mergePlayerProfileSeasonRows(effectivePlayer, archivedSeasons),
+    [effectivePlayer, archivedSeasons],
+  );
+  const teamJourney = [...new Set(mergedProfileSeasonRows.map((line) => line.team).filter(Boolean))];
   const careerArcRows = useMemo(() => {
-    const seasonRows = (player?.careerStats ?? []).map((line) => ({
-      year: Number(line?.season ?? 0),
+    const seasonRows = mergedProfileSeasonRows.map((line) => ({
+      year: Number(line?.year ?? 0) || (typeof line?.season === 'number' ? line.season : 0),
       label: `Season ${line?.season ?? "—"}`,
       detail: `${line?.team ?? "FA"} · OVR ${line?.ovr ?? "—"}`,
     }));
@@ -578,7 +583,7 @@ export default function PlayerProfile({
       .filter((row) => Number.isFinite(row.year) && row.year > 0)
       .sort((a, b) => b.year - a.year)
       .slice(0, 12);
-  }, [player?.careerStats, accoladesByYear]);
+  }, [mergedProfileSeasonRows, accoladesByYear]);
   const keyColumns = columns.filter((c) => !c.fmt && c.key !== "gamesPlayed").slice(0, 4);
   const careerHighs = keyColumns
     .map((col) => {
@@ -631,29 +636,28 @@ export default function PlayerProfile({
     ],
   }), [devHistory]);
 
-  const careerRows = useMemo(
-    () => (Array.isArray(effectivePlayer?.careerStats) ? [...effectivePlayer.careerStats] : []),
-    [effectivePlayer?.careerStats],
-  );
-  const careerTotals = useMemo(
-    () =>
-      careerRows.reduce((totals, line) => ({
-        gamesPlayed: totals.gamesPlayed + Number(line?.gamesPlayed ?? line?.gp ?? 0),
-        passYds: totals.passYds + Number(line?.passYds ?? line?.passingYards ?? 0),
-        passTDs: totals.passTDs + Number(line?.passTDs ?? line?.touchdowns ?? 0),
-        rushYds: totals.rushYds + Number(line?.rushYds ?? line?.rushingYards ?? 0),
-        rushTDs: totals.rushTDs + Number(line?.rushTDs ?? line?.rushingTDs ?? 0),
-        receptions: totals.receptions + Number(line?.receptions ?? 0),
-        recYds: totals.recYds + Number(line?.recYds ?? line?.receivingYards ?? 0),
-        recTDs: totals.recTDs + Number(line?.recTDs ?? line?.receivingTDs ?? 0),
-        tackles: totals.tackles + Number(line?.tackles ?? line?.totalTackles ?? 0),
-        sacks: totals.sacks + Number(line?.sacks ?? 0),
-        interceptions: totals.interceptions + Number(line?.interceptions ?? line?.ints ?? 0),
-      }), {
-        gamesPlayed: 0, passYds: 0, passTDs: 0, rushYds: 0, rushTDs: 0, receptions: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, interceptions: 0,
-      }),
-    [careerRows],
-  );
+  const careerRows = useMemo(() => mergedProfileSeasonRows, [mergedProfileSeasonRows]);
+  const careerTotals = useMemo(() => {
+    const posU = String(effectivePlayer?.pos ?? effectivePlayer?.position ?? '').toUpperCase();
+    const defSkill = ['DE', 'DT', 'LB', 'CB', 'S', 'DL', 'EDGE'].includes(posU);
+    return careerRows.reduce((totals, line) => ({
+      gamesPlayed: totals.gamesPlayed + Number(line?.gamesPlayed ?? line?.gp ?? 0),
+      passYds: totals.passYds + Number(line?.passYds ?? line?.passingYards ?? 0),
+      passTDs: totals.passTDs + Number(line?.passTDs ?? line?.touchdowns ?? 0),
+      rushYds: totals.rushYds + Number(line?.rushYds ?? line?.rushingYards ?? 0),
+      rushTDs: totals.rushTDs + Number(line?.rushTDs ?? line?.rushingTDs ?? 0),
+      receptions: totals.receptions + Number(line?.receptions ?? 0),
+      recYds: totals.recYds + Number(line?.recYds ?? line?.receivingYards ?? 0),
+      recTDs: totals.recTDs + Number(line?.recTDs ?? line?.receivingTDs ?? 0),
+      tackles: totals.tackles + Number(line?.tackles ?? line?.totalTackles ?? 0),
+      sacks: totals.sacks + Number(line?.sacks ?? 0),
+      interceptions: totals.interceptions + (defSkill
+        ? Number(line?.defInts ?? line?.defInterceptions ?? 0)
+        : Number(line?.interceptions ?? line?.ints ?? 0)),
+    }), {
+      gamesPlayed: 0, passYds: 0, passTDs: 0, rushYds: 0, rushTDs: 0, receptions: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, interceptions: 0,
+    });
+  }, [careerRows, effectivePlayer?.pos, effectivePlayer?.position]);
 
   const profileAnalysis = useMemo(() => buildPlayerProfileAnalysis({ player: effectivePlayer, team: resolvedProfile.team, league, context: profileContext ?? {} }), [effectivePlayer, resolvedProfile.team, league, profileContext]);
   const playerGameLogs = useMemo(() => getPlayerGameLogs(league, effectivePlayer), [league, effectivePlayer]);
@@ -1668,8 +1672,8 @@ export default function PlayerProfile({
             })()}
           </section>
 
-          {/* ── Per-season Career Stats (from player.careerStats archive) ── */}
-          {!loading && player?.careerStats?.length > 0 && (
+          {/* ── Per-season career log (player.careerStats + archived playerSeasonStatsV1) ── */}
+          {!loading && mergedProfileSeasonRows.length > 0 && (
             <section className="card-enter">
               <h3
                 style={{
@@ -1705,6 +1709,7 @@ export default function PlayerProfile({
                         Season
                       </TableHead>
                       <TableHead style={{ textAlign: "left" }}>Team</TableHead>
+                      <TableHead style={{ textAlign: "center" }}>Pos</TableHead>
                       <TableHead style={{ textAlign: "center" }}>GP</TableHead>
                       {["QB"].includes(player.pos) && (
                         <>
@@ -1729,20 +1734,26 @@ export default function PlayerProfile({
                           <TableHead style={{ textAlign: "center" }}>TD</TableHead>
                         </>
                       )}
-                      {["DE", "DT", "LB", "CB", "S", "DL"].includes(
+                      {["DE", "DT", "LB", "CB", "S", "DL", "EDGE"].includes(
                         player.pos,
                       ) && (
                         <>
                           <TableHead style={{ textAlign: "center" }}>TKL</TableHead>
                           <TableHead style={{ textAlign: "center" }}>SCK</TableHead>
-                          <TableHead style={{ textAlign: "center" }}>FF</TableHead>
+                          <TableHead style={{ textAlign: "center" }}>D-INT</TableHead>
+                        </>
+                      )}
+                      {["K"].includes(player.pos) && (
+                        <>
+                          <TableHead style={{ textAlign: "center" }}>FGM</TableHead>
+                          <TableHead style={{ textAlign: "center" }}>XPM</TableHead>
                         </>
                       )}
                       <TableHead style={{ textAlign: "center" }}>OVR</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {[...player.careerStats].reverse().map((line, i) => (
+                    {[...mergedProfileSeasonRows].reverse().map((line, i) => (
                       <TableRow key={i}>
                         <TableCell
                           style={{
@@ -1750,7 +1761,19 @@ export default function PlayerProfile({
                             fontWeight: 600,
                           }}
                         >
-                          {line.season}
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            {line.season}
+                            {onFocusLeagueHistorySeason && line.season != null && String(line.season).startsWith("s") ? (
+                              <button
+                                type="button"
+                                className="btn-link"
+                                style={{ fontSize: "0.7rem", fontWeight: 600 }}
+                                onClick={() => onFocusLeagueHistorySeason(String(line.season))}
+                              >
+                                League History
+                              </button>
+                            ) : null}
+                          </span>
                         </TableCell>
                         <TableCell
                           style={{
@@ -1759,6 +1782,9 @@ export default function PlayerProfile({
                           }}
                         >
                           {line.team}
+                        </TableCell>
+                        <TableCell style={{ textAlign: "center", fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                          {player?.pos ?? "—"}
                         </TableCell>
                         <TableCell style={{ textAlign: "center" }}>
                           {line.gamesPlayed}
@@ -1773,7 +1799,7 @@ export default function PlayerProfile({
                             </TableCell>
                             <TableCell style={{ textAlign: "center" }}>{line.ints}</TableCell>
                             <TableCell style={{ textAlign: "center" }}>
-                              {line.compPct?.toFixed(1)}%
+                              {Number(line.compPct) > 0 ? `${Number(line.compPct).toFixed(1)}%` : "—"}
                             </TableCell>
                           </>
                         )}
@@ -1806,7 +1832,7 @@ export default function PlayerProfile({
                             </TableCell>
                           </>
                         )}
-                        {["DE", "DT", "LB", "CB", "S", "DL"].includes(
+                        {["DE", "DT", "LB", "CB", "S", "DL", "EDGE"].includes(
                           player.pos,
                         ) && (
                           <>
@@ -1816,17 +1842,30 @@ export default function PlayerProfile({
                             <TableCell style={{ textAlign: "center" }}>
                               {line.sacks}
                             </TableCell>
-                            <TableCell style={{ textAlign: "center" }}>{line.ffum}</TableCell>
+                            <TableCell style={{ textAlign: "center" }}>{line.defInts ?? line.defInterceptions ?? "—"}</TableCell>
+                          </>
+                        )}
+                        {["K"].includes(player.pos) && (
+                          <>
+                            <TableCell style={{ textAlign: "center" }}>{line.fgMade ?? "—"}</TableCell>
+                            <TableCell style={{ textAlign: "center" }}>{line.xpMade ?? "—"}</TableCell>
                           </>
                         )}
                         <TableCell style={{ textAlign: "center" }}>
-                          <strong>{line.ovr}</strong>
+                          <strong>{line.ovr != null ? line.ovr : "—"}</strong>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
+            </section>
+          )}
+          {!loading && mergedProfileSeasonRows.length === 0 && !isProspect && (
+            <section className="card-enter" style={{ marginTop: "var(--space-3)" }}>
+              <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>
+                Season logs appear after seasons are archived with stat snapshots.
+              </p>
             </section>
           )}
             </>
@@ -1890,7 +1929,7 @@ export default function PlayerProfile({
                           {PASS_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{Number(line?.passYds ?? line?.passingYards ?? 0) > 0 ? Number(line?.passYds ?? line?.passingYards ?? 0).toLocaleString() : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.passTDs ?? line?.touchdowns ?? 0) > 0 ? Number(line?.passTDs ?? line?.touchdowns ?? 0) : "—"}</TableCell></>)}
                           {RUSH_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{Number(line?.rushYds ?? line?.rushingYards ?? 0) > 0 ? Number(line?.rushYds ?? line?.rushingYards ?? 0).toLocaleString() : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.rushTDs ?? line?.rushingTDs ?? 0) > 0 ? Number(line?.rushTDs ?? line?.rushingTDs ?? 0) : "—"}</TableCell></>)}
                           {REC_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{Number(line?.receptions ?? 0) > 0 ? Number(line?.receptions ?? 0) : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.recYds ?? line?.receivingYards ?? 0) > 0 ? Number(line?.recYds ?? line?.receivingYards ?? 0).toLocaleString() : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.recTDs ?? line?.receivingTDs ?? 0) > 0 ? Number(line?.recTDs ?? line?.receivingTDs ?? 0) : "—"}</TableCell></>)}
-                          {DEF_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{Number(line?.tackles ?? line?.totalTackles ?? 0) > 0 ? Number(line?.tackles ?? line?.totalTackles ?? 0) : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.sacks ?? 0) > 0 ? Number(line?.sacks ?? 0) : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.interceptions ?? line?.ints ?? 0) > 0 ? Number(line?.interceptions ?? line?.ints ?? 0) : "—"}</TableCell></>)}
+                          {DEF_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{Number(line?.tackles ?? line?.totalTackles ?? 0) > 0 ? Number(line?.tackles ?? line?.totalTackles ?? 0) : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.sacks ?? 0) > 0 ? Number(line?.sacks ?? 0) : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.defInts ?? line?.defInterceptions ?? 0) > 0 ? Number(line?.defInts ?? line?.defInterceptions ?? 0) : "—"}</TableCell></>)}
                           {SPEC_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{line?.fgMade || 0 ? line?.fgMade ?? 0 : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{line?.xpMade || 0 ? line?.xpMade ?? 0 : "—"}</TableCell></>)}
                         </TableRow>
                       ))}
