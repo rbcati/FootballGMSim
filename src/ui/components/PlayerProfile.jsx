@@ -31,6 +31,8 @@ import { getPlayerGameLogs } from "../utils/playerGameLogs.js";
 import { buildMergedPlayerAwardTimeline, buildPlayerAwardHeaderBadges } from "../../core/playerAwardTimeline.js";
 import { buildPlayerRecordContext, mergePlayerProfileSeasonRows } from "../../core/recordBookV1.js";
 import { buildLegacyScoreReport, shouldShowLegacyProfileSection } from "../../core/legacyScore.js";
+import { buildPlayerDevelopmentModel } from "../../core/playerDevelopmentModel.js";
+import { buildProspectScoutingReport } from "../../core/scoutingModel.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -598,6 +600,14 @@ export default function PlayerProfile({
   const ageCurve = useMemo(() => getAgeCurveContext(player), [player]);
   const developmentSnapshot = useMemo(() => getDevelopmentSnapshot(player), [player]);
   const developmentDrivers = useMemo(() => getDevelopmentDrivers(player, moraleContext), [player, moraleContext]);
+  const developmentArcModel = useMemo(
+    () => buildPlayerDevelopmentModel(effectivePlayer, { developmentContext: effectivePlayer?.developmentContext }),
+    [effectivePlayer],
+  );
+  const prospectScoutingReport = useMemo(
+    () => (isProspect ? buildProspectScoutingReport(player, { team: userTeam }) : null),
+    [isProspect, player, userTeam],
+  );
 
   const management = useMemo(() => normalizeManagement(player), [player]);
   const updateManagement = async (updates) => {
@@ -1059,6 +1069,45 @@ export default function PlayerProfile({
                   ]}
                 />
 
+                {!isProspect && playerView && (
+                  <div
+                    data-testid="player-profile-dev-arc"
+                    style={{
+                      marginTop: "var(--space-2)",
+                      padding: "var(--space-3)",
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--hairline)",
+                      background: "var(--surface-strong)",
+                      fontSize: "var(--text-xs)",
+                    }}
+                  >
+                    <div style={{ ...sectionLabelStyle, marginBottom: 6 }}>Career arc snapshot</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+                      <span className="status-chip info">{developmentArcModel.devStage.replace(/_/g, " ")}</span>
+                      <span className="status-chip muted">{developmentArcModel.arcType.replace(/_/g, " ")}</span>
+                      <span className="status-chip muted">Trend: {developmentArcModel.devTrend}</span>
+                      <span className="status-chip muted">Confidence: {developmentArcModel.confidence}</span>
+                    </div>
+                    <div style={{ color: "var(--text-muted)", lineHeight: 1.45, marginBottom: 6 }}>
+                      Ceiling band ~{developmentArcModel.ceilingBand} · Floor band ~{developmentArcModel.floorBand}
+                    </div>
+                    <div style={{ color: "var(--text)", fontWeight: 600, marginBottom: 4 }}>{developmentArcModel.summary}</div>
+                    {developmentArcModel.growthSignals[0] ? (
+                      <div style={{ color: "var(--text-subtle)" }}>↑ {developmentArcModel.growthSignals[0]}</div>
+                    ) : null}
+                    {developmentArcModel.regressionRisks[0] ? (
+                      <div style={{ color: "var(--text-subtle)" }}>↓ {developmentArcModel.regressionRisks[0]}</div>
+                    ) : null}
+                    <div style={{ marginTop: 6, color: "var(--text-subtle)", fontSize: "var(--text-xs)" }}>
+                      {developmentArcModel.staffImpact}
+                      {" · "}
+                      {developmentArcModel.trainingImpact}
+                      {" · "}
+                      {developmentArcModel.playingTimeImpact}
+                    </div>
+                  </div>
+                )}
+
                 {/* Traits */}
                 {player.traits?.length > 0 && (
                   <div
@@ -1332,6 +1381,30 @@ export default function PlayerProfile({
             </section>
           )}
 
+          {!loading && player && isProspect && prospectScoutingReport && (
+            <section className="card-enter" data-testid="player-profile-scouting-report">
+              <h3 style={sectionLabelStyle}>Scouting snapshot</h3>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                <span className="status-chip info">{prospectScoutingReport.scoutingGrade}</span>
+                <span className="status-chip muted">Conf: {prospectScoutingReport.confidence}</span>
+                <span className="status-chip muted">Risk: {prospectScoutingReport.riskLevel.replace(/_/g, " ")}</span>
+                <span className="status-chip muted">↑ {prospectScoutingReport.upsideLabel.replace(/_/g, " ")}</span>
+                <span className="status-chip muted">Floor: {prospectScoutingReport.floorLabel.replace(/_/g, " ")}</span>
+              </div>
+              <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginBottom: 4 }}>{prospectScoutingReport.projectedRole}</div>
+              <p style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 8 }}>{prospectScoutingReport.summary}</p>
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginBottom: 6 }}>{prospectScoutingReport.schemeFitSummary}</div>
+              {prospectScoutingReport.combineSignals[0] ? (
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>Combine: {prospectScoutingReport.combineSignals[0]}</div>
+              ) : null}
+              {prospectScoutingReport.interviewSignals[0] ? (
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>Interview: {prospectScoutingReport.interviewSignals[0]}</div>
+              ) : null}
+              {prospectScoutingReport.traits[0] ? (
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 6 }}>Notes: {prospectScoutingReport.traits.slice(0, 2).join(" · ")}</div>
+              ) : null}
+            </section>
+          )}
           {!loading && player && isProspect && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Prospect Evaluation</h3>

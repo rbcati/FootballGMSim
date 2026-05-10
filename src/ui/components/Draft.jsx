@@ -35,6 +35,7 @@ import { applyAdvancedPlayerFilters, allFilters } from "../../core/footballAdvan
 import { usePlayerCompare } from "../utils/playerCompare.js";
 import EmptyState from "./EmptyState.jsx";
 import { POS_COLORS } from "../constants/positionColors.js";
+import { buildProspectScoutingReport } from "../../core/scoutingModel.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -123,6 +124,38 @@ function getScoutReport(trueOvr, playerId, scoutAccuracy = 0.65) {
   else                        { grade = "F";  gradeColor = "#FF453A"; }
 
   return { grade, gradeColor, range: `${low}–${high}` };
+}
+
+/** Presentational only — no hooks (avoids hook-order edge cases in dense Draft table renders). */
+function ProspectScoutingChips({ prospect, team }) {
+  const report = buildProspectScoutingReport(prospect, { team });
+  const chip = (k, v) => (
+    <span
+      key={k}
+      className="status-chip muted"
+      style={{ fontSize: "10px", padding: "1px 6px", lineHeight: 1.2 }}
+      title={report.summary}
+    >
+      {k}: {v}
+    </span>
+  );
+  return (
+    <div
+      data-testid="draft-scouting-chips"
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 4,
+        marginTop: 4,
+        maxWidth: 220,
+      }}
+    >
+      {chip("conf", report.confidence)}
+      {chip("risk", String(report.riskLevel).replace(/_/g, " "))}
+      {chip("fit", `${Math.round(Number(prospect?.schemeFit ?? 65))}`)}
+      {chip("role", String(report.projectedRole).slice(0, 28))}
+    </div>
+  );
 }
 
 function ScoutBadge({ player, team }) {
@@ -1994,11 +2027,20 @@ function DraftBoard({
                       <TableCell style={{ color: "var(--text-muted)" }}>{p.age}</TableCell>
                       <TableCell style={{ textAlign: "center" }}><Button title={compareIds.includes(p.id) ? "Remove from compare" : "Add to compare"} onClick={() => toggleCompare(p)} style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", border: `1.5px solid ${compareIds.includes(p.id) ? "var(--accent)" : "var(--hairline)"}`, background: compareIds.includes(p.id) ? "var(--accent-muted)" : "transparent", fontSize: 12, color: compareIds.includes(p.id) ? "var(--accent)" : "var(--text-subtle)" }}>{compareIds.includes(p.id) ? "✓" : "⊕"}</Button></TableCell>
                       <TableCell>
-                        {/* Fog of War: show scout grade before drafted, true OVR after */}
-                        {isDraftComplete
-                          ? <OvrBadge ovr={p.ovr} />
-                          : <ScoutBadge player={p} team={(league?.teams ?? []).find((t) => t.id === league?.userTeamId)} />
-                        }
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+                          {/* Fog of War: show scout grade before drafted, true OVR after */}
+                          {isDraftComplete ? (
+                            <OvrBadge ovr={p.ovr} />
+                          ) : (
+                            <>
+                              <ScoutBadge player={p} team={(league?.teams ?? []).find((t) => t.id === league?.userTeamId)} />
+                              <ProspectScoutingChips
+                                prospect={p}
+                                team={(league?.teams ?? []).find((t) => t.id === league?.userTeamId)}
+                              />
+                            </>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell
                         style={{
@@ -2339,6 +2381,7 @@ export default function Draft({ league, actions, onNavigate = null }) {
       >
         <div>
           <h1
+            data-testid="draft-room-heading"
             style={{
               fontWeight: 800,
               fontSize: "var(--text-xl)",

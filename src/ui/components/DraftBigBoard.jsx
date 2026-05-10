@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { buildDraftBoardAnalysis } from '../../core/draft/draftBoardAnalysis.js';
 import { buildDraftProfileContext } from '../utils/playerProfileContext.js';
+import { buildProspectScoutingReport } from '../../core/scoutingModel.js';
 
 const POS_FILTERS = ['ALL', 'QB', 'WR', 'RB', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K', 'P'];
 const FILTERS = ['all', 'need', 'starter_path', 'young_upside', 'safe_pick', 'high_risk', 'bargain'];
@@ -84,7 +85,23 @@ export default function DraftBigBoard({ league, onPlayerSelect }) {
     <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>{FILTERS.map((f)=><button key={f} className="btn" onClick={()=>setActiveFilter(f)}>{f}</button>)}{POS_FILTERS.map((p)=><button key={p} className="btn" onClick={()=>setPositionFilter(p)}>{p}</button>)}</div>
     <select aria-label="Sort prospects" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>{SORTS.map((s) => <option key={s} value={s}>{s}</option>)}</select>
     <h4 style={{ marginTop: 10 }}>Prospect Board</h4>
-    {visibleProspects.length===0 ? <div style={{fontSize:12}}>No prospects available for current filters.</div> : visibleProspects.map((p)=><div key={p.prospectId} className="stat-box" style={{marginBottom:6,padding:8}}><div style={{fontSize:12}}>{p.boardRank}. {p.name} · {p.pos} {p.college ? `· ${p.college}` : ''}</div><div style={{fontSize:11}}>OVR {p.ovr ?? 'N/A'} POT {p.potential ?? 'N/A'} · Round {p.projectedRound ?? 'Unknown'} · Fit {p.fitScore}</div><div style={{fontSize:11}}>{p.comparisonReceipt || p.reason}</div><div><button className="btn" onClick={()=>setWatchlist((prev)=>prev.includes(p.prospectId)?prev.filter((id)=>id!==p.prospectId):[...prev,p.prospectId])}>{p.isShortlist ? 'Unwatch' : 'Watch'}</button><button className="btn" onClick={()=>moveProspect(p.prospectId,-1)}>↑</button><button className="btn" onClick={()=>moveProspect(p.prospectId,1)}>↓</button><button className="btn" onClick={()=>onPlayerSelect?.(p.prospectId, buildDraftProfileContext(p))}>Open profile</button></div></div>)}
+    {visibleProspects.length===0 ? <div style={{fontSize:12}}>No prospects available for current filters.</div> : visibleProspects.map((p) => {
+      const rawProspect = (prospects ?? []).find((x) => String(x?.id) === String(p.prospectId)) ?? p;
+      const sr = buildProspectScoutingReport(rawProspect, { team: userTeam });
+      return (
+        <div key={p.prospectId} className="stat-box" style={{marginBottom:6,padding:8}} data-testid="draft-big-board-row">
+          <div style={{fontSize:12}}>{p.boardRank}. {p.name} · {p.pos} {p.college ? `· ${p.college}` : ''}</div>
+          <div style={{fontSize:11}}>OVR {p.ovr ?? 'N/A'} POT {p.potential ?? 'N/A'} · Round {p.projectedRound ?? 'Unknown'} · Fit {p.fitScore}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }} data-testid="draft-board-scouting-inline">
+            <span className="status-chip muted" style={{ fontSize: 10 }}>conf {sr.confidence}</span>
+            <span className="status-chip muted" style={{ fontSize: 10 }}>{String(sr.riskLevel).replace(/_/g,' ')}</span>
+            <span className="status-chip muted" style={{ fontSize: 10 }}>{sr.upsideLabel.replace(/_/g,' ')}</span>
+          </div>
+          <div style={{fontSize:11}}>{p.comparisonReceipt || p.reason}</div>
+          <div><button className="btn" onClick={()=>setWatchlist((prev)=>prev.includes(p.prospectId)?prev.filter((id)=>id!==p.prospectId):[...prev,p.prospectId])}>{p.isShortlist ? 'Unwatch' : 'Watch'}</button><button className="btn" onClick={()=>moveProspect(p.prospectId,-1)}>↑</button><button className="btn" onClick={()=>moveProspect(p.prospectId,1)}>↓</button><button className="btn" onClick={()=>onPlayerSelect?.(p.prospectId, buildDraftProfileContext(p))}>Open profile</button></div>
+        </div>
+      );
+    })}
     <h4 style={{ marginTop: 10 }}>Pick Assets</h4>
     {analysis.pickAssets.length===0 ? <div style={{fontSize:12}}>No user picks available.</div> : analysis.pickAssets.slice(0,6).map((pick)=><div key={pick.pickId} style={{fontSize:12}}>{pick.label} · value {pick.pickValue} · {pick.targetTier}</div>)}
   </div>;

@@ -34,5 +34,6 @@ describe("DraftBigBoard", () => {
     );
     expect(html).toContain("Board Controls");
     expect(html).toContain("Class:");
+    expect(html).toContain("draft-board-scouting-inline");
   });
 });
