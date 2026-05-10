@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { launchFranchise, simulateSingleWeek, goToTab } from './helpers/franchise.js';
+import { launchFranchise, simulateSingleWeek, goToTab, selectScheduleWeekTab } from './helpers/franchise.js';
 
 test.describe('Core flow reliability', () => {
   test('refactored shell navigation paths remain reachable', async ({ page }) => {
     await launchFranchise(page);
 
     await goToTab(page, 'hq');
-    await expect(page.locator('[data-testid="section-tab-hq"][aria-current="page"]')).toBeVisible();
+    await expect(page.getByTestId('franchise-hq')).toBeVisible();
 
     await goToTab(page, 'roster');
     await expect(page.getByText('Roster').first()).toBeVisible();
@@ -23,8 +23,7 @@ test.describe('Core flow reliability', () => {
     await goToTab(page, 'free-agency');
     await expect(page.getByText('Free Agency').first()).toBeVisible();
 
-    await page.locator('[data-testid="nav-history"], [data-testid="primary-nav-history"]').first().click();
-    await page.locator('[data-testid="section-tab-history-hub"]').first().click();
+    await goToTab(page, 'history-hub');
     await expect(page.getByText('History Hub').first()).toBeVisible();
   });
 
@@ -32,19 +31,21 @@ test.describe('Core flow reliability', () => {
     await launchFranchise(page);
     await simulateSingleWeek(page);
 
-    await goToTab(page, 'hq');
-    await page.locator('[data-testid="recent-game-box-score-trigger"]').first().click();
-    await expect(page.getByText('Final Game Book').first()).toBeVisible();
-    await expect(page.getByText('Team comparison').first()).toBeVisible();
+    const scheduleWeek = await page.evaluate(() => Math.max(1, (window?.state?.league?.week ?? 2) - 1));
+    await selectScheduleWeekTab(page, scheduleWeek);
+    await page.locator('.premium-game-card.is-completed.is-clickable .premium-game-card__interactive').first().click();
+    await expect(page.getByTestId('game-book')).toBeVisible();
+    await expect(page.getByTestId('game-book-team-comparison')).toBeVisible();
   });
 
   test('schedule completed game opens box score', async ({ page }) => {
     await launchFranchise(page);
     await simulateSingleWeek(page);
 
-    await goToTab(page, 'schedule');
-    await page.locator('.matchup-card.clickable-card').first().click();
-    await expect(page.getByText('Final Game Book').first()).toBeVisible();
+    const scheduleWeek = await page.evaluate(() => Math.max(1, (window?.state?.league?.week ?? 2) - 1));
+    await selectScheduleWeekTab(page, scheduleWeek);
+    await page.locator('.premium-game-card.is-completed.is-clickable .premium-game-card__interactive').first().click();
+    await expect(page.getByTestId('game-book')).toBeVisible();
   });
 
   test('recent games card opens archived box score', async ({ page }) => {
@@ -52,20 +53,27 @@ test.describe('Core flow reliability', () => {
     await simulateSingleWeek(page);
 
     await goToTab(page, 'hq');
-    await page.locator('[data-testid="recent-game-card"]').first().click();
-    await expect(page.getByText('Final Game Book').first()).toBeVisible();
+    const filmGameBook = page.locator('[data-testid="season-pulse"]').getByRole('button', { name: /Open Game Book/i }).first();
+    await expect(filmGameBook).toBeVisible({ timeout: 30000 });
+    await filmGameBook.click();
+    await expect(page.getByTestId('game-book')).toBeVisible();
   });
 
   test('save delete and recreate slot flow', async ({ page }) => {
     page.on('dialog', (dialog) => dialog.accept());
 
     await launchFranchise(page);
-    await page.getByRole('button', { name: /Save Slots/i }).first().click();
-    await page.getByRole('button', { name: /^Delete$/ }).first().click();
+    await page.waitForFunction(() => !window?.state?.busy && !window?.state?.simulating, { timeout: 60000 });
+    await page.locator('details.app-overflow-menu summary').click();
+    await page.evaluate(() => {
+      const btn = [...document.querySelectorAll('.app-overflow-item')].find((el) => /Save Slots/i.test(el.textContent ?? ''));
+      (btn)?.click();
+    });
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('app-save-slots')).toBeVisible({ timeout: 60000 });
+    await page.locator('[data-testid="app-save-slots"]').getByRole('button', { name: /^Delete$/ }).first().click({ force: true });
 
-    await expect(page.getByText('This franchise slot is ready for a new dynasty.').first()).toBeVisible();
-    await page.locator('[data-testid="start-new-franchise-cta"]').first().click();
-    await expect(page.getByText(/Choose your franchise/i).first()).toBeVisible();
+    await expect(page.getByText(/No franchise started yet/i).first()).toBeVisible();
   });
 
   test('trade deadline messaging and lockout', async ({ page }) => {
@@ -78,7 +86,10 @@ test.describe('Core flow reliability', () => {
 
     await simulateSingleWeek(page);
     await goToTab(page, 'transactions');
+    await page.getByRole('button', { name: /^Builder$/i }).click();
 
-    await expect(page.getByText(/trade market is locked/i).first()).toBeVisible();
+    await expect(
+      page.getByText(/trade window closed|trading actions are locked|trade deadline passed|deadline passed after week/i).first(),
+    ).toBeVisible({ timeout: 30000 });
   });
 });

@@ -271,6 +271,27 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         <p className="app-hq-hero-footnote">Sim to Sunday • {footerDays} days until kickoff</p>
       </section>
 
+      <div
+        className="app-hq-action-tiles"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: 8,
+          marginBottom: 12,
+          padding: '0 var(--space-2)',
+        }}
+      >
+        {actionTiles.map((tile) => (
+          <ActionTile
+            key={tile.title}
+            icon={tile.icon}
+            title={tile.title}
+            subtitle={tile.subtitle}
+            badge={typeof tile.badge === 'string' ? <StatusChip label={tile.badge} tone="warning" /> : tile.badge}
+            onClick={tile.onClick}
+          />
+        ))}
+      </div>
 
       {lastGame ? (
         <SectionCard title="Next Action" subtitle="Postgame handoff from the latest completed week." variant="info">

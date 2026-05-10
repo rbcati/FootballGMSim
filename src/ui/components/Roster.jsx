@@ -2260,7 +2260,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
   }, [actions, fetchRoster, league, readiness.assignments, readiness.safeToMarkLineupChecked]);
 
   return (
-    <div>
+    <div id="roster">
       <TeamWorkspaceHeader
         title="Roster Operations"
         subtitle="Evaluate starters, depth, contract pressure, and next actions from one screen."
