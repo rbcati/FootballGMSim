@@ -62,6 +62,46 @@ describe('PlayerProfile', () => {
     expect(screen.getByTestId('player-profile-season-stats').textContent).toContain('Season stats will appear after this player records tracked stats.');
   });
 
+  it('shows career arc snapshot for active players', async () => {
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={league} />);
+    await waitFor(() => expect(screen.getByTestId('player-profile-dev-arc')).toBeTruthy());
+    expect(screen.getByTestId('player-profile-dev-arc').textContent).toMatch(/Career arc snapshot/i);
+  });
+
+  it('shows scouting snapshot for draft-eligible prospects', async () => {
+    const prospect = {
+      id: 55,
+      name: 'Draft Prospect',
+      pos: 'QB',
+      age: 21,
+      status: 'draft_eligible',
+      ovr: 74,
+      potential: 88,
+      schemeFit: 66,
+      combineResults: { fortyTime: 4.58, verticalLeap: 34 },
+      interviewReport: { riskScore: 38 },
+      traits: [],
+      accolades: [],
+    };
+    const prospectLeague = {
+      ...league,
+      teams: [{ id: 1, name: 'Dallas', abbr: 'DAL', roster: [], staff: { headCoach: { schemePreference: 'vertical' } } }],
+    };
+    const prospectActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: { player: prospect, stats: [], teammates: [], meta: { userTeamId: 1 } },
+      })),
+      getAllSeasons: vi.fn(async () => ({ payload: { seasons: [] } })),
+      getPlayerDraftContext: vi.fn(async () => ({ payload: { context: { known: false } } })),
+      getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+    };
+    render(
+      <PlayerProfile playerId={55} onClose={vi.fn()} actions={prospectActions} teams={prospectLeague.teams} league={prospectLeague} />,
+    );
+    await waitFor(() => expect(screen.getByTestId('player-profile-scouting-report')).toBeTruthy());
+    expect(screen.getByTestId('player-profile-scouting-report').textContent).toMatch(/Scouting snapshot/i);
+  });
+
   it('renders game book context and honest missing logs state', () => {
     render(
       <PlayerProfile
