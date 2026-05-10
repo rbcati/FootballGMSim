@@ -8,6 +8,7 @@ import {
   buildSeasonStorylineSnapshot,
 } from '../../src/core/league-memory.js';
 import { PLAYER_SEASON_STATS_ARCHIVE_SCHEMA_VERSION } from '../../src/core/playerSeasonStatsArchive.js';
+import { TRANSACTION_TIMELINE_SCHEMA_VERSION } from '../../src/core/transactionTimeline.js';
 
 describe('league memory helpers', () => {
   it('adds defaults for old saves', () => {
@@ -69,6 +70,28 @@ describe('league memory helpers', () => {
     });
     expect(season.playerSeasonStatsV1.rows).toHaveLength(1);
     expect(season.playerSeasonStatsV1.schemaVersion).toBe(1);
+  });
+
+  it('includes transactionTimelineV1 when provided with rows', () => {
+    const season = buildSeasonArchiveSummary({
+      year: 2045,
+      seasonId: 's45',
+      standings: [],
+      awards: {},
+      leaders: {},
+      champion: null,
+      runnerUp: null,
+      userTeamId: 0,
+      games: [],
+      seasonStats: [],
+      transactionTimelineV1: {
+        schemaVersion: TRANSACTION_TIMELINE_SCHEMA_VERSION,
+        rows: [{ id: 'tx-1', type: 'signing', headline: 'Test signed', week: 1 }],
+        meta: { source: 'transactions', partial: false, createdAt: 'now' },
+      },
+    });
+    expect(season.transactionTimelineV1.rows).toHaveLength(1);
+    expect(season.transactionTimelineV1.schemaVersion).toBe(TRANSACTION_TIMELINE_SCHEMA_VERSION);
   });
 
   it('keeps archive shape stable when championship data is unavailable', () => {

@@ -111,6 +111,14 @@ import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer 
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot, buildHallOfFameInducteeRow, syncHallOfFameAfterRecordBook } from '../core/league-memory.js';
 import { buildPlayerSeasonStatsArchiveRows } from '../core/playerSeasonStatsArchive.js';
+import {
+  TRANSACTION_TIMELINE_SCHEMA_VERSION,
+  compactRowsForArchive,
+  dedupeNormalizedTransactions,
+  filterNormalizedTransactions,
+  normalizeRawTransaction,
+  stripInternalTimelineFields,
+} from '../core/transactionTimeline.js';
 import { rebuildRecordBookV1, mirrorRecordBookForLegacyUi, RECORD_BOOK_SCHEMA_VERSION } from '../core/recordBookV1.js';
 import { inferChampionshipOutcome, isCompletedGame, isPostseasonGame } from '../core/championshipInference.js';
 import { repairDepthChart, validateDepthChart, optimizeDepthChartForPlan } from "../core/roster/depthChartManager.js";
@@ -3822,62 +3830,104 @@ async function handleGetRecords(payload, id) {
   post(toUI.RECORDS, { records, recordBook: meta?.recordBook ?? null }, id);
 }
 
-async function handleGetTransactions({ seasonId = null, teamId = null } = {}, id) {
-  const meta = ensureDynastyMeta(cache.getMeta());
-  const resolvedSeasonId = seasonId ?? meta?.currentSeasonId ?? null;
-
-  let rows = [];
-  if (teamId != null) {
-    rows = await Transactions.byTeam(Number(teamId)).catch(() => []);
-    if (resolvedSeasonId) {
-      rows = rows.filter((row) => row?.seasonId === resolvedSeasonId);
-    }
-  } else if (resolvedSeasonId) {
-    rows = await Transactions.bySeason(resolvedSeasonId).catch(() => []);
-  }
-
-  const allTeams = cache.getAllTeams();
-  const teamById = new Map(allTeams.map((t) => [Number(t.id), t]));
-  const teamLookup = (idValue) => teamById.get(Number(idValue));
-
-  const txTypeLabel = (type = "") => {
-    const map = {
-      SIGN: "Signing",
-      RELEASE: "Release",
-      EXTEND: "Extension",
-      RESTRUCTURE: "Restructure",
-      FRANCHISE_TAG: "Franchise Tag",
-      TRADE: "Trade",
-    };
-    return map[type] ?? type;
+function bucketTypeLabel(bucket = "") {
+  const map = {
+    signing: "Signing",
+    release: "Release",
+    extension: "Extension",
+    restructure: "Restructure",
+    franchise_tag: "Franchise Tag",
+    trade: "Trade",
+    draft: "Draft",
+    retirement: "Retirement",
+    other: "Move",
   };
+  return map[bucket] ?? bucket;
+}
 
-  const payloadRows = rows
-    .map((tx) => {
+async function handleGetTransactions(payload = {}, id) {
+  try {
+    const meta = ensureDynastyMeta(cache.getMeta());
+    const {
+      seasonId = null,
+      teamId = null,
+      playerId = null,
+      type = null,
+      year = null,
+      limit = 200,
+      mode = "auto",
+      search = "",
+    } = payload || {};
+
+    const resolvedSeasonId = seasonId ?? (mode === "recent" ? null : meta?.currentSeasonId ?? null);
+    const pid = playerId != null ? Number(playerId) : null;
+    const wantPlayer = Number.isFinite(pid) && pid > 0;
+    const explicitRecent = mode === "recent";
+
+    let rows = [];
+    if (explicitRecent && teamId == null && seasonId == null && !wantPlayer) {
+      const cap = Math.min(4000, Math.max(400, Number(limit) * 5 || 800));
+      rows = await Transactions.loadRecent(cap).catch(() => []);
+    } else if (wantPlayer && teamId == null && seasonId == null) {
+      const cap = Math.min(4000, Math.max(800, Number(limit) * 25 || 2500));
+      rows = await Transactions.loadRecent(cap).catch(() => []);
+    } else if (teamId != null) {
+      rows = await Transactions.byTeam(Number(teamId)).catch(() => []);
+      const sid = seasonId ?? resolvedSeasonId;
+      if (sid) {
+        rows = rows.filter((row) => String(row?.seasonId) === String(sid));
+      }
+    } else if (resolvedSeasonId) {
+      rows = await Transactions.bySeason(resolvedSeasonId).catch(() => []);
+    } else if (explicitRecent) {
+      const cap = Math.min(4000, Math.max(400, Number(limit) * 5 || 800));
+      rows = await Transactions.loadRecent(cap).catch(() => []);
+    }
+
+    const allTeams = cache.getAllTeams();
+    const teamById = new Map(allTeams.map((t) => [Number(t.id), t]));
+    const teamLookup = (idValue) => teamById.get(Number(idValue));
+
+    const txTypeLabel = (type = "") => {
+      const map = {
+        SIGN: "Signing",
+        RELEASE: "Release",
+        EXTEND: "Extension",
+        RESTRUCTURE: "Restructure",
+        FRANCHISE_TAG: "Franchise Tag",
+        TRADE: "Trade",
+        DRAFT: "Draft",
+        RETIREMENT: "Retirement",
+      };
+      return map[type] ?? type;
+    };
+
+    const enriched = rows.map((tx) => {
       const details = tx?.details ?? {};
       const team = teamLookup(tx?.teamId);
-      const player = details?.playerId != null ? cache.getPlayer(details.playerId) : null;
+      const detailPlayerId = details?.playerId != null ? details.playerId : tx?.playerId;
+      const player = detailPlayerId != null ? cache.getPlayer(detailPlayerId) : null;
       const fromTeam = details?.fromTeamId != null ? teamLookup(details.fromTeamId) : null;
-      const toTeam = details?.toTeamId != null ? teamLookup(details.toTeamId) : null;
+      const toTeamIdVal = details?.toTeamId ?? details?.toTeam;
+      const toTeam = toTeamIdVal != null ? teamLookup(toTeamIdVal) : null;
       const contract = details?.contract ?? null;
       const annual = Number(contract?.baseAnnual ?? 0);
       const years = Number(contract?.yearsTotal ?? contract?.years ?? 0);
       const bonus = Number(contract?.signingBonus ?? 0);
 
       return {
-        id: tx?.id,
-        type: tx?.type,
+        ...tx,
         typeLabel: txTypeLabel(tx?.type),
         seasonId: tx?.seasonId ?? null,
         week: tx?.week ?? null,
         teamId: tx?.teamId ?? null,
         teamAbbr: team?.abbr ?? null,
         teamName: team?.name ?? null,
-        playerId: details?.playerId ?? null,
+        playerId: detailPlayerId ?? null,
         playerName: player?.name ?? null,
         playerPos: player?.pos ?? null,
         fromTeamId: details?.fromTeamId ?? null,
-        toTeamId: details?.toTeamId ?? null,
+        toTeamId: toTeamIdVal != null ? Number(toTeamIdVal) : null,
         fromTeamAbbr: fromTeam?.abbr ?? null,
         toTeamAbbr: toTeam?.abbr ?? null,
         years: years || null,
@@ -3885,19 +3935,50 @@ async function handleGetTransactions({ seasonId = null, teamId = null } = {}, id
         totalValue: (years > 0 && Number.isFinite(annual)) ? (annual * years + bonus) : null,
         details,
       };
-    })
-    .sort((a, b) => {
+    });
+
+    const ctx = {
+      teams: allTeams,
+      teamsById: teamById,
+      year: meta?.year ?? null,
+      phase: meta?.phase ?? null,
+    };
+
+    const normalized = enriched.map((tx) => normalizeRawTransaction(tx, ctx));
+    const deduped = dedupeNormalizedTransactions(normalized);
+    const filtered = filterNormalizedTransactions(deduped, {
+      seasonId: seasonId != null ? String(seasonId) : null,
+      year: year != null ? Number(year) : null,
+      teamId: teamId != null ? Number(teamId) : null,
+      playerId: wantPlayer ? pid : null,
+      type: type ? String(type).toLowerCase() : null,
+      search: String(search || ""),
+      limit: Math.min(2000, Number(limit) || 200),
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
       const sa = String(a?.seasonId ?? "");
       const sb = String(b?.seasonId ?? "");
       if (sa !== sb) return sb.localeCompare(sa);
       const wa = Number(a?.week ?? -1);
       const wb = Number(b?.week ?? -1);
       if (wa !== wb) return wb - wa;
-      return Number(b?.id ?? 0) - Number(a?.id ?? 0);
-    })
-    .slice(0, 300);
+      return Number(b?.rawId ?? 0) - Number(a?.rawId ?? 0);
+    });
 
-  post(toUI.TRANSACTIONS, { transactions: payloadRows }, id);
+    const stripped = stripInternalTimelineFields(sorted).slice(0, 300).map((row) => ({
+      ...row,
+      id: row.rawId != null ? row.rawId : row.id,
+      typeLabel: bucketTypeLabel(row.type),
+      /** @deprecated prefer canonical `type` bucket; kept for older UI */
+      legacyTypeLabel: row.legacyType ? txTypeLabel(row.legacyType) : bucketTypeLabel(row.type),
+    }));
+
+    post(toUI.TRANSACTIONS, { transactions: stripped }, id);
+  } catch (err) {
+    console.error("[Worker] GET_TRANSACTIONS failed:", err);
+    post(toUI.TRANSACTIONS, { transactions: [] }, id);
+  }
 }
 
 // ── Handler: GET_HALL_OF_FAME ────────────────────────────────────────────────
@@ -7194,6 +7275,33 @@ function _executeDraftPick(pickIndex, playerId, teamId) {
   cache.setMeta({ draftState });
 }
 
+/**
+ * Persist DRAFT row to the transaction log (IndexedDB).
+ */
+async function logDraftPickTransaction(meta, pickSlot, playerIdResolved) {
+  if (!meta?.currentSeasonId || !pickSlot || playerIdResolved == null) return;
+  try {
+    const pid = Number(playerIdResolved);
+    if (!Number.isFinite(pid)) return;
+    await Transactions.add({
+      type: 'DRAFT',
+      seasonId: meta.currentSeasonId,
+      week: meta.currentWeek ?? 1,
+      teamId: Number(pickSlot.teamId),
+      playerId: pid,
+      details: {
+        playerId: pid,
+        overall: pickSlot.overall ?? null,
+        round: pickSlot.round ?? null,
+        pickInRound: pickSlot.pickInRound ?? null,
+        isCompensatory: !!pickSlot.isCompensatory,
+      },
+    });
+  } catch (err) {
+    console.error('[Worker] logDraftPickTransaction failed (non-fatal):', err);
+  }
+}
+
 
 async function handleConductPrivateWorkout({ playerId }, id) {
   const meta = ensureDynastyMeta(cache.getMeta());
@@ -7496,6 +7604,7 @@ async function handleMakeDraftPick({ playerId }, id) {
   }
 
   _executeDraftPick(currentPickIndex, player.id, currentPick.teamId);
+  await logDraftPickTransaction(ensureDynastyMeta(cache.getMeta()), currentPick, player.id);
   await flushDirty();
 
   // Priority 3: Auto-transition when the last pick is made.
@@ -7571,6 +7680,7 @@ async function handleSimDraftPick(payload, id) {
     if (!bestProspect) break; // pool exhausted
 
     _executeDraftPick(currentPickIndex, bestProspect.id, pick.teamId);
+    await logDraftPickTransaction(ensureDynastyMeta(cache.getMeta()), pick, bestProspect.id);
     // _executeDraftPick increments draftState.currentPickIndex inside setMeta;
     // read the updated value from the live meta reference
     currentPickIndex = cache.getMeta().draftState.currentPickIndex;
@@ -8205,8 +8315,26 @@ async function handleAdvanceOffseason(payload, id) {
     retired.push(ret);
     if (player.teamId != null) recalculateTeamCap(player.teamId);
 
+    const lastTeamIdForTx = player.teamId != null ? Number(player.teamId) : null;
     const hofEval = evaluateHallOfFameCandidate(player, Number(meta?.year ?? 2025), hofEvalContext);
     const isHof = hofEval.inducted;
+
+    try {
+      await Transactions.add({
+        type: 'RETIREMENT',
+        seasonId: meta.currentSeasonId,
+        week: meta.currentWeek ?? 1,
+        teamId: lastTeamIdForTx,
+        playerId: Number(player.id),
+        details: {
+          playerId: Number(player.id),
+          hof: Boolean(isHof),
+          reason: ret.reason ?? null,
+        },
+      });
+    } catch (err) {
+      console.error('[Worker] RETIREMENT transaction log failed (non-fatal):', err);
+    }
 
     // Log news based on retirement type
     if (ret.reason && ret.reason.startsWith('sudden_')) {
@@ -8605,6 +8733,32 @@ async function archiveSeason(seasonId) {
     });
     const playerSeasonStatsV1 = playerSeasonStatsV1Raw.rows.length ? playerSeasonStatsV1Raw : null;
 
+    const seasonTransactions = await Transactions.bySeason(seasonId).catch(() => []);
+    const allPlayersList = cache.getAllPlayers();
+    const playersByIdMap = new Map(allPlayersList.map((p) => [Number(p.id), p]));
+    const teamsByIdMap = new Map(teams.map((t) => [Number(t.id), t]));
+    const txTimelineCtx = {
+      teams,
+      teamsById: teamsByIdMap,
+      players: allPlayersList,
+      playersById: playersByIdMap,
+      year,
+      phase: meta?.phase ?? null,
+    };
+    const txNormalized = dedupeNormalizedTransactions(
+      seasonTransactions.map((tx) => normalizeRawTransaction(tx, txTimelineCtx)),
+    );
+    const txCompact = compactRowsForArchive(txNormalized, 32);
+    const transactionTimelineV1 = txCompact.length ? {
+      schemaVersion: TRANSACTION_TIMELINE_SCHEMA_VERSION,
+      rows: txCompact,
+      meta: {
+        source: 'transactions',
+        partial: txNormalized.length > txCompact.length,
+        createdAt: new Date().toISOString(),
+      },
+    } : null;
+
     const seasonSummary = buildSeasonArchiveSummary({
       year,
       seasonId,
@@ -8616,10 +8770,11 @@ async function archiveSeason(seasonId) {
       userTeamId: meta.userTeamId,
       championshipGameId: championshipGame?.id ?? championshipGame?.gameId ?? null,
       games: seasonGames,
-      transactions: await Transactions.bySeason(seasonId).catch(() => []),
+      transactions: seasonTransactions,
       teams,
       seasonStats: populatedStats,
       playerSeasonStatsV1: playerSeasonStatsV1 ?? undefined,
+      transactionTimelineV1: transactionTimelineV1 ?? undefined,
     });
     const archivedLeagueView = archiveCompletedSeasonIfNeeded(ensureLeagueHistoryContainer({
       seasonId: year,

@@ -7,6 +7,10 @@ describe("normalizeManagementDestination", () => {
       tab: "Transactions",
       tradeView: "Offers",
     });
+    expect(normalizeManagementDestination("Transactions:Activity")).toMatchObject({
+      tab: "Transactions",
+      tradeView: "Activity",
+    });
     expect(normalizeManagementDestination("Transactions:Unknown")).toMatchObject({
       tab: "Transactions",
       tradeView: "Finder",

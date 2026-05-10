@@ -4,6 +4,7 @@ import { ScreenHeader, SectionCard } from './ScreenSystem.jsx';
 const DESTINATIONS = [
   { key: 'History', title: 'League Archive', body: 'Champions, season snapshots, and year-to-year memory.' },
   { key: 'Team History', title: 'Franchise Timeline', body: 'Highs/lows, droughts, and long-run identity by club.' },
+  { key: 'Transactions:Activity', title: 'League activity', body: 'Dynasty-wide signings, trades, draft picks, and roster moves.' },
   { key: 'Hall of Fame', title: 'Hall of Fame', body: 'All-time greats, induction classes, and legacy scoreboards.' },
   { key: 'Awards & Records', title: 'Awards & Records', body: 'Who defined each season and who owns the book.' },
 ];

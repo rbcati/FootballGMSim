@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
 import { AWARD_DISPLAY_NAMES } from '../../core/footballMeta';
 import { buildLeagueHistoryTopPerformers } from '../../core/playerSeasonStatsArchive.js';
+import { normalizeArchivedMajorTransactions } from '../../core/transactionTimeline.js';
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -122,7 +123,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
     let mounted = true;
     setLoading(true);
     const txPromise = api.getTransactions
-      ? api.getTransactions({}).catch(() => ({ payload: { transactions: [] } }))
+      ? api.getTransactions({ mode: "recent", limit: 300 }).catch(() => ({ payload: { transactions: [] } }))
       : Promise.resolve({ payload: { transactions: [] } });
 
     Promise.all([
@@ -300,6 +301,21 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league, initi
   const notableGames = Array.isArray(selected?.notableGames) ? selected.notableGames : [];
   const selectedSeasonIndex = seasons.findIndex((s) => s.id === selected?.id);
   const topPerformers = useMemo(() => buildLeagueHistoryTopPerformers(selected, { perBucket: 2 }), [selected]);
+
+  const seasonMajorTx = useMemo(() => {
+    const v1 = selected?.transactionTimelineV1?.rows;
+    if (Array.isArray(v1) && v1.length) return v1.slice(0, 10);
+    const raw = selected?.majorTransactions;
+    if (!Array.isArray(raw) || !raw.length) return [];
+    const teams = league?.teams ?? [];
+    const teamsById = new Map(teams.map((t) => [Number(t.id), t]));
+    return normalizeArchivedMajorTransactions(raw, {
+      teams,
+      teamsById,
+      year: selected?.year ?? null,
+      phase: null,
+    }).slice(0, 10);
+  }, [selected, league?.teams]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
@@ -522,6 +538,29 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league, initi
               </div>
             </section>
           ) : null}
+
+          {seasonMajorTx.length > 0 ? (
+            <section className="rounded-md border border-[color:var(--hairline)] p-3" data-testid={`league-history-major-tx-${selected?.id ?? 'none'}`}>
+              <h4 className="text-sm font-bold mb-2">Major transactions</h4>
+              <ul className="space-y-2 text-xs">
+                {seasonMajorTx.map((tx, idx) => (
+                  <li key={`${tx.id ?? tx.rawId ?? idx}`} className="border-b border-[color:var(--hairline)]/40 pb-2 last:border-0">
+                    <div className="font-semibold text-[color:var(--text)]">{tx.headline ?? tx.typeLabel ?? tx.type}</div>
+                    <div className="text-[color:var(--text-muted)]">
+                      {tx.typeLabel ?? tx.type}
+                      {tx.week != null ? ` · Week ${tx.week}` : ""}
+                    </div>
+                    {tx.playerId != null ? (
+                      <button type="button" className="text-[color:var(--accent)] font-semibold mt-1" onClick={() => onPlayerSelect?.(tx.playerId)}>
+                        {tx.playerName ?? "Player"}
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
           {playerStatLeaders && Object.keys(playerStatLeaders).length > 0 ? (
             <section data-testid={`league-history-player-stat-leaders-${selected?.id ?? 'none'}`}>
               <h4 className="text-sm font-bold mb-2">Stat leaders</h4>
@@ -721,13 +760,25 @@ function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
 
   const rows = transactions.slice(0, 120);
   const describe = (tx) => {
-    if (tx.type === "TRADE") return `${tx.fromTeamAbbr ?? "??"} ↔ ${tx.toTeamAbbr ?? "??"} completed a trade package.`;
-    if (tx.type === "SIGN") return `${tx.teamAbbr ?? "??"} signed ${tx.playerName ?? "player"}.`;
-    if (tx.type === "RELEASE") return `${tx.teamAbbr ?? "??"} released ${tx.playerName ?? "player"}.`;
-    if (tx.type === "EXTEND") return `${tx.teamAbbr ?? "??"} extended ${tx.playerName ?? "player"}.`;
-    if (tx.type === "RESTRUCTURE") return `${tx.teamAbbr ?? "??"} restructured ${tx.playerName ?? "player"}.`;
-    if (tx.type === "FRANCHISE_TAG") return `${tx.teamAbbr ?? "??"} tagged ${tx.playerName ?? "player"}.`;
-    return tx.typeLabel ?? tx.type;
+    const leg = tx.legacyType ?? "";
+    const bucket = tx.type ?? "";
+    const isTrade = leg === "TRADE" || bucket === "trade";
+    const isSign = leg === "SIGN" || bucket === "signing";
+    const isRelease = leg === "RELEASE" || bucket === "release";
+    const isExtend = leg === "EXTEND" || bucket === "extension";
+    const isRestructure = leg === "RESTRUCTURE" || bucket === "restructure";
+    const isTag = leg === "FRANCHISE_TAG" || bucket === "franchise_tag";
+    const isDraft = leg === "DRAFT" || bucket === "draft";
+    const isRetire = leg === "RETIREMENT" || bucket === "retirement";
+    if (isTrade) return `${tx.fromTeamAbbr ?? "??"} ↔ ${tx.toTeamAbbr ?? "??"} completed a trade package.`;
+    if (isSign) return `${tx.teamAbbr ?? "??"} signed ${tx.playerName ?? "player"}.`;
+    if (isRelease) return `${tx.teamAbbr ?? "??"} released ${tx.playerName ?? "player"}.`;
+    if (isExtend) return `${tx.teamAbbr ?? "??"} extended ${tx.playerName ?? "player"}.`;
+    if (isRestructure) return `${tx.teamAbbr ?? "??"} restructured ${tx.playerName ?? "player"}.`;
+    if (isTag) return `${tx.teamAbbr ?? "??"} tagged ${tx.playerName ?? "player"}.`;
+    if (isDraft) return `${tx.teamAbbr ?? "??"} drafted ${tx.playerName ?? "player"}.`;
+    if (isRetire) return `${tx.playerName ?? "Player"} retired${tx.detail ? ` (${tx.detail})` : ""}.`;
+    return tx.headline ?? tx.typeLabel ?? tx.type;
   };
 
   return (
