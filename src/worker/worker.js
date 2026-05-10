@@ -110,6 +110,7 @@ import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer } from '../core/trade-logic.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot, buildHallOfFameInducteeRow, syncHallOfFameAfterRecordBook } from '../core/league-memory.js';
+import { buildPlayerSeasonStatsArchiveRows } from '../core/playerSeasonStatsArchive.js';
 import { rebuildRecordBookV1, mirrorRecordBookForLegacyUi, RECORD_BOOK_SCHEMA_VERSION } from '../core/recordBookV1.js';
 import { inferChampionshipOutcome, isCompletedGame, isPostseasonGame } from '../core/championshipInference.js';
 import { repairDepthChart, validateDepthChart, optimizeDepthChartForPlan } from "../core/roster/depthChartManager.js";
@@ -8434,6 +8435,8 @@ async function archiveSeason(seasonId) {
       cache.updatePlayer(playerId, { accolades });
     };
 
+    const year = meta.year;
+
     // 3. Populate stats with player details
     const populatedStats = [];
     await Promise.all(seasonStats.map(async (s) => {
@@ -8490,7 +8493,6 @@ async function archiveSeason(seasonId) {
     }
 
     // 4. Determine Champion and runner-up from season games when possible.
-    const year = meta.year;
     const championshipInference = inferChampionshipOutcome({ seasonGames, meta });
     const championshipGame = championshipInference.championshipGame;
     const championId = championshipInference.championTeamId;
@@ -8596,6 +8598,13 @@ async function archiveSeason(seasonId) {
     const standingsRows = standings.map(s => ({
       id: s.id, name: s.name, abbr: s.abbr, wins: s.wins, losses: s.losses, ties: s.ties, pct: s.pct, pf: s.pf, pa: s.pa
     }));
+    const playerSeasonStatsV1Raw = buildPlayerSeasonStatsArchiveRows(populatedStats, {
+      teams,
+      year,
+      seasonId,
+    });
+    const playerSeasonStatsV1 = playerSeasonStatsV1Raw.rows.length ? playerSeasonStatsV1Raw : null;
+
     const seasonSummary = buildSeasonArchiveSummary({
       year,
       seasonId,
@@ -8610,6 +8619,7 @@ async function archiveSeason(seasonId) {
       transactions: await Transactions.bySeason(seasonId).catch(() => []),
       teams,
       seasonStats: populatedStats,
+      playerSeasonStatsV1: playerSeasonStatsV1 ?? undefined,
     });
     const archivedLeagueView = archiveCompletedSeasonIfNeeded(ensureLeagueHistoryContainer({
       seasonId: year,

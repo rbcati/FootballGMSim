@@ -498,7 +498,7 @@ function buildTeamStatLeaders(standings = []) {
   };
 }
 
-export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [], teams = [], seasonStats = [], championshipGameId = null }) {
+export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [], teams = [], seasonStats = [], championshipGameId = null, playerSeasonStatsV1 = null }) {
   const sorted = [...(standings || [])].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
   const userRow = sorted.find((t) => Number(t.id) === Number(userTeamId)) || null;
   const userTeam = teams.find((t) => Number(t?.id) === Number(userTeamId)) ?? null;
@@ -544,7 +544,7 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
     });
   }
 
-  return {
+  const out = {
     id: seasonId,
     year,
     seasonId,
@@ -584,6 +584,10 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
     } : null,
     majorTransactions: (transactions || []).slice(0, 8),
   };
+  if (playerSeasonStatsV1 && Array.isArray(playerSeasonStatsV1.rows) && playerSeasonStatsV1.rows.length > 0) {
+    out.playerSeasonStatsV1 = playerSeasonStatsV1;
+  }
+  return out;
 }
 
 export function updateFranchiseHistory(memoryMeta, seasonSummary, teams) {

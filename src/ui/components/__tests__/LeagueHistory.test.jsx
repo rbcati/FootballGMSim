@@ -120,4 +120,43 @@ describe('LeagueHistory', () => {
       expect(screen.getByText(/2030 League Snapshot/i)).toBeTruthy();
     });
   });
+
+  it('shows top performers when playerSeasonStatsV1 snapshots exist', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        initialSelectedSeasonId="s9"
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [{
+                id: 's9',
+                year: 2095,
+                standings: [{ id: 1, abbr: 'DAL', wins: 8, losses: 9 }],
+                awards: {},
+                playerSeasonStatsV1: {
+                  schemaVersion: 1,
+                  rows: [
+                    { playerId: 'qb1', playerName: 'Air', pos: 'QB', teamId: 1, teamAbbr: 'DAL', year: 2095, seasonId: 's9', gamesPlayed: 10, passYds: 4800, passTDs: 35, passInts: 10, rushYds: 0, rushTDs: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, defInts: 0, fgMade: 0, xpMade: 0 },
+                  ],
+                  meta: {},
+                },
+              }],
+            },
+          }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('league-history-top-performers-s9')).toBeTruthy();
+      expect(screen.getByTestId('league-history-top-performers-s9').textContent).toMatch(/Air/);
+      expect(screen.getByTestId('league-history-top-performers-s9').textContent).toMatch(/4,?800/);
+    });
+  });
 });

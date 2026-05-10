@@ -7,6 +7,7 @@ import {
   buildSeasonArchiveSummary,
   buildSeasonStorylineSnapshot,
 } from '../../src/core/league-memory.js';
+import { PLAYER_SEASON_STATS_ARCHIVE_SCHEMA_VERSION } from '../../src/core/playerSeasonStatsArchive.js';
 
 describe('league memory helpers', () => {
   it('adds defaults for old saves', () => {
@@ -46,6 +47,28 @@ describe('league memory helpers', () => {
     meta = updateFranchiseHistory(meta, season, []);
     expect(meta.franchiseHistoryByTeam['0'].totals.championships).toBe(1);
     expect(meta.franchiseHistoryByTeam['0'].milestones.length).toBe(1);
+  });
+
+  it('includes playerSeasonStatsV1 when provided with rows', () => {
+    const season = buildSeasonArchiveSummary({
+      year: 2044,
+      seasonId: 's44',
+      standings: [],
+      awards: {},
+      leaders: {},
+      champion: null,
+      runnerUp: null,
+      userTeamId: 0,
+      games: [],
+      seasonStats: [],
+      playerSeasonStatsV1: {
+        schemaVersion: PLAYER_SEASON_STATS_ARCHIVE_SCHEMA_VERSION,
+        rows: [{ playerId: 'z', playerName: 'Zed', pos: 'QB', teamId: 1, year: 2044, seasonId: 's44', gamesPlayed: 1, passYds: 50, passTDs: 0, passInts: 0, rushYds: 0, rushTDs: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, defInts: 0, fgMade: 0, xpMade: 0 }],
+        meta: { source: 'seasonStats', partial: false, createdAt: 'now' },
+      },
+    });
+    expect(season.playerSeasonStatsV1.rows).toHaveLength(1);
+    expect(season.playerSeasonStatsV1.schemaVersion).toBe(1);
   });
 
   it('keeps archive shape stable when championship data is unavailable', () => {

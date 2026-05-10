@@ -8,6 +8,47 @@ import {
 } from '../../src/core/recordBookV1.js';
 
 describe('recordBookV1', () => {
+  it('single-season scan prefers playerSeasonStatsV1 when present', () => {
+    const book = rebuildRecordBookV1({
+      leagueHistory: [{
+        year: 2090,
+        seasonId: 'sx',
+        id: 'sx',
+        standings: [],
+        playerSeasonStatsV1: {
+          schemaVersion: 1,
+          rows: [
+            { playerId: 'wr9', playerName: 'Deep', pos: 'WR', teamId: 2, year: 2090, seasonId: 'sx', gamesPlayed: 11, recYds: 1700, recTDs: 14 },
+          ],
+          meta: { source: 'seasonStats', partial: false, createdAt: 't' },
+        },
+      }],
+      players: [],
+    });
+    expect(book.singleSeasonV1[RECORD_KEYS.receivingYards].value).toBe(1700);
+    expect(book.singleSeasonV1[RECORD_KEYS.receivingYards].playerId).toBe('wr9');
+  });
+
+  it('career leaders merge archive V1 when player lacks careerStats lines', () => {
+    const book = rebuildRecordBookV1({
+      leagueHistory: [{
+        year: 2099,
+        seasonId: 's9',
+        id: 's9',
+        playerSeasonStatsV1: {
+          schemaVersion: 1,
+          rows: [
+            { playerId: 'ghost', playerName: 'Ghost', pos: 'WR', teamId: 1, year: 2099, seasonId: 's9', gamesPlayed: 10, recYds: 900, recTDs: 6 },
+          ],
+          meta: { source: 'seasonStats', partial: false, createdAt: 't' },
+        },
+      }],
+      players: [{ id: 'ghost', name: 'Ghost', pos: 'WR', careerStats: [] }],
+    });
+    expect(book.careerLeadersV1[RECORD_KEYS.receivingYards][0]?.value).toBeGreaterThanOrEqual(900);
+    expect(book.careerLeadersV1[RECORD_KEYS.receivingYards][0]?.playerId).toBe('ghost');
+  });
+
   it('builds single-season records from archived playerStatLeaders', () => {
     const book = rebuildRecordBookV1({
       leagueHistory: [{
