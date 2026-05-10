@@ -555,6 +555,18 @@ export default function LeagueDashboard({
     }
   }, [activeTab]);
 
+  const handleHistoryHubNavigate = React.useCallback(
+    (dest) => {
+      const parsed = normalizeManagementDestination(dest);
+      if (parsed.tab === "Transactions" && parsed.tradeView) {
+        setTradeInitialView(parsed.tradeView);
+      }
+      const next = parsed.tab && TABS.includes(parsed.tab) ? parsed.tab : "HQ";
+      setActiveTab(next);
+    },
+    [TABS],
+  );
+
   const [leagueInitialSection, setLeagueInitialSection] = useState("Overview");
   const [teamInitialSection, setTeamInitialSection] = useState("Overview");
   const [newsSubtab, setNewsSubtab] = useState("All");
@@ -1162,6 +1174,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={handlePlayerSelect}
+              onTeamSelect={setSelectedTeamId}
               onNavigate={setActiveTab}
               initialView={tradeInitialView}
               initialPartnerTeamId={tradeSeedPartnerId}
@@ -1196,7 +1209,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "History Hub" && (
           <TabErrorBoundary label="History Hub">
-            <HistoryHub onNavigate={setActiveTab} actions={actions} onSelectSeason={setHistorySelectedSeasonId} league={league} />
+            <HistoryHub onNavigate={handleHistoryHubNavigate} actions={actions} onSelectSeason={setHistorySelectedSeasonId} league={league} />
           </TabErrorBoundary>
         )}
         {activeTab === "History" && (

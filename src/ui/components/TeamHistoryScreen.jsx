@@ -36,6 +36,7 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
   const [loading, setLoading] = useState(true);
   const [queryYear, setQueryYear] = useState('');
   const [scope, setScope] = useState('all');
+  const [majorMoves, setMajorMoves] = useState([]);
 
   const activeTeam = useMemo(
     () => (league?.teams ?? []).find((t) => Number(t.id) === Number(teamId ?? league?.userTeamId)),
@@ -59,6 +60,33 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
     })();
     return () => { cancelled = true; };
   }, [actions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tid = activeTeam?.id;
+    if (tid == null || !actions?.getTransactions) {
+      setMajorMoves([]);
+      return () => { cancelled = true; };
+    }
+    actions
+      .getTransactions({ teamId: Number(tid), limit: 120 })
+      .then((res) => {
+        if (cancelled) return;
+        const rows = res?.payload?.transactions ?? [];
+        const sorted = [...rows].sort((a, b) => {
+          const sa = String(b?.seasonId ?? '').localeCompare(String(a?.seasonId ?? ''));
+          if (sa !== 0) return sa;
+          const wa = Number(b?.week ?? 0) - Number(a?.week ?? 0);
+          if (wa !== 0) return wa;
+          return Number(b?.id ?? 0) - Number(a?.id ?? 0);
+        });
+        setMajorMoves(sorted.slice(0, 15));
+      })
+      .catch(() => {
+        if (!cancelled) setMajorMoves([]);
+      });
+    return () => { cancelled = true; };
+  }, [actions, activeTeam?.id]);
 
   const model = useMemo(
     () => buildFranchiseHistoryModel({
@@ -199,6 +227,35 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
             ))}
           </ul>
         ) : null}
+      </SectionCard>
+
+      <SectionCard title="Major moves" subtitle="Recent signings, trades, draft picks, and releases involving this franchise (from transaction log).">
+        {majorMoves.length === 0 ? (
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+            No structured transactions yet for this team. Moves appear after signings, trades, draft picks, and releases are logged during your dynasty.
+          </div>
+        ) : (
+          <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none', display: 'grid', gap: 10 }}>
+            {majorMoves.map((tx, idx) => (
+              <li
+                key={`${tx.id ?? idx}-${idx}`}
+                style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: '8px 10px', fontSize: 'var(--text-sm)' }}
+                data-testid={`team-history-major-move-${idx}`}
+              >
+                <div style={{ fontWeight: 700 }}>{tx.headline ?? tx.typeLabel ?? 'Move'}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {tx.typeLabel ?? tx.type}
+                  {tx.week != null ? ` · Week ${tx.week}` : ''}
+                </div>
+                {tx.playerId != null ? (
+                  <button type="button" className="btn btn-sm" style={{ marginTop: 6 }} onClick={() => onPlayerSelect?.(tx.playerId)}>
+                    {tx.playerName ?? 'Player profile'}
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
       </SectionCard>
 
       <SectionCard title="Franchise records" subtitle="Single-franchise stats from archived seasons only.">

@@ -159,4 +159,42 @@ describe('LeagueHistory', () => {
       expect(screen.getByTestId('league-history-top-performers-s9').textContent).toMatch(/4,?800/);
     });
   });
+
+  it('renders major transactions from transactionTimelineV1 when present', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1, teams: [{ id: 1, abbr: 'DAL' }] }}
+        initialSelectedSeasonId="sx"
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [{
+                id: 'sx',
+                year: 2100,
+                standings: [{ id: 1, abbr: 'DAL', wins: 9, losses: 8 }],
+                awards: {},
+                transactionTimelineV1: {
+                  schemaVersion: 1,
+                  rows: [
+                    { id: 'tx-1', type: 'signing', headline: 'DAL signed Test Player', week: 2, playerId: 99, playerName: 'Test Player', teamAbbr: 'DAL' },
+                  ],
+                  meta: {},
+                },
+              }],
+            },
+          }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('league-history-major-tx-sx')).toBeTruthy();
+      expect(screen.getByTestId('league-history-major-tx-sx').textContent).toMatch(/DAL signed Test Player/);
+    });
+  });
 });

@@ -483,6 +483,52 @@ export default function PlayerProfile({
   useEffect(() => {
     if (fetchedData) setData(fetchedData);
   }, [fetchedData]);
+
+  const [careerJourney, setCareerJourney] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!actions?.getTransactions || playerId == null) {
+      setCareerJourney([]);
+      return () => { cancelled = true; };
+    }
+    const acc = data?.player?.accolades;
+    actions
+      .getTransactions({ playerId: Number(playerId), limit: 100 })
+      .then((res) => {
+        if (cancelled) return;
+        const txs = res?.payload?.transactions ?? [];
+        const sorted = [...txs].sort((a, b) => {
+          const sa = String(b?.seasonId ?? "").localeCompare(String(a?.seasonId ?? ""));
+          if (sa !== 0) return sa;
+          const wa = Number(b?.week ?? 0) - Number(a?.week ?? 0);
+          if (wa !== 0) return wa;
+          return Number(b?.id ?? 0) - Number(a?.id ?? 0);
+        });
+        const hofExtras = (Array.isArray(acc) ? acc : [])
+          .filter((a) => a?.type === "HOF")
+          .map((a, i) => ({
+            id: `hof-${a.year ?? i}-${i}`,
+            typeLabel: "Hall of Fame",
+            headline: `Hall of Fame recognition${a.year != null ? ` (${a.year})` : ""}`,
+            detail: null,
+            seasonId: null,
+            week: null,
+          }));
+        const merged = [...sorted, ...hofExtras].sort((a, b) => {
+          const sa = String(b?.seasonId ?? "").localeCompare(String(a?.seasonId ?? ""));
+          if (sa !== 0) return sa;
+          return Number(b?.week ?? 0) - Number(a?.week ?? 0);
+        });
+        setCareerJourney(merged.slice(0, 12));
+      })
+      .catch(() => {
+        if (!cancelled) setCareerJourney([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [actions, playerId, data?.player?.accolades]);
+
   const fetchedPlayer = data?.player;
   const resolvedProfile = useMemo(() => resolvePlayerForProfile({ playerId, league, context: profileContext ?? {} }), [playerId, league, profileContext]);
   const player = fetchedPlayer ?? resolvedProfile.player;
@@ -1116,6 +1162,32 @@ export default function PlayerProfile({
               <EmptyState icon="📊" title="No tracked season stats yet" subtitle="Season stats will appear after this player records tracked stats." />
             )}
           </section>
+          {!loading && careerJourney.length > 0 && (
+            <section className="card-enter" data-testid="player-profile-career-journey">
+              <h3 style={sectionLabelStyle}>Career journey</h3>
+              <div style={{ display: "grid", gap: 8 }}>
+                {careerJourney.map((row, idx) => (
+                  <div
+                    key={row.id ?? idx}
+                    style={{
+                      border: "1px solid var(--hairline)",
+                      borderRadius: 8,
+                      padding: "8px 10px",
+                      fontSize: 13,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>{row.headline ?? row.typeLabel ?? "Move"}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                      {row.typeLabel ?? row.type}
+                      {row.week != null ? ` · Week ${row.week}` : ""}
+                      {row.teamAbbr ? ` · ${row.teamAbbr}` : ""}
+                    </div>
+                    {row.detail ? <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{row.detail}</div> : null}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           {!loading && hasGmContext && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Why this player?</h3>

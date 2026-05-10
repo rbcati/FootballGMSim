@@ -26,6 +26,14 @@ describe("core management screens", () => {
     expect(html).toContain("No offers right now");
   });
 
+  it("renders Transactions Activity league log empty state", () => {
+    const html = renderToString(
+      <TradeWorkspace league={baseLeague} actions={{}} initialView="Activity" />,
+    );
+    expect(html).toContain("League activity");
+    expect(html).toMatch(/Transactions will appear|Loading activity/);
+  });
+
   it("renders roster in table and depth entry states without throwing", () => {
     expect(() =>
       renderToString(<Roster league={baseLeague} actions={{}} initialState={{ view: "table", filter: "ALL" }} />),

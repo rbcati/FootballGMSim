@@ -508,11 +508,25 @@ export const PlayerStats = {
 
 // --- Transactions ---
 
+const TRANSACTIONS_RECENT_CAP = 4000;
+
 export const Transactions = {
   add:      (tx)       => dbPut(STORES.TRANSACTIONS, tx),
   bySeason: (seasonId) => dbGetAllByIndex(STORES.TRANSACTIONS, 'seasonId', seasonId),
   byTeam:   (teamId)   => dbGetAllByIndex(STORES.TRANSACTIONS, 'teamId',   teamId),
+  /** Full scan — only for filtered activity views; hard-capped for mobile safety. */
+  loadRecent: (limit = 500) =>
+    dbGetAll(STORES.TRANSACTIONS).then((all) => {
+      const sorted = [...(all || [])].sort((a, b) => num(b?.id) - num(a?.id));
+      const cap = Math.min(TRANSACTIONS_RECENT_CAP, Math.max(1, Number(limit) || 500));
+      return sorted.slice(0, cap);
+    }),
 };
+
+function num(v) {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
 
 // --- Draft Picks ---
 

@@ -1,4 +1,4 @@
-const TRANSACTION_VIEWS = new Set(["Finder", "Builder", "Offers", "Block", "Summary"]);
+const TRANSACTION_VIEWS = new Set(["Finder", "Builder", "Offers", "Block", "Summary", "Activity"]);
 const ROSTER_VIEWS = new Set(["table", "cards", "depth"]);
 const ROSTER_FILTERS = new Set(["ALL", "EXPIRING", "STARTERS", "DEPTH", "INJURED", "DEVELOPMENT"]);
 const STAT_FAMILIES = new Set(["passing", "rushing", "receiving", "defense"]);

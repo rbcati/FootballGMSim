@@ -498,7 +498,7 @@ function buildTeamStatLeaders(standings = []) {
   };
 }
 
-export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [], teams = [], seasonStats = [], championshipGameId = null, playerSeasonStatsV1 = null }) {
+export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [], teams = [], seasonStats = [], championshipGameId = null, playerSeasonStatsV1 = null, transactionTimelineV1 = null }) {
   const sorted = [...(standings || [])].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
   const userRow = sorted.find((t) => Number(t.id) === Number(userTeamId)) || null;
   const userTeam = teams.find((t) => Number(t?.id) === Number(userTeamId)) ?? null;
@@ -586,6 +586,9 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
   };
   if (playerSeasonStatsV1 && Array.isArray(playerSeasonStatsV1.rows) && playerSeasonStatsV1.rows.length > 0) {
     out.playerSeasonStatsV1 = playerSeasonStatsV1;
+  }
+  if (transactionTimelineV1 && Array.isArray(transactionTimelineV1.rows) && transactionTimelineV1.rows.length > 0) {
+    out.transactionTimelineV1 = transactionTimelineV1;
   }
   return out;
 }

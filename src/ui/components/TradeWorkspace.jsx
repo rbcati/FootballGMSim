@@ -10,10 +10,11 @@ import { getStickyTopOffset } from '../utils/screenSystem.js';
 import { Badge } from '@/components/ui/badge';
 import { buildIncomingOfferPresentation } from '../utils/tradeOfferPresentation.js';
 import { buildNewsDeskModel } from '../utils/newsDesk.js';
+import LeagueActivityLog from './LeagueActivityLog.jsx';
 
-const VIEWS = ['Block', 'Finder', 'Builder', 'Offers', 'Summary'];
+const VIEWS = ['Activity', 'Block', 'Finder', 'Builder', 'Offers', 'Summary'];
 
-export default function TradeWorkspace({ league, actions, onPlayerSelect, onNavigate = null, initialView = 'Finder', initialPartnerTeamId = null }) {
+export default function TradeWorkspace({ league, actions, onPlayerSelect, onNavigate = null, onTeamSelect = null, initialView = 'Finder', initialPartnerTeamId = null }) {
   const normalizedInitialView = typeof initialView === 'string' && initialView.includes(':')
     ? (initialView.split(':')[1] || 'Finder')
     : initialView;
@@ -85,6 +86,12 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, onNavi
           <Badge variant={view === 'Offers' ? 'default' : 'outline'}>4) Review response</Badge>
         </div>
       </SectionCard>
+
+      {view === 'Activity' && (
+        <SectionCard title="League activity" subtitle="Signings, trades, draft picks, releases, and retirements across your save.">
+          <LeagueActivityLog league={league} actions={actions} onPlayerSelect={onPlayerSelect} onTeamSelect={onTeamSelect} />
+        </SectionCard>
+      )}
 
       {view === 'Finder' && (
         <>

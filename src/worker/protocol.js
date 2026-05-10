@@ -150,7 +150,7 @@ export const toWorker = Object.freeze({
   /** Record Book & Hall of Fame */
   GET_RECORDS:        'GET_RECORDS',          // {} — fetch all-time and single-season records
   GET_HALL_OF_FAME:   'GET_HALL_OF_FAME',     // {} — fetch all HOF inductees
-  GET_TRANSACTIONS:   'GET_TRANSACTIONS',     // { seasonId?, teamId? } — league-office move log
+  GET_TRANSACTIONS:   'GET_TRANSACTIONS',     // { seasonId?, teamId?, playerId?, type?, year?, limit?, mode?: 'auto'|'recent', search? } — normalized move log; empty array on failure
 });
 
 // ─────────────────────────────────────────────
