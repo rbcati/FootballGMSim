@@ -30,6 +30,8 @@ const league = {
 const actions = {
   getPlayerCareer: vi.fn(async () => null),
   getAllSeasons: vi.fn(async () => ({ payload: { seasons: [] } })),
+  getPlayerDraftContext: vi.fn(async () => ({ payload: { context: { known: false } } })),
+  getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
 };
 
 describe('PlayerProfile', () => {

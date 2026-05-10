@@ -554,6 +554,13 @@ export function useWorker() {
     getTransactions: (payload = {}) =>
       request(toWorker.GET_TRANSACTIONS, payload, { silent: true }),
 
+    getDraftClasses: () => request(toWorker.GET_DRAFT_CLASSES, {}, { silent: true }),
+
+    getDraftClass: (payload) => request(toWorker.GET_DRAFT_CLASS, payload, { silent: true }),
+
+    getPlayerDraftContext: (playerId) =>
+      request(toWorker.GET_PLAYER_DRAFT_CONTEXT, { playerId }, { silent: true }),
+
     /** Force an immediate DB flush. */
     save: ()                     => send(toWorker.SAVE_NOW),
 

@@ -151,6 +151,11 @@ export const toWorker = Object.freeze({
   GET_RECORDS:        'GET_RECORDS',          // {} — fetch all-time and single-season records
   GET_HALL_OF_FAME:   'GET_HALL_OF_FAME',     // {} — fetch all HOF inductees
   GET_TRANSACTIONS:   'GET_TRANSACTIONS',     // { seasonId?, teamId?, playerId?, type?, year?, limit?, mode?: 'auto'|'recent', search? } — normalized move log; empty array on failure
+
+  /** Draft class memory (compact, safe on old saves) */
+  GET_DRAFT_CLASSES:    'GET_DRAFT_CLASSES',    // {} — seasons with logged DRAFT picks
+  GET_DRAFT_CLASS:      'GET_DRAFT_CLASS',      // { seasonId } — full redraft model for one class
+  GET_PLAYER_DRAFT_CONTEXT: 'GET_PLAYER_DRAFT_CONTEXT', // { playerId } — profile strip + optional class hook
 });
 
 // ─────────────────────────────────────────────
@@ -230,6 +235,9 @@ export const toUI = Object.freeze({
   RECORDS:            'RECORDS',              // { records }
   HALL_OF_FAME:       'HALL_OF_FAME',         // { players[] }
   TRANSACTIONS:       'TRANSACTIONS',         // { transactions[] }
+  DRAFT_CLASSES:        'DRAFT_CLASSES',        // { classes: [{ seasonId, year, pickCount, teamIds }] }
+  DRAFT_CLASS:          'DRAFT_CLASS',          // { model } — buildDraftClassModel payload
+  PLAYER_DRAFT_CONTEXT: 'PLAYER_DRAFT_CONTEXT', // { context, classModel? }
 
   /** Season lifecycle */
   SEASON_START:       'SEASON_START',         // { year, season, phase } — forces UI to Standings tab

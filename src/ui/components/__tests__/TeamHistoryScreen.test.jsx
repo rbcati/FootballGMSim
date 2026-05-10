@@ -15,6 +15,9 @@ describe('TeamHistoryScreen', () => {
         actions={{
           getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
           getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
         }}
         onBack={vi.fn()}
         onPlayerSelect={vi.fn()}
@@ -44,6 +47,9 @@ describe('TeamHistoryScreen', () => {
             },
           }),
           getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
         }}
         onBack={vi.fn()}
         onPlayerSelect={vi.fn()}
@@ -82,6 +88,9 @@ describe('TeamHistoryScreen', () => {
             },
           }),
           getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
         }}
         onBack={vi.fn()}
         onPlayerSelect={vi.fn()}

@@ -119,6 +119,11 @@ import {
   normalizeRawTransaction,
   stripInternalTimelineFields,
 } from '../core/transactionTimeline.js';
+import {
+  buildDraftClassModel,
+  indexDraftClassesFromTransactions,
+  buildPlayerDraftContext,
+} from '../core/draftClassHistory.js';
 import { rebuildRecordBookV1, mirrorRecordBookForLegacyUi, RECORD_BOOK_SCHEMA_VERSION } from '../core/recordBookV1.js';
 import { inferChampionshipOutcome, isCompletedGame, isPostseasonGame } from '../core/championshipInference.js';
 import { repairDepthChart, validateDepthChart, optimizeDepthChartForPlan } from "../core/roster/depthChartManager.js";
@@ -3978,6 +3983,137 @@ async function handleGetTransactions(payload = {}, id) {
   } catch (err) {
     console.error("[Worker] GET_TRANSACTIONS failed:", err);
     post(toUI.TRANSACTIONS, { transactions: [] }, id);
+  }
+}
+
+async function loadMergedSeasonSummaries() {
+  const seasons = await Seasons.loadRecent(200);
+  const meta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
+  const merged = [...seasons];
+  for (const row of meta.leagueHistory || []) {
+    if (!merged.some((s) => s?.id === row?.id)) merged.push(row);
+  }
+  merged.sort((a, b) => (b?.year ?? 0) - (a?.year ?? 0));
+  return { merged, memoryMeta: meta };
+}
+
+async function handleGetDraftClasses(payload, id) {
+  try {
+    const { merged } = await loadMergedSeasonSummaries();
+    const recent = await Transactions.loadRecent(4000).catch(() => []);
+    const draftOnly = recent.filter((tx) => String(tx?.type).toUpperCase() === 'DRAFT');
+    const classes = indexDraftClassesFromTransactions(draftOnly, merged);
+    post(toUI.DRAFT_CLASSES, { classes }, id);
+  } catch (err) {
+    console.error('[Worker] GET_DRAFT_CLASSES failed:', err);
+    post(toUI.DRAFT_CLASSES, { classes: [] }, id);
+  }
+}
+
+async function handleGetDraftClass({ seasonId }, id) {
+  try {
+    if (!seasonId) {
+      post(toUI.DRAFT_CLASS, { model: null }, id);
+      return;
+    }
+    const { merged, memoryMeta } = await loadMergedSeasonSummaries();
+    const yearRow = merged.find((s) => String(s?.id) === String(seasonId));
+    const draftYear = Number(yearRow?.year) || Number(ensureDynastyMeta(cache.getMeta())?.year) || 0;
+    const rows = await Transactions.bySeason(seasonId).catch(() => []);
+    const draftRows = rows.filter((tx) => String(tx?.type).toUpperCase() === 'DRAFT');
+    const playersById = new Map();
+    for (const tx of draftRows) {
+      const pid = Number(tx?.details?.playerId ?? tx?.playerId);
+      if (Number.isFinite(pid) && pid > 0) {
+        const pl = cache.getPlayer(pid);
+        if (pl) playersById.set(pid, pl);
+      }
+    }
+    for (const pl of cache.getAllPlayers()) {
+      const pid = Number(pl?.id);
+      if (!Number.isFinite(pid) || pid <= 0) continue;
+      if (Number(pl?.draftYear) === draftYear && !playersById.has(pid)) {
+        playersById.set(pid, pl);
+      }
+    }
+    const teams = cache.getAllTeams();
+    const currentLeagueYear = Number(ensureDynastyMeta(cache.getMeta())?.year) || draftYear;
+    const recordBook = memoryMeta?.recordBook ?? null;
+    const archivedSeasons = memoryMeta?.leagueHistory ?? [];
+    const model = buildDraftClassModel({
+      year: draftYear,
+      seasonId: String(seasonId),
+      draftTransactions: draftRows,
+      playersById,
+      currentLeagueYear,
+      recordBook,
+      archivedSeasons,
+      teams,
+    });
+    post(toUI.DRAFT_CLASS, { model }, id);
+  } catch (err) {
+    console.error('[Worker] GET_DRAFT_CLASS failed:', err);
+    post(toUI.DRAFT_CLASS, { model: null }, id);
+  }
+}
+
+async function handleGetPlayerDraftContext({ playerId }, id) {
+  try {
+    const pid = Number(playerId);
+    if (!Number.isFinite(pid) || pid <= 0) {
+      post(toUI.PLAYER_DRAFT_CONTEXT, { context: { known: false }, classModel: null }, id);
+      return;
+    }
+    const player = cache.getPlayer(pid);
+    if (!player) {
+      post(toUI.PLAYER_DRAFT_CONTEXT, { context: { known: false }, classModel: null }, id);
+      return;
+    }
+    const recent = await Transactions.loadRecent(3000).catch(() => []);
+    const draftTxs = recent.filter((tx) => {
+      if (String(tx?.type).toUpperCase() !== 'DRAFT') return false;
+      const d = tx?.details || {};
+      const idVal = Number(d.playerId ?? tx?.playerId);
+      return idVal === pid;
+    });
+    let classModel = null;
+    const firstSeason = draftTxs[0]?.seasonId;
+    if (firstSeason) {
+      const { merged, memoryMeta } = await loadMergedSeasonSummaries();
+      const yearRow = merged.find((s) => String(s?.id) === String(firstSeason));
+      const draftYear = Number(yearRow?.year) || Number(ensureDynastyMeta(cache.getMeta())?.year) || 0;
+      const rows = await Transactions.bySeason(firstSeason).catch(() => []);
+      const draftRows = rows.filter((tx) => String(tx?.type).toUpperCase() === 'DRAFT');
+      const playersById = new Map();
+      for (const tx of draftRows) {
+        const p = Number(tx?.details?.playerId ?? tx?.playerId);
+        if (Number.isFinite(p) && p > 0) {
+          const pl = cache.getPlayer(p);
+          if (pl) playersById.set(p, pl);
+        }
+      }
+      for (const pl of cache.getAllPlayers()) {
+        const p = Number(pl?.id);
+        if (Number.isFinite(p) && p > 0 && Number(pl?.draftYear) === draftYear && !playersById.has(p)) {
+          playersById.set(p, pl);
+        }
+      }
+      classModel = buildDraftClassModel({
+        year: draftYear,
+        seasonId: String(firstSeason),
+        draftTransactions: draftRows,
+        playersById,
+        currentLeagueYear: Number(ensureDynastyMeta(cache.getMeta())?.year) || draftYear,
+        recordBook: memoryMeta?.recordBook ?? null,
+        archivedSeasons: memoryMeta?.leagueHistory ?? [],
+        teams: cache.getAllTeams(),
+      });
+    }
+    const context = buildPlayerDraftContext(player, classModel, draftTxs);
+    post(toUI.PLAYER_DRAFT_CONTEXT, { context, classModel }, id);
+  } catch (err) {
+    console.error('[Worker] GET_PLAYER_DRAFT_CONTEXT failed:', err);
+    post(toUI.PLAYER_DRAFT_CONTEXT, { context: { known: false }, classModel: null }, id);
   }
 }
 
@@ -9825,6 +9961,9 @@ async function handleMessage(event) {
       case toWorker.GET_RECORDS:        return await handleGetRecords(payload, id);
       case toWorker.GET_HALL_OF_FAME:   return await handleGetHallOfFame(payload, id);
       case toWorker.GET_TRANSACTIONS:   return await handleGetTransactions(payload, id);
+      case toWorker.GET_DRAFT_CLASSES:  return await handleGetDraftClasses(payload, id);
+      case toWorker.GET_DRAFT_CLASS:    return await handleGetDraftClass(payload, id);
+      case toWorker.GET_PLAYER_DRAFT_CONTEXT: return await handleGetPlayerDraftContext(payload, id);
 
       default:
         console.warn(`[Worker] Unknown message type: ${type}`);

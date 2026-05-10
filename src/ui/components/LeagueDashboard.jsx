@@ -31,6 +31,7 @@ import TeamHistoryScreen from "./TeamHistoryScreen.jsx";
 import AwardsRecordsScreen from "./AwardsRecordsScreen.jsx";
 import HallOfFame from "./HallOfFame.jsx";
 import HistoryHub from "./HistoryHub.jsx";
+import DraftHistory from "./DraftHistory.jsx";
 import TradeWorkspace from "./TradeWorkspace.jsx";
 import PlayerProfile from "./PlayerProfile.jsx";
 import PlayerProfileModalBoundary from "./PlayerProfileModalBoundary.jsx";
@@ -199,6 +200,7 @@ const BASE_TABS = [
   "Draft Room",
   "Mock Draft",
   "History Hub",
+  "Draft History",
   "History",
   "Team History",
   "Hall of Fame",
@@ -217,7 +219,7 @@ const BASE_TABS = [
 const NAV_GROUPS = [
   { id: SHELL_SECTIONS.hq, title: "HQ", tabs: ["HQ"] },
   { id: SHELL_SECTIONS.team, title: "Team Management", tabs: ["Team", "Roster Hub", "Roster", "Depth Chart", "Weekly Prep", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center", "💰 Cap"] },
-  { id: SHELL_SECTIONS.league, title: "League Office", tabs: ["League", "Weekly Results", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "Free Agency", "Draft", "History Hub", "History", "Awards & Records", "Season Recap"] },
+  { id: SHELL_SECTIONS.league, title: "League Office", tabs: ["League", "Weekly Results", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "Free Agency", "Draft", "History Hub", "Draft History", "History", "Awards & Records", "Season Recap"] },
   { id: SHELL_SECTIONS.news, title: "News", tabs: ["News", "Story"] },
 ];
 
@@ -555,18 +557,6 @@ export default function LeagueDashboard({
     }
   }, [activeTab]);
 
-  const handleHistoryHubNavigate = React.useCallback(
-    (dest) => {
-      const parsed = normalizeManagementDestination(dest);
-      if (parsed.tab === "Transactions" && parsed.tradeView) {
-        setTradeInitialView(parsed.tradeView);
-      }
-      const next = parsed.tab && TABS.includes(parsed.tab) ? parsed.tab : "HQ";
-      setActiveTab(next);
-    },
-    [TABS],
-  );
-
   const [leagueInitialSection, setLeagueInitialSection] = useState("Overview");
   const [teamInitialSection, setTeamInitialSection] = useState("Overview");
   const [newsSubtab, setNewsSubtab] = useState("All");
@@ -575,7 +565,7 @@ export default function LeagueDashboard({
   // Track the previous phase so we can detect transitions.
   const prevPhaseRef = React.useRef(null);
 
-  // Dynamic tabs: add Postseason when in playoffs
+  // Dynamic tabs: add Postseason when in playoffs (must be declared before hooks that depend on TABS)
   const TABS = useMemo(() => {
     const isPlayoffs = league?.phase === "playoffs" || league?.playoffSeeds;
     if (isPlayoffs) {
@@ -587,6 +577,18 @@ export default function LeagueDashboard({
     }
     return BASE_TABS;
   }, [league?.phase, league?.playoffSeeds]);
+
+  const handleHistoryHubNavigate = React.useCallback(
+    (dest) => {
+      const parsed = normalizeManagementDestination(dest);
+      if (parsed.tab === "Transactions" && parsed.tradeView) {
+        setTradeInitialView(parsed.tradeView);
+      }
+      const next = parsed.tab && TABS.includes(parsed.tab) ? parsed.tab : "HQ";
+      setActiveTab(next);
+    },
+    [TABS],
+  );
 
   // Auto-navigate based on phase transitions:
   //  draft       → go to Draft tab (so the user sees the board immediately)
@@ -1212,6 +1214,11 @@ export default function LeagueDashboard({
             <HistoryHub onNavigate={handleHistoryHubNavigate} actions={actions} onSelectSeason={setHistorySelectedSeasonId} league={league} />
           </TabErrorBoundary>
         )}
+        {activeTab === "Draft History" && (
+          <TabErrorBoundary label="Draft History">
+            <DraftHistory league={league} actions={actions} onPlayerSelect={handlePlayerSelect} onNavigate={setActiveTab} />
+          </TabErrorBoundary>
+        )}
         {activeTab === "History" && (
           <TabErrorBoundary label="History">
             <LeagueHistory
@@ -1232,6 +1239,7 @@ export default function LeagueDashboard({
               onBack={() => setActiveTab("History Hub")}
               teamId={selectedTeamId ?? league?.userTeamId}
               onOpenBoxScore={(gameId) => openGameDetail(gameId, "Team History")}
+              onOpenDraftHistory={() => setActiveTab("Draft History")}
             />
           </TabErrorBoundary>
         )}
