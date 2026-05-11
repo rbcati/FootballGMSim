@@ -5,7 +5,10 @@
  */
 
 import { toWorker, toUI } from '../worker/protocol.js';
-import { runDynastySoakAudit } from '../core/dynastySoakAudit.js';
+import {
+  runDynastySoakAudit,
+  buildPersistenceAssertions,
+} from '../core/dynastySoakAudit.js';
 
 const RESPONSE_BY_REQUEST = {
   [toWorker.INIT]: [toUI.READY, toUI.ERROR],
@@ -104,7 +107,7 @@ export function loadWorkerModule() {
   return workerImportPromise;
 }
 
-function mergeAudit(into, next, seasonLabel) {
+export function mergeAudit(into, next, seasonLabel) {
   const prefix = `[${seasonLabel}]`;
   for (const f of next.failures || []) {
     into.failures.push({ ...f, message: `${prefix} ${f.message}`, code: f.code });
@@ -126,60 +129,93 @@ function mergeAudit(into, next, seasonLabel) {
   into.seasonsSimmed = Math.max(into.seasonsSimmed || 0, next.seasonsSimmed || 0);
 }
 
-/**
- * @param {object} opts
- * @param {number} [opts.seasons=5]
- * @param {number} [opts.seed=1383]
- * @param {number} [opts.simTimeoutMs]
- * @param {function} [opts.onBroadcast]
- */
+function pushCheckpoint(checkpoints, name, ms, meta = null) {
+  checkpoints.push({ name, ms, meta });
+}
+
+function topSlowCheckpoints(checkpoints, n = 10) {
+  return [...checkpoints].sort((a, b) => b.ms - a.ms).slice(0, n);
+}
+
 /**
  * `SIM_TO_PHASE` may stop before `preseason` when the worker hits its per-call
  * iteration guard mid-pipeline; repeat until preseason or hard cap.
+ * @param {number} simTimeoutMs
+ * @param {{ checkpoints: object[], label: string }} ctx
  */
-async function simUntilPreseason(simTimeoutMs) {
+async function simUntilPreseason(simTimeoutMs, ctx) {
   let lastMsg = null;
+  const attempts = [];
   for (let attempt = 0; attempt < 12; attempt += 1) {
+    const t = Date.now();
     lastMsg = await dispatchWorker(
       toWorker.SIM_TO_PHASE,
       { targetPhase: 'preseason' },
       { timeoutMs: simTimeoutMs },
     );
-    if (lastMsg.type === toUI.ERROR) return lastMsg;
+    const ms = Date.now() - t;
     const ph = String(lastMsg.payload?.phase ?? '');
-    if (ph === 'preseason') return lastMsg;
+    const yr = Number(lastMsg.payload?.year ?? 0);
+    attempts.push({
+      attempt,
+      ms,
+      phaseAfter: ph,
+      yearAfter: yr,
+      error: lastMsg.type === toUI.ERROR,
+    });
+    pushCheckpoint(ctx.checkpoints, `${ctx.label}.SIM_TO_PHASE`, ms, {
+      attempt,
+      phaseAfter: ph,
+      yearAfter: yr,
+    });
+    if (lastMsg.type === toUI.ERROR) return { lastMsg, attempts };
+    if (ph === 'preseason') return { lastMsg, attempts };
   }
-  return lastMsg;
+  return { lastMsg, attempts };
 }
 
+function checkMaxRuntime(t0, maxRuntimeMs) {
+  if (maxRuntimeMs == null || !Number.isFinite(maxRuntimeMs)) return;
+  if (Date.now() - t0 > maxRuntimeMs) {
+    const e = new Error(`max-runtime-ms exceeded (${maxRuntimeMs})`);
+    e.code = 'max_runtime_exceeded';
+    throw e;
+  }
+}
+
+/**
+ * @typedef {object} DynastySoakRunnerOptions
+ * @property {number} [seasons=5]
+ * @property {number} [seed=1383]
+ * @property {boolean} [ci=false]
+ * @property {boolean} [deepEachSeason=false]
+ * @property {number} [simTimeoutMs]
+ * @property {number} [phaseTimeoutMs] - alias override for simTimeoutMs / GET timeouts
+ * @property {number|null} [maxRuntimeMs]
+ * @property {function} [onBroadcast]
+ */
+
+/**
+ * @param {DynastySoakRunnerOptions} opts
+ */
 export async function runDynastySoakOnce(opts = {}) {
   const seasons = Math.max(1, Math.min(50, Number(opts.seasons) || 5));
   const seed = Number.isFinite(Number(opts.seed)) ? Number(opts.seed) : 1383;
-  const simTimeoutMs = opts.simTimeoutMs ?? 3_600_000;
+  const ci = !!opts.ci;
+  const deepEachSeason = !!opts.deepEachSeason;
+  const phaseTimeoutMs = Number.isFinite(Number(opts.phaseTimeoutMs))
+    ? Number(opts.phaseTimeoutMs)
+    : Number.isFinite(Number(opts.simTimeoutMs))
+      ? Number(opts.simTimeoutMs)
+      : 3_600_000;
+  const simTimeoutMs = phaseTimeoutMs;
+  const maxRuntimeMs =
+    opts.maxRuntimeMs === null || opts.maxRuntimeMs === undefined
+      ? null
+      : Number(opts.maxRuntimeMs);
 
-  globalThis.__dynastySoakBroadcast = opts.onBroadcast || null;
-  /** @see persistSimSession in worker — avoids hundreds of IndexedDB flushes per batch sim */
-  globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = true;
-
-  const t0 = Date.now();
-  try {
-  await loadWorkerModule();
-
-  await dispatchWorker(toWorker.INIT, {}, { timeoutMs: 120_000 });
-
-  const bootMsg = await dispatchWorker(
-    toWorker.USE_SAFE_STARTER_LEAGUE,
-    {
-      slotKey: 'save_slot_1',
-      options: { rngSeed: seed, userTeamId: 0, name: `Dynasty Soak ${seed}` },
-    },
-    { timeoutMs: 180_000 },
-  );
-  if (bootMsg.type === toUI.ERROR) {
-    throw new Error(bootMsg.payload?.message || 'USE_SAFE_STARTER_LEAGUE failed');
-  }
-  /** @type {any} */
-  let view = bootMsg.payload;
+  const checkpoints = [];
+  const simAttemptsPerSeason = [];
 
   const aggregate = {
     passed: true,
@@ -200,110 +236,314 @@ export async function runDynastySoakOnce(opts = {}) {
       developmentHealth: 'ok',
       historyHealth: 'ok',
     },
+    checkpoints,
+    simAttemptsPerSeason,
+    timings: {
+      bootMs: 0,
+      topSlowCheckpoints: [],
+      totalMs: 0,
+    },
+    harnessConfig: {
+      ci,
+      deepEachSeason,
+      phaseTimeoutMs,
+      maxRuntimeMs,
+    },
+    smallerLeagueNote:
+      'Only 32-team safe starter leagues are supported for this harness. Smaller default leagues are deferred (playoff seeding and conference balance are coupled to 32 teams).',
+    persistenceAssertions: [],
   };
 
-  for (let s = 1; s <= seasons; s += 1) {
-    const yearBefore = Number(view?.year ?? 0);
-    const phaseBefore = String(view?.phase ?? '');
+  globalThis.__dynastySoakBroadcast = opts.onBroadcast || null;
+  globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = true;
+  globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__ = true;
+  globalThis.__DYNASTY_SOAK_PROFILE__ = true;
+  globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
 
-    const simMsg = await simUntilPreseason(simTimeoutMs);
-    if (simMsg.type === toUI.ERROR) {
-      mergeAudit(aggregate, {
-        passed: false,
-        severity: 'error',
-        seasonsSimmed: s,
-        checks: [],
-        warnings: [],
-        failures: [{ code: 'sim_error', message: simMsg.payload?.message || 'SIM_TO_PHASE error' }],
-        summary: aggregate.summary,
-      }, `S${s}`);
-      break;
-    }
-    view = simMsg.payload;
-    const yearAfter = Number(view?.year ?? 0);
-    const phaseAfter = String(view?.phase ?? '');
-    if (phaseAfter !== 'preseason') {
-      mergeAudit(aggregate, {
-        passed: false,
-        severity: 'error',
-        seasonsSimmed: s,
-        checks: [],
-        warnings: [],
-        failures: [{
-          code: 'phase_not_preseason',
-          message: `Expected preseason after sim; got ${phaseAfter} (was ${phaseBefore})`,
-        }],
-        summary: aggregate.summary,
-      }, `S${s}`);
-      aggregate.passed = false;
-      break;
-    }
-    if (yearAfter <= yearBefore) {
-      mergeAudit(aggregate, {
-        passed: false,
-        severity: 'error',
-        seasonsSimmed: s,
-        checks: [],
-        warnings: [],
-        failures: [{
-          code: 'year_stuck',
-          message: `Year did not advance (${yearBefore} -> ${yearAfter}); possible sim stall`,
-        }],
-        summary: aggregate.summary,
-      }, `S${s}`);
-      aggregate.passed = false;
-      break;
-    }
+  const t0 = Date.now();
+  /** @type {any} */
+  let view = null;
+  let lastReportSummary = null;
 
-    const allSeasonsMsg = await dispatchWorker(toWorker.GET_ALL_SEASONS, {}, { timeoutMs: 120_000 });
-    const txMsg = await dispatchWorker(toWorker.GET_TRANSACTIONS, { mode: 'recent', limit: 400 }, { timeoutMs: 120_000 });
-    const txSeasonMsg = await dispatchWorker(
-      toWorker.GET_TRANSACTIONS,
-      { seasonId: view?.seasonId, limit: 200 },
-      { timeoutMs: 120_000 },
+  try {
+    await loadWorkerModule();
+
+    let t = Date.now();
+    await dispatchWorker(toWorker.INIT, {}, { timeoutMs: Math.min(120_000, phaseTimeoutMs) });
+    pushCheckpoint(checkpoints, 'boot.INIT', Date.now() - t, null);
+
+    checkMaxRuntime(t0, maxRuntimeMs);
+
+    t = Date.now();
+    const bootMsg = await dispatchWorker(
+      toWorker.USE_SAFE_STARTER_LEAGUE,
+      {
+        slotKey: 'save_slot_1',
+        options: { rngSeed: seed, userTeamId: 0, name: `Dynasty Soak ${seed}` },
+      },
+      { timeoutMs: Math.min(180_000, phaseTimeoutMs) },
     );
-    const recordsMsg = await dispatchWorker(toWorker.GET_RECORDS, {}, { timeoutMs: 120_000 });
-    const hofMsg = await dispatchWorker(toWorker.GET_HALL_OF_FAME, {}, { timeoutMs: 120_000 });
-    const draftClassesMsg = await dispatchWorker(toWorker.GET_DRAFT_CLASSES, {}, { timeoutMs: 120_000 });
+    pushCheckpoint(checkpoints, 'boot.USE_SAFE_STARTER_LEAGUE', Date.now() - t, null);
 
-    const leagueHistory = view?.leagueHistory ?? [];
-    const latestSeason = leagueHistory.length ? leagueHistory[leagueHistory.length - 1] : null;
-    let seasonHistory = null;
-    if (latestSeason?.id) {
-      const histMsg = await dispatchWorker(toWorker.GET_SEASON_HISTORY, { seasonId: latestSeason.id }, { timeoutMs: 120_000 });
-      if (histMsg.type !== toUI.ERROR) {
-        seasonHistory = histMsg.payload?.data ?? null;
+    if (bootMsg.type === toUI.ERROR) {
+      throw new Error(bootMsg.payload?.message || 'USE_SAFE_STARTER_LEAGUE failed');
+    }
+    view = bootMsg.payload;
+
+    for (let s = 1; s <= seasons; s += 1) {
+      checkMaxRuntime(t0, maxRuntimeMs);
+      const yearBefore = Number(view?.year ?? 0);
+      const phaseBefore = String(view?.phase ?? '');
+      const fullProbes = deepEachSeason || s === seasons;
+
+      const simCtx = { checkpoints, label: `S${s}` };
+      const { lastMsg: simMsg, attempts } = await simUntilPreseason(simTimeoutMs, simCtx);
+      simAttemptsPerSeason.push({ season: s, attempts });
+
+      if (simMsg.type === toUI.ERROR) {
+        mergeAudit(
+          aggregate,
+          {
+            passed: false,
+            severity: 'error',
+            seasonsSimmed: s,
+            checks: [],
+            warnings: [],
+            failures: [{ code: 'sim_error', message: simMsg.payload?.message || 'SIM_TO_PHASE error' }],
+            summary: aggregate.summary,
+          },
+          `S${s}`,
+        );
+        break;
       }
+      view = simMsg.payload;
+      const yearAfter = Number(view?.year ?? 0);
+      const phaseAfter = String(view?.phase ?? '');
+
+      if (phaseAfter !== 'preseason') {
+        mergeAudit(
+          aggregate,
+          {
+            passed: false,
+            severity: 'error',
+            seasonsSimmed: s,
+            checks: [],
+            warnings: [],
+            failures: [
+              {
+                code: 'phase_not_preseason',
+                message: `Expected preseason after sim; got ${phaseAfter} (was ${phaseBefore})`,
+              },
+            ],
+            summary: aggregate.summary,
+          },
+          `S${s}`,
+        );
+        aggregate.passed = false;
+        break;
+      }
+      if (yearAfter <= yearBefore) {
+        mergeAudit(
+          aggregate,
+          {
+            passed: false,
+            severity: 'error',
+            seasonsSimmed: s,
+            checks: [],
+            warnings: [],
+            failures: [
+              {
+                code: 'year_stuck',
+                message: `Year did not advance (${yearBefore} -> ${yearAfter}); possible sim stall`,
+              },
+            ],
+            summary: aggregate.summary,
+          },
+          `S${s}`,
+        );
+        aggregate.passed = false;
+        break;
+      }
+
+      let tProbe = Date.now();
+      const allSeasonsMsg = await dispatchWorker(toWorker.GET_ALL_SEASONS, {}, { timeoutMs: phaseTimeoutMs });
+      pushCheckpoint(checkpoints, `S${s}.GET_ALL_SEASONS`, Date.now() - tProbe, { fullProbes });
+
+      tProbe = Date.now();
+      const txMsg = await dispatchWorker(
+        toWorker.GET_TRANSACTIONS,
+        { mode: 'recent', limit: 400 },
+        { timeoutMs: phaseTimeoutMs },
+      );
+      pushCheckpoint(checkpoints, `S${s}.GET_TRANSACTIONS_recent`, Date.now() - tProbe, null);
+
+      let txSeasonMsg;
+      if (fullProbes) {
+        tProbe = Date.now();
+        txSeasonMsg = await dispatchWorker(
+          toWorker.GET_TRANSACTIONS,
+          { seasonId: view?.seasonId, limit: 200 },
+          { timeoutMs: phaseTimeoutMs },
+        );
+        pushCheckpoint(checkpoints, `S${s}.GET_TRANSACTIONS_season`, Date.now() - tProbe, null);
+      } else {
+        txSeasonMsg = { type: toUI.TRANSACTIONS, payload: { transactions: [] } };
+      }
+
+      let recordsMsg;
+      let hofMsg;
+      let draftClassesMsg;
+      if (fullProbes) {
+        tProbe = Date.now();
+        recordsMsg = await dispatchWorker(toWorker.GET_RECORDS, {}, { timeoutMs: phaseTimeoutMs });
+        pushCheckpoint(checkpoints, `S${s}.GET_RECORDS`, Date.now() - tProbe, null);
+
+        tProbe = Date.now();
+        hofMsg = await dispatchWorker(toWorker.GET_HALL_OF_FAME, {}, { timeoutMs: phaseTimeoutMs });
+        pushCheckpoint(checkpoints, `S${s}.GET_HALL_OF_FAME`, Date.now() - tProbe, null);
+
+        tProbe = Date.now();
+        draftClassesMsg = await dispatchWorker(toWorker.GET_DRAFT_CLASSES, {}, { timeoutMs: phaseTimeoutMs });
+        pushCheckpoint(checkpoints, `S${s}.GET_DRAFT_CLASSES`, Date.now() - tProbe, null);
+      } else {
+        recordsMsg = { type: toUI.RECORDS, payload: null };
+        hofMsg = { type: toUI.HALL_OF_FAME, payload: null };
+        draftClassesMsg = { type: toUI.DRAFT_CLASSES, payload: { classes: [] } };
+      }
+
+      const leagueHistory = view?.leagueHistory ?? [];
+      const latestSeason = leagueHistory.length ? leagueHistory[leagueHistory.length - 1] : null;
+      let seasonHistory = null;
+      let getSeasonHistoryOk = null;
+      let getSeasonHistorySkipped = !fullProbes;
+      if (fullProbes && latestSeason?.id) {
+        tProbe = Date.now();
+        const histMsg = await dispatchWorker(
+          toWorker.GET_SEASON_HISTORY,
+          { seasonId: latestSeason.id },
+          { timeoutMs: phaseTimeoutMs },
+        );
+        pushCheckpoint(checkpoints, `S${s}.GET_SEASON_HISTORY`, Date.now() - tProbe, null);
+        if (histMsg.type !== toUI.ERROR) {
+          seasonHistory = histMsg.payload?.data ?? null;
+          getSeasonHistoryOk = true;
+        } else {
+          getSeasonHistoryOk = false;
+        }
+      } else {
+        getSeasonHistoryOk = fullProbes ? null : true;
+      }
+
+      tProbe = Date.now();
+      const audit = runDynastySoakAudit({
+        viewState: view,
+        seasonIndex: s,
+        allSeasons: allSeasonsMsg.payload?.seasons ?? null,
+        seasonHistory,
+        transactions: txMsg.payload?.transactions ?? [],
+        recordsPayload: recordsMsg.payload ?? null,
+        hofPayload: hofMsg.payload ?? null,
+        draftClassesPayload: draftClassesMsg.payload ?? null,
+      });
+      pushCheckpoint(checkpoints, `S${s}.runDynastySoakAudit`, Date.now() - tProbe, null);
+      lastReportSummary = audit.reportSummary ?? null;
+
+      if (fullProbes && txSeasonMsg.type === toUI.ERROR) {
+        audit.failures.push({
+          code: 'get_transactions_season',
+          message: txSeasonMsg.payload?.message || 'GET_TRANSACTIONS by season failed',
+        });
+        audit.passed = false;
+      }
+
+      mergeAudit(aggregate, audit, `S${s}`);
+
+      if (fullProbes) {
+        const draftClassCount = Array.isArray(draftClassesMsg.payload?.classes)
+          ? draftClassesMsg.payload.classes.length
+          : 0;
+        const expectTx = s >= 2;
+        const expectStats = s >= 2;
+        const persInput = {
+          viewState: view,
+          transactionsRecent: txMsg.payload?.transactions ?? [],
+          expectTransactions: expectTx,
+          expectStatRows: expectStats,
+          expectTimelineRows: expectTx,
+          seasonTxQueryOk: txSeasonMsg.type !== toUI.ERROR,
+          getSeasonHistoryOk,
+          getSeasonHistorySkipped,
+          recordsProbeOk:
+            recordsMsg.type === toUI.ERROR
+              ? false
+              : !!(recordsMsg.payload?.recordBook || recordsMsg.payload?.records),
+          recordsProbeSkipped: false,
+          hofProbeOk:
+            hofMsg.type === toUI.ERROR ? false : !hofMsg.payload || Array.isArray(hofMsg.payload?.players),
+          hofProbeSkipped: false,
+          draftClassesProbeOk: draftClassesMsg.type !== toUI.ERROR,
+          draftClassesProbeSkipped: false,
+          draftClassCount,
+        };
+        const pers = buildPersistenceAssertions(persInput);
+        aggregate.persistenceAssertions = pers.assertions;
+        if (!pers.allOk) {
+          aggregate.passed = false;
+          mergeAudit(
+            aggregate,
+            {
+              passed: false,
+              severity: 'error',
+              seasonsSimmed: s,
+              checks: [],
+              warnings: [],
+              failures: [
+                {
+                  code: 'persistence_probe_failed',
+                  message: 'One or more persistence probes failed; see persistenceAssertions in latest.json',
+                },
+              ],
+              summary: aggregate.summary,
+            },
+            `S${s}`,
+          );
+        }
+      }
+
+      tProbe = Date.now();
+      await dispatchWorker(toWorker.ADVANCE_WEEK, { skipUserGame: true }, { timeoutMs: phaseTimeoutMs });
+      pushCheckpoint(checkpoints, `S${s}.ADVANCE_WEEK`, Date.now() - tProbe, null);
     }
 
-    const audit = runDynastySoakAudit({
-      viewState: view,
-      seasonIndex: s,
-      allSeasons: allSeasonsMsg.payload?.seasons ?? null,
-      seasonHistory,
-      transactions: txMsg.payload?.transactions ?? [],
-      recordsPayload: recordsMsg.payload ?? null,
-      hofPayload: hofMsg.payload ?? null,
-      draftClassesPayload: draftClassesMsg.payload ?? null,
-    });
+    aggregate.severity = aggregate.failures.length ? 'error' : aggregate.warnings.length ? 'warn' : 'ok';
+    aggregate.runtimeMs = Date.now() - t0;
+    aggregate.seed = seed;
+    aggregate.finalPhase = view?.phase ?? null;
+    aggregate.finalYear = view?.year ?? null;
+    aggregate.reportSummary = lastReportSummary;
+    aggregate.timings.bootMs = checkpoints.filter((c) => c.name.startsWith('boot.')).reduce((a, c) => a + c.ms, 0);
+    aggregate.timings.topSlowCheckpoints = topSlowCheckpoints(checkpoints);
+    aggregate.timings.totalMs = aggregate.runtimeMs;
+    aggregate.dynastySoakSimBatch = view?.dynastySoakSimBatch ?? null;
 
-    /* cross-check second transaction query did not throw */
-    if (txSeasonMsg.type === toUI.ERROR) {
-      audit.failures.push({ code: 'get_transactions_season', message: txSeasonMsg.payload?.message || 'GET_TRANSACTIONS by season failed' });
-      audit.passed = false;
-    }
-
-    mergeAudit(aggregate, audit, `S${s}`);
-
-    await dispatchWorker(toWorker.ADVANCE_WEEK, { skipUserGame: true }, { timeoutMs: 120_000 });
-  }
-
-  aggregate.severity = aggregate.failures.length ? 'error' : aggregate.warnings.length ? 'warn' : 'ok';
-  aggregate.runtimeMs = Date.now() - t0;
-  aggregate.seed = seed;
-  aggregate.finalView = view;
-  return aggregate;
+    return aggregate;
+  } catch (e) {
+    aggregate.passed = false;
+    aggregate.severity = 'error';
+    aggregate.failures.push({ code: e?.code || 'runner_fatal', message: e?.message || String(e) });
+    aggregate.runtimeMs = Date.now() - t0;
+    aggregate.seed = seed;
+    aggregate.finalPhase = view?.phase ?? null;
+    aggregate.finalYear = view?.year ?? null;
+    aggregate.reportSummary = lastReportSummary;
+    aggregate.timings.bootMs = checkpoints.filter((c) => c.name.startsWith('boot.')).reduce((a, c) => a + c.ms, 0);
+    aggregate.timings.topSlowCheckpoints = topSlowCheckpoints(checkpoints);
+    aggregate.timings.totalMs = aggregate.runtimeMs;
+    return aggregate;
   } finally {
     globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = false;
+    globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__ = false;
+    globalThis.__DYNASTY_SOAK_PROFILE__ = false;
+    globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
   }
 }

@@ -94,6 +94,9 @@ describe('dynastySoakAudit', () => {
     expect(r.passed).toBe(true);
     expect(r.failures.length).toBe(0);
     expect(['ok', 'warn']).toContain(r.summary.rosterHealth);
+    expect(r.reportSummary?.teamCount).toBe(2);
+    expect(r.reportSummary?.archetypeDistribution).toBeDefined();
+    expect(r.reportSummary?.transactionCountsByType?.DRAFT).toBeGreaterThanOrEqual(1);
   });
 
   it('fails on empty roster', () => {

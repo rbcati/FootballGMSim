@@ -120,6 +120,141 @@ export function validateTransactionTimelineV1Shape(block) {
   return { ok: errors.length === 0, errors };
 }
 
+/**
+ * @param {string[]} archetypes
+ * @returns {Record<string, number>}
+ */
+export function buildArchetypeDistribution(archetypes) {
+  const dist = {};
+  for (const a of archetypes || []) {
+    const k = String(a || 'unknown');
+    dist[k] = (dist[k] || 0) + 1;
+  }
+  return dist;
+}
+
+/**
+ * @param {object[]} transactions
+ * @returns {Record<string, number>}
+ */
+export function countTransactionTypes(transactions) {
+  const m = {};
+  for (const t of transactions || []) {
+    const k = String(t?.type ?? 'unknown').toUpperCase();
+    m[k] = (m[k] || 0) + 1;
+  }
+  return m;
+}
+
+/**
+ * Harness-only persistence checklist (does not mutate state).
+ * @param {object} input
+ * @returns {{ allOk: boolean, assertions: { id: string, ok: boolean, detail: string }[] }}
+ */
+export function buildPersistenceAssertions(input = {}) {
+  const viewState = input.viewState ?? {};
+  const leagueHistory = Array.isArray(viewState.leagueHistory) ? viewState.leagueHistory : [];
+  const latest = leagueHistory.length ? leagueHistory[leagueHistory.length - 1] : null;
+  const assertions = [];
+
+  assertions.push({
+    id: 'latest_season_archive',
+    ok: !!(latest && latest.id),
+    detail: latest?.id ? `latest season id=${latest.id}` : 'leagueHistory missing or empty',
+  });
+
+  const hasTx = Array.isArray(input.transactionsRecent) && input.transactionsRecent.length > 0;
+  assertions.push({
+    id: 'transactions_recent_available',
+    ok: hasTx || !input.expectTransactions,
+    detail: hasTx
+      ? `${input.transactionsRecent.length} recent rows`
+      : input.expectTransactions
+        ? 'no transactions in recent strip but activity expected'
+        : 'no recent transactions (ok if none expected)',
+  });
+
+  if (input.seasonTxQueryOk != null) {
+    assertions.push({
+      id: 'get_transactions_by_season',
+      ok: !!input.seasonTxQueryOk,
+      detail: input.seasonTxQueryOk ? 'GET_TRANSACTIONS by season ok' : 'GET_TRANSACTIONS by season failed',
+    });
+  }
+
+  const statsShape = validatePlayerSeasonStatsV1Shape(latest?.playerSeasonStatsV1);
+  const statsRows = latest?.playerSeasonStatsV1?.rows;
+  const hasStatsRows = Array.isArray(statsRows) && statsRows.length > 0;
+  assertions.push({
+    id: 'player_season_stats_v1',
+    ok: statsShape.ok && (!input.expectStatRows || hasStatsRows),
+    detail: statsShape.ok
+      ? hasStatsRows
+        ? `${statsRows.length} stat rows`
+        : 'archive present, no stat rows (ok early-season)'
+      : statsShape.errors.join('; '),
+  });
+
+  const tvShape = validateTransactionTimelineV1Shape(latest?.transactionTimelineV1);
+  const tvRows = latest?.transactionTimelineV1?.rows;
+  const hasTxRows = Array.isArray(tvRows) && tvRows.length > 0;
+  assertions.push({
+    id: 'transaction_timeline_v1',
+    ok: tvShape.ok && (!input.expectTimelineRows || hasTxRows),
+    detail: tvShape.ok
+      ? hasTxRows
+        ? `${tvRows.length} timeline rows`
+        : 'timeline object ok, empty rows'
+      : tvShape.errors.join('; '),
+  });
+
+  assertions.push({
+    id: 'get_season_history',
+    ok: input.getSeasonHistoryOk !== false,
+    detail:
+      input.getSeasonHistorySkipped
+        ? 'skipped (shallow probe mode)'
+        : input.getSeasonHistoryOk
+          ? 'GET_SEASON_HISTORY returned data'
+          : 'GET_SEASON_HISTORY failed or empty',
+  });
+
+  assertions.push({
+    id: 'get_records',
+    ok: input.recordsProbeOk !== false,
+    detail:
+      input.recordsProbeSkipped
+        ? 'skipped (shallow probe mode)'
+        : input.recordsProbeOk
+          ? 'GET_RECORDS ok'
+          : 'GET_RECORDS missing recordBook',
+  });
+
+  assertions.push({
+    id: 'get_hall_of_fame',
+    ok: input.hofProbeOk !== false,
+    detail:
+      input.hofProbeSkipped
+        ? 'skipped (shallow probe mode)'
+        : input.hofProbeOk
+          ? 'GET_HALL_OF_FAME ok'
+          : 'GET_HALL_OF_FAME invalid shape',
+  });
+
+  assertions.push({
+    id: 'get_draft_classes',
+    ok: input.draftClassesProbeOk !== false,
+    detail:
+      input.draftClassesProbeSkipped
+        ? 'skipped (shallow probe mode)'
+        : input.draftClassesProbeOk
+          ? `GET_DRAFT_CLASSES count=${input.draftClassCount ?? 0}`
+          : 'GET_DRAFT_CLASSES invalid',
+  });
+
+  return { allOk: assertions.every((a) => a.ok), assertions };
+}
+
 function countByPos(roster) {
   const m = {};
   for (const p of roster || []) {
@@ -561,6 +696,24 @@ export function runDynastySoakAudit(input = {}) {
         ? 'warn'
         : 'ok';
 
+  const draftClassesForSummary = input.draftClassesPayload?.classes;
+  const reportSummary = {
+    seasonIndex,
+    phase: metaPhase,
+    year,
+    teamCount: teams.length,
+    teamsWithoutQb,
+    archetypeDistribution: buildArchetypeDistribution(archetypes),
+    transactionCountsByType: countTransactionTypes(rawTx),
+    draftClassCount: Array.isArray(draftClassesForSummary) ? draftClassesForSummary.length : null,
+    warningCount: warnings.length,
+    failureCount: failures.length,
+    failureCodes: failures.slice(0, 40).map((f) => f.code),
+    warningCodesSample: warnings.slice(0, 30).map((w) => w.code),
+    capStressedWarnings: warnings.filter((w) => w.code === 'cap_stressed').length,
+    depthWarnings: warnings.filter((w) => String(w.code).startsWith('depth_')).length,
+  };
+
   return {
     passed,
     severity,
@@ -569,5 +722,6 @@ export function runDynastySoakAudit(input = {}) {
     warnings,
     failures,
     summary,
+    reportSummary,
   };
 }

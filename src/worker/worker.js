@@ -295,6 +295,19 @@ async function persistSimSession(update = {}) {
   await flushDirty();
 }
 
+/** Dynasty-soak harness: reduce persistSimSession frequency during long batch sim (IDB flush already no-op in batch). */
+async function maybePersistSimSession(update = {}, iterationIndex, opts = {}) {
+  const force = !!opts?.force;
+  const batch = typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
+  const throttle =
+    typeof globalThis !== 'undefined' && globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__;
+  if (batch && throttle && !force) {
+    const every = Math.max(1, Number(globalThis.__DYNASTY_SOAK_PERSIST_EVERY__) || 25);
+    if (iterationIndex % every !== 0) return;
+  }
+  await persistSimSession(update);
+}
+
 function validateLeagueFlowState({ stage = 'runtime', requireDraftState = false } = {}) {
   const meta = ensureDynastyMeta(cache.getMeta());
   const players = cache.getAllPlayers();
@@ -840,6 +853,9 @@ function buildViewState() {
     standings: standingsRows,
     standingsContext,
     teams,
+    ...(typeof globalThis !== 'undefined' && globalThis.__DYNASTY_SOAK_PROFILE__ && globalThis.__DYNASTY_SOAK_LAST_BATCH__
+      ? { dynastySoakSimBatch: { ...globalThis.__DYNASTY_SOAK_LAST_BATCH__ } }
+      : {}),
   };
 }
 
@@ -2979,8 +2995,10 @@ function buildLeagueForSim(schedule, week, seasonId) {
     })
     .filter(Boolean);
 
-  // Diagnostic logging for schedule population
-  console.log(`[Worker] Week ${week} schedule entries: ${weekData?.games?.length ?? 0}, unplayed: ${weekGames.length}`);
+  // Diagnostic logging for schedule population (skip in Node dynasty batch sim — very noisy / slow)
+  if (typeof globalThis === 'undefined' || !globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__) {
+    console.log(`[Worker] Week ${week} schedule entries: ${weekData?.games?.length ?? 0}, unplayed: ${weekGames.length}`);
+  }
 
   // Defensive logging: if weekGames is empty, log why
   if (weekGames.length === 0) {
@@ -3674,6 +3692,15 @@ async function handleSimToPhase({ targetPhase }, id) {
 
   // Already at target?
   if (isTarget(meta)) {
+    if (typeof globalThis !== 'undefined' && globalThis.__DYNASTY_SOAK_PROFILE__) {
+      globalThis.__DYNASTY_SOAK_LAST_BATCH__ = {
+        iterationsUsed: 0,
+        reachedTarget: true,
+        hitIterationCap: false,
+        lastPhase: meta?.phase ?? null,
+        targetPhase,
+      };
+    }
     post(toUI.FULL_STATE, buildViewState(), id);
     return;
   }
@@ -3682,6 +3709,17 @@ async function handleSimToPhase({ targetPhase }, id) {
   // can exceed 200 steps when each outer tick is one week/offseason day/draft episode).
   const MAX_ITERATIONS = 800;
   let iterations = 0;
+  const recordDynastySoakBatchProfile = (iterUsed, reached) => {
+    if (typeof globalThis === 'undefined' || !globalThis.__DYNASTY_SOAK_PROFILE__) return;
+    const m = cache.getMeta();
+    globalThis.__DYNASTY_SOAK_LAST_BATCH__ = {
+      iterationsUsed: iterUsed,
+      reachedTarget: !!reached,
+      hitIterationCap: iterUsed >= MAX_ITERATIONS && !reached,
+      lastPhase: m?.phase ?? null,
+      targetPhase,
+    };
+  };
   batchSimControl = {
     running: true,
     cancelRequested: false,
@@ -3709,6 +3747,7 @@ async function handleSimToPhase({ targetPhase }, id) {
         if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__) {
           await flushDirty(true);
         }
+        recordDynastySoakBatchProfile(iterations, isTarget(cache.getMeta()));
         post(toUI.FULL_STATE, buildViewState(), id);
         return;
       }
@@ -3719,12 +3758,16 @@ async function handleSimToPhase({ targetPhase }, id) {
         phase: currentMeta.phase,
         targetPhase,
       });
-      await persistSimSession({
-        status: 'running',
-        targetPhase,
-        stage: currentMeta.phase,
-        checkpoint: `iter_${iterations}`,
-      });
+      await maybePersistSimSession(
+        {
+          status: 'running',
+          targetPhase,
+          stage: currentMeta.phase,
+          checkpoint: `iter_${iterations}`,
+        },
+        iterations,
+        {},
+      );
 
       // Advance based on current phase
       // Pass skipUserGame:true during batch sim to avoid prompting the user
@@ -3742,10 +3785,18 @@ async function handleSimToPhase({ targetPhase }, id) {
         // for transitioning into the next season (handleSimDraftPick and
         // handleMakeDraftPick both call handleStartNewSeason once all picks
         // are made), so we deliberately do NOT call handleAdvanceOffseason here.
-        await persistSimSession({ status: 'running', targetPhase, stage: 'draft_setup', checkpoint: 'ensure_draft_state' });
+        await maybePersistSimSession(
+          { status: 'running', targetPhase, stage: 'draft_setup', checkpoint: 'ensure_draft_state' },
+          iterations,
+          { force: true },
+        );
         await handleStartDraft({}, null);
         validateLeagueFlowState({ stage: 'draft_setup', requireDraftState: true });
-        await persistSimSession({ status: 'running', targetPhase, stage: 'draft_execution', checkpoint: 'start' });
+        await maybePersistSimSession(
+          { status: 'running', targetPhase, stage: 'draft_execution', checkpoint: 'start' },
+          iterations,
+          { force: true },
+        );
         let draftDone = false;
         let draftGuard = 0;
         while (!draftDone && draftGuard < 500) {
@@ -3769,6 +3820,7 @@ async function handleSimToPhase({ targetPhase }, id) {
           if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__) {
             await flushDirty(true);
           }
+          recordDynastySoakBatchProfile(iterations, isTarget(cache.getMeta()));
           post(toUI.FULL_STATE, buildViewState(), id);
           return;
         }
@@ -3794,6 +3846,7 @@ async function handleSimToPhase({ targetPhase }, id) {
     if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__) {
       await flushDirty(true);
     }
+    recordDynastySoakBatchProfile(iterations, isTarget(cache.getMeta()));
     post(toUI.FULL_STATE, buildViewState(), id);
   } catch (error) {
     await persistSimSession({
@@ -3808,6 +3861,7 @@ async function handleSimToPhase({ targetPhase }, id) {
     }
     post(toUI.SIM_BATCH_STATUS, { status: 'failed', targetPhase, stage: cache.getMeta()?.phase ?? null });
     post(toUI.NOTIFICATION, { level: 'warn', message: `Simulation paused: ${error?.message ?? 'unknown error'}. You can retry or cancel.` });
+    recordDynastySoakBatchProfile(iterations, isTarget(cache.getMeta()));
     post(toUI.FULL_STATE, buildViewState(), id);
   } finally {
     batchSimControl = {

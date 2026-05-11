@@ -91,5 +91,7 @@ describe('dynasty soak integration (audit fixture)', () => {
 
     expect(r.passed).toBe(true);
     expect(['ok', 'warn']).toContain(r.severity);
+    expect(r.reportSummary?.teamCount).toBe(2);
+    expect(r.reportSummary?.archetypeDistribution).toBeDefined();
   });
 });
