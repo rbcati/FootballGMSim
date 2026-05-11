@@ -21,6 +21,7 @@ const RESPONSE_BY_REQUEST = {
   [toWorker.GET_RECORDS]: [toUI.RECORDS, toUI.ERROR],
   [toWorker.GET_HALL_OF_FAME]: [toUI.HALL_OF_FAME, toUI.ERROR],
   [toWorker.GET_DRAFT_CLASSES]: [toUI.DRAFT_CLASSES, toUI.ERROR],
+  [toWorker.GET_DRAFT_CLASS]: [toUI.DRAFT_CLASS, toUI.ERROR],
   [toWorker.GET_SEASON_HISTORY]: [toUI.SEASON_HISTORY, toUI.ERROR],
 };
 
@@ -286,6 +287,7 @@ function checkMaxRuntime(t0, maxRuntimeMs) {
  * @property {number} [seasons=5]
  * @property {number} [seed=1383]
  * @property {boolean} [ci=false]
+ * @property {boolean} [deep=false] - larger final-season transaction/draft/archive probes
  * @property {boolean} [deepEachSeason=false]
  * @property {number} [simTimeoutMs]
  * @property {number} [phaseTimeoutMs] - alias override for simTimeoutMs / GET timeouts
@@ -302,6 +304,7 @@ export async function runDynastySoakOnce(opts = {}) {
   const seasons = Math.max(1, Math.min(50, Number(opts.seasons) || 5));
   const seed = Number.isFinite(Number(opts.seed)) ? Number(opts.seed) : 1383;
   const ci = !!opts.ci;
+  const deep = !!opts.deep;
   const deepEachSeason = !!opts.deepEachSeason;
   const phaseTimeoutMs = Number.isFinite(Number(opts.phaseTimeoutMs))
     ? Number(opts.phaseTimeoutMs)
@@ -348,6 +351,7 @@ export async function runDynastySoakOnce(opts = {}) {
     },
     harnessConfig: {
       ci,
+      deep,
       deepEachSeason,
       phaseTimeoutMs,
       maxRuntimeMs,
@@ -398,6 +402,9 @@ export async function runDynastySoakOnce(opts = {}) {
       const yearBefore = Number(view?.year ?? 0);
       const phaseBefore = String(view?.phase ?? '');
       const fullProbes = deepEachSeason || s === seasons;
+      const deepFinalProbes = deep && s === seasons;
+      const recentTransactionLimit = deepFinalProbes ? 1_000 : 400;
+      const seasonTransactionLimit = deepFinalProbes ? 1_000 : 200;
 
       const simCtx = { checkpoints, label: `S${s}`, phaseBefore, yearBefore };
       const { lastMsg: simMsg, attempts } = await simUntilPreseason(simTimeoutMs, simCtx);
@@ -502,6 +509,8 @@ export async function runDynastySoakOnce(opts = {}) {
       }
 
       let tProbe = Date.now();
+      const allSeasonsMsg = await dispatchWorker(toWorker.GET_ALL_SEASONS, {}, { timeoutMs: phaseTimeoutMs });
+      pushCheckpoint(checkpoints, `S${s}.GET_ALL_SEASONS`, Date.now() - tProbe, { fullProbes, deepFinalProbes });
       const allSeasonsMsg = await runnerDispatch(toWorker.GET_ALL_SEASONS, {}, { timeoutMs: phaseTimeoutMs });
       pushCheckpoint(checkpoints, `S${s}.GET_ALL_SEASONS`, Date.now() - tProbe, { fullProbes });
 
@@ -512,7 +521,7 @@ export async function runDynastySoakOnce(opts = {}) {
       tProbe = Date.now();
       const txMsg = await runnerDispatch(
         toWorker.GET_TRANSACTIONS,
-        { mode: 'recent', limit: 400 },
+        { mode: 'recent', limit: recentTransactionLimit },
         { timeoutMs: phaseTimeoutMs },
       );
       pushCheckpoint(checkpoints, `S${s}.GET_TRANSACTIONS_recent`, Date.now() - tProbe, null);
@@ -522,6 +531,7 @@ export async function runDynastySoakOnce(opts = {}) {
         tProbe = Date.now();
         txSeasonMsg = await runnerDispatch(
           toWorker.GET_TRANSACTIONS,
+          { seasonId: view?.seasonId, limit: seasonTransactionLimit },
           { seasonId: latestSeasonId ?? view?.seasonId, limit: 200 },
           { timeoutMs: phaseTimeoutMs },
         );
@@ -554,6 +564,7 @@ export async function runDynastySoakOnce(opts = {}) {
       let seasonHistory = null;
       let getSeasonHistoryOk = null;
       let getSeasonHistorySkipped = !fullProbes;
+      const deepFinalAssertions = [];
       if (fullProbes && latestSeason?.id) {
         tProbe = Date.now();
         const histMsg = await runnerDispatch(
@@ -568,10 +579,55 @@ export async function runDynastySoakOnce(opts = {}) {
         } else {
           getSeasonHistoryOk = false;
         }
+
+        if (deepFinalProbes) {
+          const archiveSample = leagueHistory.slice(-4).filter((season) => season?.id);
+          let archiveOk = true;
+          for (const season of archiveSample) {
+            tProbe = Date.now();
+            const sampledHistMsg = await dispatchWorker(
+              toWorker.GET_SEASON_HISTORY,
+              { seasonId: season.id },
+              { timeoutMs: phaseTimeoutMs },
+            );
+            pushCheckpoint(checkpoints, `S${s}.GET_SEASON_HISTORY_deep`, Date.now() - tProbe, {
+              seasonId: season.id,
+            });
+            if (sampledHistMsg.type === toUI.ERROR || !sampledHistMsg.payload?.data) archiveOk = false;
+          }
+          deepFinalAssertions.push({
+            id: 'deep_archive_history_sample',
+            ok: archiveOk,
+            detail: archiveSample.length
+              ? `${archiveSample.length} archived season histories sampled`
+              : 'no archived seasons available to sample',
+          });
+        }
       } else {
         getSeasonHistoryOk = fullProbes ? null : true;
       }
 
+      if (deepFinalProbes && Array.isArray(draftClassesMsg?.payload?.classes)) {
+        const draftClassSample = draftClassesMsg.payload.classes.slice(0, 4).filter((klass) => klass?.seasonId);
+        let draftClassOk = true;
+        for (const klass of draftClassSample) {
+          tProbe = Date.now();
+          const draftClassMsg = await dispatchWorker(
+            toWorker.GET_DRAFT_CLASS,
+            { seasonId: klass.seasonId },
+            { timeoutMs: phaseTimeoutMs },
+          );
+          pushCheckpoint(checkpoints, `S${s}.GET_DRAFT_CLASS_deep`, Date.now() - tProbe, {
+            seasonId: klass.seasonId,
+          });
+          if (draftClassMsg.type === toUI.ERROR || !draftClassMsg.payload?.model) draftClassOk = false;
+        }
+        deepFinalAssertions.push({
+          id: 'deep_draft_class_model_sample',
+          ok: draftClassOk,
+          detail: draftClassSample.length
+            ? `${draftClassSample.length} draft class models sampled`
+            : 'no draft classes available to sample',
       const txSeasonRows = txSeasonMsg.payload?.transactions ?? [];
       let dbLatestSeason = null;
       let dbAllSeasons = null;
@@ -661,8 +717,9 @@ export async function runDynastySoakOnce(opts = {}) {
           draftClassCount,
         };
         const pers = buildPersistenceAssertions(persInput);
-        aggregate.persistenceAssertions = pers.assertions;
-        if (!pers.allOk) {
+        const assertions = deepFinalProbes ? [...pers.assertions, ...deepFinalAssertions] : pers.assertions;
+        aggregate.persistenceAssertions = assertions;
+        if (!pers.allOk || deepFinalAssertions.some((assertion) => !assertion.ok)) {
           aggregate.passed = false;
           mergeAudit(
             aggregate,

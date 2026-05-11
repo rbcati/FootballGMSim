@@ -10,7 +10,7 @@ Options:
   --seasons=N             Number of seasons to simulate (default: 5, or 1 with --ci)
   --seed=N                RNG seed (default: 1383)
   --outDir=PATH           Report output directory (default: artifacts/dynasty-soak)
-  --deep                  No-op (reserved); default is full probes on the final season only
+  --deep                  Full final-season probes plus larger transaction/draft/archive samples
   --deep-each-season      Full GET_* probes every season (slowest; matches legacy harness)
   --phase-timeout-ms=N    Timeout per SIM_TO_PHASE attempt and per GET_* (default: 60m)
   --max-runtime-ms=N      Hard cap on wall time between checkpoints (not mid-SIM_TO_PHASE); default unlimited
@@ -41,6 +41,7 @@ function parseRequiredNumber(flag, value, errors) {
 export function parseDynastySoakArgv(argv) {
   const raw = {
     ci: false,
+    deep: false,
     deepEachSeason: false,
     seasons: null,
     seed: null,
@@ -55,9 +56,8 @@ export function parseDynastySoakArgv(argv) {
   for (let i = 2; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--ci') raw.ci = true;
-    else if (a === '--deep') {
-      /* reserved: default harness already runs full probes on the last season */
-    } else if (a === '--deep-each-season') raw.deepEachSeason = true;
+    else if (a === '--deep') raw.deep = true;
+    else if (a === '--deep-each-season') raw.deepEachSeason = true;
     else if (a === '--skip-report-open') raw.skipReportOpen = true;
     else if (a.startsWith('--seasons=')) {
       const parsed = parseRequiredNumber('--seasons', a.slice('--seasons='.length), errors);
@@ -151,6 +151,7 @@ export function resolveDynastySoakConfig(raw) {
       ? Math.max(30_000, Number(raw.maxRuntimeMs))
       : null;
 
+  const deep = !!raw.deep;
   const deepEachSeason = !!raw.deepEachSeason;
 
   if (errors.length) {
@@ -163,6 +164,7 @@ export function resolveDynastySoakConfig(raw) {
       seasons,
       seed,
       ci: !!raw.ci,
+      deep,
       deepEachSeason,
       phaseTimeoutMs,
       maxRuntimeMs,
@@ -215,7 +217,9 @@ export function buildMarkdownReport(result) {
   lines.push(`- **Passed:** ${result.passed ? 'yes' : 'no'}`);
   lines.push(`- **Severity:** ${result.severity}`);
   if (result.harnessConfig) {
-    lines.push(`- **Harness:** ci=${result.harnessConfig.ci} deepEachSeason=${result.harnessConfig.deepEachSeason}`);
+    lines.push(
+      `- **Harness:** ci=${result.harnessConfig.ci} deep=${!!result.harnessConfig.deep} deepEachSeason=${result.harnessConfig.deepEachSeason}`,
+    );
   }
   lines.push('');
 
