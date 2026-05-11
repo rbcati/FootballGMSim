@@ -136,6 +136,7 @@ describe('buildPersistenceAssertions', () => {
           },
         ],
       },
+      transactionsRecent: [],
       transactionsRecent: txPayload.transactions,
       expectTransactions: true,
       transactionsRecentProbeOk: false,
