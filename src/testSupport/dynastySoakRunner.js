@@ -627,6 +627,7 @@ export async function runDynastySoakOnce(opts = {}) {
             : 'no draft classes available to sample',
         });
       }
+
       const txSeasonRows = txSeasonMsg.payload?.transactions ?? [];
       let dbLatestSeason = null;
       let dbAllSeasons = null;
