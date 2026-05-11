@@ -116,7 +116,12 @@ describe('runDynastySoakOnce', () => {
     });
 
     const simAttempt = result.simAttemptsPerSeason[0].attempts[0];
-    expect(simAttempt).toMatchObject({ phaseAfter: 'preseason', yearAfter: 2027 });
+    expect(simAttempt).toMatchObject({
+      phaseBefore: 'regular',
+      yearBefore: 2026,
+      phaseAfter: 'preseason',
+      yearAfter: 2027,
+    });
     expect(simAttempt.yearAfter).toBeGreaterThan(checkpoint.meta.yearBefore);
   });
 
