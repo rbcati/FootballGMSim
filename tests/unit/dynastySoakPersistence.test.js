@@ -1,0 +1,53 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildPersistenceAssertions,
+  validateTransactionTimelineV1Shape,
+} from '../../src/core/dynastySoakAudit.js';
+
+describe('buildPersistenceAssertions', () => {
+  it('fails when leagueHistory has no latest season', () => {
+    const r = buildPersistenceAssertions({
+      viewState: { leagueHistory: [] },
+      transactionsRecent: [{ type: 'X' }],
+      expectTransactions: false,
+      getSeasonHistoryOk: true,
+      getSeasonHistorySkipped: false,
+      recordsProbeOk: true,
+      hofProbeOk: true,
+      draftClassesProbeOk: true,
+      draftClassCount: 0,
+    });
+    expect(r.allOk).toBe(false);
+    expect(r.assertions.find((a) => a.id === 'latest_season_archive')?.ok).toBe(false);
+  });
+
+  it('fails transaction timeline when rows are malformed type', () => {
+    expect(validateTransactionTimelineV1Shape({ schemaVersion: 1, rows: {} }).ok).toBe(false);
+  });
+
+  it('passes minimal healthy snapshot', () => {
+    const r = buildPersistenceAssertions({
+      viewState: {
+        leagueHistory: [
+          {
+            id: 's1',
+            playerSeasonStatsV1: { schemaVersion: 1, rows: [{ playerId: 1, pos: 'QB' }] },
+            transactionTimelineV1: { schemaVersion: 1, rows: [{ rawId: 1, type: 'draft' }] },
+          },
+        ],
+      },
+      transactionsRecent: [{ type: 'DRAFT' }],
+      expectTransactions: true,
+      expectStatRows: true,
+      expectTimelineRows: true,
+      seasonTxQueryOk: true,
+      getSeasonHistoryOk: true,
+      getSeasonHistorySkipped: false,
+      recordsProbeOk: true,
+      hofProbeOk: true,
+      draftClassesProbeOk: true,
+      draftClassCount: 1,
+    });
+    expect(r.allOk).toBe(true);
+  });
+});
