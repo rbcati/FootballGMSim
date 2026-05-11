@@ -5,6 +5,7 @@
  */
 
 import { toWorker, toUI } from '../worker/protocol.js';
+import { Seasons, Transactions } from '../db/index.js';
 import {
   runDynastySoakAudit,
   buildPersistenceAssertions,
@@ -369,6 +370,10 @@ export async function runDynastySoakOnce(opts = {}) {
       const allSeasonsMsg = await dispatchWorker(toWorker.GET_ALL_SEASONS, {}, { timeoutMs: phaseTimeoutMs });
       pushCheckpoint(checkpoints, `S${s}.GET_ALL_SEASONS`, Date.now() - tProbe, { fullProbes });
 
+      const leagueHistory = view?.leagueHistory ?? [];
+      const latestSeason = leagueHistory.length ? leagueHistory[leagueHistory.length - 1] : null;
+      const latestSeasonId = latestSeason?.id ?? null;
+
       tProbe = Date.now();
       const txMsg = await dispatchWorker(
         toWorker.GET_TRANSACTIONS,
@@ -382,7 +387,7 @@ export async function runDynastySoakOnce(opts = {}) {
         tProbe = Date.now();
         txSeasonMsg = await dispatchWorker(
           toWorker.GET_TRANSACTIONS,
-          { seasonId: view?.seasonId, limit: 200 },
+          { seasonId: latestSeasonId ?? view?.seasonId, limit: 200 },
           { timeoutMs: phaseTimeoutMs },
         );
         pushCheckpoint(checkpoints, `S${s}.GET_TRANSACTIONS_season`, Date.now() - tProbe, null);
@@ -411,8 +416,6 @@ export async function runDynastySoakOnce(opts = {}) {
         draftClassesMsg = { type: toUI.DRAFT_CLASSES, payload: { classes: [] } };
       }
 
-      const leagueHistory = view?.leagueHistory ?? [];
-      const latestSeason = leagueHistory.length ? leagueHistory[leagueHistory.length - 1] : null;
       let seasonHistory = null;
       let getSeasonHistoryOk = null;
       let getSeasonHistorySkipped = !fullProbes;
@@ -432,6 +435,28 @@ export async function runDynastySoakOnce(opts = {}) {
         }
       } else {
         getSeasonHistoryOk = fullProbes ? null : true;
+      }
+
+      const txSeasonRows = txSeasonMsg.payload?.transactions ?? [];
+      let dbLatestSeason = null;
+      let dbAllSeasons = null;
+      let dbTransactions = null;
+      let dbProbeError = null;
+      if (fullProbes && latestSeasonId) {
+        tProbe = Date.now();
+        try {
+          [dbLatestSeason, dbAllSeasons, dbTransactions] = await Promise.all([
+            Seasons.load(latestSeasonId),
+            Seasons.loadRecent(200),
+            Transactions.bySeason(latestSeasonId),
+          ]);
+        } catch (err) {
+          dbProbeError = err;
+        }
+        pushCheckpoint(checkpoints, `S${s}.DB_PERSISTENCE_PROBES`, Date.now() - tProbe, {
+          latestSeasonId,
+          dbProbeOk: !dbProbeError,
+        });
       }
 
       tProbe = Date.now();
@@ -471,7 +496,15 @@ export async function runDynastySoakOnce(opts = {}) {
           expectStatRows: expectStats,
           expectTimelineRows: expectTx,
           seasonTxQueryOk: txSeasonMsg.type !== toUI.ERROR,
-          getSeasonHistoryOk,
+          transactionsSeason: txSeasonRows,
+          allSeasons: allSeasonsMsg.payload?.seasons ?? null,
+          latestSeasonId,
+          seasonHistory,
+          dbLatestSeasonFound: latestSeasonId ? !!dbLatestSeason : null,
+          dbAllSeasons,
+          dbTransactions: dbTransactions ?? [],
+          expectedTransactionTypes: expectTx ? ['draft', 'retirement', 'signing'] : [],
+          getSeasonHistoryOk: dbProbeError ? false : getSeasonHistoryOk,
           getSeasonHistorySkipped,
           recordsProbeOk:
             recordsMsg.type === toUI.ERROR
