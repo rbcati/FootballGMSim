@@ -125,6 +125,7 @@ describe('buildPersistenceAssertions', () => {
   });
 
   it('fails clearly when GET_TRANSACTIONS returns an ok:false empty payload', () => {
+    const txPayload = { ok: false, error: 'indexeddb read failed', transactions: [] };
     const r = buildPersistenceAssertions({
       viewState: {
         leagueHistory: [
@@ -136,6 +137,7 @@ describe('buildPersistenceAssertions', () => {
         ],
       },
       transactionsRecent: [],
+      transactionsRecent: txPayload.transactions,
       expectTransactions: true,
       transactionsRecentProbeOk: false,
       transactionsRecentHasExpectedData: false,
@@ -156,6 +158,7 @@ describe('buildPersistenceAssertions', () => {
   });
 
   it('fails clearly when GET_DRAFT_CLASSES returns an ok:false empty payload', () => {
+    const draftPayload = { ok: false, error: 'transaction read failed', classes: [] };
     const r = buildPersistenceAssertions({
       viewState: {
         leagueHistory: [
@@ -179,7 +182,7 @@ describe('buildPersistenceAssertions', () => {
       draftClassesProbeOk: false,
       draftClassesHasExpectedData: false,
       expectDraftClasses: true,
-      draftClassCount: 0,
+      draftClassCount: draftPayload.classes.length,
     });
 
     expect(r.allOk).toBe(false);
