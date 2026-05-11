@@ -5,6 +5,7 @@
  */
 
 import { toWorker, toUI } from '../worker/protocol.js';
+import { Seasons, Transactions } from '../db/index.js';
 import {
   runDynastySoakAudit,
   buildPersistenceAssertions,
@@ -26,6 +27,14 @@ const RESPONSE_BY_REQUEST = {
 
 /** @type {Map<string, { resolve: Function, reject: Function, accept: Set<string>, timer: ReturnType<typeof setTimeout> }>} */
 const waiters = new Map();
+
+export function probeHandlerSucceeded(msg) {
+  return msg?.type !== toUI.ERROR && msg?.payload?.ok !== false;
+}
+
+export function payloadArrayHasRows(payload, key) {
+  return Array.isArray(payload?.[key]) && payload[key].length > 0;
+}
 
 let msgSeq = 0;
 function nextId() {
@@ -138,18 +147,48 @@ function topSlowCheckpoints(checkpoints, n = 10) {
   return [...checkpoints].sort((a, b) => b.ms - a.ms).slice(0, n);
 }
 
+function buildPhaseBreakdown(checkpoints) {
+  const groups = {
+    boot: { ms: 0, count: 0 },
+    sim: { ms: 0, count: 0 },
+    getProbes: { ms: 0, count: 0 },
+    auditEvaluation: { ms: 0, count: 0 },
+    finalAdvance: { ms: 0, count: 0 },
+  };
+
+  for (const checkpoint of checkpoints) {
+    const name = String(checkpoint?.name ?? '');
+    const ms = Number(checkpoint?.ms ?? 0);
+    let bucket = null;
+    if (name.startsWith('boot.')) bucket = groups.boot;
+    else if (name.endsWith('.SIM_TO_PHASE')) bucket = groups.sim;
+    else if (name.includes('.GET_')) bucket = groups.getProbes;
+    else if (name.endsWith('.runDynastySoakAudit')) bucket = groups.auditEvaluation;
+    else if (name.endsWith('.ADVANCE_WEEK')) bucket = groups.finalAdvance;
+    if (!bucket) continue;
+    bucket.ms += ms;
+    bucket.count += 1;
+  }
+
+  return groups;
+}
+
 /**
  * `SIM_TO_PHASE` may stop before `preseason` when the worker hits its per-call
  * iteration guard mid-pipeline; repeat until preseason or hard cap.
  * @param {number} simTimeoutMs
- * @param {{ checkpoints: object[], label: string }} ctx
+ * @param {{ checkpoints: object[], label: string, phaseBefore?: string, yearBefore?: number }} ctx
  */
-async function simUntilPreseason(simTimeoutMs, ctx) {
+async function simUntilPreseason(simTimeoutMs, ctx, runnerDispatch = dispatchWorker) {
   let lastMsg = null;
   const attempts = [];
+  let currentPhase = String(ctx.phaseBefore ?? '');
+  let currentYear = Number(ctx.yearBefore ?? 0);
   for (let attempt = 0; attempt < 12; attempt += 1) {
+    const phaseBefore = currentPhase;
+    const yearBefore = currentYear;
     const t = Date.now();
-    lastMsg = await dispatchWorker(
+    lastMsg = await runnerDispatch(
       toWorker.SIM_TO_PHASE,
       { targetPhase: 'preseason' },
       { timeoutMs: simTimeoutMs },
@@ -157,22 +196,81 @@ async function simUntilPreseason(simTimeoutMs, ctx) {
     const ms = Date.now() - t;
     const ph = String(lastMsg.payload?.phase ?? '');
     const yr = Number(lastMsg.payload?.year ?? 0);
-    attempts.push({
+    const batch = lastMsg.payload?.dynastySoakSimBatch ?? null;
+    const simBatchMeta = {
+      iterationsUsed: batch?.iterationsUsed ?? null,
+      reachedTarget: batch?.reachedTarget ?? null,
+      hitIterationCap: batch?.hitIterationCap ?? null,
+      lastPhase: batch?.lastPhase ?? null,
+      targetPhase: batch?.targetPhase ?? 'preseason',
+    };
+    const meta = {
       attempt,
-      ms,
+      phaseBefore,
+      yearBefore,
       phaseAfter: ph,
       yearAfter: yr,
+      ...simBatchMeta,
+    };
+    attempts.push({
+      ...meta,
+      ms,
       error: lastMsg.type === toUI.ERROR,
     });
-    pushCheckpoint(ctx.checkpoints, `${ctx.label}.SIM_TO_PHASE`, ms, {
-      attempt,
-      phaseAfter: ph,
-      yearAfter: yr,
-    });
+    pushCheckpoint(ctx.checkpoints, `${ctx.label}.SIM_TO_PHASE`, ms, meta);
     if (lastMsg.type === toUI.ERROR) return { lastMsg, attempts };
+    currentPhase = ph;
+    currentYear = yr;
     if (ph === 'preseason') return { lastMsg, attempts };
   }
   return { lastMsg, attempts };
+}
+
+
+/**
+ * When the current view is already in the target phase, SIM_TO_PHASE can return
+ * immediately without crossing a season boundary. Advance at least one real
+ * worker tick first so a preseason-starting soak still simulates a full season.
+ * @param {any} view
+ * @param {{ checkpoints: object[], label: string, phaseTimeoutMs: number, runnerDispatch?: Function }} ctx
+ */
+async function advanceOutOfCurrentTargetPhase(view, ctx) {
+  const phaseBefore = String(view?.phase ?? '');
+  const yearBefore = Number(view?.year ?? 0);
+  let phaseAfter = phaseBefore;
+  let yearAfter = yearBefore;
+  let lastMsg = { payload: view };
+  let currentView = view ?? {};
+  let advances = 0;
+  const runnerDispatch = ctx.runnerDispatch || dispatchWorker;
+  const t = Date.now();
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    advances += 1;
+    lastMsg = await runnerDispatch(
+      toWorker.ADVANCE_WEEK,
+      { skipUserGame: true },
+      { timeoutMs: ctx.phaseTimeoutMs },
+    );
+    if (lastMsg.type === toUI.ERROR) break;
+
+    currentView = { ...currentView, ...(lastMsg.payload ?? {}) };
+    lastMsg = { ...lastMsg, payload: currentView };
+    phaseAfter = String(currentView.phase ?? '');
+    yearAfter = Number(currentView.year ?? 0);
+
+    if (phaseAfter !== phaseBefore || yearAfter !== yearBefore) break;
+  }
+
+  pushCheckpoint(ctx.checkpoints, `${ctx.label}.advance_out_of_${phaseBefore}`, Date.now() - t, {
+    phaseBefore,
+    phaseAfter,
+    yearBefore,
+    yearAfter,
+    advances,
+  });
+
+  return { lastMsg, phaseBefore, phaseAfter, yearBefore, yearAfter, advances };
 }
 
 function checkMaxRuntime(t0, maxRuntimeMs) {
@@ -195,6 +293,8 @@ function checkMaxRuntime(t0, maxRuntimeMs) {
  * @property {number} [phaseTimeoutMs] - alias override for simTimeoutMs / GET timeouts
  * @property {number|null} [maxRuntimeMs]
  * @property {function} [onBroadcast]
+ * @property {function} [dispatchWorker] - test hook for worker dispatches
+ * @property {function} [loadWorkerModule] - test hook for worker module loading
  */
 
 /**
@@ -216,6 +316,8 @@ export async function runDynastySoakOnce(opts = {}) {
     opts.maxRuntimeMs === null || opts.maxRuntimeMs === undefined
       ? null
       : Number(opts.maxRuntimeMs);
+  const runnerDispatch = typeof opts.dispatchWorker === 'function' ? opts.dispatchWorker : dispatchWorker;
+  const runnerLoadWorkerModule = typeof opts.loadWorkerModule === 'function' ? opts.loadWorkerModule : loadWorkerModule;
 
   const checkpoints = [];
   const simAttemptsPerSeason = [];
@@ -243,6 +345,7 @@ export async function runDynastySoakOnce(opts = {}) {
     simAttemptsPerSeason,
     timings: {
       bootMs: 0,
+      phaseBreakdown: buildPhaseBreakdown([]),
       topSlowCheckpoints: [],
       totalMs: 0,
     },
@@ -270,16 +373,16 @@ export async function runDynastySoakOnce(opts = {}) {
   let lastReportSummary = null;
 
   try {
-    await loadWorkerModule();
+    await runnerLoadWorkerModule();
 
     let t = Date.now();
-    await dispatchWorker(toWorker.INIT, {}, { timeoutMs: Math.min(120_000, phaseTimeoutMs) });
+    await runnerDispatch(toWorker.INIT, {}, { timeoutMs: Math.min(120_000, phaseTimeoutMs) });
     pushCheckpoint(checkpoints, 'boot.INIT', Date.now() - t, null);
 
     checkMaxRuntime(t0, maxRuntimeMs);
 
     t = Date.now();
-    const bootMsg = await dispatchWorker(
+    const bootMsg = await runnerDispatch(
       toWorker.USE_SAFE_STARTER_LEAGUE,
       {
         slotKey: 'save_slot_1',
@@ -303,8 +406,41 @@ export async function runDynastySoakOnce(opts = {}) {
       const recentTransactionLimit = deepFinalProbes ? 1_000 : 400;
       const seasonTransactionLimit = deepFinalProbes ? 1_000 : 200;
 
-      const simCtx = { checkpoints, label: `S${s}` };
+      const simCtx = { checkpoints, label: `S${s}`, phaseBefore, yearBefore };
       const { lastMsg: simMsg, attempts } = await simUntilPreseason(simTimeoutMs, simCtx);
+      if (phaseBefore === 'preseason') {
+        const advanceResult = await advanceOutOfCurrentTargetPhase(view, {
+          checkpoints,
+          label: `S${s}`,
+          phaseTimeoutMs,
+          runnerDispatch,
+        });
+        if (advanceResult.lastMsg.type === toUI.ERROR) {
+          mergeAudit(
+            aggregate,
+            {
+              passed: false,
+              severity: 'error',
+              seasonsSimmed: s,
+              checks: [],
+              warnings: [],
+              failures: [
+                {
+                  code: 'advance_out_of_preseason_error',
+                  message: advanceResult.lastMsg.payload?.message || 'ADVANCE_WEEK error leaving preseason',
+                },
+              ],
+              summary: aggregate.summary,
+            },
+            `S${s}`,
+          );
+          break;
+        }
+        view = advanceResult.lastMsg.payload;
+      }
+
+      const simCtx = { checkpoints, label: `S${s}` };
+      const { lastMsg: simMsg, attempts } = await simUntilPreseason(simTimeoutMs, simCtx, runnerDispatch);
       simAttemptsPerSeason.push({ season: s, attempts });
 
       if (simMsg.type === toUI.ERROR) {
@@ -375,9 +511,15 @@ export async function runDynastySoakOnce(opts = {}) {
       let tProbe = Date.now();
       const allSeasonsMsg = await dispatchWorker(toWorker.GET_ALL_SEASONS, {}, { timeoutMs: phaseTimeoutMs });
       pushCheckpoint(checkpoints, `S${s}.GET_ALL_SEASONS`, Date.now() - tProbe, { fullProbes, deepFinalProbes });
+      const allSeasonsMsg = await runnerDispatch(toWorker.GET_ALL_SEASONS, {}, { timeoutMs: phaseTimeoutMs });
+      pushCheckpoint(checkpoints, `S${s}.GET_ALL_SEASONS`, Date.now() - tProbe, { fullProbes });
+
+      const leagueHistory = view?.leagueHistory ?? [];
+      const latestSeason = leagueHistory.length ? leagueHistory[leagueHistory.length - 1] : null;
+      const latestSeasonId = latestSeason?.id ?? null;
 
       tProbe = Date.now();
-      const txMsg = await dispatchWorker(
+      const txMsg = await runnerDispatch(
         toWorker.GET_TRANSACTIONS,
         { mode: 'recent', limit: recentTransactionLimit },
         { timeoutMs: phaseTimeoutMs },
@@ -387,9 +529,10 @@ export async function runDynastySoakOnce(opts = {}) {
       let txSeasonMsg;
       if (fullProbes) {
         tProbe = Date.now();
-        txSeasonMsg = await dispatchWorker(
+        txSeasonMsg = await runnerDispatch(
           toWorker.GET_TRANSACTIONS,
           { seasonId: view?.seasonId, limit: seasonTransactionLimit },
+          { seasonId: latestSeasonId ?? view?.seasonId, limit: 200 },
           { timeoutMs: phaseTimeoutMs },
         );
         pushCheckpoint(checkpoints, `S${s}.GET_TRANSACTIONS_season`, Date.now() - tProbe, null);
@@ -402,15 +545,15 @@ export async function runDynastySoakOnce(opts = {}) {
       let draftClassesMsg;
       if (fullProbes) {
         tProbe = Date.now();
-        recordsMsg = await dispatchWorker(toWorker.GET_RECORDS, {}, { timeoutMs: phaseTimeoutMs });
+        recordsMsg = await runnerDispatch(toWorker.GET_RECORDS, {}, { timeoutMs: phaseTimeoutMs });
         pushCheckpoint(checkpoints, `S${s}.GET_RECORDS`, Date.now() - tProbe, null);
 
         tProbe = Date.now();
-        hofMsg = await dispatchWorker(toWorker.GET_HALL_OF_FAME, {}, { timeoutMs: phaseTimeoutMs });
+        hofMsg = await runnerDispatch(toWorker.GET_HALL_OF_FAME, {}, { timeoutMs: phaseTimeoutMs });
         pushCheckpoint(checkpoints, `S${s}.GET_HALL_OF_FAME`, Date.now() - tProbe, null);
 
         tProbe = Date.now();
-        draftClassesMsg = await dispatchWorker(toWorker.GET_DRAFT_CLASSES, {}, { timeoutMs: phaseTimeoutMs });
+        draftClassesMsg = await runnerDispatch(toWorker.GET_DRAFT_CLASSES, {}, { timeoutMs: phaseTimeoutMs });
         pushCheckpoint(checkpoints, `S${s}.GET_DRAFT_CLASSES`, Date.now() - tProbe, null);
       } else {
         recordsMsg = { type: toUI.RECORDS, payload: null };
@@ -418,21 +561,19 @@ export async function runDynastySoakOnce(opts = {}) {
         draftClassesMsg = { type: toUI.DRAFT_CLASSES, payload: { classes: [] } };
       }
 
-      const leagueHistory = view?.leagueHistory ?? [];
-      const latestSeason = leagueHistory.length ? leagueHistory[leagueHistory.length - 1] : null;
       let seasonHistory = null;
       let getSeasonHistoryOk = null;
       let getSeasonHistorySkipped = !fullProbes;
       const deepFinalAssertions = [];
       if (fullProbes && latestSeason?.id) {
         tProbe = Date.now();
-        const histMsg = await dispatchWorker(
+        const histMsg = await runnerDispatch(
           toWorker.GET_SEASON_HISTORY,
           { seasonId: latestSeason.id },
           { timeoutMs: phaseTimeoutMs },
         );
         pushCheckpoint(checkpoints, `S${s}.GET_SEASON_HISTORY`, Date.now() - tProbe, null);
-        if (histMsg.type !== toUI.ERROR) {
+        if (probeHandlerSucceeded(histMsg)) {
           seasonHistory = histMsg.payload?.data ?? null;
           getSeasonHistoryOk = true;
         } else {
@@ -487,6 +628,25 @@ export async function runDynastySoakOnce(opts = {}) {
           detail: draftClassSample.length
             ? `${draftClassSample.length} draft class models sampled`
             : 'no draft classes available to sample',
+      const txSeasonRows = txSeasonMsg.payload?.transactions ?? [];
+      let dbLatestSeason = null;
+      let dbAllSeasons = null;
+      let dbTransactions = null;
+      let dbProbeError = null;
+      if (fullProbes && latestSeasonId) {
+        tProbe = Date.now();
+        try {
+          [dbLatestSeason, dbAllSeasons, dbTransactions] = await Promise.all([
+            Seasons.load(latestSeasonId),
+            Seasons.loadRecent(200),
+            Transactions.bySeason(latestSeasonId),
+          ]);
+        } catch (err) {
+          dbProbeError = err;
+        }
+        pushCheckpoint(checkpoints, `S${s}.DB_PERSISTENCE_PROBES`, Date.now() - tProbe, {
+          latestSeasonId,
+          dbProbeOk: !dbProbeError,
         });
       }
 
@@ -504,10 +664,10 @@ export async function runDynastySoakOnce(opts = {}) {
       pushCheckpoint(checkpoints, `S${s}.runDynastySoakAudit`, Date.now() - tProbe, null);
       lastReportSummary = audit.reportSummary ?? null;
 
-      if (fullProbes && txSeasonMsg.type === toUI.ERROR) {
+      if (fullProbes && !probeHandlerSucceeded(txSeasonMsg)) {
         audit.failures.push({
           code: 'get_transactions_season',
-          message: txSeasonMsg.payload?.message || 'GET_TRANSACTIONS by season failed',
+          message: txSeasonMsg.payload?.message || txSeasonMsg.payload?.error || 'GET_TRANSACTIONS by season failed',
         });
         audit.passed = false;
       }
@@ -520,25 +680,40 @@ export async function runDynastySoakOnce(opts = {}) {
           : 0;
         const expectTx = s >= 2;
         const expectStats = s >= 2;
+        const expectDraftClasses = s >= 2;
+        const transactionsRecentProbeOk = probeHandlerSucceeded(txMsg);
+        const transactionsRecentHasExpectedData = payloadArrayHasRows(txMsg.payload, 'transactions');
+        const draftClassesProbeOk = probeHandlerSucceeded(draftClassesMsg);
+        const draftClassesHasExpectedData = payloadArrayHasRows(draftClassesMsg.payload, 'classes');
         const persInput = {
           viewState: view,
           transactionsRecent: txMsg.payload?.transactions ?? [],
           expectTransactions: expectTx,
+          transactionsRecentProbeOk,
+          transactionsRecentHasExpectedData,
           expectStatRows: expectStats,
           expectTimelineRows: expectTx,
           seasonTxQueryOk: txSeasonMsg.type !== toUI.ERROR,
-          getSeasonHistoryOk,
+          transactionsSeason: txSeasonRows,
+          allSeasons: allSeasonsMsg.payload?.seasons ?? null,
+          latestSeasonId,
+          seasonHistory,
+          dbLatestSeasonFound: latestSeasonId ? !!dbLatestSeason : null,
+          dbAllSeasons,
+          dbTransactions: dbTransactions ?? [],
+          expectedTransactionTypes: expectTx ? ['draft', 'retirement', 'signing'] : [],
+          getSeasonHistoryOk: dbProbeError ? false : getSeasonHistoryOk,
           getSeasonHistorySkipped,
           recordsProbeOk:
-            recordsMsg.type === toUI.ERROR
-              ? false
-              : !!(recordsMsg.payload?.recordBook || recordsMsg.payload?.records),
+            probeHandlerSucceeded(recordsMsg) && !!(recordsMsg.payload?.recordBook || recordsMsg.payload?.records),
           recordsProbeSkipped: false,
           hofProbeOk:
-            hofMsg.type === toUI.ERROR ? false : !hofMsg.payload || Array.isArray(hofMsg.payload?.players),
+            probeHandlerSucceeded(hofMsg) && (!hofMsg.payload || Array.isArray(hofMsg.payload?.players)),
           hofProbeSkipped: false,
-          draftClassesProbeOk: draftClassesMsg.type !== toUI.ERROR,
+          draftClassesProbeOk,
           draftClassesProbeSkipped: false,
+          draftClassesHasExpectedData,
+          expectDraftClasses,
           draftClassCount,
         };
         const pers = buildPersistenceAssertions(persInput);
@@ -568,7 +743,7 @@ export async function runDynastySoakOnce(opts = {}) {
       }
 
       tProbe = Date.now();
-      await dispatchWorker(toWorker.ADVANCE_WEEK, { skipUserGame: true }, { timeoutMs: phaseTimeoutMs });
+      await runnerDispatch(toWorker.ADVANCE_WEEK, { skipUserGame: true }, { timeoutMs: phaseTimeoutMs });
       pushCheckpoint(checkpoints, `S${s}.ADVANCE_WEEK`, Date.now() - tProbe, null);
     }
 
@@ -580,6 +755,7 @@ export async function runDynastySoakOnce(opts = {}) {
     aggregate.reportSummary = lastReportSummary;
     aggregate.timings.bootMs = checkpoints.filter((c) => c.name.startsWith('boot.')).reduce((a, c) => a + c.ms, 0);
     aggregate.timings.topSlowCheckpoints = topSlowCheckpoints(checkpoints);
+    aggregate.timings.phaseBreakdown = buildPhaseBreakdown(checkpoints);
     aggregate.timings.totalMs = aggregate.runtimeMs;
     aggregate.dynastySoakSimBatch = view?.dynastySoakSimBatch ?? null;
 
@@ -595,6 +771,7 @@ export async function runDynastySoakOnce(opts = {}) {
     aggregate.reportSummary = lastReportSummary;
     aggregate.timings.bootMs = checkpoints.filter((c) => c.name.startsWith('boot.')).reduce((a, c) => a + c.ms, 0);
     aggregate.timings.topSlowCheckpoints = topSlowCheckpoints(checkpoints);
+    aggregate.timings.phaseBreakdown = buildPhaseBreakdown(checkpoints);
     aggregate.timings.totalMs = aggregate.runtimeMs;
     return aggregate;
   } finally {

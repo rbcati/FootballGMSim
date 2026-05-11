@@ -41,6 +41,24 @@ describe('dynastySoakCli', () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 
+  it('rejects invalid numeric args in equals form', () => {
+    for (const flag of ['--seasons', '--seed', '--phase-timeout-ms', '--max-runtime-ms', '--teams']) {
+      for (const value of ['', 'NaN', 'Infinity', 'abc']) {
+        const { errors } = parseDynastySoakArgv(['node', 'x.mjs', `${flag}=${value}`]);
+        expect(errors.length, `${flag}=${value}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('rejects invalid numeric args in space-separated form', () => {
+    for (const flag of ['--seasons', '--seed', '--phase-timeout-ms', '--max-runtime-ms', '--teams']) {
+      for (const value of ['', 'NaN', 'Infinity', 'abc']) {
+        const { errors } = parseDynastySoakArgv(['node', 'x.mjs', flag, value]);
+        expect(errors.length, `${flag} ${value}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it('resolves CI defaults and phase timeout', () => {
     const { raw } = parseDynastySoakArgv(['node', 'x.mjs', '--ci']);
     const { errors, resolved } = resolveDynastySoakConfig(raw);
@@ -79,8 +97,25 @@ describe('dynastySoakCli', () => {
       finalYear: 2027,
       harnessConfig: { ci: true, deep: true, deepEachSeason: false },
       timings: {
+        phaseBreakdown: {
+          boot: { ms: 5, count: 1 },
+          sim: { ms: 80, count: 1 },
+          getProbes: { ms: 12, count: 2 },
+          auditEvaluation: { ms: 3, count: 1 },
+          finalAdvance: { ms: 7, count: 1 },
+        },
         topSlowCheckpoints: [
-          { name: 'S1.SIM_TO_PHASE', ms: 80 },
+          {
+            name: 'S1.SIM_TO_PHASE',
+            ms: 80,
+            meta: {
+              iterationsUsed: 42,
+              reachedTarget: true,
+              hitIterationCap: false,
+              lastPhase: 'preseason',
+              targetPhase: 'preseason',
+            },
+          },
           { name: 'boot.INIT', ms: 5 },
         ],
       },
@@ -93,8 +128,13 @@ describe('dynastySoakCli', () => {
       },
       persistenceAssertions: [{ id: 'latest_season_archive', ok: true, detail: 'ok' }],
     });
+    expect(md).toContain('Phase timing breakdown');
+    expect(md).toContain('GET probes');
+    expect(md).toContain('| Simulation | 80 | 1 |');
     expect(md).toContain('Slowest checkpoints');
     expect(md).toContain('S1.SIM_TO_PHASE');
+    expect(md).toContain('iterationsUsed');
+    expect(md).toContain('hitIterationCap');
     expect(md).toContain('AI / roster snapshot');
     expect(md).toContain('contender');
     expect(md).toContain('Persistence probes');

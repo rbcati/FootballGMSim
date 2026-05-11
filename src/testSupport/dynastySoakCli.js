@@ -18,13 +18,20 @@ Options:
   --teams=N               Reserved; only 32 is supported (smaller leagues deferred — see report)
 `;
 
-function parseEq(argv, i, prefix) {
-  const a = argv[i];
-  if (a.startsWith(`${prefix}=`)) return a.slice(prefix.length + 1);
-  if (a === prefix && argv[i + 1] != null && !String(argv[i + 1]).startsWith('-')) {
-    return argv[i + 1];
+function parseRequiredNumber(flag, value, errors) {
+  const rawValue = value == null ? '' : String(value);
+  if (rawValue.trim() === '') {
+    errors.push(`${flag} requires a finite number`);
+    return { ok: false, value: null };
   }
-  return null;
+
+  const numberValue = Number(rawValue);
+  if (!Number.isFinite(numberValue)) {
+    errors.push(`${flag} requires a finite number`);
+    return { ok: false, value: null };
+  }
+
+  return { ok: true, value: numberValue };
 }
 
 /**
@@ -52,45 +59,55 @@ export function parseDynastySoakArgv(argv) {
     else if (a === '--deep') raw.deep = true;
     else if (a === '--deep-each-season') raw.deepEachSeason = true;
     else if (a === '--skip-report-open') raw.skipReportOpen = true;
-    else if (a.startsWith('--seasons=')) raw.seasons = Number(a.split('=')[1]);
-    else if (a.startsWith('--seed=')) raw.seed = Number(a.split('=')[1]);
-    else if (a.startsWith('--outDir=')) raw.outDir = a.split('=').slice(1).join('=');
-    else if (a.startsWith('--phase-timeout-ms=')) raw.phaseTimeoutMs = Number(a.split('=')[1]);
-    else if (a.startsWith('--max-runtime-ms=')) raw.maxRuntimeMs = Number(a.split('=')[1]);
-    else if (a.startsWith('--teams=')) raw.teams = Number(a.split('=')[1]);
-    else if (a === '--seasons') {
+    else if (a.startsWith('--seasons=')) {
+      const parsed = parseRequiredNumber('--seasons', a.slice('--seasons='.length), errors);
+      if (parsed.ok) raw.seasons = parsed.value;
+    } else if (a.startsWith('--seed=')) {
+      const parsed = parseRequiredNumber('--seed', a.slice('--seed='.length), errors);
+      if (parsed.ok) raw.seed = parsed.value;
+    } else if (a.startsWith('--outDir=')) raw.outDir = a.split('=').slice(1).join('=');
+    else if (a.startsWith('--phase-timeout-ms=')) {
+      const parsed = parseRequiredNumber('--phase-timeout-ms', a.slice('--phase-timeout-ms='.length), errors);
+      if (parsed.ok) raw.phaseTimeoutMs = parsed.value;
+    } else if (a.startsWith('--max-runtime-ms=')) {
+      const parsed = parseRequiredNumber('--max-runtime-ms', a.slice('--max-runtime-ms='.length), errors);
+      if (parsed.ok) raw.maxRuntimeMs = parsed.value;
+    } else if (a.startsWith('--teams=')) {
+      const parsed = parseRequiredNumber('--teams', a.slice('--teams='.length), errors);
+      if (parsed.ok) raw.teams = parsed.value;
+    } else if (a === '--seasons') {
       const v = argv[i + 1];
-      if (v == null || String(v).startsWith('-')) errors.push('--seasons requires a number');
-      else {
-        raw.seasons = Number(v);
+      const parsed = parseRequiredNumber('--seasons', v, errors);
+      if (parsed.ok) {
+        raw.seasons = parsed.value;
         i += 1;
       }
     } else if (a === '--seed') {
       const v = argv[i + 1];
-      if (v == null || String(v).startsWith('-')) errors.push('--seed requires a number');
-      else {
-        raw.seed = Number(v);
+      const parsed = parseRequiredNumber('--seed', v, errors);
+      if (parsed.ok) {
+        raw.seed = parsed.value;
         i += 1;
       }
     } else if (a === '--phase-timeout-ms') {
       const v = argv[i + 1];
-      if (v == null || String(v).startsWith('-')) errors.push('--phase-timeout-ms requires a number');
-      else {
-        raw.phaseTimeoutMs = Number(v);
+      const parsed = parseRequiredNumber('--phase-timeout-ms', v, errors);
+      if (parsed.ok) {
+        raw.phaseTimeoutMs = parsed.value;
         i += 1;
       }
     } else if (a === '--max-runtime-ms') {
       const v = argv[i + 1];
-      if (v == null || String(v).startsWith('-')) errors.push('--max-runtime-ms requires a number');
-      else {
-        raw.maxRuntimeMs = Number(v);
+      const parsed = parseRequiredNumber('--max-runtime-ms', v, errors);
+      if (parsed.ok) {
+        raw.maxRuntimeMs = parsed.value;
         i += 1;
       }
     } else if (a === '--teams') {
       const v = argv[i + 1];
-      if (v == null || String(v).startsWith('-')) errors.push('--teams requires a number');
-      else {
-        raw.teams = Number(v);
+      const parsed = parseRequiredNumber('--teams', v, errors);
+      if (parsed.ok) {
+        raw.teams = parsed.value;
         i += 1;
       }
     } else if (a.startsWith('-')) {
@@ -168,6 +185,23 @@ export function mdEscape(s) {
     .replace(/\r?\n/g, ' ');
 }
 
+
+function formatPhaseBreakdownLabel(key) {
+  const labels = {
+    boot: 'Boot',
+    sim: 'Simulation',
+    getProbes: 'GET probes',
+    auditEvaluation: 'Audit evaluation',
+    finalAdvance: 'Final advance',
+  };
+  return labels[key] || key;
+}
+
+function formatCheckpointMeta(meta) {
+  if (!meta || typeof meta !== 'object' || !Object.keys(meta).length) return '';
+  return mdEscape(JSON.stringify(meta));
+}
+
 /**
  * @param {object} result - runDynastySoakOnce output (JSON-serializable)
  */
@@ -196,14 +230,27 @@ export function buildMarkdownReport(result) {
     lines.push('');
   }
 
+  const phaseBreakdown = result.timings?.phaseBreakdown;
+  if (phaseBreakdown && Object.keys(phaseBreakdown).length) {
+    lines.push('## Phase timing breakdown');
+    lines.push('');
+    lines.push('| Phase group | ms | Checkpoints |');
+    lines.push('| --- | --- | --- |');
+    for (const [key, value] of Object.entries(phaseBreakdown)) {
+      const entry = value && typeof value === 'object' ? value : { ms: value, count: null };
+      lines.push(`| ${mdEscape(formatPhaseBreakdownLabel(key))} | ${entry.ms ?? 0} | ${entry.count ?? 'n/a'} |`);
+    }
+    lines.push('');
+  }
+
   if (result.timings?.topSlowCheckpoints?.length) {
     lines.push('## Slowest checkpoints');
     lines.push('');
-    lines.push('| Rank | Checkpoint | ms |');
-    lines.push('| --- | --- | --- |');
+    lines.push('| Rank | Checkpoint | ms | Metadata |');
+    lines.push('| --- | --- | --- | --- |');
     let r = 1;
     for (const c of result.timings.topSlowCheckpoints) {
-      lines.push(`| ${r} | ${mdEscape(c.name)} | ${c.ms} |`);
+      lines.push(`| ${r} | ${mdEscape(c.name)} | ${c.ms} | ${formatCheckpointMeta(c.meta)} |`);
       r += 1;
     }
     lines.push('');

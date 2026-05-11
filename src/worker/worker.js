@@ -53,6 +53,12 @@
  */
 
 import { toWorker, toUI } from './protocol.js';
+import {
+  createEmptyDirtySnapshot,
+  hasDirtySnapshot,
+  mergeDirtySnapshots,
+  queueDirtySnapshot,
+} from './dirtyFlushAccumulator.js';
 import { cache }          from '../db/cache.js';
 import {
   Meta, Teams, Players, Rosters, Games,
@@ -1366,6 +1372,7 @@ function hydrateAllPlayersForDevelopment() {
 // / handleUseSafeStarterLeague.
 // Every other path that might call flushDirty() is therefore safely blocked.
 let _saveIsExplicitlyLoaded = false;
+let pendingBatchDirty = createEmptyDirtySnapshot();
 
 const LEAGUE_DB_PREFIX = 'FootballGM_League_';
 
@@ -1467,7 +1474,8 @@ async function flushDirty(forceFlush = false) {
     return;
   }
 
-  if (!cache.isDirty()) return;
+  const hasPendingBatchDirty = hasDirtySnapshot(pendingBatchDirty);
+  if (!cache.isDirty() && !hasPendingBatchDirty) return;
 
   // SECONDARY SAFETY CHECK: Never flush if cache isn't fully loaded (prevent empty overwrite)
   if (!cache.isLoaded()) {
@@ -1475,16 +1483,23 @@ async function flushDirty(forceFlush = false) {
       return;
   }
 
-  // Node dynasty-soak harness: skip IndexedDB writes during long SIM_TO_PHASE batches, but
-  // still drain dirty flags so dirty tracking does not grow without bound (would slow to a crawl).
+  // Node dynasty-soak harness: skip IndexedDB writes during long SIM_TO_PHASE batches.
+  // Drain the cache so dirty tracking stays bounded, but retain the drained dirty IDs
+  // and write them on the final forced flush instead of discarding them.
   if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ && !forceFlush) {
     if (cache.isDirty()) {
-      cache.drainDirty();
+      pendingBatchDirty = queueDirtySnapshot(pendingBatchDirty, cache.drainDirty());
+      globalThis.__DYNASTY_SOAK_PENDING_DIRTY__ = pendingBatchDirty;
     }
     return;
   }
 
-  const dirty = cache.drainDirty();
+  const currentDirty = cache.isDirty() ? cache.drainDirty() : createEmptyDirtySnapshot();
+  const dirty = forceFlush
+    ? mergeDirtySnapshots(pendingBatchDirty, currentDirty)
+    : currentDirty;
+
+  if (!hasDirtySnapshot(dirty)) return;
 
   // Resolve dirty IDs → full objects, dropping any that are null (already deleted).
   const teams   = dirty.teams.map(id => cache.getTeam(id)).filter(Boolean);
@@ -1576,6 +1591,13 @@ async function flushDirty(forceFlush = false) {
       });
     }
   } catch (_) { /* non-fatal — manifest is best-effort */ }
+
+  if (forceFlush && hasPendingBatchDirty) {
+    pendingBatchDirty = createEmptyDirtySnapshot();
+    if (typeof globalThis !== 'undefined') {
+      globalThis.__DYNASTY_SOAK_PENDING_DIRTY__ = pendingBatchDirty;
+    }
+  }
 }
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
@@ -3878,13 +3900,23 @@ async function handleSimToPhase({ targetPhase }, id) {
 // ── Handler: GET_SEASON_HISTORY ───────────────────────────────────────────────
 
 async function handleGetSeasonHistory({ seasonId }, id) {
-  // Check LRU first
-  let data = cache.getHistorySeason(seasonId);
-  if (!data) {
-    data = await Seasons.load(seasonId);
-    if (data) cache.setHistorySeason(seasonId, data);
+  try {
+    // Check LRU first
+    let data = cache.getHistorySeason(seasonId);
+    if (!data) {
+      data = await Seasons.load(seasonId);
+      if (data) cache.setHistorySeason(seasonId, data);
+    }
+    post(toUI.SEASON_HISTORY, { ok: true, seasonId, data: data ?? null }, id);
+  } catch (err) {
+    console.error('[Worker] GET_SEASON_HISTORY failed:', err);
+    post(toUI.SEASON_HISTORY, {
+      ok: false,
+      error: err?.message || String(err),
+      seasonId,
+      data: null,
+    }, id);
   }
-  post(toUI.SEASON_HISTORY, { seasonId, data: data ?? null }, id);
 }
 
 // ── Handler: GET_ALL_SEASONS ──────────────────────────────────────────────────
@@ -3957,21 +3989,21 @@ async function handleGetTransactions(payload = {}, id) {
     let rows = [];
     if (explicitRecent && teamId == null && seasonId == null && !wantPlayer) {
       const cap = Math.min(4000, Math.max(400, Number(limit) * 5 || 800));
-      rows = await Transactions.loadRecent(cap).catch(() => []);
+      rows = await Transactions.loadRecent(cap);
     } else if (wantPlayer && teamId == null && seasonId == null) {
       const cap = Math.min(4000, Math.max(800, Number(limit) * 25 || 2500));
-      rows = await Transactions.loadRecent(cap).catch(() => []);
+      rows = await Transactions.loadRecent(cap);
     } else if (teamId != null) {
-      rows = await Transactions.byTeam(Number(teamId)).catch(() => []);
+      rows = await Transactions.byTeam(Number(teamId));
       const sid = seasonId ?? resolvedSeasonId;
       if (sid) {
         rows = rows.filter((row) => String(row?.seasonId) === String(sid));
       }
     } else if (resolvedSeasonId) {
-      rows = await Transactions.bySeason(resolvedSeasonId).catch(() => []);
+      rows = await Transactions.bySeason(resolvedSeasonId);
     } else if (explicitRecent) {
       const cap = Math.min(4000, Math.max(400, Number(limit) * 5 || 800));
-      rows = await Transactions.loadRecent(cap).catch(() => []);
+      rows = await Transactions.loadRecent(cap);
     }
 
     const allTeams = cache.getAllTeams();
@@ -4064,10 +4096,14 @@ async function handleGetTransactions(payload = {}, id) {
       legacyTypeLabel: row.legacyType ? txTypeLabel(row.legacyType) : bucketTypeLabel(row.type),
     }));
 
-    post(toUI.TRANSACTIONS, { transactions: stripped }, id);
+    post(toUI.TRANSACTIONS, { ok: true, transactions: stripped }, id);
   } catch (err) {
     console.error("[Worker] GET_TRANSACTIONS failed:", err);
-    post(toUI.TRANSACTIONS, { transactions: [] }, id);
+    post(toUI.TRANSACTIONS, {
+      ok: false,
+      error: err?.message || String(err),
+      transactions: [],
+    }, id);
   }
 }
 
@@ -4085,13 +4121,17 @@ async function loadMergedSeasonSummaries() {
 async function handleGetDraftClasses(payload, id) {
   try {
     const { merged } = await loadMergedSeasonSummaries();
-    const recent = await Transactions.loadRecent(4000).catch(() => []);
+    const recent = await Transactions.loadRecent(4000);
     const draftOnly = recent.filter((tx) => String(tx?.type).toUpperCase() === 'DRAFT');
     const classes = indexDraftClassesFromTransactions(draftOnly, merged);
-    post(toUI.DRAFT_CLASSES, { classes }, id);
+    post(toUI.DRAFT_CLASSES, { ok: true, classes }, id);
   } catch (err) {
     console.error('[Worker] GET_DRAFT_CLASSES failed:', err);
-    post(toUI.DRAFT_CLASSES, { classes: [] }, id);
+    post(toUI.DRAFT_CLASSES, {
+      ok: false,
+      error: err?.message || String(err),
+      classes: [],
+    }, id);
   }
 }
 
