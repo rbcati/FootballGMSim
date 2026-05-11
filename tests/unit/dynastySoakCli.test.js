@@ -25,7 +25,7 @@ describe('dynastySoakCli', () => {
     expect(raw.deepEachSeason).toBe(true);
   });
 
-  it('resolves --deep into an explicit runner config field', () => {
+  it('resolves --deep into an explicit runner config field without enabling deep-each-season', () => {
     const { raw, errors: parseErrors } = parseDynastySoakArgv(['node', 'x.mjs', '--deep']);
     expect(parseErrors).toEqual([]);
     expect(raw.deep).toBe(true);
@@ -34,6 +34,16 @@ describe('dynastySoakCli', () => {
     expect(errors).toEqual([]);
     expect(resolved.deep).toBe(true);
     expect(resolved.deepEachSeason).toBe(false);
+  });
+
+  it('resolves --deep-each-season into an explicit runner config field', () => {
+    const { raw, errors: parseErrors } = parseDynastySoakArgv(['node', 'x.mjs', '--deep-each-season']);
+    expect(parseErrors).toEqual([]);
+    expect(raw.deepEachSeason).toBe(true);
+
+    const { errors, resolved } = resolveDynastySoakConfig(raw);
+    expect(errors).toEqual([]);
+    expect(resolved.deepEachSeason).toBe(true);
   });
 
   it('rejects unknown flags', () => {
@@ -128,6 +138,7 @@ describe('dynastySoakCli', () => {
       },
       persistenceAssertions: [{ id: 'latest_season_archive', ok: true, detail: 'ok' }],
     });
+    expect(md).toContain('- **Harness:** ci=true deep=true deepEachSeason=false');
     expect(md).toContain('Phase timing breakdown');
     expect(md).toContain('GET probes');
     expect(md).toContain('| Simulation | 80 | 1 |');

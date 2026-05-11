@@ -399,8 +399,8 @@ export async function runDynastySoakOnce(opts = {}) {
 
     for (let s = 1; s <= seasons; s += 1) {
       checkMaxRuntime(t0, maxRuntimeMs);
-      const yearBefore = Number(view?.year ?? 0);
-      const phaseBefore = String(view?.phase ?? '');
+      let yearBefore = Number(view?.year ?? 0);
+      let phaseBefore = String(view?.phase ?? '');
       const fullProbes = deepEachSeason || s === seasons;
       const deepFinalProbes = deep && s === seasons;
       const recentTransactionLimit = deepFinalProbes ? 1_000 : 400;
@@ -435,6 +435,8 @@ export async function runDynastySoakOnce(opts = {}) {
           break;
         }
         view = advanceResult.lastMsg.payload;
+        yearBefore = Number(view?.year ?? 0);
+        phaseBefore = String(view?.phase ?? '');
       }
 
       const simCtx = { checkpoints, label: `S${s}`, phaseBefore, yearBefore };
@@ -580,7 +582,7 @@ export async function runDynastySoakOnce(opts = {}) {
           let archiveOk = true;
           for (const season of archiveSample) {
             tProbe = Date.now();
-            const sampledHistMsg = await dispatchWorker(
+            const sampledHistMsg = await runnerDispatch(
               toWorker.GET_SEASON_HISTORY,
               { seasonId: season.id },
               { timeoutMs: phaseTimeoutMs },
@@ -607,7 +609,7 @@ export async function runDynastySoakOnce(opts = {}) {
         let draftClassOk = true;
         for (const klass of draftClassSample) {
           tProbe = Date.now();
-          const draftClassMsg = await dispatchWorker(
+          const draftClassMsg = await runnerDispatch(
             toWorker.GET_DRAFT_CLASS,
             { seasonId: klass.seasonId },
             { timeoutMs: phaseTimeoutMs },
@@ -625,6 +627,7 @@ export async function runDynastySoakOnce(opts = {}) {
             : 'no draft classes available to sample',
         });
       }
+
       const txSeasonRows = txSeasonMsg.payload?.transactions ?? [];
       let dbLatestSeason = null;
       let dbAllSeasons = null;
