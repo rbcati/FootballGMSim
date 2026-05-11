@@ -53,6 +53,11 @@ const MAX_TRADES_PER_WEEK = 2;
 /** Value ratio tolerance (±10 % of fair value). */
 const VALUE_TOLERANCE = 0.10;
 
+/** CPU vs CPU uniform swaps avoid quarterbacks (validation + narrative safety). */
+export function shouldBlockCpuUniformPlayerSwap(playerA, playerB) {
+  return String(playerA?.pos ?? '') === 'QB' || String(playerB?.pos ?? '') === 'QB';
+}
+
 // ── Asset Valuation ───────────────────────────────────────────────────────────
 
 /**
@@ -299,6 +304,8 @@ export async function runAIToAITrades() {
       // Check trade fairness: values must be within ±VALUE_TOLERANCE.
       const ratio = valueA / valueB;
       if (ratio < (1 - VALUE_TOLERANCE) || ratio > (1 + VALUE_TOLERANCE)) continue;
+
+      if (shouldBlockCpuUniformPlayerSwap(playerFromA, playerFromB)) continue;
 
       // Trade is fair — execute it.
       await executeTrade(teamA.id, playerFromA, teamB.id, playerFromB);

@@ -401,9 +401,21 @@ class AiLogic {
             year: meta?.year,
         });
 
-        // 1. Identify Needs
+        // 1. Identify Needs (prioritize highest gaps; contenders focus on a few real upgrades per day)
         const needs = this._teamNeedsFromStrategy(strategy);
-        const highNeedPositions = Object.keys(needs).filter(pos => needs[pos] >= 1.2);
+        let highNeedPositions = Object.keys(needs).filter(pos => needs[pos] >= 1.2);
+        const needSortScore = (pos) => Number(needs[pos] ?? 0) + (pos === 'QB' ? 0.72 : 0);
+        highNeedPositions.sort((a, b) => needSortScore(b) - needSortScore(a));
+        const arch = strategy?.archetype;
+        const maxNeedSlots = arch === 'contender' || arch === 'playoff_hunt'
+          ? 3
+          : arch === 'rebuild' || arch === 'development'
+            ? 6
+            : 4;
+        highNeedPositions = highNeedPositions.slice(0, maxNeedSlots);
+        if (Number(needs.QB ?? 0) >= 1.12 && !highNeedPositions.includes('QB')) {
+          highNeedPositions = ['QB', ...highNeedPositions].slice(0, maxNeedSlots);
+        }
 
         if (highNeedPositions.length === 0) return;
 
@@ -491,17 +503,27 @@ class AiLogic {
                 const age = Number(fa?.age ?? 27);
                 const isVeteran = age >= 30;
                 const isExpensive = Number(demand?.baseAnnual ?? 0) >= 14;
-                const avoidVeteranSpend = ['rebuild', 'development'].includes(strategy?.archetype) && isVeteran && isExpensive;
+                const avoidVeteranSpend = (['rebuild', 'development'].includes(strategy?.archetype) && isVeteran && isExpensive)
+                    || (strategy?.archetype === 'retool' && age >= 31 && isExpensive);
                 if (avoidVeteranSpend) continue;
 
                 const capHit = demand.baseAnnual + (demand.signingBonus / demand.yearsTotal);
-                const capLimit = strategy?.archetype === 'contender'
-                    ? 0.8
+                const capHealth = Number(strategy?.capHealth ?? 55);
+                let capLimit = strategy?.archetype === 'contender'
+                    ? 0.74
                     : ['rebuild', 'development'].includes(strategy?.archetype)
-                        ? 0.45
-                        : 0.65;
+                        ? 0.42
+                        : strategy?.archetype === 'middle'
+                          ? 0.58
+                          : 0.62;
+                if (capHealth < 28) capLimit *= 0.68;
+                else if (capHealth < 40) capLimit *= 0.86;
                 const maxAllowedHit = Math.max(3, Number(team.capRoom ?? 0) * capLimit);
-                if (!urgentPos && capHit > maxAllowedHit) continue;
+                const qbDesperate = pos === 'QB' && Number(needs.QB ?? 0) >= 1.12;
+                if (!urgentPos && capHit > maxAllowedHit) {
+                    const qbException = qbDesperate && capHit <= maxAllowedHit * 1.28 && capHealth >= 18;
+                    if (!qbException) continue;
+                }
 
                 // Check Cap
                 if ((team.capRoom ?? 0) > (capHit + 1)) {
