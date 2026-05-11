@@ -28,6 +28,24 @@ describe('dynastySoakCli', () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 
+  it('rejects invalid numeric args in equals form', () => {
+    for (const flag of ['--seasons', '--seed', '--phase-timeout-ms', '--max-runtime-ms', '--teams']) {
+      for (const value of ['', 'NaN', 'Infinity', 'abc']) {
+        const { errors } = parseDynastySoakArgv(['node', 'x.mjs', `${flag}=${value}`]);
+        expect(errors.length, `${flag}=${value}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('rejects invalid numeric args in space-separated form', () => {
+    for (const flag of ['--seasons', '--seed', '--phase-timeout-ms', '--max-runtime-ms', '--teams']) {
+      for (const value of ['', 'NaN', 'Infinity', 'abc']) {
+        const { errors } = parseDynastySoakArgv(['node', 'x.mjs', flag, value]);
+        expect(errors.length, `${flag} ${value}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it('resolves CI defaults and phase timeout', () => {
     const { raw } = parseDynastySoakArgv(['node', 'x.mjs', '--ci']);
     const { errors, resolved } = resolveDynastySoakConfig(raw);
