@@ -7,20 +7,33 @@ import {
 } from '../../src/testSupport/dynastySoakCli.js';
 
 describe('dynastySoakCli', () => {
-  it('parses --ci, --seasons, --seed, --deep-each-season', () => {
+  it('parses --ci, --seasons, --seed, --deep, --deep-each-season', () => {
     const { raw, errors } = parseDynastySoakArgv([
       'node',
       'dynasty-soak.mjs',
       '--ci',
       '--seasons=2',
       '--seed=99',
+      '--deep',
       '--deep-each-season',
     ]);
     expect(errors).toEqual([]);
     expect(raw.ci).toBe(true);
     expect(raw.seasons).toBe(2);
     expect(raw.seed).toBe(99);
+    expect(raw.deep).toBe(true);
     expect(raw.deepEachSeason).toBe(true);
+  });
+
+  it('resolves --deep into an explicit runner config field', () => {
+    const { raw, errors: parseErrors } = parseDynastySoakArgv(['node', 'x.mjs', '--deep']);
+    expect(parseErrors).toEqual([]);
+    expect(raw.deep).toBe(true);
+
+    const { errors, resolved } = resolveDynastySoakConfig(raw);
+    expect(errors).toEqual([]);
+    expect(resolved.deep).toBe(true);
+    expect(resolved.deepEachSeason).toBe(false);
   });
 
   it('rejects unknown flags', () => {
@@ -64,7 +77,7 @@ describe('dynastySoakCli', () => {
       warnings: [],
       finalPhase: 'preseason',
       finalYear: 2027,
-      harnessConfig: { ci: true, deepEachSeason: false },
+      harnessConfig: { ci: true, deep: true, deepEachSeason: false },
       timings: {
         topSlowCheckpoints: [
           { name: 'S1.SIM_TO_PHASE', ms: 80 },
