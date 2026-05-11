@@ -149,7 +149,7 @@ export function countTransactionTypes(transactions) {
 /**
  * Harness-only persistence checklist (does not mutate state).
  * @param {object} input
- * @returns {{ allOk: boolean, assertions: { id: string, ok: boolean, detail: string }[] }}
+ * @returns {{ allOk: boolean, assertions: { id: string, ok: boolean, detail: string, code?: string }[] }}
  */
 export function buildPersistenceAssertions(input = {}) {
   const viewState = input.viewState ?? {};
@@ -164,20 +164,28 @@ export function buildPersistenceAssertions(input = {}) {
   });
 
   const hasTx = Array.isArray(input.transactionsRecent) && input.transactionsRecent.length > 0;
+  const transactionsRecentProbeOk = input.transactionsRecentProbeOk !== false;
+  const transactionsRecentHasExpectedData = input.transactionsRecentHasExpectedData ?? hasTx;
   assertions.push({
     id: 'transactions_recent_available',
-    ok: hasTx || !input.expectTransactions,
-    detail: hasTx
-      ? `${input.transactionsRecent.length} recent rows`
-      : input.expectTransactions
-        ? 'no transactions in recent strip but activity expected'
-        : 'no recent transactions (ok if none expected)',
+    ok: transactionsRecentProbeOk && (transactionsRecentHasExpectedData || !input.expectTransactions),
+    code: !transactionsRecentProbeOk
+      ? 'get_transactions_failed'
+      : (!transactionsRecentHasExpectedData && input.expectTransactions ? 'transactions_recent_empty' : undefined),
+    detail: !transactionsRecentProbeOk
+      ? 'GET_TRANSACTIONS recent failed'
+      : transactionsRecentHasExpectedData
+        ? `${input.transactionsRecent.length} recent rows`
+        : input.expectTransactions
+          ? 'no transactions in recent strip but activity expected'
+          : 'no recent transactions (ok if none expected)',
   });
 
   if (input.seasonTxQueryOk != null) {
     assertions.push({
       id: 'get_transactions_by_season',
       ok: !!input.seasonTxQueryOk,
+      code: input.seasonTxQueryOk ? undefined : 'get_transactions_failed',
       detail: input.seasonTxQueryOk ? 'GET_TRANSACTIONS by season ok' : 'GET_TRANSACTIONS by season failed',
     });
   }
@@ -241,15 +249,22 @@ export function buildPersistenceAssertions(input = {}) {
           : 'GET_HALL_OF_FAME invalid shape',
   });
 
+  const draftClassesProbeOk = input.draftClassesProbeOk !== false;
+  const draftClassesHasExpectedData = input.draftClassesHasExpectedData ?? Number(input.draftClassCount ?? 0) > 0;
   assertions.push({
     id: 'get_draft_classes',
-    ok: input.draftClassesProbeOk !== false,
+    ok: input.draftClassesProbeSkipped || (draftClassesProbeOk && (draftClassesHasExpectedData || !input.expectDraftClasses)),
+    code: !draftClassesProbeOk
+      ? 'get_draft_classes_failed'
+      : (!draftClassesHasExpectedData && input.expectDraftClasses ? 'draft_classes_empty' : undefined),
     detail:
       input.draftClassesProbeSkipped
         ? 'skipped (shallow probe mode)'
-        : input.draftClassesProbeOk
-          ? `GET_DRAFT_CLASSES count=${input.draftClassCount ?? 0}`
-          : 'GET_DRAFT_CLASSES invalid',
+        : !draftClassesProbeOk
+          ? 'GET_DRAFT_CLASSES failed'
+          : draftClassesHasExpectedData
+            ? `GET_DRAFT_CLASSES count=${input.draftClassCount ?? 0}`
+            : 'GET_DRAFT_CLASSES returned no classes (ok if none expected)',
   });
 
   return { allOk: assertions.every((a) => a.ok), assertions };
