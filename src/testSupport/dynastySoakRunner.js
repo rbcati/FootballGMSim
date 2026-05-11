@@ -439,6 +439,12 @@ export async function runDynastySoakOnce(opts = {}) {
         phaseBefore = String(view?.phase ?? '');
       }
 
+      const simCtx = {
+        checkpoints,
+        label: `S${s}`,
+        phaseBefore: String(view?.phase ?? ''),
+        yearBefore: Number(view?.year ?? 0),
+      };
       const simCtx = { checkpoints, label: `S${s}`, phaseBefore, yearBefore };
       const { lastMsg: simMsg, attempts } = await simUntilPreseason(simTimeoutMs, simCtx, runnerDispatch);
       simAttemptsPerSeason.push({ season: s, attempts });
@@ -560,7 +566,7 @@ export async function runDynastySoakOnce(opts = {}) {
 
       let seasonHistory = null;
       let getSeasonHistoryOk = null;
-      let getSeasonHistorySkipped = !fullProbes;
+      const getSeasonHistorySkipped = !fullProbes;
       const deepFinalAssertions = [];
       if (fullProbes && latestSeason?.id) {
         tProbe = Date.now();
