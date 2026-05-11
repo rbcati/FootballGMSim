@@ -151,17 +151,63 @@ export function countTransactionTypes(transactions) {
  * @param {object} input
  * @returns {{ allOk: boolean, assertions: { id: string, ok: boolean, detail: string, code?: string }[] }}
  */
+function transactionBucket(tx) {
+  const raw = String(tx?.type ?? tx?.legacyType ?? '').toLowerCase();
+  if (raw === 'sign' || raw === 'signing') return 'signing';
+  if (raw === 'draft') return 'draft';
+  if (raw === 'retirement') return 'retirement';
+  return raw;
+}
+
+function hasSeasonId(row, seasonId) {
+  return seasonId != null && String(row?.id ?? row?.seasonId ?? '') === String(seasonId);
+}
+
 export function buildPersistenceAssertions(input = {}) {
   const viewState = input.viewState ?? {};
   const leagueHistory = Array.isArray(viewState.leagueHistory) ? viewState.leagueHistory : [];
   const latest = leagueHistory.length ? leagueHistory[leagueHistory.length - 1] : null;
   const assertions = [];
 
+  const latestSeasonId = input.latestSeasonId ?? latest?.id ?? null;
+
   assertions.push({
     id: 'latest_season_archive',
     ok: !!(latest && latest.id),
     detail: latest?.id ? `latest season id=${latest.id}` : 'leagueHistory missing or empty',
   });
+
+  if (Array.isArray(input.allSeasons) && latestSeasonId != null) {
+    const found = input.allSeasons.some((season) => hasSeasonId(season, latestSeasonId));
+    assertions.push({
+      id: 'get_all_seasons_latest',
+      ok: found,
+      detail: found
+        ? `GET_ALL_SEASONS includes latest season ${latestSeasonId}`
+        : `GET_ALL_SEASONS missing latest season ${latestSeasonId}`,
+    });
+  }
+
+  if (input.dbLatestSeasonFound != null) {
+    assertions.push({
+      id: 'db_latest_season_archive',
+      ok: !!input.dbLatestSeasonFound,
+      detail: input.dbLatestSeasonFound
+        ? `IndexedDB contains latest season ${latestSeasonId ?? '(unknown)'}`
+        : `IndexedDB missing latest season ${latestSeasonId ?? '(unknown)'}`,
+    });
+  }
+
+  if (Array.isArray(input.dbAllSeasons) && latestSeasonId != null) {
+    const found = input.dbAllSeasons.some((season) => hasSeasonId(season, latestSeasonId));
+    assertions.push({
+      id: 'db_all_seasons_latest',
+      ok: found,
+      detail: found
+        ? `IndexedDB season list includes latest season ${latestSeasonId}`
+        : `IndexedDB season list missing latest season ${latestSeasonId}`,
+    });
+  }
 
   const hasTx = Array.isArray(input.transactionsRecent) && input.transactionsRecent.length > 0;
   const transactionsRecentProbeOk = input.transactionsRecentProbeOk !== false;
@@ -226,6 +272,37 @@ export function buildPersistenceAssertions(input = {}) {
           ? 'GET_SEASON_HISTORY returned data'
           : 'GET_SEASON_HISTORY failed or empty',
   });
+
+  if (input.seasonHistory !== undefined && latestSeasonId != null && !input.getSeasonHistorySkipped) {
+    const found = input.seasonHistory && hasSeasonId(input.seasonHistory, latestSeasonId);
+    assertions.push({
+      id: 'get_season_history_latest',
+      ok: !!found,
+      detail: found
+        ? `GET_SEASON_HISTORY returned latest season ${latestSeasonId}`
+        : `GET_SEASON_HISTORY missing latest season ${latestSeasonId}`,
+    });
+  }
+
+  const transactionProbeRows = [
+    ...(Array.isArray(input.transactionsRecent) ? input.transactionsRecent : []),
+    ...(Array.isArray(input.transactionsSeason) ? input.transactionsSeason : []),
+    ...(Array.isArray(input.dbTransactions) ? input.dbTransactions : []),
+  ];
+  const expectedTransactionTypes = Array.isArray(input.expectedTransactionTypes)
+    ? input.expectedTransactionTypes.map((type) => String(type).toLowerCase())
+    : [];
+  if (expectedTransactionTypes.length) {
+    const present = new Set(transactionProbeRows.map(transactionBucket));
+    const missing = expectedTransactionTypes.filter((type) => !present.has(type));
+    assertions.push({
+      id: 'expected_transaction_types',
+      ok: missing.length === 0,
+      detail: missing.length
+        ? `missing transaction buckets: ${missing.join(', ')}`
+        : `found transaction buckets: ${expectedTransactionTypes.join(', ')}`,
+    });
+  }
 
   assertions.push({
     id: 'get_records',
