@@ -119,4 +119,104 @@ describe('runDynastySoakOnce', () => {
     expect(simAttempt).toMatchObject({ phaseAfter: 'preseason', yearAfter: 2027 });
     expect(simAttempt.yearAfter).toBeGreaterThan(checkpoint.meta.yearBefore);
   });
+
+  it('uses injected worker hooks for deep final probes without deepEachSeason', async () => {
+    const calls = [];
+    const bootState = makeState({ phase: 'regular', year: 2026 });
+    const finalState = {
+      ...makeState({ phase: 'preseason', year: 2027 }),
+      seasonId: 's2027',
+      leagueHistory: [
+        { id: 's2023', year: 2023 },
+        { id: 's2024', year: 2024 },
+        { id: 's2025', year: 2025 },
+        { id: 's2026', year: 2026 },
+      ],
+    };
+    const draftClasses = [
+      { seasonId: 's2026', year: 2026 },
+      { seasonId: 's2025', year: 2025 },
+    ];
+
+    const dispatchWorker = vi.fn(async (type, payload = {}) => {
+      calls.push({ type, payload });
+      switch (type) {
+        case toWorker.INIT:
+          return { type: toUI.READY, payload: {} };
+        case toWorker.USE_SAFE_STARTER_LEAGUE:
+          return { type: toUI.FULL_STATE, payload: bootState };
+        case toWorker.SIM_TO_PHASE:
+          expect(payload).toEqual({ targetPhase: 'preseason' });
+          return { type: toUI.FULL_STATE, payload: finalState };
+        case toWorker.GET_ALL_SEASONS:
+          return { type: toUI.ALL_SEASONS, payload: { seasons: finalState.leagueHistory } };
+        case toWorker.GET_TRANSACTIONS:
+          return { type: toUI.TRANSACTIONS, payload: { transactions: [] } };
+        case toWorker.GET_RECORDS:
+          return { type: toUI.RECORDS, payload: { recordBook: {} } };
+        case toWorker.GET_HALL_OF_FAME:
+          return { type: toUI.HALL_OF_FAME, payload: { players: [] } };
+        case toWorker.GET_DRAFT_CLASSES:
+          return { type: toUI.DRAFT_CLASSES, payload: { classes: draftClasses } };
+        case toWorker.GET_SEASON_HISTORY:
+          return {
+            type: toUI.SEASON_HISTORY,
+            payload: { seasonId: payload.seasonId, data: { id: payload.seasonId } },
+          };
+        case toWorker.GET_DRAFT_CLASS:
+          return {
+            type: toUI.DRAFT_CLASS,
+            payload: { seasonId: payload.seasonId, model: { seasonId: payload.seasonId } },
+          };
+        case toWorker.ADVANCE_WEEK:
+          return { type: toUI.WEEK_COMPLETE, payload: finalState };
+        default:
+          throw new Error(`Unexpected worker call: ${type}`);
+      }
+    });
+    const loadWorkerModule = vi.fn(async () => {});
+
+    const { runDynastySoakOnce } = await import('../../src/testSupport/dynastySoakRunner.js');
+    const result = await runDynastySoakOnce({
+      seasons: 1,
+      seed: 123,
+      deep: true,
+      deepEachSeason: false,
+      dispatchWorker,
+      loadWorkerModule,
+    });
+
+    expect(loadWorkerModule).toHaveBeenCalledTimes(1);
+    expect(result.harnessConfig.deep).toBe(true);
+    expect(result.harnessConfig.deepEachSeason).toBe(false);
+
+    expect(calls).toContainEqual({
+      type: toWorker.GET_TRANSACTIONS,
+      payload: { mode: 'recent', limit: 1000 },
+    });
+    expect(calls).toContainEqual({
+      type: toWorker.GET_TRANSACTIONS,
+      payload: { seasonId: 's2026', limit: 1000 },
+    });
+
+    const seasonHistoryCalls = calls.filter((c) => c.type === toWorker.GET_SEASON_HISTORY);
+    for (const seasonId of ['s2023', 's2024', 's2025', 's2026']) {
+      expect(seasonHistoryCalls).toContainEqual({
+        type: toWorker.GET_SEASON_HISTORY,
+        payload: { seasonId },
+      });
+    }
+
+    const draftClassCalls = calls.filter((c) => c.type === toWorker.GET_DRAFT_CLASS);
+    expect(draftClassCalls).toEqual([
+      { type: toWorker.GET_DRAFT_CLASS, payload: { seasonId: 's2026' } },
+      { type: toWorker.GET_DRAFT_CLASS, payload: { seasonId: 's2025' } },
+    ]);
+
+    expect(result.persistenceAssertions.map((assertion) => assertion.id)).toEqual([
+      'deep_archive_history_sample',
+      'deep_draft_class_model_sample',
+    ]);
+  });
+
 });
