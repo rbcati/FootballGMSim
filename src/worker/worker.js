@@ -3900,13 +3900,23 @@ async function handleSimToPhase({ targetPhase }, id) {
 // ── Handler: GET_SEASON_HISTORY ───────────────────────────────────────────────
 
 async function handleGetSeasonHistory({ seasonId }, id) {
-  // Check LRU first
-  let data = cache.getHistorySeason(seasonId);
-  if (!data) {
-    data = await Seasons.load(seasonId);
-    if (data) cache.setHistorySeason(seasonId, data);
+  try {
+    // Check LRU first
+    let data = cache.getHistorySeason(seasonId);
+    if (!data) {
+      data = await Seasons.load(seasonId);
+      if (data) cache.setHistorySeason(seasonId, data);
+    }
+    post(toUI.SEASON_HISTORY, { ok: true, seasonId, data: data ?? null }, id);
+  } catch (err) {
+    console.error('[Worker] GET_SEASON_HISTORY failed:', err);
+    post(toUI.SEASON_HISTORY, {
+      ok: false,
+      error: err?.message || String(err),
+      seasonId,
+      data: null,
+    }, id);
   }
-  post(toUI.SEASON_HISTORY, { seasonId, data: data ?? null }, id);
 }
 
 // ── Handler: GET_ALL_SEASONS ──────────────────────────────────────────────────
@@ -3979,21 +3989,21 @@ async function handleGetTransactions(payload = {}, id) {
     let rows = [];
     if (explicitRecent && teamId == null && seasonId == null && !wantPlayer) {
       const cap = Math.min(4000, Math.max(400, Number(limit) * 5 || 800));
-      rows = await Transactions.loadRecent(cap).catch(() => []);
+      rows = await Transactions.loadRecent(cap);
     } else if (wantPlayer && teamId == null && seasonId == null) {
       const cap = Math.min(4000, Math.max(800, Number(limit) * 25 || 2500));
-      rows = await Transactions.loadRecent(cap).catch(() => []);
+      rows = await Transactions.loadRecent(cap);
     } else if (teamId != null) {
-      rows = await Transactions.byTeam(Number(teamId)).catch(() => []);
+      rows = await Transactions.byTeam(Number(teamId));
       const sid = seasonId ?? resolvedSeasonId;
       if (sid) {
         rows = rows.filter((row) => String(row?.seasonId) === String(sid));
       }
     } else if (resolvedSeasonId) {
-      rows = await Transactions.bySeason(resolvedSeasonId).catch(() => []);
+      rows = await Transactions.bySeason(resolvedSeasonId);
     } else if (explicitRecent) {
       const cap = Math.min(4000, Math.max(400, Number(limit) * 5 || 800));
-      rows = await Transactions.loadRecent(cap).catch(() => []);
+      rows = await Transactions.loadRecent(cap);
     }
 
     const allTeams = cache.getAllTeams();
@@ -4086,10 +4096,14 @@ async function handleGetTransactions(payload = {}, id) {
       legacyTypeLabel: row.legacyType ? txTypeLabel(row.legacyType) : bucketTypeLabel(row.type),
     }));
 
-    post(toUI.TRANSACTIONS, { transactions: stripped }, id);
+    post(toUI.TRANSACTIONS, { ok: true, transactions: stripped }, id);
   } catch (err) {
     console.error("[Worker] GET_TRANSACTIONS failed:", err);
-    post(toUI.TRANSACTIONS, { transactions: [] }, id);
+    post(toUI.TRANSACTIONS, {
+      ok: false,
+      error: err?.message || String(err),
+      transactions: [],
+    }, id);
   }
 }
 
@@ -4107,13 +4121,17 @@ async function loadMergedSeasonSummaries() {
 async function handleGetDraftClasses(payload, id) {
   try {
     const { merged } = await loadMergedSeasonSummaries();
-    const recent = await Transactions.loadRecent(4000).catch(() => []);
+    const recent = await Transactions.loadRecent(4000);
     const draftOnly = recent.filter((tx) => String(tx?.type).toUpperCase() === 'DRAFT');
     const classes = indexDraftClassesFromTransactions(draftOnly, merged);
-    post(toUI.DRAFT_CLASSES, { classes }, id);
+    post(toUI.DRAFT_CLASSES, { ok: true, classes }, id);
   } catch (err) {
     console.error('[Worker] GET_DRAFT_CLASSES failed:', err);
-    post(toUI.DRAFT_CLASSES, { classes: [] }, id);
+    post(toUI.DRAFT_CLASSES, {
+      ok: false,
+      error: err?.message || String(err),
+      classes: [],
+    }, id);
   }
 }
 

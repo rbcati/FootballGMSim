@@ -27,6 +27,14 @@ const RESPONSE_BY_REQUEST = {
 /** @type {Map<string, { resolve: Function, reject: Function, accept: Set<string>, timer: ReturnType<typeof setTimeout> }>} */
 const waiters = new Map();
 
+export function probeHandlerSucceeded(msg) {
+  return msg?.type !== toUI.ERROR && msg?.payload?.ok !== false;
+}
+
+export function payloadArrayHasRows(payload, key) {
+  return Array.isArray(payload?.[key]) && payload[key].length > 0;
+}
+
 let msgSeq = 0;
 function nextId() {
   msgSeq += 1;
@@ -509,7 +517,7 @@ export async function runDynastySoakOnce(opts = {}) {
           { timeoutMs: phaseTimeoutMs },
         );
         pushCheckpoint(checkpoints, `S${s}.GET_SEASON_HISTORY`, Date.now() - tProbe, null);
-        if (histMsg.type !== toUI.ERROR) {
+        if (probeHandlerSucceeded(histMsg)) {
           seasonHistory = histMsg.payload?.data ?? null;
           getSeasonHistoryOk = true;
         } else {
@@ -555,10 +563,10 @@ export async function runDynastySoakOnce(opts = {}) {
       pushCheckpoint(checkpoints, `S${s}.runDynastySoakAudit`, Date.now() - tProbe, null);
       lastReportSummary = audit.reportSummary ?? null;
 
-      if (fullProbes && txSeasonMsg.type === toUI.ERROR) {
+      if (fullProbes && !probeHandlerSucceeded(txSeasonMsg)) {
         audit.failures.push({
           code: 'get_transactions_season',
-          message: txSeasonMsg.payload?.message || 'GET_TRANSACTIONS by season failed',
+          message: txSeasonMsg.payload?.message || txSeasonMsg.payload?.error || 'GET_TRANSACTIONS by season failed',
         });
         audit.passed = false;
       }
@@ -571,10 +579,17 @@ export async function runDynastySoakOnce(opts = {}) {
           : 0;
         const expectTx = s >= 2;
         const expectStats = s >= 2;
+        const expectDraftClasses = s >= 2;
+        const transactionsRecentProbeOk = probeHandlerSucceeded(txMsg);
+        const transactionsRecentHasExpectedData = payloadArrayHasRows(txMsg.payload, 'transactions');
+        const draftClassesProbeOk = probeHandlerSucceeded(draftClassesMsg);
+        const draftClassesHasExpectedData = payloadArrayHasRows(draftClassesMsg.payload, 'classes');
         const persInput = {
           viewState: view,
           transactionsRecent: txMsg.payload?.transactions ?? [],
           expectTransactions: expectTx,
+          transactionsRecentProbeOk,
+          transactionsRecentHasExpectedData,
           expectStatRows: expectStats,
           expectTimelineRows: expectTx,
           seasonTxQueryOk: txSeasonMsg.type !== toUI.ERROR,
@@ -589,15 +604,15 @@ export async function runDynastySoakOnce(opts = {}) {
           getSeasonHistoryOk: dbProbeError ? false : getSeasonHistoryOk,
           getSeasonHistorySkipped,
           recordsProbeOk:
-            recordsMsg.type === toUI.ERROR
-              ? false
-              : !!(recordsMsg.payload?.recordBook || recordsMsg.payload?.records),
+            probeHandlerSucceeded(recordsMsg) && !!(recordsMsg.payload?.recordBook || recordsMsg.payload?.records),
           recordsProbeSkipped: false,
           hofProbeOk:
-            hofMsg.type === toUI.ERROR ? false : !hofMsg.payload || Array.isArray(hofMsg.payload?.players),
+            probeHandlerSucceeded(hofMsg) && (!hofMsg.payload || Array.isArray(hofMsg.payload?.players)),
           hofProbeSkipped: false,
-          draftClassesProbeOk: draftClassesMsg.type !== toUI.ERROR,
+          draftClassesProbeOk,
           draftClassesProbeSkipped: false,
+          draftClassesHasExpectedData,
+          expectDraftClasses,
           draftClassCount,
         };
         const pers = buildPersistenceAssertions(persInput);
