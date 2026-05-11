@@ -30,7 +30,10 @@ function parseArgs(argv) {
 }
 
 function mdEscape(s) {
-  return String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  return String(s ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\r?\n/g, ' ');
 }
 
 function buildMarkdownReport(result) {
