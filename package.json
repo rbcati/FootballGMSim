@@ -12,6 +12,8 @@
     "preview": "vite preview",
     "test": "playwright test",
     "test:unit": "vitest run",
+    "test:soak": "vitest run tests/unit/dynastySoakAudit.test.js tests/integration/dynastySoak.test.js",
+    "audit:dynasty": "tsx scripts/dynasty-soak.mjs",
     "test:e2e": "playwright test",
     "check:netlify-parity": "bash scripts/netlify-parity-check.sh",
     "check:netlify-cli-build": "npx --yes netlify-cli@latest build --context production --offline",
@@ -46,8 +48,10 @@
     "@playwright/test": "^1.59.1",
     "@testing-library/react": "^16.3.0",
     "@vitejs/plugin-react": "^5.1.4",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^26.1.0",
     "playwright": "^1.59.1",
+    "tsx": "^4.21.0",
     "vite": "^7.3.3",
     "vitest": "^3.2.4"
   }

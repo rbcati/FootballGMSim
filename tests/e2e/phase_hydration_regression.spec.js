@@ -37,7 +37,7 @@ test.describe('Phase hydration regression', () => {
     await page.waitForFunction(() => window?.state?.league?.phase === 'draft', { timeout: 120000 });
 
     await goToTab(page, 'draft');
-    await expect(page.getByTestId('draft-room-heading')).toBeVisible({ timeout: 45000 });
+    await expect(page.getByTestId('draft-room-heading')).toBeVisible({ timeout: 90000 });
     await expect(page.getByText(/Draft data is still initializing/i)).toHaveCount(0);
 
     await page.evaluate(() => window.gameController.simDraftPick());

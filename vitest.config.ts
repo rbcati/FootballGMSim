@@ -11,6 +11,7 @@ export default defineConfig({
     include: [
       'src/**/*.test.{js,jsx,ts,tsx}',
       'tests/unit/**/*.test.{js,jsx,ts,tsx}',
+      'tests/integration/**/*.test.{js,jsx,ts,tsx}',
     ],
     exclude: [
       'tests/e2e/**',
