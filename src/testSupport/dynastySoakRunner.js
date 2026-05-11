@@ -399,8 +399,8 @@ export async function runDynastySoakOnce(opts = {}) {
 
     for (let s = 1; s <= seasons; s += 1) {
       checkMaxRuntime(t0, maxRuntimeMs);
-      const yearBefore = Number(view?.year ?? 0);
-      const phaseBefore = String(view?.phase ?? '');
+      let yearBefore = Number(view?.year ?? 0);
+      let phaseBefore = String(view?.phase ?? '');
       const fullProbes = deepEachSeason || s === seasons;
       const deepFinalProbes = deep && s === seasons;
       const recentTransactionLimit = deepFinalProbes ? 1_000 : 400;
@@ -435,6 +435,8 @@ export async function runDynastySoakOnce(opts = {}) {
           break;
         }
         view = advanceResult.lastMsg.payload;
+        yearBefore = Number(view?.year ?? 0);
+        phaseBefore = String(view?.phase ?? '');
       }
 
       const simCtx = { checkpoints, label: `S${s}`, phaseBefore, yearBefore };
