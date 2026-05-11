@@ -136,11 +136,15 @@ function buildPositionalNeed(group, roster, archetype = 'middle') {
 }
 
 function classifyArchetype({ winPct, rosterStrength, capHealth, qbNeedPriority }) {
-  if (winPct >= 0.67 && rosterStrength >= 74 && qbNeedPriority < 62) return 'contender';
-  if (winPct >= 0.55 && rosterStrength >= 70) return 'playoff_hunt';
-  if (winPct <= 0.32 && (capHealth <= 45 || qbNeedPriority >= 70)) return 'rebuild';
-  if (winPct <= 0.4 && rosterStrength < 66) return 'development';
-  if (winPct <= 0.45 || capHealth <= 35) return 'retool';
+  // Strong roster can carry a softer record into contender territory without
+  // letting obvious QB holes project as win-now.
+  if (winPct >= 0.58 && rosterStrength >= 78 && qbNeedPriority < 58) return 'contender';
+  if (winPct >= 0.64 && rosterStrength >= 73 && qbNeedPriority < 62) return 'contender';
+  if (winPct >= 0.53 && rosterStrength >= 69) return 'playoff_hunt';
+  if (winPct <= 0.34 && (capHealth <= 48 || qbNeedPriority >= 72)) return 'rebuild';
+  if (winPct <= 0.28 && rosterStrength < 70) return 'rebuild';
+  if (winPct <= 0.42 && rosterStrength < 65 && rosterStrength >= 48) return 'development';
+  if (winPct <= 0.46 || capHealth <= 38) return 'retool';
   return 'middle';
 }
 
@@ -193,7 +197,7 @@ export function buildAiTeamStrategy({
   const capRoom = toNum(team?.capRoom, 0);
   const deadCap = toNum(team?.deadCap, 0);
   const capUsed = toNum(team?.capUsed, 0);
-  const capHealth = clamp(Math.round(60 + capRoom * 2 - deadCap * 2 - Math.max(0, capUsed - 295) * 1.1), 0, 100);
+  const capHealth = clamp(Math.round(60 + capRoom * 2 - deadCap * 2 - Math.max(0, capUsed - 295) * 1.05), 0, 100);
   const rosterStrength = Math.round(avg(normalizedRoster.map((p) => p.ovr)));
   const ageCurve = {
     avgAge: Number(avg(normalizedRoster.map((p) => p.age)).toFixed(1)),
@@ -222,6 +226,11 @@ export function buildAiTeamStrategy({
     `Record profile ${(winPct * 100).toFixed(1)}% win pace.`,
     `Roster strength ${rosterStrength || 0} OVR with cap health ${capHealth}.`,
     topNeed ? `Top need ${topNeed.positionGroup} (${topNeed.severity}).` : 'No clear top need.',
+    qBPlaceholderNeeds >= 68
+      ? 'QB room grades as a priority risk.'
+      : qBPlaceholderNeeds <= 35
+        ? 'QB situation looks stable for the window.'
+        : 'QB need is manageable relative to other roster spots.',
   ];
 
   return {
@@ -246,6 +255,23 @@ export function buildAiTeamStrategy({
   };
 }
 
+/**
+ * Map a roster position code to aiTeamStrategy positional need groups (QB, DL_EDGE, …).
+ * Used by draft/FA scoring so OL/DL/LB variants pick up grouped need priorities.
+ * @param {string|null|undefined} pos
+ * @returns {string|null}
+ */
+export function mapPlayerPosToNeedGroup(pos) {
+  const p = String(pos ?? '').toUpperCase();
+  if (!p) return null;
+  for (const group of POSITION_GROUPS) {
+    const accepted = GROUP_TO_POS[group];
+    if (accepted?.includes(p)) return group;
+    if (!accepted && group === p) return group;
+  }
+  return null;
+}
+
 export function buildAiTeamStrategyFromRosterAnalysis({
   team = {},
   analysis = null,
@@ -265,5 +291,6 @@ export const __internal = Object.freeze({
   DEPTH_TARGET,
   classifyArchetype,
   buildPositionalNeed,
+  mapPlayerPosToNeedGroup,
 });
 

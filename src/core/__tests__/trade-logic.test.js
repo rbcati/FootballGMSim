@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculatePlayerValue } from '../trade-logic.js';
+import { calculatePlayerValue, shouldBlockCpuUniformPlayerSwap } from '../trade-logic.js';
 
 describe('calculatePlayerValue', () => {
   it('values younger high-potential players above older equivalents', () => {
@@ -50,6 +50,17 @@ describe('calculatePlayerValue', () => {
     };
 
     expect(calculatePlayerValue(poorAsset)).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('shouldBlockCpuUniformPlayerSwap', () => {
+  it('blocks uniform swaps that involve a quarterback', () => {
+    expect(shouldBlockCpuUniformPlayerSwap({ pos: 'QB' }, { pos: 'WR' })).toBe(true);
+    expect(shouldBlockCpuUniformPlayerSwap({ pos: 'LB' }, { pos: 'QB' })).toBe(true);
+  });
+
+  it('allows non-QB uniform swaps', () => {
+    expect(shouldBlockCpuUniformPlayerSwap({ pos: 'WR' }, { pos: 'CB' })).toBe(false);
   });
 });
 

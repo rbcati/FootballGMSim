@@ -170,7 +170,7 @@ import {
 import { deriveGamePlanMultipliers } from '../core/sim/gamePlanMultipliers.ts';
 import { buildGamePlanNarrative } from '../core/narrative.js';
 import { buildRosterBuildingAnalysis } from '../core/rosterBuildingAnalysis.js';
-import { buildAiTeamStrategy } from '../core/aiTeamStrategy.js';
+import { buildAiTeamStrategy, mapPlayerPosToNeedGroup } from '../core/aiTeamStrategy.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -7860,6 +7860,8 @@ async function handleSimDraftPick(payload, id) {
 
   // Optimisation: Filter draft pool once
   const draftPool = cache.getAllPlayers().filter(p => p.status === 'draft_eligible');
+  /** @type {Map<string, number>} key `${teamId}|${needGroup}` → picks already made this draft run */
+  const sessionPicksByTeamNeedGroup = new Map();
 
   while (currentPickIndex < picks.length) {
     const pick = picks[currentPickIndex];
@@ -7894,23 +7896,42 @@ async function handleSimDraftPick(payload, id) {
           schemeFit: p?.schemeFit ?? 65,
           archetypeTag: p?.archetypeTag ?? p?.pos,
         }, team, { teamNeeds: needs });
-        const posPriority = Number(needPriorityByPos.get(p?.pos) ?? 0);
+        const needGroup = mapPlayerPosToNeedGroup(p?.pos) ?? String(p?.pos ?? '');
+        let posPriority = Number(needPriorityByPos.get(needGroup) ?? 0);
+        const qbNeedP = Number(needPriorityByPos.get('QB') ?? 0);
+        if (String(p?.pos) === 'QB' && qbNeedP >= 56) {
+          posPriority = Math.min(100, posPriority + Math.round((qbNeedP - 52) * 0.55));
+        }
         const talentGapGuard = Math.max(0, Number((p?.ovr ?? 60) - 80));
         const archetypeNeedFactor = strategy?.archetype === 'contender'
-          ? 0.05
+          ? 0.056
           : ['rebuild', 'development'].includes(strategy?.archetype)
-            ? 0.08
-            : 0.065;
-        const needBoost = Math.min(7.5, posPriority * archetypeNeedFactor);
+            ? 0.086
+            : 0.069;
+        const needBoost = Math.min(6.75, posPriority * archetypeNeedFactor);
         // Keep BPA available: suppress need boost on clearly elite prospects.
-        const eliteProspectReduction = talentGapGuard >= 8 ? 0.25 : talentGapGuard >= 4 ? 0.55 : 1;
-        const val = Number(boardScore?.score ?? 0) + (needBoost * eliteProspectReduction);
+        const eliteProspectReduction = talentGapGuard >= 8 ? 0.22 : talentGapGuard >= 4 ? 0.52 : 1;
+        const sessionKey = `${pick.teamId}|${needGroup}`;
+        const dupDepth = Number(sessionPicksByTeamNeedGroup.get(sessionKey) || 0);
+        const hoardPenalty = dupDepth > 0
+          ? Math.min(3.6, dupDepth * 1.75) * (eliteProspectReduction < 0.95 ? 0.42 : 1)
+          : 0;
+        const val = Number(boardScore?.score ?? 0) + (needBoost * eliteProspectReduction) - hoardPenalty;
 
         if (val > bestValue) {
             bestValue = val;
             bestProspect = p;
             bestIdx = i;
-        } else if (val === bestValue && (!bestProspect || (p.ovr > bestProspect.ovr))) {
+        } else if (val === bestValue && bestProspect) {
+            const rBest = Number(bestProspect?.interviewReport?.riskScore ?? 40);
+            const rNew = Number(p?.interviewReport?.riskScore ?? 40);
+            const ovrNew = Number(p?.ovr ?? 0);
+            const ovrBest = Number(bestProspect?.ovr ?? 0);
+            if (ovrNew > ovrBest || (ovrNew === ovrBest && rNew < rBest)) {
+              bestProspect = p;
+              bestIdx = i;
+            }
+        } else if (val === bestValue && !bestProspect) {
             bestProspect = p;
             bestIdx = i;
         }
@@ -7919,6 +7940,9 @@ async function handleSimDraftPick(payload, id) {
     if (!bestProspect) break; // pool exhausted
 
     _executeDraftPick(currentPickIndex, bestProspect.id, pick.teamId);
+    const pickedGroup = mapPlayerPosToNeedGroup(bestProspect?.pos) ?? String(bestProspect?.pos ?? '');
+    const sgKey = `${pick.teamId}|${pickedGroup}`;
+    sessionPicksByTeamNeedGroup.set(sgKey, Number(sessionPicksByTeamNeedGroup.get(sgKey) || 0) + 1);
     await logDraftPickTransaction(ensureDynastyMeta(cache.getMeta()), pick, bestProspect.id);
     // _executeDraftPick increments draftState.currentPickIndex inside setMeta;
     // read the updated value from the live meta reference

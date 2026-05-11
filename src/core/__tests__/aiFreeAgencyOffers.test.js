@@ -273,6 +273,85 @@ describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
     );
   });
 
+  it('skips non-urgent splash offers when cap hit exceeds tightened middle cap band', async () => {
+    const splashFa = {
+      id: 41,
+      name: 'Splash WR',
+      pos: 'WR',
+      status: 'free_agent',
+      ovr: 78,
+      age: 28,
+      offers: [],
+    };
+    mockCache.getTeam.mockReturnValue({
+      id: 2,
+      name: 'Middle Tight',
+      abbr: 'MID',
+      wins: 8,
+      losses: 8,
+      capRoom: 6,
+      capUsed: 292,
+      deadCap: 8,
+    });
+    mockCache.getPlayersByTeam.mockReturnValue([
+      { id: 201, pos: 'WR', ovr: 66, age: 26, potential: 68, contract: { years: 2 } },
+      { id: 202, pos: 'WR', ovr: 64, age: 25, potential: 66, contract: { years: 2 } },
+      { id: 204, pos: 'QB', ovr: 78, age: 29, potential: 80, contract: { years: 2 } },
+      ...Array.from({ length: 12 }, (_, i) => ({
+        id: 210 + i,
+        pos: 'OL',
+        ovr: 71,
+        age: 26,
+        potential: 74,
+        contract: { years: 2 },
+      })),
+    ]);
+    mockCalculateExtensionDemand.mockReturnValue({ years: 3, yearsTotal: 3, baseAnnual: 16, signingBonus: 10 });
+
+    await AiLogic.makeFreeAgencyOffers(2, { WR: [splashFa] });
+
+    expect(mockCache.updatePlayer).not.toHaveBeenCalled();
+  });
+
+  it('allows a controlled QB exception when cap is tight but QB need is severe', async () => {
+    const qbFa = {
+      id: 42,
+      name: 'Bridge QB',
+      pos: 'QB',
+      status: 'free_agent',
+      ovr: 76,
+      age: 30,
+      offers: [],
+    };
+    mockCache.getTeam.mockReturnValue({
+      id: 3,
+      name: 'QB Needy',
+      abbr: 'QBN',
+      wins: 4,
+      losses: 13,
+      capRoom: 10,
+      capUsed: 290,
+      deadCap: 6,
+    });
+    mockCache.getPlayersByTeam.mockReturnValue([
+      { id: 301, pos: 'QB', ovr: 61, age: 32, potential: 63, contract: { years: 1 } },
+      { id: 302, pos: 'WR', ovr: 80, age: 26, potential: 84, contract: { years: 2 } },
+      { id: 303, pos: 'WR', ovr: 78, age: 25, potential: 82, contract: { years: 2 } },
+      { id: 304, pos: 'WR', ovr: 76, age: 24, potential: 80, contract: { years: 2 } },
+    ]);
+    // Cap hit ~5.0M: above strict rebuild band for $10M room, but inside QB exception window.
+    mockCalculateExtensionDemand.mockReturnValue({ years: 2, yearsTotal: 2, baseAnnual: 4.5, signingBonus: 1 });
+
+    await AiLogic.makeFreeAgencyOffers(3, { QB: [qbFa] });
+
+    expect(mockCache.updatePlayer).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        offers: expect.arrayContaining([expect.objectContaining({ teamId: 3 })]),
+      }),
+    );
+  });
+
   it('calculateTeamNeeds keeps QB as high priority when QB room is weak', () => {
     mockCache.getTeam.mockReturnValue({
       id: 1,
