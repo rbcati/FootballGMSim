@@ -146,16 +146,46 @@ function topSlowCheckpoints(checkpoints, n = 10) {
   return [...checkpoints].sort((a, b) => b.ms - a.ms).slice(0, n);
 }
 
+function buildPhaseBreakdown(checkpoints) {
+  const groups = {
+    boot: { ms: 0, count: 0 },
+    sim: { ms: 0, count: 0 },
+    getProbes: { ms: 0, count: 0 },
+    auditEvaluation: { ms: 0, count: 0 },
+    finalAdvance: { ms: 0, count: 0 },
+  };
+
+  for (const checkpoint of checkpoints) {
+    const name = String(checkpoint?.name ?? '');
+    const ms = Number(checkpoint?.ms ?? 0);
+    let bucket = null;
+    if (name.startsWith('boot.')) bucket = groups.boot;
+    else if (name.endsWith('.SIM_TO_PHASE')) bucket = groups.sim;
+    else if (name.includes('.GET_')) bucket = groups.getProbes;
+    else if (name.endsWith('.runDynastySoakAudit')) bucket = groups.auditEvaluation;
+    else if (name.endsWith('.ADVANCE_WEEK')) bucket = groups.finalAdvance;
+    if (!bucket) continue;
+    bucket.ms += ms;
+    bucket.count += 1;
+  }
+
+  return groups;
+}
+
 /**
  * `SIM_TO_PHASE` may stop before `preseason` when the worker hits its per-call
  * iteration guard mid-pipeline; repeat until preseason or hard cap.
  * @param {number} simTimeoutMs
- * @param {{ checkpoints: object[], label: string }} ctx
+ * @param {{ checkpoints: object[], label: string, phaseBefore?: string, yearBefore?: number }} ctx
  */
 async function simUntilPreseason(simTimeoutMs, ctx, runnerDispatch = dispatchWorker) {
   let lastMsg = null;
   const attempts = [];
+  let currentPhase = String(ctx.phaseBefore ?? '');
+  let currentYear = Number(ctx.yearBefore ?? 0);
   for (let attempt = 0; attempt < 12; attempt += 1) {
+    const phaseBefore = currentPhase;
+    const yearBefore = currentYear;
     const t = Date.now();
     lastMsg = await runnerDispatch(
       toWorker.SIM_TO_PHASE,
@@ -165,19 +195,31 @@ async function simUntilPreseason(simTimeoutMs, ctx, runnerDispatch = dispatchWor
     const ms = Date.now() - t;
     const ph = String(lastMsg.payload?.phase ?? '');
     const yr = Number(lastMsg.payload?.year ?? 0);
-    attempts.push({
+    const batch = lastMsg.payload?.dynastySoakSimBatch ?? null;
+    const simBatchMeta = {
+      iterationsUsed: batch?.iterationsUsed ?? null,
+      reachedTarget: batch?.reachedTarget ?? null,
+      hitIterationCap: batch?.hitIterationCap ?? null,
+      lastPhase: batch?.lastPhase ?? null,
+      targetPhase: batch?.targetPhase ?? 'preseason',
+    };
+    const meta = {
       attempt,
-      ms,
+      phaseBefore,
+      yearBefore,
       phaseAfter: ph,
       yearAfter: yr,
+      ...simBatchMeta,
+    };
+    attempts.push({
+      ...meta,
+      ms,
       error: lastMsg.type === toUI.ERROR,
     });
-    pushCheckpoint(ctx.checkpoints, `${ctx.label}.SIM_TO_PHASE`, ms, {
-      attempt,
-      phaseAfter: ph,
-      yearAfter: yr,
-    });
+    pushCheckpoint(ctx.checkpoints, `${ctx.label}.SIM_TO_PHASE`, ms, meta);
     if (lastMsg.type === toUI.ERROR) return { lastMsg, attempts };
+    currentPhase = ph;
+    currentYear = yr;
     if (ph === 'preseason') return { lastMsg, attempts };
   }
   return { lastMsg, attempts };
@@ -300,6 +342,7 @@ export async function runDynastySoakOnce(opts = {}) {
     simAttemptsPerSeason,
     timings: {
       bootMs: 0,
+      phaseBreakdown: buildPhaseBreakdown([]),
       topSlowCheckpoints: [],
       totalMs: 0,
     },
@@ -356,6 +399,8 @@ export async function runDynastySoakOnce(opts = {}) {
       const phaseBefore = String(view?.phase ?? '');
       const fullProbes = deepEachSeason || s === seasons;
 
+      const simCtx = { checkpoints, label: `S${s}`, phaseBefore, yearBefore };
+      const { lastMsg: simMsg, attempts } = await simUntilPreseason(simTimeoutMs, simCtx);
       if (phaseBefore === 'preseason') {
         const advanceResult = await advanceOutOfCurrentTargetPhase(view, {
           checkpoints,
@@ -653,6 +698,7 @@ export async function runDynastySoakOnce(opts = {}) {
     aggregate.reportSummary = lastReportSummary;
     aggregate.timings.bootMs = checkpoints.filter((c) => c.name.startsWith('boot.')).reduce((a, c) => a + c.ms, 0);
     aggregate.timings.topSlowCheckpoints = topSlowCheckpoints(checkpoints);
+    aggregate.timings.phaseBreakdown = buildPhaseBreakdown(checkpoints);
     aggregate.timings.totalMs = aggregate.runtimeMs;
     aggregate.dynastySoakSimBatch = view?.dynastySoakSimBatch ?? null;
 
@@ -668,6 +714,7 @@ export async function runDynastySoakOnce(opts = {}) {
     aggregate.reportSummary = lastReportSummary;
     aggregate.timings.bootMs = checkpoints.filter((c) => c.name.startsWith('boot.')).reduce((a, c) => a + c.ms, 0);
     aggregate.timings.topSlowCheckpoints = topSlowCheckpoints(checkpoints);
+    aggregate.timings.phaseBreakdown = buildPhaseBreakdown(checkpoints);
     aggregate.timings.totalMs = aggregate.runtimeMs;
     return aggregate;
   } finally {
