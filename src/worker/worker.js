@@ -3684,11 +3684,13 @@ async function handleSimToPhase({ targetPhase }, id) {
     regular:    (m) => m.phase === 'regular',
   };
 
-  const isTarget = PHASE_TARGETS[targetPhase];
-  if (!isTarget) {
+  const hasTarget = Object.prototype.hasOwnProperty.call(PHASE_TARGETS, targetPhase);
+  const resolvedTarget = hasTarget ? PHASE_TARGETS[targetPhase] : null;
+  if (typeof resolvedTarget !== 'function') {
     post(toUI.ERROR, { message: `Unknown target phase: ${targetPhase}` }, id);
     return;
   }
+  const isTarget = resolvedTarget;
 
   // Already at target?
   if (isTarget(meta)) {
