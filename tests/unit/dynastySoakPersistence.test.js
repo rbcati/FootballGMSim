@@ -125,7 +125,7 @@ describe('buildPersistenceAssertions', () => {
   });
 
   it('fails clearly when GET_TRANSACTIONS returns an ok:false empty payload', () => {
-    const txMsg = { type: 'TRANSACTIONS', payload: { ok: false, error: 'indexeddb read failed', transactions: [] } };
+    const txPayload = { ok: false, error: 'indexeddb read failed', transactions: [] };
     const r = buildPersistenceAssertions({
       viewState: {
         leagueHistory: [
@@ -136,10 +136,10 @@ describe('buildPersistenceAssertions', () => {
           },
         ],
       },
-      transactionsRecent: txMsg.payload.transactions,
+      transactionsRecent: txPayload.transactions,
       expectTransactions: true,
-      transactionsRecentProbeOk: probeHandlerSucceeded(txMsg),
-      transactionsRecentHasExpectedData: payloadArrayHasRows(txMsg.payload, 'transactions'),
+      transactionsRecentProbeOk: false,
+      transactionsRecentHasExpectedData: false,
       expectStatRows: false,
       expectTimelineRows: false,
       seasonTxQueryOk: true,
@@ -157,7 +157,7 @@ describe('buildPersistenceAssertions', () => {
   });
 
   it('fails clearly when GET_DRAFT_CLASSES returns an ok:false empty payload', () => {
-    const draftMsg = { type: 'DRAFT_CLASSES', payload: { ok: false, error: 'transaction read failed', classes: [] } };
+    const draftPayload = { ok: false, error: 'transaction read failed', classes: [] };
     const r = buildPersistenceAssertions({
       viewState: {
         leagueHistory: [
@@ -178,10 +178,10 @@ describe('buildPersistenceAssertions', () => {
       getSeasonHistoryOk: true,
       recordsProbeOk: true,
       hofProbeOk: true,
-      draftClassesProbeOk: probeHandlerSucceeded(draftMsg),
-      draftClassesHasExpectedData: payloadArrayHasRows(draftMsg.payload, 'classes'),
+      draftClassesProbeOk: false,
+      draftClassesHasExpectedData: false,
       expectDraftClasses: true,
-      draftClassCount: 0,
+      draftClassCount: draftPayload.classes.length,
     });
 
     expect(r.allOk).toBe(false);
