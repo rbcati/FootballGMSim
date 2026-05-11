@@ -9,6 +9,10 @@ import {
   mergeDirtySnapshots,
   queueDirtySnapshot,
 } from '../../src/worker/dirtyFlushAccumulator.js';
+import {
+  payloadArrayHasRows,
+  probeHandlerSucceeded,
+} from '../../src/testSupport/dynastySoakRunner.js';
 
 describe('dynasty soak batch dirty accumulator', () => {
   it('keeps dirty IDs drained during batch and merges them into final flush', () => {
