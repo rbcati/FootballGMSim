@@ -4,19 +4,11 @@ import {
   validateTransactionTimelineV1Shape,
 } from '../../src/core/dynastySoakAudit.js';
 import {
-  payloadArrayHasRows,
-  probeHandlerSucceeded,
-} from '../../src/testSupport/dynastySoakRunner.js';
-import {
   createEmptyDirtySnapshot,
   hasDirtySnapshot,
   mergeDirtySnapshots,
   queueDirtySnapshot,
 } from '../../src/worker/dirtyFlushAccumulator.js';
-import {
-  payloadArrayHasRows,
-  probeHandlerSucceeded,
-} from '../../src/testSupport/dynastySoakRunner.js';
 
 describe('dynasty soak batch dirty accumulator', () => {
   it('keeps dirty IDs drained during batch and merges them into final flush', () => {
@@ -144,7 +136,6 @@ describe('buildPersistenceAssertions', () => {
           },
         ],
       },
-      transactionsRecent: [],
       transactionsRecent: txPayload.transactions,
       expectTransactions: true,
       transactionsRecentProbeOk: false,
