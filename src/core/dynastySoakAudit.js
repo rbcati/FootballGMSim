@@ -170,12 +170,43 @@ export function buildPersistenceAssertions(input = {}) {
   const assertions = [];
 
   const latestSeasonId = input.latestSeasonId ?? latest?.id ?? null;
+  const auditProfile = input.auditProfile ?? 'full';
+  const expectArchive = input.expectArchive ?? auditProfile !== 'ci';
 
-  assertions.push({
-    id: 'latest_season_archive',
-    ok: !!(latest && latest.id),
-    detail: latest?.id ? `latest season id=${latest.id}` : 'leagueHistory missing or empty',
-  });
+  const skipReason = (id, fallback) => String(input.skippedProbeReasons?.[id] || fallback || '').trim();
+  const pushSkipped = (id, reason, detailPrefix = 'skipped') => {
+    const hasReason = !!String(reason || '').trim();
+    assertions.push({
+      id,
+      ok: hasReason,
+      status: 'skipped',
+      skipped: true,
+      code: hasReason ? undefined : 'skipped_probe_missing_reason',
+      detail: hasReason ? `${detailPrefix}: ${reason}` : `${detailPrefix}: missing reason`,
+    });
+  };
+
+  if (expectArchive) {
+    assertions.push({
+      id: 'latest_season_archive',
+      ok: !!(latest && latest.id),
+      detail: latest?.id ? `latest season id=${latest.id}` : 'leagueHistory missing or empty',
+    });
+  } else {
+    pushSkipped(
+      'latest_season_archive',
+      skipReason('latest_season_archive', 'CI profile does not complete a season or create a completed-season archive'),
+    );
+  }
+
+  if (input.allSeasonsProbeOk != null) {
+    assertions.push({
+      id: 'get_all_seasons_probe',
+      ok: !!input.allSeasonsProbeOk,
+      code: input.allSeasonsProbeOk ? undefined : 'get_all_seasons_failed',
+      detail: input.allSeasonsProbeOk ? 'GET_ALL_SEASONS ok' : 'GET_ALL_SEASONS failed',
+    });
+  }
 
   if (Array.isArray(input.allSeasons) && latestSeasonId != null) {
     const found = input.allSeasons.some((season) => hasSeasonId(season, latestSeasonId));
@@ -186,6 +217,11 @@ export function buildPersistenceAssertions(input = {}) {
         ? `GET_ALL_SEASONS includes latest season ${latestSeasonId}`
         : `GET_ALL_SEASONS missing latest season ${latestSeasonId}`,
     });
+  } else if (!expectArchive && input.allSeasonsProbeOk != null) {
+    pushSkipped(
+      'get_all_seasons_latest',
+      skipReason('get_all_seasons_latest', 'CI profile has no completed season archive to find in GET_ALL_SEASONS'),
+    );
   }
 
   if (input.dbLatestSeasonFound != null) {
@@ -209,6 +245,15 @@ export function buildPersistenceAssertions(input = {}) {
     });
   }
 
+  if (input.saveNowOk != null) {
+    assertions.push({
+      id: 'save_now_flush',
+      ok: !!input.saveNowOk,
+      code: input.saveNowOk ? undefined : 'save_now_failed',
+      detail: input.saveNowOk ? 'SAVE_NOW flush ok' : 'SAVE_NOW flush failed',
+    });
+  }
+
   const hasTx = Array.isArray(input.transactionsRecent) && input.transactionsRecent.length > 0;
   const transactionsRecentProbeOk = input.transactionsRecentProbeOk !== false;
   const transactionsRecentHasExpectedData = input.transactionsRecentHasExpectedData ?? hasTx;
@@ -227,7 +272,12 @@ export function buildPersistenceAssertions(input = {}) {
           : 'no recent transactions (ok if none expected)',
   });
 
-  if (input.seasonTxQueryOk != null) {
+  if (input.seasonTxQuerySkipped) {
+    pushSkipped(
+      'get_transactions_by_season',
+      skipReason('get_transactions_by_season', 'CI profile has no completed season archive for a season-scoped transaction query'),
+    );
+  } else if (input.seasonTxQueryOk != null) {
     assertions.push({
       id: 'get_transactions_by_season',
       ok: !!input.seasonTxQueryOk,
@@ -239,39 +289,57 @@ export function buildPersistenceAssertions(input = {}) {
   const statsShape = validatePlayerSeasonStatsV1Shape(latest?.playerSeasonStatsV1);
   const statsRows = latest?.playerSeasonStatsV1?.rows;
   const hasStatsRows = Array.isArray(statsRows) && statsRows.length > 0;
-  assertions.push({
-    id: 'player_season_stats_v1',
-    ok: statsShape.ok && (!input.expectStatRows || hasStatsRows),
-    detail: statsShape.ok
-      ? hasStatsRows
-        ? `${statsRows.length} stat rows`
-        : 'archive present, no stat rows (ok early-season)'
-      : statsShape.errors.join('; '),
-  });
+  if (expectArchive || latest?.playerSeasonStatsV1 != null) {
+    assertions.push({
+      id: 'player_season_stats_v1',
+      ok: statsShape.ok && (!input.expectStatRows || hasStatsRows),
+      detail: statsShape.ok
+        ? hasStatsRows
+          ? `${statsRows.length} stat rows`
+          : 'archive present, no stat rows (ok early-season)'
+        : statsShape.errors.join('; '),
+    });
+  } else {
+    pushSkipped(
+      'player_season_stats_v1',
+      skipReason('player_season_stats_v1', 'CI profile does not create a completed-season player stats archive'),
+    );
+  }
 
   const tvShape = validateTransactionTimelineV1Shape(latest?.transactionTimelineV1);
   const tvRows = latest?.transactionTimelineV1?.rows;
   const hasTxRows = Array.isArray(tvRows) && tvRows.length > 0;
-  assertions.push({
-    id: 'transaction_timeline_v1',
-    ok: tvShape.ok && (!input.expectTimelineRows || hasTxRows),
-    detail: tvShape.ok
-      ? hasTxRows
-        ? `${tvRows.length} timeline rows`
-        : 'timeline object ok, empty rows'
-      : tvShape.errors.join('; '),
-  });
+  if (expectArchive || latest?.transactionTimelineV1 != null) {
+    assertions.push({
+      id: 'transaction_timeline_v1',
+      ok: tvShape.ok && (!input.expectTimelineRows || hasTxRows),
+      detail: tvShape.ok
+        ? hasTxRows
+          ? `${tvRows.length} timeline rows`
+          : 'timeline object ok, empty rows'
+        : tvShape.errors.join('; '),
+    });
+  } else {
+    pushSkipped(
+      'transaction_timeline_v1',
+      skipReason('transaction_timeline_v1', 'CI profile does not create a completed-season transaction timeline archive'),
+    );
+  }
 
-  assertions.push({
-    id: 'get_season_history',
-    ok: input.getSeasonHistoryOk !== false,
-    detail:
-      input.getSeasonHistorySkipped
-        ? 'skipped (shallow probe mode)'
-        : input.getSeasonHistoryOk
-          ? 'GET_SEASON_HISTORY returned data'
-          : 'GET_SEASON_HISTORY failed or empty',
-  });
+  if (input.getSeasonHistorySkipped) {
+    pushSkipped(
+      'get_season_history',
+      skipReason('get_season_history', 'shallow probe mode has no completed season history to query'),
+    );
+  } else {
+    assertions.push({
+      id: 'get_season_history',
+      ok: input.getSeasonHistoryOk !== false,
+      detail: input.getSeasonHistoryOk
+        ? 'GET_SEASON_HISTORY returned data'
+        : 'GET_SEASON_HISTORY failed or empty',
+    });
+  }
 
   if (input.seasonHistory !== undefined && latestSeasonId != null && !input.getSeasonHistorySkipped) {
     const found = input.seasonHistory && hasSeasonId(input.seasonHistory, latestSeasonId);
@@ -304,47 +372,53 @@ export function buildPersistenceAssertions(input = {}) {
     });
   }
 
-  assertions.push({
-    id: 'get_records',
-    ok: input.recordsProbeOk !== false,
-    detail:
-      input.recordsProbeSkipped
-        ? 'skipped (shallow probe mode)'
-        : input.recordsProbeOk
-          ? 'GET_RECORDS ok'
-          : 'GET_RECORDS missing recordBook',
-  });
+  if (input.recordsProbeSkipped) {
+    pushSkipped('get_records', skipReason('get_records', 'records probe skipped by audit profile'));
+  } else {
+    assertions.push({
+      id: 'get_records',
+      ok: input.recordsProbeOk !== false,
+      detail: input.recordsProbeOk
+        ? 'GET_RECORDS ok'
+        : 'GET_RECORDS missing recordBook',
+    });
+  }
 
-  assertions.push({
-    id: 'get_hall_of_fame',
-    ok: input.hofProbeOk !== false,
-    detail:
-      input.hofProbeSkipped
-        ? 'skipped (shallow probe mode)'
-        : input.hofProbeOk
-          ? 'GET_HALL_OF_FAME ok'
-          : 'GET_HALL_OF_FAME invalid shape',
-  });
+  if (input.hofProbeSkipped) {
+    pushSkipped('get_hall_of_fame', skipReason('get_hall_of_fame', 'Hall of Fame probe skipped by audit profile'));
+  } else {
+    assertions.push({
+      id: 'get_hall_of_fame',
+      ok: input.hofProbeOk !== false,
+      detail: input.hofProbeOk
+        ? 'GET_HALL_OF_FAME ok'
+        : 'GET_HALL_OF_FAME invalid shape',
+    });
+  }
 
   const draftClassesProbeOk = input.draftClassesProbeOk !== false;
   const draftClassesHasExpectedData = input.draftClassesHasExpectedData ?? Number(input.draftClassCount ?? 0) > 0;
-  assertions.push({
-    id: 'get_draft_classes',
-    ok: input.draftClassesProbeSkipped || (draftClassesProbeOk && (draftClassesHasExpectedData || !input.expectDraftClasses)),
-    code: !draftClassesProbeOk
-      ? 'get_draft_classes_failed'
-      : (!draftClassesHasExpectedData && input.expectDraftClasses ? 'draft_classes_empty' : undefined),
-    detail:
-      input.draftClassesProbeSkipped
-        ? 'skipped (shallow probe mode)'
-        : !draftClassesProbeOk
-          ? 'GET_DRAFT_CLASSES failed'
-          : draftClassesHasExpectedData
-            ? `GET_DRAFT_CLASSES count=${input.draftClassCount ?? 0}`
-            : 'GET_DRAFT_CLASSES returned no classes (ok if none expected)',
-  });
+  if (input.draftClassesProbeSkipped) {
+    pushSkipped(
+      'get_draft_classes',
+      skipReason('get_draft_classes', 'CI profile does not enter draft, so draft classes are not expected'),
+    );
+  } else {
+    assertions.push({
+      id: 'get_draft_classes',
+      ok: draftClassesProbeOk && (draftClassesHasExpectedData || !input.expectDraftClasses),
+      code: !draftClassesProbeOk
+        ? 'get_draft_classes_failed'
+        : (!draftClassesHasExpectedData && input.expectDraftClasses ? 'draft_classes_empty' : undefined),
+      detail: !draftClassesProbeOk
+        ? 'GET_DRAFT_CLASSES failed'
+        : draftClassesHasExpectedData
+          ? `GET_DRAFT_CLASSES count=${input.draftClassCount ?? 0}`
+          : 'GET_DRAFT_CLASSES returned no classes (ok if none expected)',
+    });
+  }
 
-  return { allOk: assertions.every((a) => a.ok), assertions };
+  return { allOk: assertions.every((a) => a.ok !== false), assertions };
 }
 
 function countByPos(roster) {
