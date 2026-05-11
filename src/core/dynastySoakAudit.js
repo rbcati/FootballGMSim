@@ -149,13 +149,27 @@ export function countTransactionTypes(transactions) {
 /**
  * Harness-only persistence checklist (does not mutate state).
  * @param {object} input
- * @returns {{ allOk: boolean, assertions: { id: string, ok: boolean, detail: string }[] }}
+ * @returns {{ allOk: boolean, assertions: { id: string, ok: boolean, detail: string, code?: string }[] }}
  */
+function transactionBucket(tx) {
+  const raw = String(tx?.type ?? tx?.legacyType ?? '').toLowerCase();
+  if (raw === 'sign' || raw === 'signing') return 'signing';
+  if (raw === 'draft') return 'draft';
+  if (raw === 'retirement') return 'retirement';
+  return raw;
+}
+
+function hasSeasonId(row, seasonId) {
+  return seasonId != null && String(row?.id ?? row?.seasonId ?? '') === String(seasonId);
+}
+
 export function buildPersistenceAssertions(input = {}) {
   const viewState = input.viewState ?? {};
   const leagueHistory = Array.isArray(viewState.leagueHistory) ? viewState.leagueHistory : [];
   const latest = leagueHistory.length ? leagueHistory[leagueHistory.length - 1] : null;
   const assertions = [];
+
+  const latestSeasonId = input.latestSeasonId ?? latest?.id ?? null;
 
   assertions.push({
     id: 'latest_season_archive',
@@ -163,21 +177,61 @@ export function buildPersistenceAssertions(input = {}) {
     detail: latest?.id ? `latest season id=${latest.id}` : 'leagueHistory missing or empty',
   });
 
+  if (Array.isArray(input.allSeasons) && latestSeasonId != null) {
+    const found = input.allSeasons.some((season) => hasSeasonId(season, latestSeasonId));
+    assertions.push({
+      id: 'get_all_seasons_latest',
+      ok: found,
+      detail: found
+        ? `GET_ALL_SEASONS includes latest season ${latestSeasonId}`
+        : `GET_ALL_SEASONS missing latest season ${latestSeasonId}`,
+    });
+  }
+
+  if (input.dbLatestSeasonFound != null) {
+    assertions.push({
+      id: 'db_latest_season_archive',
+      ok: !!input.dbLatestSeasonFound,
+      detail: input.dbLatestSeasonFound
+        ? `IndexedDB contains latest season ${latestSeasonId ?? '(unknown)'}`
+        : `IndexedDB missing latest season ${latestSeasonId ?? '(unknown)'}`,
+    });
+  }
+
+  if (Array.isArray(input.dbAllSeasons) && latestSeasonId != null) {
+    const found = input.dbAllSeasons.some((season) => hasSeasonId(season, latestSeasonId));
+    assertions.push({
+      id: 'db_all_seasons_latest',
+      ok: found,
+      detail: found
+        ? `IndexedDB season list includes latest season ${latestSeasonId}`
+        : `IndexedDB season list missing latest season ${latestSeasonId}`,
+    });
+  }
+
   const hasTx = Array.isArray(input.transactionsRecent) && input.transactionsRecent.length > 0;
+  const transactionsRecentProbeOk = input.transactionsRecentProbeOk !== false;
+  const transactionsRecentHasExpectedData = input.transactionsRecentHasExpectedData ?? hasTx;
   assertions.push({
     id: 'transactions_recent_available',
-    ok: hasTx || !input.expectTransactions,
-    detail: hasTx
-      ? `${input.transactionsRecent.length} recent rows`
-      : input.expectTransactions
-        ? 'no transactions in recent strip but activity expected'
-        : 'no recent transactions (ok if none expected)',
+    ok: transactionsRecentProbeOk && (transactionsRecentHasExpectedData || !input.expectTransactions),
+    code: !transactionsRecentProbeOk
+      ? 'get_transactions_failed'
+      : (!transactionsRecentHasExpectedData && input.expectTransactions ? 'transactions_recent_empty' : undefined),
+    detail: !transactionsRecentProbeOk
+      ? 'GET_TRANSACTIONS recent failed'
+      : transactionsRecentHasExpectedData
+        ? `${input.transactionsRecent.length} recent rows`
+        : input.expectTransactions
+          ? 'no transactions in recent strip but activity expected'
+          : 'no recent transactions (ok if none expected)',
   });
 
   if (input.seasonTxQueryOk != null) {
     assertions.push({
       id: 'get_transactions_by_season',
       ok: !!input.seasonTxQueryOk,
+      code: input.seasonTxQueryOk ? undefined : 'get_transactions_failed',
       detail: input.seasonTxQueryOk ? 'GET_TRANSACTIONS by season ok' : 'GET_TRANSACTIONS by season failed',
     });
   }
@@ -219,6 +273,37 @@ export function buildPersistenceAssertions(input = {}) {
           : 'GET_SEASON_HISTORY failed or empty',
   });
 
+  if (input.seasonHistory !== undefined && latestSeasonId != null && !input.getSeasonHistorySkipped) {
+    const found = input.seasonHistory && hasSeasonId(input.seasonHistory, latestSeasonId);
+    assertions.push({
+      id: 'get_season_history_latest',
+      ok: !!found,
+      detail: found
+        ? `GET_SEASON_HISTORY returned latest season ${latestSeasonId}`
+        : `GET_SEASON_HISTORY missing latest season ${latestSeasonId}`,
+    });
+  }
+
+  const transactionProbeRows = [
+    ...(Array.isArray(input.transactionsRecent) ? input.transactionsRecent : []),
+    ...(Array.isArray(input.transactionsSeason) ? input.transactionsSeason : []),
+    ...(Array.isArray(input.dbTransactions) ? input.dbTransactions : []),
+  ];
+  const expectedTransactionTypes = Array.isArray(input.expectedTransactionTypes)
+    ? input.expectedTransactionTypes.map((type) => String(type).toLowerCase())
+    : [];
+  if (expectedTransactionTypes.length) {
+    const present = new Set(transactionProbeRows.map(transactionBucket));
+    const missing = expectedTransactionTypes.filter((type) => !present.has(type));
+    assertions.push({
+      id: 'expected_transaction_types',
+      ok: missing.length === 0,
+      detail: missing.length
+        ? `missing transaction buckets: ${missing.join(', ')}`
+        : `found transaction buckets: ${expectedTransactionTypes.join(', ')}`,
+    });
+  }
+
   assertions.push({
     id: 'get_records',
     ok: input.recordsProbeOk !== false,
@@ -241,15 +326,22 @@ export function buildPersistenceAssertions(input = {}) {
           : 'GET_HALL_OF_FAME invalid shape',
   });
 
+  const draftClassesProbeOk = input.draftClassesProbeOk !== false;
+  const draftClassesHasExpectedData = input.draftClassesHasExpectedData ?? Number(input.draftClassCount ?? 0) > 0;
   assertions.push({
     id: 'get_draft_classes',
-    ok: input.draftClassesProbeOk !== false,
+    ok: input.draftClassesProbeSkipped || (draftClassesProbeOk && (draftClassesHasExpectedData || !input.expectDraftClasses)),
+    code: !draftClassesProbeOk
+      ? 'get_draft_classes_failed'
+      : (!draftClassesHasExpectedData && input.expectDraftClasses ? 'draft_classes_empty' : undefined),
     detail:
       input.draftClassesProbeSkipped
         ? 'skipped (shallow probe mode)'
-        : input.draftClassesProbeOk
-          ? `GET_DRAFT_CLASSES count=${input.draftClassCount ?? 0}`
-          : 'GET_DRAFT_CLASSES invalid',
+        : !draftClassesProbeOk
+          ? 'GET_DRAFT_CLASSES failed'
+          : draftClassesHasExpectedData
+            ? `GET_DRAFT_CLASSES count=${input.draftClassCount ?? 0}`
+            : 'GET_DRAFT_CLASSES returned no classes (ok if none expected)',
   });
 
   return { allOk: assertions.every((a) => a.ok), assertions };
