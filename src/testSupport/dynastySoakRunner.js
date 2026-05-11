@@ -406,8 +406,6 @@ export async function runDynastySoakOnce(opts = {}) {
       const recentTransactionLimit = deepFinalProbes ? 1_000 : 400;
       const seasonTransactionLimit = deepFinalProbes ? 1_000 : 200;
 
-      const simCtx = { checkpoints, label: `S${s}`, phaseBefore, yearBefore };
-      const { lastMsg: simMsg, attempts } = await simUntilPreseason(simTimeoutMs, simCtx);
       if (phaseBefore === 'preseason') {
         const advanceResult = await advanceOutOfCurrentTargetPhase(view, {
           checkpoints,
@@ -439,7 +437,7 @@ export async function runDynastySoakOnce(opts = {}) {
         view = advanceResult.lastMsg.payload;
       }
 
-      const simCtx = { checkpoints, label: `S${s}` };
+      const simCtx = { checkpoints, label: `S${s}`, phaseBefore, yearBefore };
       const { lastMsg: simMsg, attempts } = await simUntilPreseason(simTimeoutMs, simCtx, runnerDispatch);
       simAttemptsPerSeason.push({ season: s, attempts });
 
@@ -509,10 +507,8 @@ export async function runDynastySoakOnce(opts = {}) {
       }
 
       let tProbe = Date.now();
-      const allSeasonsMsg = await dispatchWorker(toWorker.GET_ALL_SEASONS, {}, { timeoutMs: phaseTimeoutMs });
-      pushCheckpoint(checkpoints, `S${s}.GET_ALL_SEASONS`, Date.now() - tProbe, { fullProbes, deepFinalProbes });
       const allSeasonsMsg = await runnerDispatch(toWorker.GET_ALL_SEASONS, {}, { timeoutMs: phaseTimeoutMs });
-      pushCheckpoint(checkpoints, `S${s}.GET_ALL_SEASONS`, Date.now() - tProbe, { fullProbes });
+      pushCheckpoint(checkpoints, `S${s}.GET_ALL_SEASONS`, Date.now() - tProbe, { fullProbes, deepFinalProbes });
 
       const leagueHistory = view?.leagueHistory ?? [];
       const latestSeason = leagueHistory.length ? leagueHistory[leagueHistory.length - 1] : null;
@@ -531,8 +527,7 @@ export async function runDynastySoakOnce(opts = {}) {
         tProbe = Date.now();
         txSeasonMsg = await runnerDispatch(
           toWorker.GET_TRANSACTIONS,
-          { seasonId: view?.seasonId, limit: seasonTransactionLimit },
-          { seasonId: latestSeasonId ?? view?.seasonId, limit: 200 },
+          { seasonId: latestSeasonId ?? view?.seasonId, limit: seasonTransactionLimit },
           { timeoutMs: phaseTimeoutMs },
         );
         pushCheckpoint(checkpoints, `S${s}.GET_TRANSACTIONS_season`, Date.now() - tProbe, null);
@@ -628,6 +623,8 @@ export async function runDynastySoakOnce(opts = {}) {
           detail: draftClassSample.length
             ? `${draftClassSample.length} draft class models sampled`
             : 'no draft classes available to sample',
+        });
+      }
       const txSeasonRows = txSeasonMsg.payload?.transactions ?? [];
       let dbLatestSeason = null;
       let dbAllSeasons = null;
