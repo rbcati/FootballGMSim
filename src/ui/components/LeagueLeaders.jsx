@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "./EmptyState.jsx";
 import { getSafeLeagueLeaderCategories } from "../../state/selectors.js";
 import { buildLeagueStatsHubModel } from "../utils/leagueStatsHub.js";
+import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from "../utils/dataBrowser.js";
 
 const TABS = ["Passing", "Rushing", "Receiving", "Tackles", "Sacks", "Interceptions", "Kicking"];
 
@@ -114,6 +115,10 @@ const API_TAB_MAP = Object.freeze({
 export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavigate }) {
   const [activeTab, setActiveTab] = useState("Passing");
   const [leaderPayload, setLeaderPayload] = useState({ categories: null, source: null, phase: null });
+  const [search, setSearch] = useState("");
+  const [positionFilter, setPositionFilter] = useState("ALL");
+  const [teamFilter, setTeamFilter] = useState("ALL");
+  const [sort, setSort] = useState({ key: "primary", dir: "desc" });
   const firstTabRef = useRef(null);
   const teams = Array.isArray(league?.teams) ? league.teams : [];
 
@@ -159,6 +164,7 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
             name: row.name,
             teamName: row.teamAbbr,
             teamId: row.teamId,
+            pos: row.raw?.pos ?? row.raw?.position ?? row.raw?.player?.pos ?? row.raw?.player?.position ?? "",
             isUserTeam: Number(row.teamId) === Number(league?.userTeamId),
           },
           primary: row.value,
@@ -188,6 +194,7 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
           name: row.name,
           teamName: row.team,
           teamId: row.teamId,
+          pos: row.pos ?? row.position ?? "",
           isUserTeam: Number(row.teamId) === Number(league?.userTeamId),
         },
         primary: config.getPrimary(row) ?? 0,
@@ -196,6 +203,29 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
       .sort((a, b) => (b.primary ?? 0) - (a.primary ?? 0))
       .slice(0, 10);
   }, [activeTab, league?.userTeamId, model.playerTables, remoteCategories]);
+
+
+  const positionOptions = useMemo(() => uniqueFilterOptions(rows, (entry) => entry.player?.pos), [rows]);
+  const teamOptions = useMemo(() => uniqueFilterOptions(rows, (entry) => entry.player?.teamName), [rows]);
+  const visibleRows = useMemo(() => {
+    const filtered = rows.filter((entry) => {
+      if (positionFilter !== "ALL" && entry.player?.pos !== positionFilter) return false;
+      if (teamFilter !== "ALL" && entry.player?.teamName !== teamFilter) return false;
+      return rowMatchesSearch(entry.player, search, ["name", "teamName", "pos"]);
+    });
+    const getValue = (entry) => {
+      if (sort.key === "name") return entry.player?.name;
+      if (sort.key === "team") return entry.player?.teamName;
+      if (sort.key === "secondary") return entry.secondary;
+      return entry.primary;
+    };
+    return stableSortRows(filtered, getValue, sort.dir, (entry) => entry.player?.name);
+  }, [rows, positionFilter, teamFilter, search, sort]);
+  const resetFilters = () => { setSearch(""); setPositionFilter("ALL"); setTeamFilter("ALL"); };
+  const hasActiveFilters = Boolean(search.trim()) || positionFilter !== "ALL" || teamFilter !== "ALL";
+  const handleSort = (key) => setSort((current) => current.key === key
+    ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
+    : { key, dir: key === "name" || key === "team" ? "asc" : "desc" });
 
   const config = CATEGORY_CONFIG[activeTab] ?? CATEGORY_CONFIG.Passing;
   const sourceLabel = leaderPayload?.source === "last_completed_regular_season"
@@ -212,26 +242,39 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
             role="tab"
             aria-selected={activeTab === tab}
             className={`standings-tab${activeTab === tab ? " active" : ""}`}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => { setActiveTab(tab); resetFilters(); setSort({ key: "primary", dir: "desc" }); }}
           >
             {tab}
           </button>
         ))}
       </div>
       <div style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>{sourceLabel}</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input aria-label="Search league leaders" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search player/team" style={{ minHeight: 32, flex: "1 1 180px" }} />
+        <select aria-label="Filter leaders by position" value={positionFilter} onChange={(e) => setPositionFilter(e.target.value)} style={{ minHeight: 32 }}>
+          <option value="ALL">All positions</option>
+          {positionOptions.map((pos) => <option key={pos} value={pos}>{pos}</option>)}
+        </select>
+        <select aria-label="Filter leaders by team" value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} style={{ minHeight: 32 }}>
+          <option value="ALL">All teams</option>
+          {teamOptions.map((team) => <option key={team} value={team}>{team}</option>)}
+        </select>
+        {hasActiveFilters ? <button type="button" onClick={resetFilters} style={{ minHeight: 32 }}>Reset filters</button> : null}
+      </div>
+      <div style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>{buildShowingLabel(visibleRows.length, rows.length, "leader")}</div>
       <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
         <table className="standings-table" style={{ width: "100%", minWidth: 680 }}>
           <thead>
             <tr>
               <th style={{ width: 70 }}>Rank</th>
-              <th>Player</th>
-              <th>Team</th>
-              <th style={{ textAlign: "right" }}>{config.primaryLabel}</th>
+              <th><button type="button" onClick={() => handleSort("name")}>Player{sort.key === "name" ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}</button></th>
+              <th><button type="button" onClick={() => handleSort("team")}>Team{sort.key === "team" ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}</button></th>
+              <th style={{ textAlign: "right" }}><button type="button" onClick={() => handleSort("primary")}>{config.primaryLabel}{sort.key === "primary" ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}</button></th>
               <th style={{ textAlign: "right" }}>{config.secondaryLabel}</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((entry, index) => (
+            {visibleRows.map((entry, index) => (
               <tr
                 key={`${entry.player?.id ?? entry.player?.name ?? "player"}-${index}`}
                 className="card-enter"
@@ -252,7 +295,7 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
                 <td style={{ textAlign: "right" }}>{entry.secondary ?? "—"}</td>
               </tr>
             ))}
-            {rows.length === 0 && (
+            {visibleRows.length === 0 && (
               <tr>
                 <td colSpan={5} style={{ padding: 0 }}>
                   <EmptyState

@@ -51,4 +51,25 @@ describe('free agency playbook knowledge display', () => {
     ], { sortPreset: 'tactical_fit', sortKey: 'ovr', sortDir: 'desc', needs: [] });
     expect(sorted.map((p) => p.id)).toEqual([2, 3, 1]);
   });
+
+  it('keeps manual name sorting stable for equal names and supports market fit sort keys', () => {
+    const marketRowsById = new Map([
+      [1, { sortKeys: { fitScore: 55 } }],
+      [2, { sortKeys: { fitScore: 90 } }],
+      [3, { sortKeys: { fitScore: 55 } }],
+    ]);
+    const sortedByFit = sortFreeAgentsForView([
+      { id: 1, name: 'Same', ovr: 80 },
+      { id: 2, name: 'Best', ovr: 78 },
+      { id: 3, name: 'Same', ovr: 76 },
+    ], { sortPreset: 'manual', sortKey: 'fitScore', sortDir: 'desc', marketRowsById });
+    expect(sortedByFit.map((p) => p.id)).toEqual([2, 1, 3]);
+
+    const sortedByName = sortFreeAgentsForView([
+      { id: 1, name: 'Same', ovr: 80 },
+      { id: 3, name: 'Same', ovr: 76 },
+      { id: 2, name: 'Best', ovr: 78 },
+    ], { sortPreset: 'manual', sortKey: 'name', sortDir: 'asc', marketRowsById });
+    expect(sortedByName.map((p) => p.id)).toEqual([2, 1, 3]);
+  });
 });

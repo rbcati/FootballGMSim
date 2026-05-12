@@ -54,6 +54,7 @@ import { buildFreeAgencyMarketAnalysis } from "../../core/freeAgency/freeAgencyM
 import { buildFreeAgencyProfileContext } from "../utils/playerProfileContext.js";
 import { buildContractOfferInsight, toneToContractInsightColor } from "../utils/contractOfferInsights.js";
 import { evaluatePendingOfferCapReservation } from "../../core/pendingOfferCapModel.js";
+import { buildShowingLabel, stableSortRows } from "../utils/dataBrowser.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -189,18 +190,13 @@ export function sortFreeAgentsForView(displayed, { sortPreset, sortKey, sortDir,
     arr.sort((a, b) => (rowFor(a).riskFlags?.length ?? 0) - (rowFor(b).riskFlags?.length ?? 0) || (rowFor(b).sortKeys?.fitScore ?? 0) - (rowFor(a).sortKeys?.fitScore ?? 0));
     return arr;
   }
-  arr.sort((a, b) => {
-    let va = a[sortKey];
-    let vb = b[sortKey];
-    if (sortKey === "ask") {
-      va = a._ask;
-      vb = b._ask;
-    }
-    if (va === vb) return 0;
-    if (sortDir === "asc") return va > vb ? 1 : -1;
-    return va < vb ? 1 : -1;
-  });
-  return arr;
+  return stableSortRows(arr, (player) => {
+    const marketRow = rowFor(player);
+    if (sortKey === "ask") return player._ask;
+    if (sortKey === "fitScore") return marketRow.sortKeys?.fitScore ?? player?._eval?.schemeFit?.score ?? player.schemeFit ?? 0;
+    if (sortKey === "capFit") return marketRow.sortKeys?.capFit ?? marketRow.sortKeys?.affordability ?? 0;
+    return player?.[sortKey];
+  }, sortDir, (player) => player?.name);
 }
 
 // ── Shared sub-components (identical signature & appearance to Roster.jsx) ────
@@ -1030,6 +1026,22 @@ export default function FreeAgency({
     showFlash(isResignPhase ? "Re-sign priorities loaded: OVR 75+." : "Top-target quick filter loaded: OVR 75+.");
   };
 
+  const resetMarketFilters = () => {
+    setNameFilter("");
+    setPosFilter("ALL");
+    setMinOvr(0);
+    setMaxAge(40);
+    setMinSchemeFit(0);
+    setDemandTier("ALL");
+    setFitTierFilter("ALL");
+    setArchetypeFilter("ALL");
+    setRoleFilter("ALL");
+    setPositionNeedOnly(false);
+    setWatchOnly(false);
+    setMarketFilter("all");
+    setAdvancedFilters([]);
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -1360,6 +1372,10 @@ export default function FreeAgency({
           </div>
         </CardContent>
       </Card>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: "var(--space-3)", fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+        <span>{buildShowingLabel(sortedAgents.length, evaluatedFaPool.length, faState?.phase === "offseason_resign" ? "re-sign target" : "free agent")}</span>
+        <Button type="button" variant="outline" onClick={resetMarketFilters}>Reset filters</Button>
+      </div>
       <AdvancedPlayerSearch
         filters={advancedFilters}
         onChange={setAdvancedFilters}
