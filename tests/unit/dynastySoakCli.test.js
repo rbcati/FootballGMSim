@@ -137,6 +137,21 @@ describe('dynastySoakCli', () => {
       phasePath: 'short',
       profileNotes: ['CI profile runs a short real-worker phase path and does not complete a season.'],
       harnessConfig: { ci: true, auditProfile: 'ci', phasePath: 'short', deep: true, deepEachSeason: false },
+      auditCheckpoint: {
+        ok: true,
+        auditOnly: true,
+        archiveType: 'audit_checkpoint',
+        completedSeason: false,
+        sourcePhase: 'regular',
+        sourceYear: 2026,
+        sourceSeasonId: 's2026',
+        realWeeksSimulated: 2,
+        exercised: {
+          dbAuditCheckpointWriteRead: { status: 'exercised', detail: 'read back from DB' },
+          getRecordsHandler: { status: 'exercised', detail: 'GET_RECORDS handler returned record data' },
+        },
+        skipped: [{ system: 'completedSeasonArchive', reason: 'archiveSeason is not called by checkpoint' }],
+      },
       exerciseMatrix: {
         realWorkerBoot: { status: 'exercised' },
         regularWeeks: { status: 'exercised', count: 2 },
@@ -221,10 +236,26 @@ describe('dynastySoakCli', () => {
         phaseTimeoutMs: 3_600_000,
         maxRuntimeMs: null,
       },
+      auditCheckpoint: {
+        ok: true,
+        auditOnly: true,
+        archiveType: 'audit_checkpoint',
+        completedSeason: false,
+        sourcePhase: 'regular',
+        sourceYear: 2026,
+        sourceSeasonId: 's2026',
+        realWeeksSimulated: 2,
+        exercised: {
+          dbAuditCheckpointWriteRead: { status: 'exercised', detail: 'read back from DB' },
+          getRecordsHandler: { status: 'exercised', detail: 'GET_RECORDS handler returned record data' },
+        },
+        skipped: [{ system: 'completedSeasonArchive', reason: 'archiveSeason is not called by checkpoint' }],
+      },
       exerciseMatrix: {
         realWorkerBoot: { status: 'exercised' },
         safeStarterLeague: { status: 'exercised' },
         regularWeeks: { status: 'exercised', count: 2 },
+        auditCheckpoint: { status: 'exercised_partial', archiveType: 'audit_checkpoint', completedSeason: false, realWeeksSimulated: 2 },
         workerProbes: {
           status: 'exercised_partial',
           detail: 'GET_ALL_SEASONS, GET_TRANSACTIONS recent, GET_RECORDS, GET_HALL_OF_FAME',
@@ -265,6 +296,7 @@ describe('dynastySoakCli', () => {
       expect(json.finalPhase).toBe('regular');
       expect(json.finalYear).toBe(2026);
       expect(json.exerciseMatrix.workerProbes.status).toBe('exercised_partial');
+      expect(json.auditCheckpoint).toMatchObject({ auditOnly: true, completedSeason: false, archiveType: 'audit_checkpoint' });
       expect(json.exerciseMatrix.fullSeasonArchive.status).toBe('skipped');
       expect(json.persistenceAssertions.some((a) => a.status === 'skipped')).toBe(true);
       expect(json.failures).toEqual([]);
@@ -275,6 +307,11 @@ describe('dynastySoakCli', () => {
       expect(md).toContain('Short real-worker smoke audit. It does not complete a season.');
       expect(md).toContain('Full-season balance, playoffs, offseason, free agency, draft, and completed-season archive are not validated by CI profile.');
       expect(md).toContain('GET_ALL_SEASONS, GET_TRANSACTIONS recent, GET_RECORDS, GET_HALL_OF_FAME');
+      expect(md).toContain('## Audit checkpoint');
+      expect(md).toContain('**Audit only:** true');
+      expect(md).toContain('**Completed season:** false');
+      expect(md).toContain('not full-season balance validation');
+      expect(md).toContain('getRecordsHandler');
       expect(md).toContain('| fullSeasonArchive | CI profile does not create a completed-season archive |');
       expect(md).toContain('**skipped** `latest_season_archive`');
       expect(md).toContain('npm run audit:dynasty -- --audit-profile=full --seasons=1 --seed=1383');

@@ -14,6 +14,7 @@ import {
 const RESPONSE_BY_REQUEST = {
   [toWorker.INIT]: [toUI.READY, toUI.ERROR],
   [toWorker.USE_SAFE_STARTER_LEAGUE]: [toUI.FULL_STATE, toUI.ERROR],
+  [toWorker.RUN_DYNASTY_AUDIT_CHECKPOINT]: [toUI.DYNASTY_AUDIT_CHECKPOINT, toUI.ERROR],
   [toWorker.SIM_TO_PHASE]: [toUI.FULL_STATE, toUI.ERROR],
   [toWorker.ADVANCE_WEEK]: [toUI.WEEK_COMPLETE, toUI.ERROR, toUI.FULL_STATE],
   [toWorker.SAVE_NOW]: [toUI.SAVED, toUI.ERROR],
@@ -140,6 +141,23 @@ export function mergeAudit(into, next, seasonLabel) {
   into.seasonsSimmed = Math.max(into.seasonsSimmed || 0, next.seasonsSimmed || 0);
 }
 
+
+function annotateAuditCheckpointWithWorkerProbe(auditCheckpoint, name, ok, detail) {
+  if (!auditCheckpoint || typeof auditCheckpoint !== 'object') return;
+  if (!auditCheckpoint.exercised || typeof auditCheckpoint.exercised !== 'object') {
+    auditCheckpoint.exercised = {};
+  }
+  auditCheckpoint.exercised[name] = {
+    status: ok ? 'exercised' : 'failed',
+    detail: String(detail || (ok ? 'handler probe ok' : 'handler probe failed')),
+  };
+  if (!ok) {
+    auditCheckpoint.ok = false;
+    if (!Array.isArray(auditCheckpoint.failures)) auditCheckpoint.failures = [];
+    auditCheckpoint.failures.push({ system: name, error: auditCheckpoint.exercised[name].detail });
+  }
+}
+
 function pushCheckpoint(checkpoints, name, ms, meta = null) {
   checkpoints.push({ name, ms, meta });
 }
@@ -163,6 +181,7 @@ function buildPhaseBreakdown(checkpoints) {
     let bucket = null;
     if (name.startsWith('boot.')) bucket = groups.boot;
     else if (name.endsWith('.SIM_TO_PHASE')) bucket = groups.sim;
+    else if (name.includes('AUDIT_CHECKPOINT')) bucket = groups.getProbes;
     else if (name.includes('.GET_')) bucket = groups.getProbes;
     else if (name.endsWith('.runDynastySoakAudit')) bucket = groups.auditEvaluation;
     else if (name.endsWith('.ADVANCE_WEEK') || name.includes('.ADVANCE_WEEK.')) bucket = groups.finalAdvance;
@@ -487,6 +506,7 @@ async function runFullDynastySoakOnce(opts = {}) {
   globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = true;
   globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__ = true;
   globalThis.__DYNASTY_SOAK_PROFILE__ = true;
+  globalThis.__DYNASTY_SOAK_AUDIT_CHECKPOINT_ENABLED__ = false;
   globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
 
   const t0 = Date.now();
@@ -900,6 +920,7 @@ async function runFullDynastySoakOnce(opts = {}) {
     globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = false;
     globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__ = false;
     globalThis.__DYNASTY_SOAK_PROFILE__ = false;
+    globalThis.__DYNASTY_SOAK_AUDIT_CHECKPOINT_ENABLED__ = false;
     globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
   }
 }
@@ -950,6 +971,7 @@ async function runCiDynastySoakOnce(opts = {}) {
   globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = false;
   globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__ = false;
   globalThis.__DYNASTY_SOAK_PROFILE__ = true;
+  globalThis.__DYNASTY_SOAK_AUDIT_CHECKPOINT_ENABLED__ = true;
   globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
 
   try {
@@ -1047,6 +1069,38 @@ async function runCiDynastySoakOnce(opts = {}) {
       : { status: 'failed', reason: saveMsg.payload?.message || 'SAVE_NOW failed' };
     checkMaxRuntime(t0, maxRuntimeMs);
 
+    const checkpointMsg = await timedDispatch({
+      checkpoints,
+      name: 'ci.RUN_DYNASTY_AUDIT_CHECKPOINT',
+      runnerDispatch,
+      type: toWorker.RUN_DYNASTY_AUDIT_CHECKPOINT,
+      payload: { realWeeksSimulated: regularWeeksSimmed, auditProfile: 'ci' },
+      timeoutMs: Math.min(180_000, phaseTimeoutMs),
+      meta: { realWeeksSimulated: regularWeeksSimmed },
+    });
+    const auditCheckpoint = checkpointMsg.payload ?? null;
+    aggregate.auditCheckpoint = auditCheckpoint;
+    if (probeHandlerSucceeded(checkpointMsg) && auditCheckpoint?.ok === true && auditCheckpoint?.auditOnly === true && auditCheckpoint?.completedSeason === false) {
+      aggregate.exerciseMatrix.auditCheckpoint = {
+        status: 'exercised_partial',
+        detail: 'audit-only checkpoint persisted metadata and shaped safe partial archive probes',
+        archiveType: auditCheckpoint.archiveType,
+        completedSeason: auditCheckpoint.completedSeason,
+        realWeeksSimulated: auditCheckpoint.realWeeksSimulated,
+      };
+    } else {
+      aggregate.passed = false;
+      aggregate.exerciseMatrix.auditCheckpoint = {
+        status: 'failed',
+        reason: auditCheckpoint?.error || auditCheckpoint?.failures?.map((f) => f?.error || f?.system).join('; ') || 'audit checkpoint failed',
+      };
+      aggregate.failures.push({
+        code: 'audit_checkpoint_failed',
+        message: aggregate.exerciseMatrix.auditCheckpoint.reason,
+      });
+    }
+    checkMaxRuntime(t0, maxRuntimeMs);
+
     const allSeasonsMsg = await timedDispatch({
       checkpoints,
       name: 'ci.GET_ALL_SEASONS',
@@ -1076,6 +1130,50 @@ async function runCiDynastySoakOnce(opts = {}) {
       type: toWorker.GET_HALL_OF_FAME,
       timeoutMs: phaseTimeoutMs,
     });
+    annotateAuditCheckpointWithWorkerProbe(
+      auditCheckpoint,
+      'getAllSeasonsHandler',
+      probeHandlerSucceeded(allSeasonsMsg),
+      probeHandlerSucceeded(allSeasonsMsg)
+        ? `GET_ALL_SEASONS ok (${Array.isArray(allSeasonsMsg.payload?.seasons) ? allSeasonsMsg.payload.seasons.length : 0} rows)`
+        : (allSeasonsMsg.payload?.message || allSeasonsMsg.payload?.error || 'GET_ALL_SEASONS failed'),
+    );
+    annotateAuditCheckpointWithWorkerProbe(
+      auditCheckpoint,
+      'getTransactionsRecentHandler',
+      probeHandlerSucceeded(txMsg),
+      probeHandlerSucceeded(txMsg)
+        ? `GET_TRANSACTIONS recent ok (${Array.isArray(txMsg.payload?.transactions) ? txMsg.payload.transactions.length : 0} rows)`
+        : (txMsg.payload?.message || txMsg.payload?.error || 'GET_TRANSACTIONS recent failed'),
+    );
+    annotateAuditCheckpointWithWorkerProbe(
+      auditCheckpoint,
+      'getRecordsHandler',
+      probeHandlerSucceeded(recordsMsg) && !!(recordsMsg.payload?.recordBook || recordsMsg.payload?.records),
+      (probeHandlerSucceeded(recordsMsg) && !!(recordsMsg.payload?.recordBook || recordsMsg.payload?.records))
+        ? 'GET_RECORDS handler returned record data'
+        : (recordsMsg.payload?.message || recordsMsg.payload?.error || 'GET_RECORDS handler failed or returned no record data'),
+    );
+    annotateAuditCheckpointWithWorkerProbe(
+      auditCheckpoint,
+      'getHallOfFameHandler',
+      probeHandlerSucceeded(hofMsg) && (!hofMsg.payload || Array.isArray(hofMsg.payload?.players)),
+      (probeHandlerSucceeded(hofMsg) && (!hofMsg.payload || Array.isArray(hofMsg.payload?.players)))
+        ? 'GET_HALL_OF_FAME handler returned a valid player list'
+        : (hofMsg.payload?.message || hofMsg.payload?.error || 'GET_HALL_OF_FAME handler failed or returned invalid data'),
+    );
+    if (auditCheckpoint?.ok === false && aggregate.exerciseMatrix.auditCheckpoint?.status !== 'failed') {
+      aggregate.passed = false;
+      aggregate.exerciseMatrix.auditCheckpoint = {
+        ...aggregate.exerciseMatrix.auditCheckpoint,
+        status: 'failed',
+        reason: auditCheckpoint.failures?.map((f) => f?.error || f?.system).filter(Boolean).join('; ') || 'audit checkpoint probe failed',
+      };
+      aggregate.failures.push({
+        code: 'audit_checkpoint_probe_failed',
+        message: aggregate.exerciseMatrix.auditCheckpoint.reason,
+      });
+    }
     aggregate.exerciseMatrix.workerProbes = { status: 'exercised_partial', detail: 'GET_ALL_SEASONS, GET_TRANSACTIONS recent, GET_RECORDS, GET_HALL_OF_FAME' };
 
     const skippedProbeReasons = {
@@ -1124,6 +1222,7 @@ async function runCiDynastySoakOnce(opts = {}) {
       expectDraftClasses: false,
       draftClassCount: 0,
       saveNowOk,
+      auditCheckpoint,
       skippedProbeReasons,
     });
     aggregate.persistenceAssertions = pers.assertions;
@@ -1144,6 +1243,7 @@ async function runCiDynastySoakOnce(opts = {}) {
     globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = false;
     globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__ = false;
     globalThis.__DYNASTY_SOAK_PROFILE__ = false;
+    globalThis.__DYNASTY_SOAK_AUDIT_CHECKPOINT_ENABLED__ = false;
     globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
     globalThis.__dynastySoakBroadcast = null;
   }

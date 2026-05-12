@@ -311,6 +311,44 @@ export function buildMarkdownReport(result) {
     lines.push('');
   }
 
+  if (result.auditCheckpoint) {
+    const cp = result.auditCheckpoint;
+    lines.push('## Audit checkpoint');
+    lines.push('');
+    lines.push(`- **Status:** ${cp.ok === true ? 'ok' : 'FAIL'}`);
+    lines.push(`- **Type:** ${mdEscape(cp.archiveType ?? 'unknown')}`);
+    lines.push(`- **Audit only:** ${cp.auditOnly === true ? 'true' : 'false'}`);
+    lines.push(`- **Completed season:** ${cp.completedSeason === false ? 'false' : mdEscape(String(cp.completedSeason))}`);
+    lines.push(`- **Source:** phase=${mdEscape(cp.sourcePhase ?? 'n/a')} year=${mdEscape(cp.sourceYear ?? 'n/a')} seasonId=${mdEscape(cp.sourceSeasonId ?? 'n/a')}`);
+    lines.push(`- **Real weeks simulated before checkpoint:** ${mdEscape(cp.realWeeksSimulated ?? 'n/a')}`);
+    lines.push('- **Warning:** This checkpoint is audit-only partial-season coverage, not full-season balance validation and not a completed-season archive.');
+    lines.push('- **Full completed-season validation:** `npm run audit:dynasty -- --audit-profile=full --seasons=1 --seed=1383`');
+    lines.push('');
+    const exercised = Object.entries(cp.exercised || {});
+    lines.push('### Checkpoint systems exercised');
+    lines.push('');
+    if (!exercised.length) lines.push('_None_');
+    else {
+      lines.push('| System | Status | Detail |');
+      lines.push('| --- | --- | --- |');
+      for (const [name, entry] of exercised) {
+        lines.push(`| ${mdEscape(name)} | ${mdEscape(entry?.status ?? 'exercised')} | ${mdEscape(entry?.detail || '')} |`);
+      }
+    }
+    lines.push('');
+    lines.push('### Checkpoint systems skipped');
+    lines.push('');
+    if (!Array.isArray(cp.skipped) || cp.skipped.length === 0) lines.push('_None_');
+    else {
+      lines.push('| System | Reason |');
+      lines.push('| --- | --- |');
+      for (const row of cp.skipped) {
+        lines.push(`| ${mdEscape(row?.system ?? 'unknown')} | ${mdEscape(row?.reason || 'missing reason')} |`);
+      }
+    }
+    lines.push('');
+  }
+
   if (result.smallerLeagueNote) {
     lines.push('## League mode');
     lines.push('');

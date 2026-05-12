@@ -31,6 +31,26 @@ vi.mock('../../src/core/dynastySoakAudit.js', () => ({
   })),
 }));
 
+
+function makeAuditCheckpoint(realWeeksSimulated = 2) {
+  return {
+    ok: true,
+    auditOnly: true,
+    archiveType: 'audit_checkpoint',
+    completedSeason: false,
+    sourcePhase: 'regular',
+    sourceYear: 2026,
+    realWeeksSimulated,
+    exercised: {
+      forcedDirtyFlush: { status: 'exercised', detail: 'ok' },
+      dbAuditCheckpointWriteRead: { status: 'exercised', detail: 'ok' },
+    },
+    skipped: [
+      { system: 'completedSeasonArchive', reason: 'archiveSeason is not called for partial CI runs' },
+    ],
+  };
+}
+
 function makeState({ phase, year }) {
   return {
     phase,
@@ -72,6 +92,8 @@ describe('runDynastySoakOnce', () => {
         }
         case toWorker.SAVE_NOW:
           return { type: toUI.SAVED, payload: {} };
+        case toWorker.RUN_DYNASTY_AUDIT_CHECKPOINT:
+          return { type: toUI.DYNASTY_AUDIT_CHECKPOINT, payload: makeAuditCheckpoint(payload.realWeeksSimulated) };
         case toWorker.GET_ALL_SEASONS:
           return { type: toUI.ALL_SEASONS, payload: { seasons: [] } };
         case toWorker.GET_TRANSACTIONS:
@@ -103,6 +125,7 @@ describe('runDynastySoakOnce', () => {
     expect(calls.map((c) => c.type)).toContain(toWorker.USE_SAFE_STARTER_LEAGUE);
     expect(calls.filter((c) => c.type === toWorker.ADVANCE_WEEK)).toHaveLength(3);
     expect(calls.some((c) => c.type === toWorker.SIM_TO_PHASE)).toBe(false);
+    expect(calls.some((c) => c.type === toWorker.RUN_DYNASTY_AUDIT_CHECKPOINT)).toBe(true);
     expect(result.auditProfile).toBe('ci');
     expect(result.phasePath).toBe('short');
     expect(result.seasonsSimmed).toBe(1); // mocked pure audit return; report still labels CI as short path
@@ -112,6 +135,10 @@ describe('runDynastySoakOnce', () => {
     expect(result.exerciseMatrix.offseason.status).toBe('skipped');
     expect(result.exerciseMatrix.draft.status).toBe('skipped');
     expect(result.exerciseMatrix.fullSeasonArchive.status).toBe('skipped');
+    expect(result.exerciseMatrix.auditCheckpoint.status).toBe('exercised_partial');
+    expect(result.auditCheckpoint).toMatchObject({ auditOnly: true, completedSeason: false, archiveType: 'audit_checkpoint' });
+    expect(result.auditCheckpoint.exercised.getAllSeasonsHandler.status).toBe('exercised');
+    expect(result.auditCheckpoint.exercised.getRecordsHandler.status).toBe('exercised');
   });
 
 
@@ -140,7 +167,7 @@ describe('runDynastySoakOnce', () => {
     const week2State = { ...makeState({ phase: 'regular', year: 2026 }), currentWeek: 2 };
     const week3State = { ...makeState({ phase: 'regular', year: 2026 }), currentWeek: 3 };
     let advanceCount = 0;
-    const dispatchWorker = vi.fn(async (type) => {
+    const dispatchWorker = vi.fn(async (type, payload = {}) => {
       switch (type) {
         case toWorker.INIT:
           return { type: toUI.READY, payload: {} };
@@ -151,6 +178,8 @@ describe('runDynastySoakOnce', () => {
           return { type: toUI.WEEK_COMPLETE, payload: advanceCount === 1 ? week2State : week3State };
         case toWorker.SAVE_NOW:
           return { type: toUI.SAVED, payload: {} };
+        case toWorker.RUN_DYNASTY_AUDIT_CHECKPOINT:
+          return { type: toUI.DYNASTY_AUDIT_CHECKPOINT, payload: makeAuditCheckpoint(payload.realWeeksSimulated) };
         case toWorker.GET_ALL_SEASONS:
           return { type: toUI.ALL_SEASONS, payload: { seasons: [] } };
         case toWorker.GET_TRANSACTIONS:
@@ -254,6 +283,8 @@ describe('runDynastySoakOnce', () => {
     expect(result.harnessConfig.deep).toBe(true);
     expect(result.harnessConfig.deepEachSeason).toBe(false);
 
+    expect(calls.some((c) => c.type === toWorker.RUN_DYNASTY_AUDIT_CHECKPOINT)).toBe(false);
+
     expect(calls).toContainEqual({
       type: toWorker.GET_TRANSACTIONS,
       payload: { mode: 'recent', limit: 1000 },
@@ -277,10 +308,49 @@ describe('runDynastySoakOnce', () => {
       { type: toWorker.GET_DRAFT_CLASS, payload: { seasonId: 's2025' } },
     ]);
 
-    expect(result.persistenceAssertions.map((assertion) => assertion.id)).toEqual([
+    expect(result.persistenceAssertions.map((assertion) => assertion.id)).toEqual(expect.arrayContaining([
       'deep_archive_history_sample',
       'deep_draft_class_model_sample',
-    ]);
+    ]));
+  });
+
+
+  it('fails CI profile when the audit checkpoint returns ok false', async () => {
+    const bootState = makeState({ phase: 'regular', year: 2026 });
+    const week2State = { ...makeState({ phase: 'regular', year: 2026 }), currentWeek: 2 };
+    let advanceCount = 0;
+    const dispatchWorker = vi.fn(async (type) => {
+      switch (type) {
+        case toWorker.INIT:
+          return { type: toUI.READY, payload: {} };
+        case toWorker.USE_SAFE_STARTER_LEAGUE:
+          return { type: toUI.FULL_STATE, payload: bootState };
+        case toWorker.ADVANCE_WEEK:
+          advanceCount += 1;
+          return { type: toUI.WEEK_COMPLETE, payload: week2State };
+        case toWorker.SAVE_NOW:
+          return { type: toUI.SAVED, payload: {} };
+        case toWorker.RUN_DYNASTY_AUDIT_CHECKPOINT:
+          return { type: toUI.DYNASTY_AUDIT_CHECKPOINT, payload: { ok: false, error: 'guard failed' } };
+        case toWorker.GET_ALL_SEASONS:
+          return { type: toUI.ALL_SEASONS, payload: { seasons: [] } };
+        case toWorker.GET_TRANSACTIONS:
+          return { type: toUI.TRANSACTIONS, payload: { transactions: [] } };
+        case toWorker.GET_RECORDS:
+          return { type: toUI.RECORDS, payload: { recordBook: {} } };
+        case toWorker.GET_HALL_OF_FAME:
+          return { type: toUI.HALL_OF_FAME, payload: { players: [] } };
+        default:
+          throw new Error(`Unexpected worker call: ${type}`);
+      }
+    });
+
+    const { runDynastySoakOnce } = await import('../../src/testSupport/dynastySoakRunner.js');
+    const result = await runDynastySoakOnce({ auditProfile: 'ci', ci: true, dispatchWorker, loadWorkerModule: vi.fn(async () => {}) });
+
+    expect(result.passed).toBe(false);
+    expect(result.exerciseMatrix.auditCheckpoint.status).toBe('failed');
+    expect(result.failures.some((f) => f.code === 'audit_checkpoint_failed')).toBe(true);
   });
 
 });
