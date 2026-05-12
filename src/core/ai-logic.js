@@ -18,6 +18,8 @@ import { evaluateContractOffer } from './contracts/negotiation.js';
 import { evaluateReSigningPriority } from './retention/reSigning.js';
 import { buildFreeAgencyMarketAnalysis } from './freeAgency/freeAgencyMarketAnalysis.js';
 import { buildContractFromMarket, evaluateContractMarket } from './contractModel.js';
+import { evaluatePendingOfferCapReservation } from './pendingOfferCapModel.js';
+import { evaluatePlayerMarketRealism, normalizePositionGroup } from './marketRealismModel.js';
 
 class AiLogic {
     static NEED_GROUP_TO_POS = Object.freeze({
@@ -482,6 +484,25 @@ class AiLogic {
             return legacyGetCandidates(pos);
         };
 
+
+        const hasDuplicateExpensivePendingOffer = (pos, proposedCapHit) => {
+            if (pos === 'QB' || proposedCapHit < 10 || !freeAgentsMap) return false;
+            const group = normalizePositionGroup(pos);
+            return Object.values(freeAgentsMap)
+                .flat()
+                .filter(Boolean)
+                .some((player) => {
+                    if (normalizePositionGroup(player?.pos) !== group) return false;
+                    return Array.isArray(player?.offers) && player.offers.some((offer) => {
+                        if (Number(offer?.teamId) !== Number(teamId)) return false;
+                        const c = offer?.contract ?? {};
+                        const years = Math.max(1, Number(c.yearsTotal ?? c.years ?? 1));
+                        const annual = Number(c.baseAnnual ?? 0) + (Number(c.signingBonus ?? 0) / years);
+                        return annual >= 10;
+                    });
+                });
+        };
+
         // 4. Attempt to fill each high need position
         for (const pos of highNeedPositions) {
             const candidates = getCandidatesForPos(pos);
@@ -520,6 +541,19 @@ class AiLogic {
                 if (strategy?.archetype === 'retool' && age >= 31 && oldExpensiveNonQb) continue;
                 if (marketRiskTags.includes('long veteran commitment') && ['rebuild', 'development', 'retool'].includes(strategy?.archetype)) continue;
 
+                const qbDesperate = pos === 'QB' && Number(needs.QB ?? 0) >= 1.12;
+                const realism = evaluatePlayerMarketRealism({
+                    player: fa,
+                    team,
+                    roster: strategy?.roster ?? cache.getPlayersByTeam(teamId),
+                    strategy,
+                    positionalNeed: needs[pos] ?? 1,
+                    capRoom: team.capRoom,
+                    proposedAnnual: modelAnnualForRisk,
+                    action: 'free_agency',
+                });
+                if (realism.shouldAvoid && !realism.flags.includes('qb_need_exception') && !qbDesperate) continue;
+
                 const demandYears = Math.max(1, Number(demand?.yearsTotal ?? demand?.years ?? market.suggestedYears ?? 1));
                 const modelAnnual = Number(market.suggestedAnnual ?? demandAnnual);
                 const baseAnnual = Math.round(Math.min(modelAnnual, demandAnnual * 1.08) * 10) / 10;
@@ -534,6 +568,21 @@ class AiLogic {
                 offerContract.years = offerContract.yearsTotal;
 
                 const capHit = offerContract.baseAnnual + (offerContract.signingBonus / offerContract.yearsTotal);
+                if (hasDuplicateExpensivePendingOffer(pos, capHit)) continue;
+
+                const pendingCap = evaluatePendingOfferCapReservation({
+                    team,
+                    freeAgents: freeAgentsMap ? Object.values(freeAgentsMap).flat().filter(Boolean) : [],
+                    teamId,
+                    currentCapRoom: team.capRoom,
+                    proposedOffer: { player: fa, offer: { teamId, contract: offerContract } },
+                });
+                const pendingAfter = Number(pendingCap?.estimatedCapRoomAfterPending ?? team.capRoom);
+                const pendingStatus = pendingCap?.capReservationStatus;
+                const pendingBlocks = ['overcommitted'].includes(pendingStatus) || pendingAfter < 0;
+                const pendingQbException = pos === 'QB' && Number(needs.QB ?? 0) >= 1.12 && pendingAfter >= -2;
+                if (pendingBlocks && !pendingQbException) continue;
+
                 const capHealth = Number(strategy?.capHealth ?? 55);
                 let capLimit = strategy?.archetype === 'contender'
                     ? 0.74
@@ -545,9 +594,8 @@ class AiLogic {
                 if (capHealth < 28) capLimit *= 0.68;
                 else if (capHealth < 40) capLimit *= 0.86;
                 const maxAllowedHit = Math.max(3, Number(team.capRoom ?? 0) * capLimit);
-                const qbDesperate = pos === 'QB' && Number(needs.QB ?? 0) >= 1.12;
                 if (!urgentPos && capHit > maxAllowedHit) {
-                    const qbException = qbDesperate && market.controlledException && capHit <= maxAllowedHit * 1.28 && capHealth >= 18;
+                    const qbException = qbDesperate && (market.controlledException || realism.flags.includes('qb_need_exception')) && capHit <= maxAllowedHit * 1.8;
                     if (!qbException) continue;
                 }
 
@@ -562,7 +610,16 @@ class AiLogic {
                             marketTier: market.marketTier,
                             capFit: market.capFit,
                             riskTags: market.riskTags,
-                            reasons: market.reasons,
+                            reasons: [...new Set([...(market.reasons ?? []), ...(realism.reasons ?? [])])],
+                            marketRealism: {
+                                marketDemandScore: realism.marketDemandScore,
+                                fitScore: realism.fitScore,
+                                capRisk: realism.capRisk,
+                                ageRisk: realism.ageRisk,
+                                contractBurden: realism.contractBurden,
+                                teamFitTier: realism.teamFitTier,
+                                flags: realism.flags,
+                            },
                         },
                         timestamp: Date.now()
                     };

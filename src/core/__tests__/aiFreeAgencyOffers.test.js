@@ -354,6 +354,96 @@ describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
     );
   });
 
+
+  it('pending offer cap reservation prevents CPU overcommitment on non-QB splash', async () => {
+    const pendingQb = {
+      id: 51,
+      name: 'Pending QB',
+      pos: 'QB',
+      status: 'free_agent',
+      ovr: 75,
+      age: 28,
+      offers: [{ teamId: 4, contract: { years: 1, yearsTotal: 1, baseAnnual: 8, signingBonus: 0 } }],
+    };
+    const rbFa = {
+      id: 52,
+      name: 'Costly RB',
+      pos: 'RB',
+      status: 'free_agent',
+      ovr: 79,
+      age: 28,
+      offers: [],
+    };
+    mockCache.getTeam.mockReturnValue({
+      id: 4,
+      name: 'Pending Tight',
+      abbr: 'PEN',
+      wins: 8,
+      losses: 8,
+      capRoom: 12,
+      capUsed: 288,
+      deadCap: 4,
+    });
+    mockCache.getPlayersByTeam.mockReturnValue([
+      { id: 401, pos: 'QB', ovr: 78, age: 29, potential: 78, contract: { years: 2 } },
+      { id: 402, pos: 'RB', ovr: 61, age: 24, potential: 64, contract: { years: 1 } },
+    ]);
+    mockCalculateExtensionDemand.mockImplementation((player) => {
+      if (player.id === 52) return { years: 2, yearsTotal: 2, baseAnnual: 9, signingBonus: 2 };
+      return { years: 1, yearsTotal: 1, baseAnnual: 8, signingBonus: 0 };
+    });
+
+    await AiLogic.makeFreeAgencyOffers(4, { QB: [pendingQb], RB: [rbFa] });
+
+    expect(mockCache.updatePlayer).not.toHaveBeenCalledWith(
+      52,
+      expect.objectContaining({ offers: expect.any(Array) }),
+    );
+  });
+
+  it('avoids duplicate expensive non-QB pending offers in the same position group', async () => {
+    const pendingWr = {
+      id: 61,
+      name: 'Pending WR',
+      pos: 'WR',
+      status: 'free_agent',
+      ovr: 80,
+      age: 27,
+      offers: [{ teamId: 5, contract: { years: 2, yearsTotal: 2, baseAnnual: 12, signingBonus: 0 } }],
+    };
+    const wrFa = {
+      id: 62,
+      name: 'Second WR',
+      pos: 'WR',
+      status: 'free_agent',
+      ovr: 78,
+      age: 27,
+      offers: [],
+    };
+    mockCache.getTeam.mockReturnValue({
+      id: 5,
+      name: 'Duplicate Watch',
+      abbr: 'DUP',
+      wins: 9,
+      losses: 8,
+      capRoom: 45,
+      capUsed: 250,
+      deadCap: 0,
+    });
+    mockCache.getPlayersByTeam.mockReturnValue([
+      { id: 501, pos: 'QB', ovr: 80, age: 29, potential: 80, contract: { years: 3 } },
+      { id: 502, pos: 'WR', ovr: 64, age: 25, potential: 68, contract: { years: 1 } },
+    ]);
+    mockCalculateExtensionDemand.mockReturnValue({ years: 2, yearsTotal: 2, baseAnnual: 11, signingBonus: 2 });
+
+    await AiLogic.makeFreeAgencyOffers(5, { WR: [pendingWr, wrFa] });
+
+    expect(mockCache.updatePlayer).not.toHaveBeenCalledWith(
+      62,
+      expect.objectContaining({ offers: expect.any(Array) }),
+    );
+  });
+
   it('calculateTeamNeeds keeps QB as high priority when QB room is weak', () => {
     mockCache.getTeam.mockReturnValue({
       id: 1,
