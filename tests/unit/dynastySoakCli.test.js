@@ -150,6 +150,7 @@ describe('dynastySoakCli', () => {
           dbAuditCheckpointWriteRead: { status: 'exercised', detail: 'read back from DB' },
           getRecordsHandler: { status: 'exercised', detail: 'GET_RECORDS handler returned record data' },
         },
+        exercised: { dbAuditCheckpointWriteRead: { status: 'exercised', detail: 'read back from DB' } },
         skipped: [{ system: 'completedSeasonArchive', reason: 'archiveSeason is not called by checkpoint' }],
       },
       exerciseMatrix: {
@@ -249,6 +250,7 @@ describe('dynastySoakCli', () => {
           dbAuditCheckpointWriteRead: { status: 'exercised', detail: 'read back from DB' },
           getRecordsHandler: { status: 'exercised', detail: 'GET_RECORDS handler returned record data' },
         },
+        exercised: { dbAuditCheckpointWriteRead: { status: 'exercised', detail: 'read back from DB' } },
         skipped: [{ system: 'completedSeasonArchive', reason: 'archiveSeason is not called by checkpoint' }],
       },
       exerciseMatrix: {
