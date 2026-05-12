@@ -99,6 +99,23 @@ describe('Trade + Free Agency Market Realism V2 model', () => {
     expect(rebuild.fitScore).toBeLessThan(contender.fitScore);
   });
 
+
+  it('keeps severe QB need exception controlled and explicit', () => {
+    const out = evaluatePlayerMarketRealism({
+      player: { pos: 'QB', ovr: 75, potential: 79, age: 30 },
+      team: team({ capRoom: 10 }),
+      strategy: strategy('rebuild', 92),
+      positionalNeed: 1.85,
+      proposedAnnual: 8,
+      action: 'free_agency',
+    });
+
+    expect(out.flags).toContain('qb_need_exception');
+    expect(out.reasons).toContain('severe QB need exception');
+    expect(out.shouldAvoid).toBe(false);
+    expect(out.capRisk).toBeLessThan(92);
+  });
+
   it('adds a premium tax so young premium players are not undervalued in trades', () => {
     const base = 120;
     const qb = adjustTradeValueForMarketRealism({ pos: 'QB', ovr: 78, potential: 90, age: 23, contract: { baseAnnual: 5 } }, base);

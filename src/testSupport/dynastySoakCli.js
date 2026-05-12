@@ -425,6 +425,23 @@ export function buildMarkdownReport(result) {
     }
     lines.push(`- **Draft classes listed:** ${rs.draftClassCount ?? 'n/a'}`);
     lines.push('');
+
+    if (rs.economyRegressionSnapshot) {
+      const eco = rs.economyRegressionSnapshot;
+      lines.push('## Economy regression snapshot');
+      lines.push('');
+      lines.push(`- **Pending offer cap health:** overcommitted teams=${eco.teamsWithPendingOfferOvercommit ?? 'n/a'}, overcommitted offers=${eco.pendingOfferOvercommitCount ?? 'n/a'}, unknown offer values=${eco.unknownOfferValueCount ?? 'n/a'}`);
+      lines.push(`- **CPU FA offer sanity:** CPU offers=${eco.cpuOfferCount ?? 'n/a'}, duplicate expensive same-group buckets=${eco.duplicateExpensiveSameGroupOffers ?? 'n/a'}, rebuild old-vet offers=${eco.oldVeteranOffersByRebuildTeams ?? 'n/a'}, contender veteran offers=${eco.contenderVeteranOfferCount ?? 'n/a'}, severe QB exceptions=${eco.severeQbNeedOfferCount ?? 'n/a'}`);
+      lines.push(`- **Market realism warnings:** teams over cap=${eco.teamsOverCap ?? 'n/a'}`);
+      lines.push(`- **Trade realism warnings:** young premium discount flags=${eco.premiumYoungPlayerTradeDiscountFlags ?? 'n/a'}, expensive veteran swap flags=${eco.expensiveVeteranSwapFlags ?? 'n/a'}`);
+      if (Array.isArray(eco.skippedReasons) && eco.skippedReasons.length) {
+        lines.push(`- **Unknown/skipped:** ${mdEscape(eco.skippedReasons.map((row) => `${row.code}: ${row.reason}`).join('; '))}`);
+      }
+      if (Array.isArray(eco.warnings) && eco.warnings.length) {
+        lines.push(`- **Warnings:** ${mdEscape(eco.warnings.join('; '))}`);
+      }
+      lines.push('');
+    }
   }
 
   if (result.persistenceAssertions?.length) {
