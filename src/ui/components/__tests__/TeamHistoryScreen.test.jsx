@@ -109,4 +109,69 @@ describe('TeamHistoryScreen', () => {
     const arg = onOpen.mock.calls[0][0];
     expect(String(arg)).toMatch(/2055/);
   });
+
+  it('supports timeline search, numeric sort, showing counts, and reset filters', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 1, name: 'Dallas', abbr: 'DAL' }], userTeamId: 1 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                {
+                  year: 2030,
+                  standings: [{ id: 1, name: 'Dallas', abbr: 'DAL', wins: 12, losses: 5, ties: 0, pf: 420, pa: 310 }],
+                  champion: { id: 1, abbr: 'DAL' },
+                  awards: { mvp: { playerId: 7, name: 'Title QB' } },
+                },
+                {
+                  year: 2031,
+                  standings: [{ id: 1, name: 'Dallas', abbr: 'DAL', wins: 9, losses: 8, ties: 0, pf: 360, pa: 340 }],
+                  runnerUp: { id: 2, abbr: 'PHI' },
+                  awards: { mvp: { playerId: 9, name: 'Ace Star' } },
+                },
+                {
+                  year: 2032,
+                  standings: [{ id: 1, name: 'Dallas', abbr: 'DAL', wins: 4, losses: 13, ties: 0, pf: 260, pa: 410 }],
+                  awards: {},
+                },
+              ],
+            },
+          }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-timeline-count').textContent).toContain('Showing 3 of 3 seasons');
+    });
+
+    fireEvent.change(screen.getByLabelText(/Sort team history seasons/i), { target: { value: 'wins' } });
+    let seasonCards = screen.getAllByTestId(/team-history-season-/);
+    expect(seasonCards[0].textContent).toContain('2030');
+
+    fireEvent.click(screen.getByLabelText(/Toggle team history season sort direction/i));
+    await waitFor(() => {
+      seasonCards = screen.getAllByTestId(/team-history-season-/);
+      expect(seasonCards[0].textContent).toContain('2032');
+    });
+
+    fireEvent.change(screen.getByLabelText(/Search team history seasons/i), { target: { value: 'Ace Star' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-timeline-count').textContent).toContain('Showing 1 of 3 seasons');
+    });
+    expect(screen.getByTestId('team-history-season-2031')).toBeTruthy();
+    expect(screen.queryByTestId('team-history-season-2030')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-timeline-count').textContent).toContain('Showing 3 of 3 seasons');
+    });
+  });
 });
