@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import LeagueHistory from '../LeagueHistory.jsx';
 
 describe('LeagueHistory', () => {
@@ -195,6 +195,60 @@ describe('LeagueHistory', () => {
     await waitFor(() => {
       expect(screen.getByTestId('league-history-major-tx-sx')).toBeTruthy();
       expect(screen.getByTestId('league-history-major-tx-sx').textContent).toMatch(/DAL signed Test Player/);
+    });
+  });
+
+  it('renders season search input in the sidebar when seasons exist', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        initialSelectedSeasonId="s1"
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                { id: 's1', year: 2030, standings: [{ id: 1, wins: 8, losses: 9 }], awards: {}, champion: { abbr: 'DAL' } },
+                { id: 's2', year: 2031, standings: [], awards: {}, champion: { abbr: 'NYG' } },
+              ],
+            },
+          }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/2030 League Snapshot/i)).toBeTruthy();
+    });
+
+    const searchInputs = screen.queryAllByPlaceholderText(/Search year or champion/);
+    expect(searchInputs.length).toBeGreaterThan(0);
+
+    const countEls = screen.queryAllByTestId('league-history-season-count');
+    expect(countEls.length).toBeGreaterThan(0);
+    expect(countEls.some((el) => el.textContent.includes('seasons'))).toBe(true);
+  });
+
+  it('renders empty state when no archived seasons', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+        }}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/No archived seasons yet/i)).toBeTruthy();
     });
   });
 });

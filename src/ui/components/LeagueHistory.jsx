@@ -8,6 +8,7 @@ import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/b
 import { AWARD_DISPLAY_NAMES } from '../../core/footballMeta';
 import { buildLeagueHistoryTopPerformers } from '../../core/playerSeasonStatsArchive.js';
 import { normalizeArchivedMajorTransactions } from '../../core/transactionTimeline.js';
+import { normalizeSearchText, rowMatchesSearch, stableSortRows, buildShowingLabel } from '../utils/dataBrowser.js';
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -342,6 +343,7 @@ function SeasonDraftClassSnippet({ seasonId, year, actions, onPlayerSelect }) {
 
 function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, league, initialSelectedSeasonId = null }) {
   const [selectedSeasonId, setSelectedSeasonId] = useState(initialSelectedSeasonId ?? seasons?.[0]?.id ?? null);
+  const [seasonSearch, setSeasonSearch] = useState('');
 
   useEffect(() => {
     if (!seasons?.length) return;
@@ -352,6 +354,16 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
     }
     setSelectedSeasonId((prev) => prev ?? seasons[0]?.id ?? null);
   }, [initialSelectedSeasonId, seasons]);
+
+  const filteredSeasons = useMemo(() => {
+    const q = normalizeSearchText(seasonSearch);
+    if (!q) return seasons;
+    return seasons.filter((s) => {
+      const yr = String(s.year ?? '');
+      const champ = String(s.champion?.abbr ?? s.champion?.name ?? '');
+      return yr.includes(q) || normalizeSearchText(champ).includes(q);
+    });
+  }, [seasons, seasonSearch]);
 
   if (!seasons?.length) {
     return (
@@ -400,11 +412,28 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
       <Card className="card-premium">
-        <CardHeader><CardTitle>Season Archive</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Season Archive</CardTitle>
+          <div className="text-xs text-[color:var(--text-muted)]" data-testid="league-history-season-count">
+            {buildShowingLabel(filteredSeasons.length, seasons.length, 'seasons')}
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="h-[520px]">
+          <div className="px-3 py-2">
+            <input
+              type="search"
+              value={seasonSearch}
+              onChange={(e) => setSeasonSearch(e.target.value)}
+              placeholder="Search year or champion…"
+              data-testid="league-history-season-search"
+              className="h-8 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+            />
+          </div>
+          <ScrollArea className="h-[480px]">
             <div className="divide-y divide-[color:var(--hairline)]">
-              {seasons.map((s) => (
+              {filteredSeasons.length === 0 ? (
+                <div className="px-4 py-6 text-center text-xs text-[color:var(--text-muted)]">No seasons match your search.</div>
+              ) : filteredSeasons.map((s) => (
                 <button
                   key={s.id}
                   className={`w-full text-left px-4 py-3 ${selected?.id === s.id ? "bg-[color:var(--surface-strong)]" : ""}`}
@@ -800,17 +829,59 @@ function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
 }
 
 function AwardsHistory({ seasons, onPlayerSelect }) {
+  const [awardSearch, setAwardSearch] = useState('');
+  const [awardSortDir, setAwardSortDir] = useState('desc');
+
   if (!seasons?.length) return <div className="py-8 text-center text-[color:var(--text-muted)]">No award history yet.</div>;
+
+  const q = normalizeSearchText(awardSearch);
+  const filtered = q
+    ? seasons.filter((s) => {
+        const fields = [
+          String(s.year ?? ''),
+          s.champion?.abbr, s.champion?.name,
+          s.awards?.mvp?.name, s.awards?.opoy?.name, s.awards?.dpoy?.name, s.awards?.roty?.name,
+        ];
+        return fields.some((f) => f && normalizeSearchText(f).includes(q));
+      })
+    : seasons;
+  const sorted = [...filtered].sort((a, b) => awardSortDir === 'desc' ? (b.year ?? 0) - (a.year ?? 0) : (a.year ?? 0) - (b.year ?? 0));
 
   return (
     <Card className="card-premium">
-      <CardHeader><CardTitle>Awards by Season</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle>Awards by Season</CardTitle>
+        <div className="flex flex-wrap items-center gap-2 mt-1">
+          <input
+            type="search"
+            value={awardSearch}
+            onChange={(e) => setAwardSearch(e.target.value)}
+            placeholder="Search year, champion, or award winner…"
+            data-testid="awards-history-search"
+            className="h-8 w-full sm:w-64 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+          />
+          <span className="text-xs text-[color:var(--text-muted)]" data-testid="awards-history-count">
+            {buildShowingLabel(sorted.length, seasons.length, 'seasons')}
+          </span>
+          {q && (
+            <button type="button" className="text-xs text-[color:var(--accent)]" onClick={() => setAwardSearch('')}>
+              Reset
+            </button>
+          )}
+        </div>
+      </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="h-[560px]">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="pl-5">Year</TableHead>
+                <TableHead
+                  className="pl-5"
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => setAwardSortDir((d) => d === 'asc' ? 'desc' : 'asc')}
+                >
+                  Year {awardSortDir === 'asc' ? '↑' : '↓'}
+                </TableHead>
                 <TableHead>Champion</TableHead>
                 <TableHead>MVP</TableHead>
                 <TableHead>{AWARD_DISPLAY_NAMES.opoy}</TableHead>
@@ -819,7 +890,9 @@ function AwardsHistory({ seasons, onPlayerSelect }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {seasons.map((s) => (
+              {sorted.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-[color:var(--text-muted)]">No awards match your search.</TableCell></TableRow>
+              ) : sorted.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="pl-5 font-bold">{s.year}</TableCell>
                   <TableCell>{s.champion?.abbr ?? "—"}</TableCell>
@@ -838,9 +911,11 @@ function AwardsHistory({ seasons, onPlayerSelect }) {
 }
 
 function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
+  const [txSearch, setTxSearch] = useState('');
+  const [txType, setTxType] = useState('all');
+
   if (!transactions?.length) return <div className="py-8 text-center text-[color:var(--text-muted)]">No transaction history tracked yet.</div>;
 
-  const rows = transactions.slice(0, 120);
   const describe = (tx) => {
     const leg = tx.legacyType ?? "";
     const bucket = tx.type ?? "";
@@ -863,13 +938,56 @@ function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
     return tx.headline ?? tx.typeLabel ?? tx.type;
   };
 
+  const q = normalizeSearchText(txSearch);
+  const allRows = transactions.slice(0, 200);
+  const filtered = allRows.filter((tx) => {
+    if (txType !== 'all' && (tx.type ?? tx.legacyType ?? '').toLowerCase() !== txType) return false;
+    if (!q) return true;
+    return [tx.playerName, tx.teamAbbr, tx.typeLabel, tx.headline, tx.fromTeamAbbr, tx.toTeamAbbr]
+      .some((f) => f && normalizeSearchText(f).includes(q));
+  });
+
+  const typeOptions = [...new Set(allRows.map((tx) => tx.type ?? tx.legacyType).filter(Boolean))].sort();
+  const hasFilters = q || txType !== 'all';
+
   return (
     <Card className="card-premium">
-      <CardHeader><CardTitle>League Moves Log</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle>League Moves Log</CardTitle>
+        <div className="flex flex-wrap items-center gap-2 mt-1">
+          <input
+            type="search"
+            value={txSearch}
+            onChange={(e) => setTxSearch(e.target.value)}
+            placeholder="Search player or team…"
+            data-testid="league-office-tx-search"
+            className="h-8 w-full sm:w-56 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+          />
+          <select
+            value={txType}
+            onChange={(e) => setTxType(e.target.value)}
+            data-testid="league-office-tx-type"
+            className="h-8 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+          >
+            <option value="all">All types</option>
+            {typeOptions.map((t) => <option key={t} value={t.toLowerCase()}>{t}</option>)}
+          </select>
+          <span className="text-xs text-[color:var(--text-muted)]" data-testid="league-office-tx-count">
+            {buildShowingLabel(filtered.length, allRows.length, 'moves')}
+          </span>
+          {hasFilters && (
+            <button type="button" className="text-xs text-[color:var(--accent)]" onClick={() => { setTxSearch(''); setTxType('all'); }}>
+              Reset
+            </button>
+          )}
+        </div>
+      </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="h-[560px]">
           <div className="divide-y divide-[color:var(--hairline)]">
-            {rows.map((tx, idx) => (
+            {filtered.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-[color:var(--text-muted)]">No moves match your filters.</div>
+            ) : filtered.map((tx, idx) => (
               <div key={`${tx.id ?? idx}`} className="px-4 py-3 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <strong>{tx.typeLabel ?? tx.type}</strong>
