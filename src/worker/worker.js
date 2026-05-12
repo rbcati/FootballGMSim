@@ -5961,6 +5961,14 @@ async function handleGetFreeAgents(payload, id) {
             }
         }
 
+        const annualCapHitForOffer = (offer) => {
+            const c = offer?.contract ?? {};
+            const years = Math.max(1, Number(c.yearsTotal ?? c.years ?? 1));
+            const baseAnnual = Number(c.baseAnnual ?? c.annualSalary ?? c.annual ?? 0);
+            const signingBonus = Number(c.signingBonus ?? 0);
+            return Math.round((baseAnnual + (signingBonus / years)) * 10) / 10;
+        };
+
         // Calculate user's bid value if they have one
         let userBidValue = 0;
         if (userOffer) {
@@ -6088,9 +6096,11 @@ async function handleGetFreeAgents(payload, id) {
               topOfferValue: Math.round(topOfferValue * 10) / 10,
               topBidTeam: topBid ? topBid.teamName : null,
               topBidAnnual: topBid ? Math.round(topBid.contract.baseAnnual * 10) / 10 : 0,
+              topBidAnnualCapHit: topBid ? annualCapHitForOffer(topBid) : 0,
               topBidYears: topBid ? topBid.contract.yearsTotal : 0,
               topOfferContractModel: topBid?.contractModel ?? null,
               userBidAnnual: userOffer ? Math.round(userOffer.contract.baseAnnual * 10) / 10 : 0,
+              userBidAnnualCapHit: userOffer ? annualCapHitForOffer(userOffer) : 0,
               userBidYears: userOffer ? userOffer.contract.yearsTotal : 0,
               userOfferContractModel: userOffer?.contractModel ?? null,
               userBidValue: Math.round(userBidValue * 10) / 10,
