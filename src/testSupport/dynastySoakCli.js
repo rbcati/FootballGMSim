@@ -295,6 +295,19 @@ export function buildMarkdownReport(result) {
     for (const [name, entry] of exerciseEntries.filter(([, entry]) => !String(entry?.status ?? '').startsWith('skipped'))) {
       lines.push(`| ${mdEscape(name)} | ${mdEscape(exerciseStatusLabel(entry))} | ${mdEscape(exerciseDetail(entry))} |`);
     }
+    const workerProbeDetail = String(result.exerciseMatrix?.workerProbes?.detail ?? '');
+    const workerProbeHandlers = [
+      workerProbeDetail.includes('GET_RECORDS') ? 'getRecordsHandler' : null,
+      workerProbeDetail.includes('GET_ALL_SEASONS') ? 'getAllSeasonsHandler' : null,
+      workerProbeDetail.includes('GET_TRANSACTIONS') ? 'getTransactionsHandler' : null,
+      workerProbeDetail.includes('GET_HALL_OF_FAME') ? 'getHallOfFameHandler' : null,
+    ].filter(Boolean);
+    if (workerProbeHandlers.length) {
+      lines.push('');
+      lines.push('### Worker probe handlers');
+      lines.push('');
+      for (const handler of workerProbeHandlers) lines.push(`- ${mdEscape(handler)}`);
+    }
     lines.push('');
 
     lines.push('## What was skipped');

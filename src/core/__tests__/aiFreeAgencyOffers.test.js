@@ -105,7 +105,8 @@ describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
         offers: expect.arrayContaining([
           expect.objectContaining({
             teamId: 1,
-            contract: expect.objectContaining({ baseAnnual: 4 }),
+            contract: expect.objectContaining({ baseAnnual: 4.3, yearsTotal: 1 }),
+            contractModel: expect.objectContaining({ marketTier: 'aging veteran' }),
           }),
         ]),
       }),
@@ -248,7 +249,8 @@ describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
         offers: expect.arrayContaining([
           expect.objectContaining({
             teamId: 1,
-            contract: expect.objectContaining({ baseAnnual: 5, yearsTotal: 2 }),
+            contract: expect.objectContaining({ baseAnnual: 5.4, yearsTotal: 1 }),
+            contractModel: expect.objectContaining({ capFit: expect.any(String) }),
           }),
         ]),
       }),
@@ -267,7 +269,7 @@ describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
       expect.objectContaining({
         teamId: 1,
         status: 'active',
-        contract: expect.objectContaining({ baseAnnual: 5, yearsTotal: 2 }),
+        contract: expect.objectContaining({ baseAnnual: 5.4, yearsTotal: 1 }),
         offers: [],
       }),
     );
