@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import LeagueHistory from '../LeagueHistory.jsx';
 
 describe('LeagueHistory', () => {
@@ -195,6 +195,72 @@ describe('LeagueHistory', () => {
     await waitFor(() => {
       expect(screen.getByTestId('league-history-major-tx-sx')).toBeTruthy();
       expect(screen.getByTestId('league-history-major-tx-sx').textContent).toMatch(/DAL signed Test Player/);
+    });
+  });
+
+  it('shows season search input and showing label on initial load', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                { id: 's1', year: 2030, standings: [], awards: {}, champion: { abbr: 'DAL' } },
+                { id: 's2', year: 2031, standings: [], awards: {}, champion: { abbr: 'NYG' } },
+                { id: 's3', year: 2032, standings: [], awards: {}, champion: { abbr: 'DAL' } },
+              ],
+            },
+          }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      const searchInputs = screen.queryAllByTestId('league-history-season-search');
+      expect(searchInputs.length).toBeGreaterThan(0);
+      const showingLabels = screen.queryAllByTestId('league-history-season-showing');
+      expect(showingLabels.some((el) => el.textContent.includes('3 of 3'))).toBe(true);
+    });
+  });
+
+  it('filters season list by search query', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                { id: 's1', year: 2030, standings: [], awards: {}, champion: { abbr: 'DAL' } },
+                { id: 's2', year: 2031, standings: [], awards: {}, champion: { abbr: 'NYG' } },
+              ],
+            },
+          }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      const inputs = screen.queryAllByTestId('league-history-season-search');
+      expect(inputs.length).toBeGreaterThan(0);
+    });
+
+    const inputs = screen.queryAllByTestId('league-history-season-search');
+    fireEvent.change(inputs[0], { target: { value: '2030' } });
+    await waitFor(() => {
+      const labels = screen.queryAllByTestId('league-history-season-showing');
+      expect(labels.some((el) => el.textContent.includes('1 of 2'))).toBe(true);
     });
   });
 });

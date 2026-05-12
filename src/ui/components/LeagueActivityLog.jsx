@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { buildShowingLabel } from "../utils/dataBrowser.js";
 
 const TYPE_FILTERS = [
   { value: "all", label: "All types" },
@@ -134,7 +135,23 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
         <button type="button" className="btn btn-secondary h-9 text-sm" onClick={() => load()}>
           Refresh
         </button>
+        {(search || type !== "all" || teamId !== "all" || seasonId !== "all") && (
+          <button
+            type="button"
+            className="btn btn-secondary h-9 text-sm"
+            onClick={() => { setSearch(""); setType("all"); setTeamId("all"); setSeasonId("all"); }}
+          >
+            Reset filters
+          </button>
+        )}
       </div>
+
+      {!loading && (
+        <div className="text-xs text-[color:var(--text-muted)]" data-testid="league-activity-showing-label">
+          {buildShowingLabel(rows.length, rows.length, 'transaction')}
+          {(type !== 'all' || teamId !== 'all' || seasonId !== 'all' || search) ? ' (filtered)' : ''}
+        </div>
+      )}
 
       {loading ? (
         <div className="py-8 text-center text-sm text-[color:var(--text-muted)]">Loading activity…</div>
