@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatting.js";
 import { derivePlayerContractFinancials } from "../utils/contractFormatting.js";
+import { buildContractOfferInsight, toneToContractInsightColor } from "../utils/contractOfferInsights.js";
 import { buildTeamIntelligence, classifyNeedFitForProspect, describeProspectProfile, describeRookieOnboarding } from "../utils/teamIntelligence.js";
 import { buildTeamChemistrySummary, describePlayerMoraleContext } from "../utils/teamChemistry.js";
 import { normalizeManagement, TRADE_STATUS_LABELS, TRADE_STATUS_TOOLTIPS, TRADE_STATUSES, CONTRACT_PLAN_FLAGS, CONTRACT_PLAN_LABELS, toggleContractPlan } from "../utils/playerManagement.js";
@@ -593,6 +594,7 @@ export default function PlayerProfile({
   const chemistry = useMemo(() => buildTeamChemistrySummary(userTeam, { week: data?.meta?.week ?? 1, direction: teamIntel?.direction }), [userTeam, data?.meta?.week, teamIntel]);
   const moraleContext = useMemo(() => describePlayerMoraleContext(player, { team: userTeam, chemistry, week: data?.meta?.week ?? 1 }), [player, userTeam, chemistry, data?.meta?.week]);
   const onboardingContext = useMemo(() => ((isProspect || Number(player?.age ?? 30) <= 24) ? describeRookieOnboarding(player, teamIntel) : null), [isProspect, player, teamIntel]);
+  const contractMarketRead = useMemo(() => buildContractOfferInsight(player ?? {}, { capRoom: userTeam?.capRoom, team: userTeam, teamIntel }), [player, userTeam, teamIntel]);
   const developmentSignal = useMemo(() => classifyDevelopmentTrend(player), [player]);
   const readinessSignal = useMemo(() => getPlayerReadiness(player), [player]);
   const fitSignal = useMemo(() => getSchemeFitSignal(player), [player]);
@@ -1543,6 +1545,40 @@ export default function PlayerProfile({
                   </span>
                 ))}
               </div>
+            </section>
+          )}
+
+
+          {!loading && playerView && (
+            <section className="card-enter">
+              <h3 style={sectionLabelStyle}>Contract Read</h3>
+              <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Market tier</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{contractMarketRead.marketTierLabel}</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginTop: 2 }}>{contractMarketRead.hasMetadata ? "From saved offer metadata" : "Market estimate from current ratings/cap context"}</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Cap fit</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2, color: toneToContractInsightColor(contractMarketRead.capFitTone) }}>{contractMarketRead.capFitLabel}</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginTop: 2 }}>{contractMarketRead.annualValueLabel} · {contractMarketRead.termLabel}</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Risk tags</div>
+                  <div style={{ marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {(contractMarketRead.riskTags.length ? contractMarketRead.riskTags : ["No major model risk tags"]).slice(0, 4).map((tag) => (
+                      <span key={`profile-contract-${tag}`} style={{ fontSize: 11, border: "1px solid var(--hairline)", borderRadius: 999, padding: "2px 8px", color: "var(--text-subtle)" }}>{tag}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {contractMarketRead.reasonBullets.length > 0 ? (
+                <div style={{ marginTop: 6, display: "grid", gap: 3 }}>
+                  {contractMarketRead.reasonBullets.map((reason, idx) => (
+                    <div key={`profile-contract-reason-${idx}`} style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>• Why this deal? {reason}</div>
+                  ))}
+                </div>
+              ) : null}
             </section>
           )}
 

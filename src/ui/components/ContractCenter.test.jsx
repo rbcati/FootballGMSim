@@ -29,6 +29,8 @@ describe('ContractCenter re-signing mode', () => {
     expect(html).toContain('Projected cap room (pending)');
     expect(html).toContain('Premium positions at risk');
     expect(html).toContain('Core QB');
+    expect(html).toContain('Elite starter');
+    expect(html).toContain('Good cap fit');
     expect(html).toContain('Let Walk');
     expect(html).toContain('Defer');
   });
