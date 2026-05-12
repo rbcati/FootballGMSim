@@ -17,6 +17,7 @@ import { getTeamContextForNegotiation } from './teamContext/negotiationContext.j
 import { evaluateContractOffer } from './contracts/negotiation.js';
 import { evaluateReSigningPriority } from './retention/reSigning.js';
 import { buildFreeAgencyMarketAnalysis } from './freeAgency/freeAgencyMarketAnalysis.js';
+import { buildContractFromMarket, evaluateContractMarket } from './contractModel.js';
 
 class AiLogic {
     static NEED_GROUP_TO_POS = Object.freeze({
@@ -497,17 +498,42 @@ class AiLogic {
                 // Check if we already have an active offer out to this player
                 if (fa.offers && fa.offers.find(o => o.teamId === teamId)) continue;
 
-                // Calculate Ask / Offer
+                // Calculate Ask / Offer through the V1 contract model.
                 const demand = demandByPlayerId.get(fa.id) ?? calculateExtensionDemand(fa);
                 if (!demand) continue;
+                const market = evaluateContractMarket(fa, {
+                    team,
+                    strategy,
+                    teamArchetype: strategy?.archetype,
+                    capHealth: strategy?.capHealth,
+                    teamCapRoom: team.capRoom,
+                    positionalNeed: needs[pos] ?? 1,
+                });
+                const marketRiskTags = Array.isArray(market.riskTags) ? market.riskTags : [];
                 const age = Number(fa?.age ?? 27);
                 const isVeteran = age >= 30;
-                const isExpensive = Number(demand?.baseAnnual ?? 0) >= 14;
-                const avoidVeteranSpend = (['rebuild', 'development'].includes(strategy?.archetype) && isVeteran && isExpensive)
-                    || (strategy?.archetype === 'retool' && age >= 31 && isExpensive);
-                if (avoidVeteranSpend) continue;
+                const demandAnnual = Number(demand?.baseAnnual ?? market.suggestedAnnual ?? 0);
+                const modelAnnualForRisk = Number(market?.annualCapHit ?? market?.suggestedAnnual ?? demandAnnual);
+                const oldExpensiveNonQb = isVeteran && fa.pos !== 'QB' && modelAnnualForRisk >= 10;
+                const oldExpensiveQbRebuild = fa.pos === 'QB' && age >= 33 && demandAnnual >= 14 && ['rebuild', 'development'].includes(strategy?.archetype);
+                if ((['rebuild', 'development'].includes(strategy?.archetype) && oldExpensiveNonQb) || oldExpensiveQbRebuild) continue;
+                if (strategy?.archetype === 'retool' && age >= 31 && oldExpensiveNonQb) continue;
+                if (marketRiskTags.includes('long veteran commitment') && ['rebuild', 'development', 'retool'].includes(strategy?.archetype)) continue;
 
-                const capHit = demand.baseAnnual + (demand.signingBonus / demand.yearsTotal);
+                const demandYears = Math.max(1, Number(demand?.yearsTotal ?? demand?.years ?? market.suggestedYears ?? 1));
+                const modelAnnual = Number(market.suggestedAnnual ?? demandAnnual);
+                const baseAnnual = Math.round(Math.min(modelAnnual, demandAnnual * 1.08) * 10) / 10;
+                const years = Math.max(1, Math.min(Number(market.suggestedYears ?? demandYears), demandYears));
+                const bonusRatio = demandAnnual > 0 ? Math.min(0.22, Number(demand?.signingBonus ?? 0) / Math.max(1, demandAnnual * demandYears)) : 0;
+                const offerContract = buildContractFromMarket({
+                    ...market,
+                    suggestedAnnual: baseAnnual,
+                    suggestedYears: years,
+                    signingBonus: Math.round(baseAnnual * years * bonusRatio * 10) / 10,
+                }, { startYear: cache.getMeta().year });
+                offerContract.years = offerContract.yearsTotal;
+
+                const capHit = offerContract.baseAnnual + (offerContract.signingBonus / offerContract.yearsTotal);
                 const capHealth = Number(strategy?.capHealth ?? 55);
                 let capLimit = strategy?.archetype === 'contender'
                     ? 0.74
@@ -521,7 +547,7 @@ class AiLogic {
                 const maxAllowedHit = Math.max(3, Number(team.capRoom ?? 0) * capLimit);
                 const qbDesperate = pos === 'QB' && Number(needs.QB ?? 0) >= 1.12;
                 if (!urgentPos && capHit > maxAllowedHit) {
-                    const qbException = qbDesperate && capHit <= maxAllowedHit * 1.28 && capHealth >= 18;
+                    const qbException = qbDesperate && market.controlledException && capHit <= maxAllowedHit * 1.28 && capHealth >= 18;
                     if (!qbException) continue;
                 }
 
@@ -531,9 +557,12 @@ class AiLogic {
                     const offer = {
                         teamId,
                         teamName: team.name, // Snapshot name
-                        contract: {
-                            ...demand,
-                            startYear: cache.getMeta().year
+                        contract: offerContract,
+                        contractModel: {
+                            marketTier: market.marketTier,
+                            capFit: market.capFit,
+                            riskTags: market.riskTags,
+                            reasons: market.reasons,
                         },
                         timestamp: Date.now()
                     };
