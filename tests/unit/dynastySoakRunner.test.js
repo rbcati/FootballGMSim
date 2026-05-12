@@ -114,6 +114,75 @@ describe('runDynastySoakOnce', () => {
     expect(result.exerciseMatrix.fullSeasonArchive.status).toBe('skipped');
   });
 
+
+  it('fails CI profile when an exercised worker probe reports an error', async () => {
+    const auditModule = await import('../../src/core/dynastySoakAudit.js');
+    auditModule.buildPersistenceAssertions.mockReturnValueOnce({
+      allOk: false,
+      assertions: [
+        {
+          id: 'get_records',
+          ok: false,
+          code: 'get_records_failed',
+          detail: 'GET_RECORDS failed: indexeddb read failed',
+        },
+        {
+          id: 'get_draft_classes',
+          ok: true,
+          status: 'skipped',
+          skipped: true,
+          detail: 'skipped: CI profile does not enter draft, so draft classes are not expected',
+        },
+      ],
+    });
+
+    const bootState = makeState({ phase: 'regular', year: 2026 });
+    const week2State = { ...makeState({ phase: 'regular', year: 2026 }), currentWeek: 2 };
+    const week3State = { ...makeState({ phase: 'regular', year: 2026 }), currentWeek: 3 };
+    let advanceCount = 0;
+    const dispatchWorker = vi.fn(async (type) => {
+      switch (type) {
+        case toWorker.INIT:
+          return { type: toUI.READY, payload: {} };
+        case toWorker.USE_SAFE_STARTER_LEAGUE:
+          return { type: toUI.FULL_STATE, payload: bootState };
+        case toWorker.ADVANCE_WEEK:
+          advanceCount += 1;
+          return { type: toUI.WEEK_COMPLETE, payload: advanceCount === 1 ? week2State : week3State };
+        case toWorker.SAVE_NOW:
+          return { type: toUI.SAVED, payload: {} };
+        case toWorker.GET_ALL_SEASONS:
+          return { type: toUI.ALL_SEASONS, payload: { seasons: [] } };
+        case toWorker.GET_TRANSACTIONS:
+          return { type: toUI.TRANSACTIONS, payload: { transactions: [] } };
+        case toWorker.GET_RECORDS:
+          return { type: toUI.ERROR, payload: { message: 'indexeddb read failed' } };
+        case toWorker.GET_HALL_OF_FAME:
+          return { type: toUI.HALL_OF_FAME, payload: { players: [] } };
+        case toWorker.SIM_TO_PHASE:
+          throw new Error('CI profile must not call SIM_TO_PHASE');
+        default:
+          throw new Error(`Unexpected worker call: ${type}`);
+      }
+    });
+
+    const { runDynastySoakOnce } = await import('../../src/testSupport/dynastySoakRunner.js');
+    const result = await runDynastySoakOnce({
+      auditProfile: 'ci',
+      ci: true,
+      dispatchWorker,
+      loadWorkerModule: vi.fn(async () => {}),
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.failures).toContainEqual({
+      code: 'persistence_probe_failed',
+      message: 'One or more CI persistence/probe assertions failed; see persistenceAssertions in latest.json',
+    });
+    expect(result.persistenceAssertions.find((a) => a.id === 'get_records').ok).toBe(false);
+    expect(result.persistenceAssertions.find((a) => a.id === 'get_draft_classes').status).toBe('skipped');
+  });
+
   it('uses injected worker hooks for deep final probes without deepEachSeason', async () => {
     const calls = [];
     const bootState = makeState({ phase: 'regular', year: 2026 });

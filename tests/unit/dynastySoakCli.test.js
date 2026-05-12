@@ -1,9 +1,13 @@
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   parseDynastySoakArgv,
   resolveDynastySoakConfig,
   buildMarkdownReport,
   slimDynastySoakResultForJson,
+  writeDynastySoakReports,
 } from '../../src/testSupport/dynastySoakCli.js';
 
 describe('dynastySoakCli', () => {
@@ -186,6 +190,97 @@ describe('dynastySoakCli', () => {
     expect(md).toContain('AI / roster snapshot');
     expect(md).toContain('contender');
     expect(md).toContain('Persistence probes');
+  });
+
+
+  it('writes canonical JSON and Markdown artifacts for a realistic CI profile result', async () => {
+    const tmp = await mkdtemp(join(tmpdir(), 'dynasty-soak-cli-'));
+    const result = {
+      seed: 1383,
+      seasonsSimmed: 0,
+      runtimeMs: 18_776,
+      passed: true,
+      severity: 'warn',
+      summary: { rosterHealth: 'ok', archiveHealth: 'warn' },
+      failures: [],
+      warnings: [{ code: 'hof_empty_young', message: '[CI] Hall of Fame classes empty in early league years' }],
+      finalPhase: 'regular',
+      finalYear: 2026,
+      auditProfile: 'ci',
+      phasePath: 'short',
+      profileNotes: [
+        'CI profile runs a short real-worker phase path and does not complete a season.',
+        'Use --audit-profile=full --seasons=1 for the full manual season audit.',
+      ],
+      harnessConfig: {
+        ci: true,
+        auditProfile: 'ci',
+        phasePath: 'short',
+        deep: false,
+        deepEachSeason: false,
+        phaseTimeoutMs: 3_600_000,
+        maxRuntimeMs: null,
+      },
+      exerciseMatrix: {
+        realWorkerBoot: { status: 'exercised' },
+        safeStarterLeague: { status: 'exercised' },
+        regularWeeks: { status: 'exercised', count: 2 },
+        workerProbes: {
+          status: 'exercised_partial',
+          detail: 'GET_ALL_SEASONS, GET_TRANSACTIONS recent, GET_RECORDS, GET_HALL_OF_FAME',
+        },
+        fullRegularSeason: {
+          status: 'skipped',
+          reason: 'CI profile runs a short real-worker phase path and does not complete a full season',
+        },
+        playoffs: { status: 'skipped', reason: 'CI profile does not complete a full season' },
+        offseason: { status: 'skipped', reason: 'CI profile does not complete a full season' },
+        draft: { status: 'skipped', reason: 'CI profile does not enter draft' },
+        fullSeasonArchive: { status: 'skipped', reason: 'CI profile does not create a completed-season archive' },
+      },
+      timings: {
+        phaseBreakdown: { boot: { ms: 365, count: 2 }, getProbes: { ms: 131, count: 4 } },
+        topSlowCheckpoints: [{ name: 'ci.ADVANCE_WEEK.regular_2', ms: 11_471, meta: { weekBefore: 0 } }],
+      },
+      reportSummary: { teamCount: 32, teamsWithoutQb: 0, archetypeDistribution: { contender: 6 } },
+      persistenceAssertions: [
+        { id: 'latest_season_archive', ok: true, status: 'skipped', detail: 'skipped: CI profile does not complete a season or create a completed-season archive' },
+        { id: 'get_all_seasons_probe', ok: true, detail: 'GET_ALL_SEASONS ok' },
+        { id: 'get_draft_classes', ok: true, status: 'skipped', detail: 'skipped: CI profile does not enter draft, so draft classes are not expected' },
+      ],
+      finalView: { veryLarge: true },
+    };
+
+    try {
+      const written = await writeDynastySoakReports(result, 'reports', tmp);
+      const json = JSON.parse(await readFile(written.jsonPath, 'utf8'));
+      const md = await readFile(written.markdownPath, 'utf8');
+
+      expect(written.outDir).toBe(join(tmp, 'reports'));
+      expect(json.finalView).toBeUndefined();
+      expect(json.auditProfile).toBe('ci');
+      expect(json.phasePath).toBe('short');
+      expect(json.seed).toBe(1383);
+      expect(json.runtimeMs).toBe(18_776);
+      expect(json.finalPhase).toBe('regular');
+      expect(json.finalYear).toBe(2026);
+      expect(json.exerciseMatrix.workerProbes.status).toBe('exercised_partial');
+      expect(json.exerciseMatrix.fullSeasonArchive.status).toBe('skipped');
+      expect(json.persistenceAssertions.some((a) => a.status === 'skipped')).toBe(true);
+      expect(json.failures).toEqual([]);
+      expect(json.warnings).toHaveLength(1);
+
+      expect(md).toContain('**Profile:** ci');
+      expect(md).toContain('**Phase path:** short');
+      expect(md).toContain('Short real-worker smoke audit. It does not complete a season.');
+      expect(md).toContain('Full-season balance, playoffs, offseason, free agency, draft, and completed-season archive are not validated by CI profile.');
+      expect(md).toContain('GET_ALL_SEASONS, GET_TRANSACTIONS recent, GET_RECORDS, GET_HALL_OF_FAME');
+      expect(md).toContain('| fullSeasonArchive | CI profile does not create a completed-season archive |');
+      expect(md).toContain('**skipped** `latest_season_archive`');
+      expect(md).toContain('npm run audit:dynasty -- --audit-profile=full --seasons=1 --seed=1383');
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
   });
 
   it('slimDynastySoakResultForJson removes finalView', () => {
