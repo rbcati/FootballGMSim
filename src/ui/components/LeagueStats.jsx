@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { buildLeagueStatsHubModel } from "../utils/leagueStatsHub.js";
+import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from "../utils/dataBrowser.js";
 
 const leaderCards = [["Passing yards", "passing", "passYds"],["Passing TD", "passing", "passTd"],["Rushing yards", "rushing", "rushYds"],["Receiving yards", "receiving", "recYds"],["Tackles", "defense", "tkl"],["Sacks", "defense", "sack"],["Interceptions", "defense", "defInt"],["Field goals made", "kicking", "fgm"]];
 
@@ -27,14 +28,21 @@ export default function LeagueStats({ league, onPlayerSelect, onTeamSelect }) {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("passing");
   const [sort, setSort] = useState({ key: defaultSort.passing, dir: "desc" });
-  const filtered = (model.playerTables[tab] ?? []).filter((r) => (`${r.name} ${r.team} ${r.pos}`).toLowerCase().includes(search.toLowerCase()));
-  const rows = useMemo(() => [...filtered].sort((a, b) => {
-    const ak = a?.[sort.key]; const bk = b?.[sort.key];
-    const d = typeof ak === "string" ? String(ak).localeCompare(String(bk)) : Number(ak ?? 0) - Number(bk ?? 0);
-    return sort.dir === "asc" ? d : -d;
-  }), [filtered, sort]);
-  const setTabWithSort = (t) => { setTab(t); setSort({ key: defaultSort[t], dir: "desc" }); };
-  const clickSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" });
+  const [posFilter, setPosFilter] = useState("ALL");
+  const [teamFilter, setTeamFilter] = useState("ALL");
+  const sourceRows = model.playerTables[tab] ?? [];
+  const positionOptions = useMemo(() => uniqueFilterOptions(sourceRows, (r) => r.pos), [sourceRows]);
+  const teamOptions = useMemo(() => uniqueFilterOptions(sourceRows, (r) => r.team), [sourceRows]);
+  const filtered = useMemo(() => sourceRows.filter((r) => {
+    if (posFilter !== "ALL" && r.pos !== posFilter) return false;
+    if (teamFilter !== "ALL" && r.team !== teamFilter) return false;
+    return rowMatchesSearch(r, search, ["name", "team", "pos"]);
+  }), [sourceRows, posFilter, teamFilter, search]);
+  const rows = useMemo(() => stableSortRows(filtered, (r) => r?.[sort.key], sort.dir, (r) => r?.name), [filtered, sort]);
+  const hasActiveFilters = Boolean(search.trim()) || posFilter !== "ALL" || teamFilter !== "ALL";
+  const resetFilters = () => { setSearch(""); setPosFilter("ALL"); setTeamFilter("ALL"); };
+  const setTabWithSort = (t) => { setTab(t); setSort({ key: defaultSort[t], dir: "desc" }); setPosFilter("ALL"); setTeamFilter("ALL"); };
+  const clickSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" || key === "team" || key === "pos" ? "asc" : "desc" });
 
   return <div style={{ display: "grid", gap: 12 }}>
     <div className="card" style={{ padding: 12 }}>
@@ -47,9 +55,29 @@ export default function LeagueStats({ league, onPlayerSelect, onTeamSelect }) {
       {leaderCards.map(([label, bucket, key]) => <div key={label} className="card" style={{ padding: 10 }}><div>{label}</div>{(model.playerLeaders[bucket] ?? []).map((r,i)=><button key={`${r.playerId}-${i}`} onClick={()=>onPlayerSelect?.(r.playerId)} style={{display:'flex',width:'100%',justifyContent:'space-between'}}><span>{r.name} ({r.team})</span><span>{fmt(key, r[key])}</span></button>)}</div>)}
     </div>
     <div className="card" style={{ padding: 10 }}>
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>{['passing','rushing','receiving','defense','kicking'].map((t)=><button key={t} onClick={()=>setTabWithSort(t)} style={{fontWeight: tab===t?700:500, textTransform:'capitalize'}}>{t}</button>)}<input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search name/team/pos" /></div>
-      <div style={{ overflowX:'auto' }}><table style={{ minWidth: 980, width:'100%' }}><thead><tr>{columns[tab].map(([label,key])=><th key={key}><button onClick={()=>clickSort(key)}>{label}{sort.key===key?(sort.dir==='asc'?' ↑':' ↓'):''}</button></th>)}</tr></thead><tbody>
-          {rows.length ? rows.map((r)=><tr key={`${r.playerId}-${tab}`}><td><button onClick={()=>onPlayerSelect?.(r.playerId)}>{r.name}</button></td>{columns[tab].slice(1).map(([,k])=><td key={k}>{fmt(k, r[k])}</td>)}</tr>) : <tr><td colSpan={columns[tab].length}>{tab==='passing'?'No passing stats recorded yet.':tab==='rushing'?'No rushing stats recorded yet.':'No data for this category yet.'}</td></tr>}
+      <div style={{ display:'grid', gap:8 }}>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+          {['passing','rushing','receiving','defense','kicking'].map((t)=><button key={t} onClick={()=>setTabWithSort(t)} style={{fontWeight: tab===t?700:500, textTransform:'capitalize', minHeight:32}}>{t}</button>)}
+          <input aria-label="Search player stats" value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search player/team/pos" style={{ minHeight:32, flex:'1 1 180px' }} />
+          <select aria-label="Filter by position" value={posFilter} onChange={(e)=>setPosFilter(e.target.value)} style={{ minHeight:32 }}>
+            <option value="ALL">All positions</option>
+            {positionOptions.map((pos) => <option key={pos} value={pos}>{pos}</option>)}
+          </select>
+          <select aria-label="Filter by team" value={teamFilter} onChange={(e)=>setTeamFilter(e.target.value)} style={{ minHeight:32 }}>
+            <option value="ALL">All teams</option>
+            {teamOptions.map((team) => <option key={team} value={team}>{team}</option>)}
+          </select>
+          {hasActiveFilters ? <button type="button" onClick={resetFilters} style={{ minHeight:32 }}>Reset filters</button> : null}
+        </div>
+        <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', fontSize:12, color:'var(--text-muted)' }}>
+          <span>{buildShowingLabel(rows.length, sourceRows.length, 'player')}</span>
+          {posFilter !== 'ALL' ? <span>Position: {posFilter}</span> : null}
+          {teamFilter !== 'ALL' ? <span>Team: {teamFilter}</span> : null}
+          <span>Sort: {columns[tab].find(([, key]) => key === sort.key)?.[0] ?? sort.key} {sort.dir === 'asc' ? '↑' : '↓'}</span>
+        </div>
+      </div>
+      <div style={{ overflowX:'auto' }}><table aria-label="Player stat table" style={{ minWidth: 980, width:'100%' }}><thead><tr>{columns[tab].map(([label,key])=><th key={key}><button aria-label={`Sort by ${label}`} onClick={()=>clickSort(key)}>{label}{sort.key===key?(sort.dir==='asc'?' ↑':' ↓'):''}</button></th>)}</tr></thead><tbody>
+          {rows.length ? rows.map((r)=><tr key={`${r.playerId}-${tab}`}><td><button onClick={()=>onPlayerSelect?.(r.playerId)}>{r.name}</button></td>{columns[tab].slice(1).map(([,k])=><td key={k} data-label={columns[tab].find(([, key]) => key === k)?.[0]}>{fmt(k, r[k])}</td>)}</tr>) : <tr><td colSpan={columns[tab].length}>{hasActiveFilters ? 'No player stats match those filters.' : tab==='passing'?'No passing stats recorded yet.':tab==='rushing'?'No rushing stats recorded yet.':'No data for this category yet.'}</td></tr>}
       </tbody></table></div>
     </div>
     <div className="card" style={{ padding: 10 }}>
