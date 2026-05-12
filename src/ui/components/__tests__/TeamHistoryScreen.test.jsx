@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, cleanup, within } from '@testing-library/react';
 import TeamHistoryScreen from '../TeamHistoryScreen.jsx';
 
 describe('TeamHistoryScreen', () => {
@@ -108,5 +108,97 @@ describe('TeamHistoryScreen', () => {
     });
     const arg = onOpen.mock.calls[0][0];
     expect(String(arg)).toMatch(/2055/);
+  });
+
+  it('filters timeline by year search, shows count, and resets', async () => {
+    const seasons = [
+      { year: 2030, standings: [{ id: 1, abbr: 'ALP', wins: 12, losses: 5, ties: 0, pf: 400, pa: 300 }] },
+      { year: 2031, standings: [{ id: 1, abbr: 'ALP', wins: 4, losses: 13, ties: 0, pf: 260, pa: 420 }] },
+      { year: 2032, standings: [{ id: 1, abbr: 'ALP', wins: 9, losses: 8, ties: 0, pf: 360, pa: 340 }] },
+    ];
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 1, name: 'Alpha', abbr: 'ALP' }], userTeamId: 1 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons } }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+
+    const count = await screen.findByTestId('team-history-timeline-count');
+    expect(count.textContent).toMatch(/Showing 3 of 3 seasons/);
+
+    fireEvent.change(screen.getByPlaceholderText(/search year or mvp/i), {
+      target: { value: '2031' },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('team-history-timeline-count').textContent).toMatch(/Showing 1 of 3 seasons/),
+    );
+
+    fireEvent.click(screen.getByTestId('team-history-timeline-reset'));
+    await waitFor(() =>
+      expect(screen.getByTestId('team-history-timeline-count').textContent).toMatch(/Showing 3 of 3 seasons/),
+    );
+  });
+
+  it('sorts timeline by wins (most) while reset removes the chip', async () => {
+    const seasons = [
+      { year: 2040, standings: [{ id: 1, abbr: 'ALP', wins: 4, losses: 13, ties: 0, pf: 220, pa: 410 }] },
+      { year: 2041, standings: [{ id: 1, abbr: 'ALP', wins: 13, losses: 4, ties: 0, pf: 480, pa: 280 }] },
+      { year: 2042, standings: [{ id: 1, abbr: 'ALP', wins: 8, losses: 9, ties: 0, pf: 320, pa: 330 }] },
+    ];
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 1, name: 'Alpha', abbr: 'ALP' }], userTeamId: 1 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons } }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId('team-history-timeline-count');
+    fireEvent.change(screen.getByLabelText(/sort seasons/i), { target: { value: 'winsDesc' } });
+
+    await waitFor(() => {
+      const controls = screen.getByTestId('team-history-timeline-controls');
+      expect(within(controls).getByDisplayValue(/Wins \(most\)/i)).toBeTruthy();
+    });
+
+    const yearMatches = screen.getAllByText(/^204[012]$/).map((el) => el.textContent);
+    expect(yearMatches.indexOf('2041')).toBeLessThan(yearMatches.indexOf('2042'));
+    expect(yearMatches.indexOf('2042')).toBeLessThan(yearMatches.indexOf('2040'));
+
+    fireEvent.click(screen.getByTestId('team-history-timeline-reset'));
+    expect(screen.queryByTestId('team-history-timeline-reset')).toBeNull();
+  });
+
+  it('hides timeline count when there are no archived seasons (fresh save)', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 1, name: 'Alpha', abbr: 'ALP' }], userTeamId: 1 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(screen.queryByTestId('team-history-timeline-count')).toBeNull());
   });
 });

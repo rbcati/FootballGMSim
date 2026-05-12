@@ -8,6 +8,14 @@ import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/b
 import { AWARD_DISPLAY_NAMES } from '../../core/footballMeta';
 import { buildLeagueHistoryTopPerformers } from '../../core/playerSeasonStatsArchive.js';
 import { normalizeArchivedMajorTransactions } from '../../core/transactionTimeline.js';
+import { buildShowingLabel, rowMatchesSearch, stableSortRows } from '../utils/dataBrowser.js';
+
+const AWARDS_HISTORY_SORTS = {
+  yearDesc: { label: 'Year (newest)', getValue: (s) => Number(s?.year ?? 0), direction: 'desc' },
+  yearAsc: { label: 'Year (oldest)', getValue: (s) => Number(s?.year ?? 0), direction: 'asc' },
+  champion: { label: 'Champion', getValue: (s) => s?.champion?.abbr ?? '', direction: 'asc' },
+  mvp: { label: 'MVP name', getValue: (s) => s?.awards?.mvp?.name ?? '', direction: 'asc' },
+};
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -799,13 +807,84 @@ function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
   );
 }
 
-function AwardsHistory({ seasons, onPlayerSelect }) {
-  if (!seasons?.length) return <div className="py-8 text-center text-[color:var(--text-muted)]">No award history yet.</div>;
+export function AwardsHistory({ seasons, onPlayerSelect }) {
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('yearDesc');
+
+  const totalSeasons = (seasons ?? []).length;
+  const displayedSeasons = useMemo(() => {
+    const trimmed = String(search ?? '').trim();
+    const filtered = (seasons ?? []).filter((s) =>
+      !trimmed
+        ? true
+        : rowMatchesSearch(
+            s,
+            trimmed,
+            [
+              (r) => r?.year ?? '',
+              (r) => r?.champion?.abbr ?? '',
+              (r) => r?.champion?.name ?? '',
+              (r) => r?.awards?.mvp?.name ?? '',
+              (r) => r?.awards?.opoy?.name ?? '',
+              (r) => r?.awards?.dpoy?.name ?? '',
+              (r) => r?.awards?.roty?.name ?? '',
+            ],
+          ),
+    );
+    const def = AWARDS_HISTORY_SORTS[sortKey] ?? AWARDS_HISTORY_SORTS.yearDesc;
+    return stableSortRows(filtered, def.getValue, def.direction, (r) => Number(r?.year ?? 0));
+  }, [seasons, search, sortKey]);
+
+  const filtersActive = Boolean(String(search ?? '').trim()) || sortKey !== 'yearDesc';
+
+  if (!totalSeasons) return <div className="py-8 text-center text-[color:var(--text-muted)]">No award history yet.</div>;
 
   return (
     <Card className="card-premium">
       <CardHeader><CardTitle>Awards by Season</CardTitle></CardHeader>
       <CardContent className="p-0">
+        <div
+          className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-[color:var(--hairline)]"
+          data-testid="league-history-awards-controls"
+        >
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search year, champion, or winner"
+            aria-label="Search awards history"
+            className="h-9 flex-1 min-w-[180px] rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+          />
+          <label className="flex items-center gap-2 text-xs font-semibold text-[color:var(--text-muted)]">
+            Sort
+            <select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value)}
+              aria-label="Sort awards history"
+              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-sm"
+            >
+              {Object.entries(AWARDS_HISTORY_SORTS).map(([key, def]) => (
+                <option key={key} value={key}>{def.label}</option>
+              ))}
+            </select>
+          </label>
+          {filtersActive ? (
+            <button
+              type="button"
+              className="btn btn-secondary h-9 text-xs"
+              onClick={() => { setSearch(''); setSortKey('yearDesc'); }}
+              data-testid="league-history-awards-reset"
+            >
+              Reset
+            </button>
+          ) : null}
+          <span
+            className="text-xs text-[color:var(--text-muted)] ml-auto"
+            data-testid="league-history-awards-count"
+          >
+            {buildShowingLabel(displayedSeasons.length, totalSeasons, 'season')}
+          </span>
+        </div>
         <ScrollArea className="h-[560px]">
           <Table>
             <TableHeader>
@@ -819,7 +898,14 @@ function AwardsHistory({ seasons, onPlayerSelect }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {seasons.map((s) => (
+              {displayedSeasons.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="pl-5 py-6 text-center text-[color:var(--text-muted)]">
+                    No award seasons match the current filters.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+              {displayedSeasons.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="pl-5 font-bold">{s.year}</TableCell>
                   <TableCell>{s.champion?.abbr ?? "—"}</TableCell>

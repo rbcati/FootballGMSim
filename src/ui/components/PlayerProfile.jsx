@@ -34,6 +34,35 @@ import { buildPlayerRecordContext, mergePlayerProfileSeasonRows } from "../../co
 import { buildLegacyScoreReport, shouldShowLegacyProfileSection } from "../../core/legacyScore.js";
 import { buildPlayerDevelopmentModel } from "../../core/playerDevelopmentModel.js";
 import { buildProspectScoutingReport } from "../../core/scoutingModel.js";
+import { buildShowingLabel, rowMatchesSearch, stableSortRows } from "../utils/dataBrowser.js";
+
+const SEASON_LOG_SORTS = {
+  seasonDesc: { label: "Season (newest)", getValue: (r) => Number(r?.year ?? r?.season ?? 0), direction: "desc" },
+  seasonAsc: { label: "Season (oldest)", getValue: (r) => Number(r?.year ?? r?.season ?? 0), direction: "asc" },
+  team: { label: "Team", getValue: (r) => r?.team ?? "", direction: "asc" },
+  games: { label: "Games", getValue: (r) => Number(r?.gamesPlayed ?? r?.gp ?? 0), direction: "desc" },
+  ovr: { label: "OVR", getValue: (r) => Number(r?.ovr ?? 0), direction: "desc" },
+};
+
+function pickSeasonLogKeyStatGetter(pos) {
+  const p = String(pos ?? "").toUpperCase();
+  if (p === "QB") return (r) => Number(r?.passYds ?? 0);
+  if (["RB", "FB"].includes(p)) return (r) => Number(r?.rushYds ?? 0);
+  if (["WR", "TE"].includes(p)) return (r) => Number(r?.recYds ?? 0);
+  if (["DE", "DT", "LB", "CB", "S", "DL", "EDGE"].includes(p)) return (r) => Number(r?.tackles ?? 0);
+  if (p === "K") return (r) => Number(r?.fgMade ?? 0);
+  return null;
+}
+
+function pickSeasonLogKeyStatLabel(pos) {
+  const p = String(pos ?? "").toUpperCase();
+  if (p === "QB") return "Pass yards";
+  if (["RB", "FB"].includes(p)) return "Rush yards";
+  if (["WR", "TE"].includes(p)) return "Rec yards";
+  if (["DE", "DT", "LB", "CB", "S", "DL", "EDGE"].includes(p)) return "Tackles";
+  if (p === "K") return "Field goals made";
+  return null;
+}
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -420,6 +449,8 @@ export default function PlayerProfile({
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
   const [draftContext, setDraftContext] = useState(null);
+  const [seasonLogSearch, setSeasonLogSearch] = useState("");
+  const [seasonLogSort, setSeasonLogSort] = useState("seasonDesc");
   const requestKey = useMemo(() => buildRouteRequestKey("player", playerId), [playerId]);
   const cacheScopeKey = useMemo(() => buildLeagueCacheScopeKey(league), [league]);
   const fetchProfileData = React.useCallback(async () => {
@@ -718,6 +749,47 @@ export default function PlayerProfile({
   }), [devHistory]);
 
   const careerRows = useMemo(() => mergedProfileSeasonRows, [mergedProfileSeasonRows]);
+
+  const seasonLogKeyStatGetter = useMemo(
+    () => pickSeasonLogKeyStatGetter(effectivePlayer?.pos ?? effectivePlayer?.position),
+    [effectivePlayer?.pos, effectivePlayer?.position],
+  );
+  const seasonLogKeyStatLabel = useMemo(
+    () => pickSeasonLogKeyStatLabel(effectivePlayer?.pos ?? effectivePlayer?.position),
+    [effectivePlayer?.pos, effectivePlayer?.position],
+  );
+  const displayedSeasonLogRows = useMemo(() => {
+    const trimmed = String(seasonLogSearch ?? "").trim();
+    const filtered = mergedProfileSeasonRows.filter((row) =>
+      !trimmed
+        ? true
+        : rowMatchesSearch(
+            row,
+            trimmed,
+            [
+              (r) => r?.team ?? "",
+              (r) => r?.season ?? "",
+              (r) => r?.year ?? "",
+            ],
+          ),
+    );
+    let sortDef = SEASON_LOG_SORTS[seasonLogSort];
+    if (seasonLogSort === "keyStat" && seasonLogKeyStatGetter) {
+      sortDef = { label: seasonLogKeyStatLabel, getValue: seasonLogKeyStatGetter, direction: "desc" };
+    }
+    if (!sortDef) sortDef = SEASON_LOG_SORTS.seasonDesc;
+    return stableSortRows(
+      filtered,
+      sortDef.getValue,
+      sortDef.direction,
+      (r) => Number(r?.year ?? r?.season ?? 0),
+    );
+  }, [mergedProfileSeasonRows, seasonLogSearch, seasonLogSort, seasonLogKeyStatGetter, seasonLogKeyStatLabel]);
+  const seasonLogFiltersActive = Boolean(String(seasonLogSearch ?? "").trim()) || seasonLogSort !== "seasonDesc";
+  const resetSeasonLogFilters = () => {
+    setSeasonLogSearch("");
+    setSeasonLogSort("seasonDesc");
+  };
   const careerTotals = useMemo(() => {
     const posU = String(effectivePlayer?.pos ?? effectivePlayer?.position ?? '').toUpperCase();
     const defSkill = ['DE', 'DT', 'LB', 'CB', 'S', 'DL', 'EDGE'].includes(posU);
@@ -1930,6 +2002,52 @@ export default function PlayerProfile({
               >
                 Season Log
               </h3>
+              <div
+                data-testid="player-profile-season-log-controls"
+                style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 8 }}
+              >
+                <input
+                  type="search"
+                  value={seasonLogSearch}
+                  onChange={(e) => setSeasonLogSearch(e.target.value)}
+                  placeholder="Search by team or year"
+                  aria-label="Search season log"
+                  style={{ background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 8, padding: "6px 10px", color: "var(--text)", minWidth: 160, flex: "1 1 160px", fontSize: "0.78rem" }}
+                />
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                  Sort
+                  <select
+                    value={seasonLogSort}
+                    onChange={(e) => setSeasonLogSort(e.target.value)}
+                    aria-label="Sort season log"
+                    style={{ background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 8, padding: "6px 8px", color: "var(--text)", fontSize: "0.78rem" }}
+                  >
+                    {Object.entries(SEASON_LOG_SORTS).map(([key, def]) => (
+                      <option key={key} value={key}>{def.label}</option>
+                    ))}
+                    {seasonLogKeyStatGetter && seasonLogKeyStatLabel ? (
+                      <option value="keyStat">{seasonLogKeyStatLabel}</option>
+                    ) : null}
+                  </select>
+                </label>
+                {seasonLogFiltersActive ? (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={resetSeasonLogFilters}
+                    data-testid="player-profile-season-log-reset"
+                    style={{ fontSize: "0.72rem" }}
+                  >
+                    Reset
+                  </button>
+                ) : null}
+                <span
+                  data-testid="player-profile-season-log-count"
+                  style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginLeft: "auto" }}
+                >
+                  {buildShowingLabel(displayedSeasonLogRows.length, mergedProfileSeasonRows.length, "season")}
+                </span>
+              </div>
               <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
                 <Table
                   className="standings-table"
@@ -1995,7 +2113,14 @@ export default function PlayerProfile({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {[...mergedProfileSeasonRows].reverse().map((line, i) => (
+                    {displayedSeasonLogRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={12} style={{ textAlign: "center", color: "var(--text-muted)", padding: "var(--space-3)" }}>
+                          No seasons match the current filters.
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                    {displayedSeasonLogRows.map((line, i) => (
                       <TableRow key={i}>
                         <TableCell
                           style={{

@@ -1,10 +1,11 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import LeagueHistory from '../LeagueHistory.jsx';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
+import LeagueHistory, { AwardsHistory } from '../LeagueHistory.jsx';
 
 describe('LeagueHistory', () => {
+  afterEach(() => cleanup());
   it('opens the selected archived season and handles missing championship data safely', async () => {
     render(
       <LeagueHistory
@@ -196,5 +197,56 @@ describe('LeagueHistory', () => {
       expect(screen.getByTestId('league-history-major-tx-sx')).toBeTruthy();
       expect(screen.getByTestId('league-history-major-tx-sx').textContent).toMatch(/DAL signed Test Player/);
     });
+  });
+
+});
+
+describe('LeagueHistory · AwardsHistory tab', () => {
+  afterEach(() => cleanup());
+
+  it('filters by champion search, sorts, and resets while keeping count honest', async () => {
+    const seasons = [
+      { id: 'sA', year: 2030, champion: { abbr: 'DAL', name: 'Dallas' }, awards: { mvp: { playerId: 1, name: 'Star Alpha' } } },
+      { id: 'sB', year: 2031, champion: { abbr: 'NYG', name: 'NY Giants' }, awards: { mvp: { playerId: 2, name: 'Star Bravo' } } },
+      { id: 'sC', year: 2032, champion: { abbr: 'DAL', name: 'Dallas' }, awards: { mvp: { playerId: 3, name: 'Star Charlie' } } },
+    ];
+    render(<AwardsHistory seasons={seasons} onPlayerSelect={vi.fn()} />);
+    expect(screen.getByTestId('league-history-awards-count').textContent).toMatch(/Showing 3 of 3 seasons/);
+
+    fireEvent.change(screen.getByPlaceholderText(/search year, champion, or winner/i), {
+      target: { value: 'NYG' },
+    });
+    expect(screen.getByTestId('league-history-awards-count').textContent).toMatch(/Showing 1 of 3 seasons/);
+    expect(screen.queryAllByText('NY Giants').length).toBeGreaterThanOrEqual(0);
+
+    fireEvent.click(screen.getByTestId('league-history-awards-reset'));
+    expect(screen.getByTestId('league-history-awards-count').textContent).toMatch(/Showing 3 of 3 seasons/);
+
+    fireEvent.change(screen.getByLabelText(/sort awards history/i), { target: { value: 'yearAsc' } });
+    const yearCells = screen.getAllByText(/^203[012]$/).map((el) => el.textContent);
+    expect(yearCells[0]).toBe('2030');
+    expect(yearCells[yearCells.length - 1]).toBe('2032');
+  });
+
+  it('shows safe Showing-0 state when filter excludes every season', () => {
+    const seasons = [
+      { id: 'sA', year: 2030, champion: { abbr: 'DAL' }, awards: {} },
+      { id: 'sB', year: 2031, champion: { abbr: 'NYG' }, awards: {} },
+    ];
+    render(<AwardsHistory seasons={seasons} onPlayerSelect={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText(/search year, champion, or winner/i), {
+      target: { value: 'zzz-no-match' },
+    });
+    expect(screen.getByTestId('league-history-awards-count').textContent).toMatch(/Showing 0 of 2 seasons/);
+    expect(screen.getByText(/No award seasons match the current filters/i)).toBeTruthy();
+  });
+
+  it('does not invent winners — empty award cells stay as em dashes', () => {
+    const seasons = [
+      { id: 's1', year: 2030, standings: [], awards: {} },
+    ];
+    render(<AwardsHistory seasons={seasons} onPlayerSelect={vi.fn()} />);
+    expect(screen.getByTestId('league-history-awards-count').textContent).toMatch(/Showing 1 of 1 season/);
+    expect(screen.queryByText(/TBD champion|Star Alpha/)).toBeNull();
   });
 });
