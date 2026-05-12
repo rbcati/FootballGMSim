@@ -234,6 +234,37 @@ function formatCheckpointMeta(meta) {
   return mdEscape(JSON.stringify(meta));
 }
 
+function formatCheckpointSystemLabel(name) {
+  switch (String(name ?? '')) {
+    case 'getAllSeasonsHandler':
+      return 'GET_ALL_SEASONS';
+    case 'getTransactionsRecentHandler':
+      return 'GET_TRANSACTIONS recent';
+    case 'getRecordsHandler':
+      return 'GET_RECORDS';
+    case 'getHallOfFameHandler':
+      return 'GET_HALL_OF_FAME';
+    default:
+      return String(name ?? 'unknown');
+  }
+}
+
+function formatProbeText(value) {
+  return String(value ?? '')
+    .replaceAll('getAllSeasonsHandler', 'GET_ALL_SEASONS')
+    .replaceAll('getTransactionsRecentHandler', 'GET_TRANSACTIONS recent')
+    .replaceAll('getRecordsHandler', 'GET_RECORDS')
+    .replaceAll('getHallOfFameHandler', 'GET_HALL_OF_FAME');
+}
+
+function formatPersistenceProbeLabel(id) {
+  const raw = String(id ?? 'unknown');
+  if (raw.startsWith('audit_checkpoint_probe_')) {
+    return `audit_checkpoint_probe_${formatProbeText(raw.slice('audit_checkpoint_probe_'.length))}`;
+  }
+  return formatProbeText(raw);
+}
+
 function exerciseStatusLabel(entry) {
   if (!entry || typeof entry !== 'object') return 'unknown';
   return String(entry.status ?? 'unknown');
@@ -295,19 +326,6 @@ export function buildMarkdownReport(result) {
     for (const [name, entry] of exerciseEntries.filter(([, entry]) => !String(entry?.status ?? '').startsWith('skipped'))) {
       lines.push(`| ${mdEscape(name)} | ${mdEscape(exerciseStatusLabel(entry))} | ${mdEscape(exerciseDetail(entry))} |`);
     }
-    const workerProbeDetail = String(result.exerciseMatrix?.workerProbes?.detail ?? '');
-    const workerProbeHandlers = [
-      workerProbeDetail.includes('GET_RECORDS') ? 'getRecordsHandler' : null,
-      workerProbeDetail.includes('GET_ALL_SEASONS') ? 'getAllSeasonsHandler' : null,
-      workerProbeDetail.includes('GET_TRANSACTIONS') ? 'getTransactionsHandler' : null,
-      workerProbeDetail.includes('GET_HALL_OF_FAME') ? 'getHallOfFameHandler' : null,
-    ].filter(Boolean);
-    if (workerProbeHandlers.length) {
-      lines.push('');
-      lines.push('### Worker probe handlers');
-      lines.push('');
-      for (const handler of workerProbeHandlers) lines.push(`- ${mdEscape(handler)}`);
-    }
     lines.push('');
 
     lines.push('## What was skipped');
@@ -345,7 +363,7 @@ export function buildMarkdownReport(result) {
       lines.push('| System | Status | Detail |');
       lines.push('| --- | --- | --- |');
       for (const [name, entry] of exercised) {
-        lines.push(`| ${mdEscape(name)} | ${mdEscape(entry?.status ?? 'exercised')} | ${mdEscape(entry?.detail || '')} |`);
+        lines.push(`| ${mdEscape(formatCheckpointSystemLabel(name))} | ${mdEscape(entry?.status ?? 'exercised')} | ${mdEscape(entry?.detail || '')} |`);
       }
     }
     lines.push('');
@@ -414,7 +432,7 @@ export function buildMarkdownReport(result) {
     lines.push('');
     for (const a of result.persistenceAssertions) {
       const st = a.status === 'skipped' ? 'skipped' : (a.ok ? 'ok' : 'FAIL');
-      lines.push(`- **${st}** \`${a.id}\`: ${mdEscape(a.detail || '')}`);
+      lines.push(`- **${st}** \`${mdEscape(formatPersistenceProbeLabel(a.id))}\`: ${mdEscape(formatProbeText(a.detail || ''))}`);
     }
     lines.push('');
   }

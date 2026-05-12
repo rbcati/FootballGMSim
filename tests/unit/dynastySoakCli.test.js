@@ -146,10 +146,6 @@ describe('dynastySoakCli', () => {
         sourceYear: 2026,
         sourceSeasonId: 's2026',
         realWeeksSimulated: 2,
-        exercised: {
-          dbAuditCheckpointWriteRead: { status: 'exercised', detail: 'read back from DB' },
-          getRecordsHandler: { status: 'exercised', detail: 'GET_RECORDS handler returned record data' },
-        },
         exercised: { dbAuditCheckpointWriteRead: { status: 'exercised', detail: 'read back from DB' } },
         skipped: [{ system: 'completedSeasonArchive', reason: 'archiveSeason is not called by checkpoint' }],
       },
@@ -249,8 +245,8 @@ describe('dynastySoakCli', () => {
         exercised: {
           dbAuditCheckpointWriteRead: { status: 'exercised', detail: 'read back from DB' },
           getRecordsHandler: { status: 'exercised', detail: 'GET_RECORDS handler returned record data' },
+          getHallOfFameHandler: { status: 'exercised', detail: 'GET_HALL_OF_FAME handler returned a valid player list' },
         },
-        exercised: { dbAuditCheckpointWriteRead: { status: 'exercised', detail: 'read back from DB' } },
         skipped: [{ system: 'completedSeasonArchive', reason: 'archiveSeason is not called by checkpoint' }],
       },
       exerciseMatrix: {
@@ -279,6 +275,8 @@ describe('dynastySoakCli', () => {
       persistenceAssertions: [
         { id: 'latest_season_archive', ok: true, status: 'skipped', detail: 'skipped: CI profile does not complete a season or create a completed-season archive' },
         { id: 'get_all_seasons_probe', ok: true, detail: 'GET_ALL_SEASONS ok' },
+        { id: 'audit_checkpoint_exercised_systems', ok: true, detail: 'exercised: dbAuditCheckpointWriteRead, getRecordsHandler, getHallOfFameHandler' },
+        { id: 'audit_checkpoint_probe_getRecordsHandler', ok: true, detail: 'getRecordsHandler: GET_RECORDS handler returned record data' },
         { id: 'get_draft_classes', ok: true, status: 'skipped', detail: 'skipped: CI profile does not enter draft, so draft classes are not expected' },
       ],
       finalView: { veryLarge: true },
@@ -309,13 +307,21 @@ describe('dynastySoakCli', () => {
       expect(md).toContain('Short real-worker smoke audit. It does not complete a season.');
       expect(md).toContain('Full-season balance, playoffs, offseason, free agency, draft, and completed-season archive are not validated by CI profile.');
       expect(md).toContain('GET_ALL_SEASONS, GET_TRANSACTIONS recent, GET_RECORDS, GET_HALL_OF_FAME');
+      expect(md).toContain('GET_RECORDS');
+      expect(md).toContain('GET_HALL_OF_FAME');
+      expect(md).not.toContain('getRecordsHandler');
+      expect(md).not.toContain('getHallOfFameHandler');
       expect(md).toContain('## Audit checkpoint');
       expect(md).toContain('**Audit only:** true');
       expect(md).toContain('**Completed season:** false');
       expect(md).toContain('not full-season balance validation');
-      expect(md).toContain('getRecordsHandler');
+      expect(md).toContain('dbAuditCheckpointWriteRead');
+      expect(md).toContain('| completedSeasonArchive | archiveSeason is not called by checkpoint |');
       expect(md).toContain('| fullSeasonArchive | CI profile does not create a completed-season archive |');
       expect(md).toContain('**skipped** `latest_season_archive`');
+      expect(md).toContain('## Warnings');
+      expect(md).toContain('hof_empty_young');
+      expect(md).toContain('## Failures');
       expect(md).toContain('npm run audit:dynasty -- --audit-profile=full --seasons=1 --seed=1383');
     } finally {
       await rm(tmp, { recursive: true, force: true });
