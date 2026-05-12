@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { buildShowingLabel } from "../utils/dataBrowser.js";
 
 const TYPE_FILTERS = [
   { value: "all", label: "All types" },
@@ -134,6 +135,14 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
         <button type="button" className="btn btn-secondary h-9 text-sm" onClick={() => load()}>
           Refresh
         </button>
+        <button
+          type="button"
+          className="btn btn-secondary h-9 text-sm"
+          onClick={() => { setSeasonId("all"); setTeamId("all"); setType("all"); setSearch(""); }}
+          data-testid="league-activity-reset"
+        >
+          Reset
+        </button>
       </div>
 
       {loading ? (
@@ -143,6 +152,13 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
           Transactions will appear as your league signs, drafts, trades, releases, and retires players.
         </div>
       ) : (
+        <>
+          <div
+            className="text-xs text-[color:var(--text-muted)] px-1"
+            data-testid="league-activity-showing"
+          >
+            {buildShowingLabel(rows.length, rows.length, "transaction")}
+          </div>
         <ScrollArea className="h-[min(520px,65vh)] rounded-lg border border-[color:var(--hairline)]">
           <ul className="divide-y divide-[color:var(--hairline)]">
             {rows.map((tx, idx) => (
@@ -182,6 +198,7 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
             ))}
           </ul>
         </ScrollArea>
+        </>
       )}
     </div>
   );

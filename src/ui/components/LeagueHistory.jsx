@@ -8,6 +8,7 @@ import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/b
 import { AWARD_DISPLAY_NAMES } from '../../core/footballMeta';
 import { buildLeagueHistoryTopPerformers } from '../../core/playerSeasonStatsArchive.js';
 import { normalizeArchivedMajorTransactions } from '../../core/transactionTimeline.js';
+import { rowMatchesSearch, buildShowingLabel } from "../utils/dataBrowser.js";
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -176,7 +177,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
           <RecordsExplorer records={records} recordBook={recordBook} seasons={seasons} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
 
-        <TabsContent value="awards">
+        <TabsContent value="awards" forceMount style={activeTab !== "awards" ? { display: "none" } : undefined}>
           <AwardsHistory seasons={seasons} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
 
@@ -342,6 +343,18 @@ function SeasonDraftClassSnippet({ seasonId, year, actions, onPlayerSelect }) {
 
 function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, league, initialSelectedSeasonId = null }) {
   const [selectedSeasonId, setSelectedSeasonId] = useState(initialSelectedSeasonId ?? seasons?.[0]?.id ?? null);
+  const [seasonListSearch, setSeasonListSearch] = useState("");
+
+  const filteredSeasonList = useMemo(() => {
+    if (!seasonListSearch.trim()) return seasons ?? [];
+    return (seasons ?? []).filter((s) =>
+      rowMatchesSearch(s, seasonListSearch, [
+        (row) => String(row?.year ?? ""),
+        (row) => row?.champion?.abbr,
+        (row) => row?.champion?.name,
+      ])
+    );
+  }, [seasons, seasonListSearch]);
 
   useEffect(() => {
     if (!seasons?.length) return;
@@ -402,18 +415,39 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
       <Card className="card-premium">
         <CardHeader><CardTitle>Season Archive</CardTitle></CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="h-[520px]">
+          <div className="px-3 py-2 border-b border-[color:var(--hairline)]">
+            <input
+              type="search"
+              value={seasonListSearch}
+              onChange={(e) => setSeasonListSearch(e.target.value)}
+              placeholder="Search year or champion…"
+              aria-label="Search seasons"
+              className="h-8 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+              data-testid="league-history-season-search"
+            />
+            <div
+              className="mt-1 text-[10px] text-[color:var(--text-muted)]"
+              data-testid="league-history-season-showing"
+            >
+              {buildShowingLabel(filteredSeasonList.length, (seasons ?? []).length, "season")}
+            </div>
+          </div>
+          <ScrollArea className="h-[460px]">
             <div className="divide-y divide-[color:var(--hairline)]">
-              {seasons.map((s) => (
-                <button
-                  key={s.id}
-                  className={`w-full text-left px-4 py-3 ${selected?.id === s.id ? "bg-[color:var(--surface-strong)]" : ""}`}
-                  onClick={() => setSelectedSeasonId(s.id)}
-                >
-                  <div className="font-bold text-sm">{s.year}</div>
-                  <div className="text-xs text-[color:var(--text-muted)]">{s.champion?.abbr ?? "TBD"} champion</div>
-                </button>
-              ))}
+              {filteredSeasonList.length === 0 ? (
+                <div className="px-4 py-4 text-xs text-[color:var(--text-muted)]">No seasons match your search.</div>
+              ) : (
+                filteredSeasonList.map((s) => (
+                  <button
+                    key={s.id}
+                    className={`w-full text-left px-4 py-3 ${selected?.id === s.id ? "bg-[color:var(--surface-strong)]" : ""}`}
+                    onClick={() => setSelectedSeasonId(s.id)}
+                  >
+                    <div className="font-bold text-sm">{s.year}</div>
+                    <div className="text-xs text-[color:var(--text-muted)]">{s.champion?.abbr ?? "TBD"} champion</div>
+                  </button>
+                ))
+              )}
             </div>
           </ScrollArea>
         </CardContent>
@@ -800,13 +834,59 @@ function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
 }
 
 function AwardsHistory({ seasons, onPlayerSelect }) {
+  const [awardsSearch, setAwardsSearch] = useState("");
+
+  const filteredAwardSeasons = useMemo(() => {
+    if (!awardsSearch.trim()) return seasons ?? [];
+    return (seasons ?? []).filter((s) =>
+      rowMatchesSearch(s, awardsSearch, [
+        (row) => String(row?.year ?? ""),
+        (row) => row?.champion?.abbr,
+        (row) => row?.champion?.name,
+        (row) => row?.awards?.mvp?.name,
+        (row) => row?.awards?.opoy?.name,
+        (row) => row?.awards?.dpoy?.name,
+        (row) => row?.awards?.roty?.name,
+      ])
+    );
+  }, [seasons, awardsSearch]);
+
   if (!seasons?.length) return <div className="py-8 text-center text-[color:var(--text-muted)]">No award history yet.</div>;
 
   return (
     <Card className="card-premium">
-      <CardHeader><CardTitle>Awards by Season</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle>Awards by Season</CardTitle>
+      </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea className="h-[560px]">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-[color:var(--hairline)]">
+          <input
+            type="search"
+            value={awardsSearch}
+            onChange={(e) => setAwardsSearch(e.target.value)}
+            placeholder="Search year, champion, or winner…"
+            aria-label="Search awards"
+            className="h-8 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs flex-1 min-w-[160px]"
+            data-testid="league-history-awards-search"
+          />
+          {awardsSearch ? (
+            <button
+              type="button"
+              className="btn text-xs px-2 py-1"
+              onClick={() => setAwardsSearch("")}
+              data-testid="league-history-awards-reset"
+            >
+              Clear
+            </button>
+          ) : null}
+          <span
+            className="text-[10px] text-[color:var(--text-muted)]"
+            data-testid="league-history-awards-showing"
+          >
+            {buildShowingLabel(filteredAwardSeasons.length, (seasons ?? []).length, "season")}
+          </span>
+        </div>
+        <ScrollArea className="h-[520px]">
           <Table>
             <TableHeader>
               <TableRow>
@@ -819,16 +899,22 @@ function AwardsHistory({ seasons, onPlayerSelect }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {seasons.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="pl-5 font-bold">{s.year}</TableCell>
-                  <TableCell>{s.champion?.abbr ?? "—"}</TableCell>
-                  <TableCell><AwardCell award={s.awards?.mvp} onPlayerSelect={onPlayerSelect} /></TableCell>
-                  <TableCell><AwardCell award={s.awards?.opoy} onPlayerSelect={onPlayerSelect} /></TableCell>
-                  <TableCell><AwardCell award={s.awards?.dpoy} onPlayerSelect={onPlayerSelect} /></TableCell>
-                  <TableCell><AwardCell award={s.awards?.roty} onPlayerSelect={onPlayerSelect} /></TableCell>
+              {filteredAwardSeasons.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-6 text-center text-xs text-[color:var(--text-muted)]">No seasons match your search.</TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                filteredAwardSeasons.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="pl-5 font-bold">{s.year}</TableCell>
+                    <TableCell>{s.champion?.abbr ?? "—"}</TableCell>
+                    <TableCell><AwardCell award={s.awards?.mvp} onPlayerSelect={onPlayerSelect} /></TableCell>
+                    <TableCell><AwardCell award={s.awards?.opoy} onPlayerSelect={onPlayerSelect} /></TableCell>
+                    <TableCell><AwardCell award={s.awards?.dpoy} onPlayerSelect={onPlayerSelect} /></TableCell>
+                    <TableCell><AwardCell award={s.awards?.roty} onPlayerSelect={onPlayerSelect} /></TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </ScrollArea>

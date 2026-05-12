@@ -60,6 +60,102 @@ describe('TeamHistoryScreen', () => {
     });
   });
 
+  it('shows showing count and sort controls after seasons load', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 7, name: 'Seattle', abbr: 'SEA' }], userTeamId: 7 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                { year: 2030, standings: [{ id: 7, abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 420, pa: 300 }], champion: { id: 7, abbr: 'SEA' }, playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+                { year: 2031, standings: [{ id: 7, abbr: 'SEA', wins: 8, losses: 9, ties: 0, pf: 320, pa: 330 }], playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+                { year: 2032, standings: [{ id: 7, abbr: 'SEA', wins: 5, losses: 12, ties: 0, pf: 280, pa: 390 }], playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+              ],
+            },
+          }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      const showLabel = screen.getByTestId('team-history-showing-label');
+      expect(showLabel.textContent).toMatch(/Showing 3 of 3 seasons/i);
+    });
+  });
+
+  it('filters timeline by year text and updates showing count', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 7, name: 'Seattle', abbr: 'SEA' }], userTeamId: 7 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                { year: 2030, standings: [{ id: 7, abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 420, pa: 300 }], champion: { id: 7, abbr: 'SEA' }, playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+                { year: 2031, standings: [{ id: 7, abbr: 'SEA', wins: 8, losses: 9, ties: 0, pf: 320, pa: 330 }], playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+              ],
+            },
+          }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-showing-label').textContent).toMatch(/Showing 2 of 2/i);
+    });
+    const input = screen.getByPlaceholderText('Filter by year');
+    fireEvent.change(input, { target: { value: '2030' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-showing-label').textContent).toMatch(/Showing 1 of 2/i);
+    });
+  });
+
+  it('reset filters restores full showing count', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 7, name: 'Seattle', abbr: 'SEA' }], userTeamId: 7 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                { year: 2030, standings: [{ id: 7, abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 420, pa: 300 }], champion: { id: 7, abbr: 'SEA' }, playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+                { year: 2031, standings: [{ id: 7, abbr: 'SEA', wins: 8, losses: 9, ties: 0, pf: 320, pa: 330 }], playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+              ],
+            },
+          }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('team-history-showing-label')).toBeTruthy());
+    const input = screen.getByPlaceholderText('Filter by year');
+    fireEvent.change(input, { target: { value: '2030' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-showing-label').textContent).toMatch(/Showing 1 of 2/i);
+    });
+    const resetBtn = screen.getByTestId('team-history-reset-filters');
+    fireEvent.click(resetBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-showing-label').textContent).toMatch(/Showing 2 of 2/i);
+    });
+  });
+
   it('calls onOpenBoxScore when defining game has resolvable id and scores', async () => {
     const onOpen = vi.fn();
     render(
