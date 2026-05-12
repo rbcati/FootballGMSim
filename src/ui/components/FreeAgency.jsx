@@ -53,6 +53,7 @@ import { formatDemandTier } from "../utils/offseasonActionCenter.js";
 import { buildFreeAgencyMarketAnalysis } from "../../core/freeAgency/freeAgencyMarketAnalysis.js";
 import { buildFreeAgencyProfileContext } from "../utils/playerProfileContext.js";
 import { buildContractOfferInsight, toneToContractInsightColor } from "../utils/contractOfferInsights.js";
+import { evaluatePendingOfferCapReservation } from "../../core/pendingOfferCapModel.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -334,6 +335,69 @@ export function ContractOfferInsightBlock({ player, capRoom, compact = false, sh
   );
 }
 
+
+const RESERVATION_TONE = Object.freeze({
+  safe: 'var(--success)',
+  manageable: 'var(--accent)',
+  tight: 'var(--warning)',
+  overcommitted: 'var(--danger)',
+  unknown: 'var(--text-muted)',
+});
+
+function formatCapValue(value) {
+  return Number.isFinite(Number(value)) ? `$${Number(value).toFixed(1)}M` : 'Unknown';
+}
+
+function CapImpactStat({ label, value, color = 'var(--text)' }) {
+  return (
+    <div style={{ border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', padding: '8px 10px', background: 'var(--surface)' }}>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
+      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+    </div>
+  );
+}
+
+export function PendingCapImpactPanel({ reservation }) {
+  const status = reservation?.capReservationStatus ?? 'unknown';
+  const tone = RESERVATION_TONE[status] ?? RESERVATION_TONE.unknown;
+  const rows = Array.isArray(reservation?.offerRows) ? reservation.offerRows : [];
+  return (
+    <Card className="card-premium" style={{ marginBottom: "var(--space-4)" }}>
+      <CardContent style={{ padding: "var(--space-4)", display: "grid", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 800 }}>Pending cap impact</div>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 3 }}>Annual cap reservation if every pending bid is accepted.</div>
+          </div>
+          <Badge variant="outline" style={{ color: tone, borderColor: tone, background: `${tone}14` }}>{reservation?.capReservationStatusLabel ?? 'Unknown'}</Badge>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
+          <CapImpactStat label="Current Room" value={formatCapValue(reservation?.currentCapRoom)} color={tone} />
+          <CapImpactStat label="Pending Offers" value={String(reservation?.pendingOfferCount ?? 0)} />
+          <CapImpactStat label="Annual Reserved" value={formatCapValue(reservation?.pendingAnnualCommitment)} color={reservation?.pendingAnnualCommitment > 0 ? "var(--warning)" : "var(--text)"} />
+          <CapImpactStat label="After Pending" value={formatCapValue(reservation?.estimatedCapRoomAfterPending)} color={tone} />
+        </div>
+        {rows.length > 0 ? (
+          <div style={{ display: "grid", gap: 4 }}>
+            {rows.slice(0, 4).map((row) => (
+              <div key={`${row.playerId ?? row.playerName}-${row.annualValue ?? 'unknown'}`} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.playerName}</span>
+                <strong style={{ color: row.status === 'unknown' ? "var(--text-muted)" : "var(--text)", whiteSpace: "nowrap" }}>{row.status === 'unknown' ? 'Unknown annual' : `${formatCapValue(row.annualValue)} / yr`}{row.years ? ` · ${row.years}y` : ''}</strong>
+              </div>
+            ))}
+            {rows.length > 4 ? <div style={{ fontSize: "10px", color: "var(--text-subtle)" }}>+{rows.length - 4} more pending offer{rows.length - 4 === 1 ? '' : 's'}</div> : null}
+          </div>
+        ) : (
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>No pending bids are reserving cap right now.</div>
+        )}
+        {(reservation?.warnings ?? []).map((warning) => (
+          <div key={warning} role="status" style={{ fontSize: "var(--text-xs)", color: status === 'overcommitted' ? "var(--danger)" : "var(--warning)", background: `${status === 'overcommitted' ? 'var(--danger)' : 'var(--warning)'}14`, border: `1px solid ${status === 'overcommitted' ? 'var(--danger)' : 'var(--warning)'}55`, borderRadius: "var(--radius-md)", padding: "8px 10px" }}>{warning}</div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Cap banner ────────────────────────────────────────────────────────────────
 
 function CapBanner({ userTeam }) {
@@ -428,7 +492,7 @@ function CapBanner({ userTeam }) {
 // Renders as a full-width <td colSpan=7> in its own table row, appearing
 // directly below the highlighted player row (two-row pattern from Roster.jsx).
 
-function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit = 53, onSubmit, onCancel, asDiv }) {
+export function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit = 53, pendingCapContext = null, onSubmit, onCancel, asDiv }) {
   const defaultSalary = suggestedSalary(player.ovr, player.pos, player.age);
   const defaultYears = suggestedYears(player.age);
   const [annual, setAnnual] = useState(defaultSalary);
@@ -455,8 +519,20 @@ function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit = 53, o
 
   const Wrapper = asDiv ? 'div' : 'td';
   const props = asDiv ? {} : { colSpan: 9 };
-  const postMoveCap = Number(capRoom) - Number(annual || 0);
+  const proposedReservation = useMemo(() => {
+    if (!pendingCapContext) return null;
+    return evaluatePendingOfferCapReservation({
+      ...pendingCapContext,
+      proposedOffer: {
+        player,
+        replaceExisting: true,
+        offer: { contract: { baseAnnual: Number(annual || 0), yearsTotal: Number(years || 1), signingBonus: 0 } },
+      },
+    });
+  }, [pendingCapContext, player, annual, years]);
+  const postMoveCap = proposedReservation?.estimatedCapRoomAfterPending ?? (Number(capRoom) - Number(annual || 0));
   const postMoveRoster = Number(rosterCount) + 1;
+  const projectedWarnings = proposedReservation?.warnings ?? [];
 
   return (
     <Wrapper
@@ -499,11 +575,14 @@ function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit = 53, o
         </div>
         <div style={{ display: "grid", gap: 2, marginLeft: "auto", minWidth: 170 }}>
           <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-            Cap after bid: <strong style={{ color: postMoveCap < 0 ? "var(--danger)" : "var(--text)" }}>${postMoveCap.toFixed(1)}M</strong>
+            Cap after all pending: <strong style={{ color: postMoveCap < 0 ? "var(--danger)" : postMoveCap < 5 ? "var(--warning)" : "var(--text)" }}>{formatCapValue(postMoveCap)}</strong>
           </div>
           <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
             Roster after signing: <strong style={{ color: postMoveRoster > rosterLimit ? "var(--warning)" : "var(--text)" }}>{postMoveRoster}/{rosterLimit}</strong>
           </div>
+          {projectedWarnings.slice(0, 1).map((warning) => (
+            <div key={warning} style={{ fontSize: "10px", color: postMoveCap < 0 ? "var(--danger)" : "var(--warning)" }}>{warning}</div>
+          ))}
         </div>
 
         {/* Inputs */}
@@ -601,7 +680,7 @@ function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit = 53, o
 
 // ── Player Preview Bottom Sheet ──────────────────────────────────────────────
 
-function PlayerPreviewSheet({ player, capRoom, onClose, onSubmitBid }) {
+function PlayerPreviewSheet({ player, capRoom, pendingCapContext = null, onClose, onSubmitBid }) {
   const [phase, setPhase] = useState("view"); // "view" | "bid"
   const offers = player?.offers || {};
 
@@ -694,6 +773,7 @@ function PlayerPreviewSheet({ player, capRoom, onClose, onSubmitBid }) {
                 <SignInlineForm
                   player={player}
                   capRoom={capRoom}
+                  pendingCapContext={pendingCapContext}
                   asDiv
                   onCancel={() => setPhase("view")}
                   onSubmit={(c) => { onSubmitBid(player.id, c); onClose(); }}
@@ -824,6 +904,16 @@ export default function FreeAgency({
   }), [userTeam, evaluatedFaPool, capRoom, capUsed, deadCap]);
 
   const marketRowsById = useMemo(() => new Map((marketAnalysis?.marketRows ?? []).map((r) => [r.playerId, r])), [marketAnalysis]);
+  const pendingCapContext = useMemo(() => ({
+    team: userTeam,
+    freeAgents: evaluatedFaPool,
+    teamId: activeTeamId,
+    currentCapRoom: capRoom,
+  }), [userTeam, evaluatedFaPool, activeTeamId, capRoom]);
+  const pendingCapReservation = useMemo(
+    () => evaluatePendingOfferCapReservation(pendingCapContext),
+    [pendingCapContext],
+  );
 
   const displayed = useMemo(() => {
     const base = filterFreeAgentsForView(evaluatedFaPool, {
@@ -1094,6 +1184,7 @@ export default function FreeAgency({
       )}
 
       <CapBanner userTeam={userTeam} />
+      <PendingCapImpactPanel reservation={pendingCapReservation} />
 
       {flash && (
         <div
@@ -1538,6 +1629,7 @@ export default function FreeAgency({
                             <SignInlineForm
                               player={player}
                               capRoom={capRoom}
+                              pendingCapContext={pendingCapContext}
                               rosterCount={rosterCount}
                               rosterLimit={rosterLimit}
                               onCancel={() => setSigningPlayerId(null)}
@@ -1732,7 +1824,7 @@ export default function FreeAgency({
 
                         {isSigningThis ? (
                             <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: "var(--space-3)", marginTop: "var(--space-2)" }}>
-                               <SignInlineForm player={player} capRoom={capRoom} rosterCount={rosterCount} rosterLimit={rosterLimit} asDiv onCancel={() => setSigningPlayerId(null)} onSubmit={(c) => handleSign(player.id, c)} />
+                               <SignInlineForm player={player} capRoom={capRoom} pendingCapContext={pendingCapContext} rosterCount={rosterCount} rosterLimit={rosterLimit} asDiv onCancel={() => setSigningPlayerId(null)} onSubmit={(c) => handleSign(player.id, c)} />
                             </div>
                         ) : (
                             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
@@ -1766,6 +1858,7 @@ export default function FreeAgency({
         <PlayerPreviewSheet
           player={previewPlayer}
           capRoom={capRoom}
+          pendingCapContext={pendingCapContext}
           onClose={() => setPreviewPlayer(null)}
           onSubmitBid={handleSign}
         />
