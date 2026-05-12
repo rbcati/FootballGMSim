@@ -15,6 +15,7 @@ import {
 } from './draftClassHistory.js';
 import { buildAiTeamStrategy } from './aiTeamStrategy.js';
 import { buildPlayerDevelopmentModel } from './playerDevelopmentModel.js';
+import { summarizeEconomyRegressionSnapshot } from './economyRegressionAudit.js';
 import { buildProspectScoutingReport } from './scoutingModel.js';
 import {
   defensiveIntsFromTotalsForArchive,
@@ -545,6 +546,7 @@ export function runDynastySoakAudit(input = {}) {
   const schedule = viewState?.schedule;
   const standings = Array.isArray(viewState?.standings) ? viewState.standings : [];
   const leagueHistory = viewState?.leagueHistory ?? [];
+  const incomingTradeOffers = Array.isArray(viewState?.incomingTradeOffers) ? viewState.incomingTradeOffers : [];
 
   // --- Phase / user / schedule ---
   if (userTeamId == null || userTeamId === '') {
@@ -784,6 +786,39 @@ export function runDynastySoakAudit(input = {}) {
     }
   }
 
+  // --- Economy regression snapshot (informational, warning-only) ---
+  const economyRegressionSnapshot = summarizeEconomyRegressionSnapshot({
+    teams,
+    players: allPlayers,
+    userTeamId,
+    incomingTradeOffers,
+  });
+  if (economyRegressionSnapshot.teamsOverCap > 0) {
+    warn('economy_teams_over_cap', `${economyRegressionSnapshot.teamsOverCap} team(s) are over cap in economy regression snapshot`);
+    bumpSummary(summary, 'capHealth', 'warn');
+  }
+  if (economyRegressionSnapshot.teamsWithPendingOfferOvercommit > 0) {
+    warn('economy_pending_offer_overcommit', `${economyRegressionSnapshot.teamsWithPendingOfferOvercommit} team(s) are overcommitted by pending offers`, {
+      pendingOfferOvercommitCount: economyRegressionSnapshot.pendingOfferOvercommitCount,
+    });
+    bumpSummary(summary, 'capHealth', 'warn');
+  }
+  if (economyRegressionSnapshot.duplicateExpensiveSameGroupOffers > 0) {
+    warn('economy_duplicate_expensive_same_group_offers', `${economyRegressionSnapshot.duplicateExpensiveSameGroupOffers} duplicate expensive same-group CPU offer bucket(s)`);
+    bumpSummary(summary, 'aiHealth', 'warn');
+  }
+  if (economyRegressionSnapshot.oldVeteranOffersByRebuildTeams > 0) {
+    warn('economy_rebuild_old_veteran_offer', `${economyRegressionSnapshot.oldVeteranOffersByRebuildTeams} old expensive veteran CPU offer(s) by rebuild teams`);
+    bumpSummary(summary, 'aiHealth', 'warn');
+  }
+  if (economyRegressionSnapshot.premiumYoungPlayerTradeDiscountFlags > 0 || economyRegressionSnapshot.expensiveVeteranSwapFlags > 0) {
+    warn('economy_trade_realism_flags', 'Trade realism warning flags detected in economy regression snapshot', {
+      premiumYoungPlayerTradeDiscountFlags: economyRegressionSnapshot.premiumYoungPlayerTradeDiscountFlags,
+      expensiveVeteranSwapFlags: economyRegressionSnapshot.expensiveVeteranSwapFlags,
+    });
+    bumpSummary(summary, 'aiHealth', 'warn');
+  }
+
   // --- Transactions + draft class memory ---
   const rawTx = Array.isArray(input.transactions) ? input.transactions : [];
   if (seasonIndex >= 2 && rawTx.length < 3) {
@@ -938,6 +973,7 @@ export function runDynastySoakAudit(input = {}) {
     warningCodesSample: warnings.slice(0, 30).map((w) => w.code),
     capStressedWarnings: warnings.filter((w) => w.code === 'cap_stressed').length,
     depthWarnings: warnings.filter((w) => String(w.code).startsWith('depth_')).length,
+    economyRegressionSnapshot,
   };
 
   return {

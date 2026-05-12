@@ -62,6 +62,13 @@ describe('shouldBlockCpuUniformPlayerSwap', () => {
   it('allows non-QB uniform swaps', () => {
     expect(shouldBlockCpuUniformPlayerSwap({ pos: 'WR' }, { pos: 'CB' })).toBe(false);
   });
+
+  it('blocks directionless veteran-for-veteran swaps involving a quarterback', () => {
+    const expensiveQb = { pos: 'QB', age: 35, ovr: 76, potential: 76, contract: { baseAnnual: 22 } };
+    const expensiveWr = { pos: 'WR', age: 33, ovr: 79, potential: 79, contract: { baseAnnual: 14 } };
+
+    expect(shouldBlockCpuUniformPlayerSwap(expensiveQb, expensiveWr)).toBe(true);
+  });
 });
 
 
