@@ -254,6 +254,66 @@ export function buildPersistenceAssertions(input = {}) {
     });
   }
 
+  if (auditProfile === 'ci') {
+    const cp = input.auditCheckpoint ?? null;
+    if (!cp) {
+      assertions.push({
+        id: 'audit_checkpoint_present',
+        ok: false,
+        code: 'audit_checkpoint_missing',
+        detail: 'CI profile did not return an audit checkpoint payload',
+      });
+    } else {
+      assertions.push({
+        id: 'audit_checkpoint_ok',
+        ok: cp.ok === true,
+        code: cp.ok === true ? undefined : 'audit_checkpoint_failed',
+        detail: cp.ok === true ? 'audit checkpoint ok' : `audit checkpoint failed: ${cp.error || JSON.stringify(cp.failures || [])}`,
+      });
+      assertions.push({
+        id: 'audit_checkpoint_metadata',
+        ok: cp.auditOnly === true && cp.archiveType === 'audit_checkpoint' && cp.completedSeason === false,
+        code: cp.auditOnly === true && cp.archiveType === 'audit_checkpoint' && cp.completedSeason === false ? undefined : 'audit_checkpoint_not_guarded',
+        detail: `auditOnly=${cp.auditOnly === true} archiveType=${cp.archiveType ?? 'missing'} completedSeason=${cp.completedSeason === false ? 'false' : String(cp.completedSeason)}`,
+      });
+      assertions.push({
+        id: 'audit_checkpoint_real_weeks',
+        ok: Number(cp.realWeeksSimulated ?? 0) >= 1,
+        code: Number(cp.realWeeksSimulated ?? 0) >= 1 ? undefined : 'audit_checkpoint_exercised_data_missing',
+        detail: `realWeeksSimulated=${cp.realWeeksSimulated ?? 'missing'}`,
+      });
+      const exercised = cp.exercised && typeof cp.exercised === 'object' ? cp.exercised : {};
+      const exercisedEntries = Object.entries(exercised);
+      assertions.push({
+        id: 'audit_checkpoint_exercised_systems',
+        ok: exercisedEntries.length > 0,
+        code: exercisedEntries.length > 0 ? undefined : 'audit_checkpoint_exercised_data_missing',
+        detail: exercisedEntries.length ? `exercised: ${exercisedEntries.map(([name]) => name).join(', ')}` : 'no checkpoint systems marked exercised',
+      });
+      for (const [name, entry] of exercisedEntries) {
+        const failed = entry?.status === 'failed' || entry?.ok === false;
+        assertions.push({
+          id: `audit_checkpoint_probe_${name}`,
+          ok: !failed,
+          code: failed ? 'audit_checkpoint_probe_failed' : undefined,
+          detail: failed ? `${name} failed: ${entry?.detail || entry?.error || 'no detail'}` : `${name}: ${entry?.detail || entry?.status || 'exercised'}`,
+        });
+      }
+      const skipped = Array.isArray(cp.skipped) ? cp.skipped : [];
+      for (const row of skipped) {
+        const reason = String(row?.reason || '').trim();
+        assertions.push({
+          id: `audit_checkpoint_skipped_${row?.system || 'unknown'}`,
+          ok: !!reason,
+          status: 'skipped',
+          skipped: true,
+          code: reason ? undefined : 'audit_checkpoint_skipped_without_reason',
+          detail: reason ? `skipped: ${reason}` : 'skipped: missing reason',
+        });
+      }
+    }
+  }
+
   const hasTx = Array.isArray(input.transactionsRecent) && input.transactionsRecent.length > 0;
   const transactionsRecentProbeOk = input.transactionsRecentProbeOk !== false;
   const transactionsRecentHasExpectedData = input.transactionsRecentHasExpectedData ?? hasTx;

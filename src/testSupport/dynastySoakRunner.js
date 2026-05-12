@@ -14,6 +14,7 @@ import {
 const RESPONSE_BY_REQUEST = {
   [toWorker.INIT]: [toUI.READY, toUI.ERROR],
   [toWorker.USE_SAFE_STARTER_LEAGUE]: [toUI.FULL_STATE, toUI.ERROR],
+  [toWorker.RUN_DYNASTY_AUDIT_CHECKPOINT]: [toUI.DYNASTY_AUDIT_CHECKPOINT, toUI.ERROR],
   [toWorker.SIM_TO_PHASE]: [toUI.FULL_STATE, toUI.ERROR],
   [toWorker.ADVANCE_WEEK]: [toUI.WEEK_COMPLETE, toUI.ERROR, toUI.FULL_STATE],
   [toWorker.SAVE_NOW]: [toUI.SAVED, toUI.ERROR],
@@ -163,6 +164,7 @@ function buildPhaseBreakdown(checkpoints) {
     let bucket = null;
     if (name.startsWith('boot.')) bucket = groups.boot;
     else if (name.endsWith('.SIM_TO_PHASE')) bucket = groups.sim;
+    else if (name.includes('AUDIT_CHECKPOINT')) bucket = groups.getProbes;
     else if (name.includes('.GET_')) bucket = groups.getProbes;
     else if (name.endsWith('.runDynastySoakAudit')) bucket = groups.auditEvaluation;
     else if (name.endsWith('.ADVANCE_WEEK') || name.includes('.ADVANCE_WEEK.')) bucket = groups.finalAdvance;
@@ -487,6 +489,7 @@ async function runFullDynastySoakOnce(opts = {}) {
   globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = true;
   globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__ = true;
   globalThis.__DYNASTY_SOAK_PROFILE__ = true;
+  globalThis.__DYNASTY_SOAK_AUDIT_CHECKPOINT_ENABLED__ = false;
   globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
 
   const t0 = Date.now();
@@ -900,6 +903,7 @@ async function runFullDynastySoakOnce(opts = {}) {
     globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = false;
     globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__ = false;
     globalThis.__DYNASTY_SOAK_PROFILE__ = false;
+    globalThis.__DYNASTY_SOAK_AUDIT_CHECKPOINT_ENABLED__ = false;
     globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
   }
 }
@@ -950,6 +954,7 @@ async function runCiDynastySoakOnce(opts = {}) {
   globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = false;
   globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__ = false;
   globalThis.__DYNASTY_SOAK_PROFILE__ = true;
+  globalThis.__DYNASTY_SOAK_AUDIT_CHECKPOINT_ENABLED__ = true;
   globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
 
   try {
@@ -1047,6 +1052,38 @@ async function runCiDynastySoakOnce(opts = {}) {
       : { status: 'failed', reason: saveMsg.payload?.message || 'SAVE_NOW failed' };
     checkMaxRuntime(t0, maxRuntimeMs);
 
+    const checkpointMsg = await timedDispatch({
+      checkpoints,
+      name: 'ci.RUN_DYNASTY_AUDIT_CHECKPOINT',
+      runnerDispatch,
+      type: toWorker.RUN_DYNASTY_AUDIT_CHECKPOINT,
+      payload: { realWeeksSimulated: regularWeeksSimmed, auditProfile: 'ci' },
+      timeoutMs: Math.min(180_000, phaseTimeoutMs),
+      meta: { realWeeksSimulated: regularWeeksSimmed },
+    });
+    const auditCheckpoint = checkpointMsg.payload ?? null;
+    aggregate.auditCheckpoint = auditCheckpoint;
+    if (probeHandlerSucceeded(checkpointMsg) && auditCheckpoint?.ok === true && auditCheckpoint?.auditOnly === true && auditCheckpoint?.completedSeason === false) {
+      aggregate.exerciseMatrix.auditCheckpoint = {
+        status: 'exercised_partial',
+        detail: 'audit-only checkpoint persisted metadata and shaped safe partial archive probes',
+        archiveType: auditCheckpoint.archiveType,
+        completedSeason: auditCheckpoint.completedSeason,
+        realWeeksSimulated: auditCheckpoint.realWeeksSimulated,
+      };
+    } else {
+      aggregate.passed = false;
+      aggregate.exerciseMatrix.auditCheckpoint = {
+        status: 'failed',
+        reason: auditCheckpoint?.error || auditCheckpoint?.failures?.map((f) => f?.error || f?.system).join('; ') || 'audit checkpoint failed',
+      };
+      aggregate.failures.push({
+        code: 'audit_checkpoint_failed',
+        message: aggregate.exerciseMatrix.auditCheckpoint.reason,
+      });
+    }
+    checkMaxRuntime(t0, maxRuntimeMs);
+
     const allSeasonsMsg = await timedDispatch({
       checkpoints,
       name: 'ci.GET_ALL_SEASONS',
@@ -1124,6 +1161,7 @@ async function runCiDynastySoakOnce(opts = {}) {
       expectDraftClasses: false,
       draftClassCount: 0,
       saveNowOk,
+      auditCheckpoint,
       skippedProbeReasons,
     });
     aggregate.persistenceAssertions = pers.assertions;
@@ -1144,6 +1182,7 @@ async function runCiDynastySoakOnce(opts = {}) {
     globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = false;
     globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__ = false;
     globalThis.__DYNASTY_SOAK_PROFILE__ = false;
+    globalThis.__DYNASTY_SOAK_AUDIT_CHECKPOINT_ENABLED__ = false;
     globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
     globalThis.__dynastySoakBroadcast = null;
   }
