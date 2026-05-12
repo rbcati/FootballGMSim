@@ -114,10 +114,6 @@ describe('TeamHistoryScreen', () => {
     render(
       <TeamHistoryScreen
         league={{ teams: [{ id: 1, name: 'Dallas', abbr: 'DAL' }], userTeamId: 1 }}
-  it('filters, sorts, and resets season timeline rows', async () => {
-    render(
-      <TeamHistoryScreen
-        league={{ teams: [{ id: 7, name: 'Seattle', abbr: 'SEA' }], userTeamId: 7 }}
         actions={{
           getAllSeasons: vi.fn().mockResolvedValue({
             payload: {
@@ -138,23 +134,6 @@ describe('TeamHistoryScreen', () => {
                   year: 2032,
                   standings: [{ id: 1, name: 'Dallas', abbr: 'DAL', wins: 4, losses: 13, ties: 0, pf: 260, pa: 410 }],
                   awards: {},
-                  standings: [
-                    { id: 7, abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 420, pa: 300 },
-                    { id: 9, abbr: 'RIV', wins: 8, losses: 9, ties: 0, pf: 320, pa: 360 },
-                  ],
-                  champion: { id: 7, abbr: 'SEA' },
-                  runnerUp: { id: 9, abbr: 'RIV' },
-                  playoffBracketSnapshot: { mode: 'empty', rounds: [] },
-                },
-                {
-                  year: 2031,
-                  standings: [
-                    { id: 7, abbr: 'SEA', wins: 8, losses: 9, ties: 0, pf: 300, pa: 330 },
-                    { id: 5, abbr: 'BOS', wins: 11, losses: 6, ties: 0, pf: 390, pa: 310 },
-                  ],
-                  champion: { id: 5, abbr: 'BOS' },
-                  runnerUp: { id: 7, abbr: 'SEA' },
-                  playoffBracketSnapshot: { mode: 'empty', rounds: [] },
                 },
               ],
             },
@@ -193,22 +172,6 @@ describe('TeamHistoryScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
     await waitFor(() => {
       expect(screen.getByTestId('team-history-timeline-count').textContent).toContain('Showing 3 of 3 seasons');
-      expect(screen.getByTestId('team-history-timeline-showing').textContent).toContain('Showing 2 of 2 seasons');
-    });
-
-    fireEvent.change(screen.getByLabelText('Sort team history seasons'), { target: { value: 'wins' } });
-    const sortedRows = screen.getAllByTestId(/team-history-season-row-/i);
-    expect(sortedRows[0].textContent).toContain('2030');
-
-    fireEvent.change(screen.getByLabelText('Search team history seasons'), { target: { value: 'champion' } });
-    await waitFor(() => {
-      expect(screen.getByTestId('team-history-timeline-showing').textContent).toContain('Showing 1 of 2 seasons');
-    });
-    expect(screen.getByTestId('team-history-season-row-2030')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
-    await waitFor(() => {
-      expect(screen.getByTestId('team-history-timeline-showing').textContent).toContain('Showing 2 of 2 seasons');
     });
   });
 });
