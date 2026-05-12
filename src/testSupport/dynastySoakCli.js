@@ -3,6 +3,9 @@
  * Used by scripts/dynasty-soak.mjs and Vitest.
  */
 
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
 export const DYNASTY_SOAK_USAGE = `Usage: npm run audit:dynasty -- [options]
 
 Options:
@@ -416,4 +419,27 @@ export function slimDynastySoakResultForJson(result) {
   const out = { ...result };
   delete out.finalView;
   return out;
+}
+
+/**
+ * Write the canonical dynasty soak JSON and Markdown reports.
+ * Kept in the CLI helper so tests can exercise the real artifact path without
+ * launching the worker.
+ * @param {object} result
+ * @param {string} [outDir]
+ * @param {string} [cwd]
+ * @returns {Promise<{ outDir: string, jsonPath: string, markdownPath: string }>}
+ */
+export async function writeDynastySoakReports(result, outDir = 'artifacts/dynasty-soak', cwd = process.cwd()) {
+  const resolvedOutDir = resolve(cwd, outDir);
+  const jsonPath = resolve(resolvedOutDir, 'latest.json');
+  const markdownPath = resolve(resolvedOutDir, 'latest.md');
+  await mkdir(resolvedOutDir, { recursive: true });
+  await writeFile(
+    jsonPath,
+    JSON.stringify(slimDynastySoakResultForJson(result), null, 2),
+    'utf8',
+  );
+  await writeFile(markdownPath, buildMarkdownReport(result), 'utf8');
+  return { outDir: resolvedOutDir, jsonPath, markdownPath };
 }
