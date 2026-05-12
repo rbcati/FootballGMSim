@@ -16,6 +16,7 @@ const RESPONSE_BY_REQUEST = {
   [toWorker.USE_SAFE_STARTER_LEAGUE]: [toUI.FULL_STATE, toUI.ERROR],
   [toWorker.SIM_TO_PHASE]: [toUI.FULL_STATE, toUI.ERROR],
   [toWorker.ADVANCE_WEEK]: [toUI.WEEK_COMPLETE, toUI.ERROR, toUI.FULL_STATE],
+  [toWorker.SAVE_NOW]: [toUI.SAVED, toUI.ERROR],
   [toWorker.GET_ALL_SEASONS]: [toUI.ALL_SEASONS, toUI.ERROR],
   [toWorker.GET_TRANSACTIONS]: [toUI.TRANSACTIONS, toUI.ERROR],
   [toWorker.GET_RECORDS]: [toUI.RECORDS, toUI.ERROR],
@@ -164,7 +165,7 @@ function buildPhaseBreakdown(checkpoints) {
     else if (name.endsWith('.SIM_TO_PHASE')) bucket = groups.sim;
     else if (name.includes('.GET_')) bucket = groups.getProbes;
     else if (name.endsWith('.runDynastySoakAudit')) bucket = groups.auditEvaluation;
-    else if (name.endsWith('.ADVANCE_WEEK')) bucket = groups.finalAdvance;
+    else if (name.endsWith('.ADVANCE_WEEK') || name.includes('.ADVANCE_WEEK.')) bucket = groups.finalAdvance;
     if (!bucket) continue;
     bucket.ms += ms;
     bucket.count += 1;
@@ -282,6 +283,121 @@ function checkMaxRuntime(t0, maxRuntimeMs) {
   }
 }
 
+function baseSummary() {
+  return {
+    rosterHealth: 'ok',
+    capHealth: 'ok',
+    statHealth: 'ok',
+    archiveHealth: 'ok',
+    aiHealth: 'ok',
+    transactionHealth: 'ok',
+    draftHealth: 'ok',
+    scoutingHealth: 'ok',
+    developmentHealth: 'ok',
+    historyHealth: 'ok',
+  };
+}
+
+function buildCiExerciseMatrix(regularWeekCount = 0) {
+  const fullSeasonReason = 'CI profile runs a short real-worker phase path and does not complete a full season';
+  return {
+    realWorkerBoot: { status: 'exercised' },
+    safeStarterLeague: { status: 'exercised' },
+    preseasonAdvance: { status: 'pending' },
+    regularWeeks: { status: regularWeekCount > 0 ? 'exercised' : 'pending', count: regularWeekCount },
+    fullRegularSeason: { status: 'skipped', reason: fullSeasonReason },
+    playoffs: { status: 'skipped', reason: 'CI profile does not complete a full season' },
+    offseason: { status: 'skipped', reason: 'CI profile does not complete a full season' },
+    freeAgency: { status: 'skipped', reason: 'CI profile does not enter offseason' },
+    draft: { status: 'skipped', reason: 'CI profile does not enter draft' },
+    fullSeasonArchive: { status: 'skipped', reason: 'CI profile does not create a completed-season archive' },
+    persistenceFlush: { status: 'pending' },
+    workerProbes: { status: 'pending' },
+  };
+}
+
+function buildFullExerciseMatrix() {
+  return {
+    realWorkerBoot: { status: 'exercised' },
+    safeStarterLeague: { status: 'exercised' },
+    simToPhase: { status: 'exercised', detail: 'Full profile uses SIM_TO_PHASE to reach next preseason.' },
+    fullRegularSeason: { status: 'exercised' },
+    playoffs: { status: 'exercised' },
+    offseason: { status: 'exercised' },
+    freeAgency: { status: 'exercised' },
+    draft: { status: 'exercised' },
+    fullSeasonArchive: { status: 'exercised' },
+    persistenceFlush: { status: 'exercised' },
+    workerProbes: { status: 'exercised' },
+  };
+}
+
+function createAggregate({ auditProfile, phasePath, seed, phaseTimeoutMs, maxRuntimeMs, deep, deepEachSeason, profileNotes }) {
+  const checkpoints = [];
+  const simAttemptsPerSeason = [];
+  return {
+    passed: true,
+    severity: 'ok',
+    seasonsSimmed: 0,
+    checks: [],
+    warnings: [],
+    failures: [],
+    summary: baseSummary(),
+    checkpoints,
+    simAttemptsPerSeason,
+    timings: {
+      bootMs: 0,
+      phaseBreakdown: buildPhaseBreakdown([]),
+      topSlowCheckpoints: [],
+      totalMs: 0,
+    },
+    harnessConfig: {
+      ci: auditProfile === 'ci',
+      auditProfile,
+      phasePath,
+      deep: !!deep,
+      deepEachSeason: !!deepEachSeason,
+      phaseTimeoutMs,
+      maxRuntimeMs,
+      profileNotes,
+    },
+    auditProfile,
+    phasePath,
+    profileNotes,
+    seed,
+    smallerLeagueNote:
+      'Only 32-team safe starter leagues are supported for this harness. Smaller default leagues are deferred (playoff seeding and conference balance are coupled to 32 teams).',
+    persistenceAssertions: [],
+    exerciseMatrix: auditProfile === 'ci' ? buildCiExerciseMatrix(0) : buildFullExerciseMatrix(),
+  };
+}
+
+function finalizeAggregate(aggregate, t0, view, lastReportSummary = null) {
+  aggregate.severity = aggregate.failures.length ? 'error' : aggregate.warnings.length ? 'warn' : 'ok';
+  aggregate.runtimeMs = Date.now() - t0;
+  aggregate.finalPhase = view?.phase ?? null;
+  aggregate.finalYear = view?.year ?? null;
+  aggregate.reportSummary = lastReportSummary;
+  aggregate.timings.bootMs = aggregate.checkpoints.filter((c) => c.name.startsWith('boot.')).reduce((a, c) => a + c.ms, 0);
+  aggregate.timings.topSlowCheckpoints = topSlowCheckpoints(aggregate.checkpoints);
+  aggregate.timings.phaseBreakdown = buildPhaseBreakdown(aggregate.checkpoints);
+  aggregate.timings.totalMs = aggregate.runtimeMs;
+  aggregate.dynastySoakSimBatch = view?.dynastySoakSimBatch ?? null;
+  return aggregate;
+}
+
+function mergeViewWithPayload(currentView, msg, latestBroadcastView) {
+  if (latestBroadcastView && typeof latestBroadcastView === 'object') return latestBroadcastView;
+  return { ...(currentView ?? {}), ...(msg?.payload ?? {}) };
+}
+
+async function timedDispatch({ checkpoints, name, runnerDispatch, type, payload = {}, timeoutMs, meta = null }) {
+  const t = Date.now();
+  const msg = await runnerDispatch(type, payload, { timeoutMs });
+  pushCheckpoint(checkpoints, name, Date.now() - t, meta);
+  return msg;
+}
+
 /**
  * @typedef {object} DynastySoakRunnerOptions
  * @property {number} [seasons=5]
@@ -300,7 +416,7 @@ function checkMaxRuntime(t0, maxRuntimeMs) {
 /**
  * @param {DynastySoakRunnerOptions} opts
  */
-export async function runDynastySoakOnce(opts = {}) {
+async function runFullDynastySoakOnce(opts = {}) {
   const seasons = Math.max(1, Math.min(50, Number(opts.seasons) || 5));
   const seed = Number.isFinite(Number(opts.seed)) ? Number(opts.seed) : 1383;
   const ci = !!opts.ci;
@@ -351,6 +467,8 @@ export async function runDynastySoakOnce(opts = {}) {
     },
     harnessConfig: {
       ci,
+      auditProfile: 'full',
+      phasePath: 'full-season',
       deep,
       deepEachSeason,
       phaseTimeoutMs,
@@ -359,6 +477,10 @@ export async function runDynastySoakOnce(opts = {}) {
     smallerLeagueNote:
       'Only 32-team safe starter leagues are supported for this harness. Smaller default leagues are deferred (playoff seeding and conference balance are coupled to 32 teams).',
     persistenceAssertions: [],
+    auditProfile: 'full',
+    phasePath: 'full-season',
+    profileNotes: opts.profileNotes ?? ['Full profile preserves the legacy full-season SIM_TO_PHASE audit and may be slow.'],
+    exerciseMatrix: buildFullExerciseMatrix(),
   };
 
   globalThis.__dynastySoakBroadcast = opts.onBroadcast || null;
@@ -780,4 +902,258 @@ export async function runDynastySoakOnce(opts = {}) {
     globalThis.__DYNASTY_SOAK_PROFILE__ = false;
     globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
   }
+}
+
+async function runCiDynastySoakOnce(opts = {}) {
+  const seed = Number.isFinite(Number(opts.seed)) ? Number(opts.seed) : 1383;
+  const deep = !!opts.deep;
+  const deepEachSeason = !!opts.deepEachSeason;
+  const phaseTimeoutMs = Number.isFinite(Number(opts.phaseTimeoutMs))
+    ? Number(opts.phaseTimeoutMs)
+    : Number.isFinite(Number(opts.simTimeoutMs))
+      ? Number(opts.simTimeoutMs)
+      : 3_600_000;
+  const maxRuntimeMs =
+    opts.maxRuntimeMs === null || opts.maxRuntimeMs === undefined
+      ? null
+      : Number(opts.maxRuntimeMs);
+  const ciWeeks = Math.max(1, Math.min(2, Number(opts.ciWeeks) || 2));
+  const profileNotes = opts.profileNotes ?? [
+    'CI profile runs a short real-worker phase path and does not complete a season.',
+    'Use --audit-profile=full --seasons=1 for the full manual season audit.',
+  ];
+  const runnerDispatch = typeof opts.dispatchWorker === 'function' ? opts.dispatchWorker : dispatchWorker;
+  const runnerLoadWorkerModule = typeof opts.loadWorkerModule === 'function' ? opts.loadWorkerModule : loadWorkerModule;
+  const aggregate = createAggregate({
+    auditProfile: 'ci',
+    phasePath: 'short',
+    seed,
+    phaseTimeoutMs,
+    maxRuntimeMs,
+    deep,
+    deepEachSeason,
+    profileNotes,
+  });
+  const { checkpoints } = aggregate;
+  const t0 = Date.now();
+  let view = null;
+  let lastReportSummary = null;
+  let latestBroadcastView = null;
+  const upstreamBroadcast = opts.onBroadcast || null;
+
+  globalThis.__dynastySoakBroadcast = (msg) => {
+    if (msg?.type === toUI.STATE_UPDATE || msg?.type === toUI.FULL_STATE) {
+      latestBroadcastView = { ...(latestBroadcastView ?? view ?? {}), ...(msg.payload ?? {}) };
+    }
+    if (typeof upstreamBroadcast === 'function') upstreamBroadcast(msg);
+  };
+  globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = false;
+  globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__ = false;
+  globalThis.__DYNASTY_SOAK_PROFILE__ = true;
+  globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
+
+  try {
+    await runnerLoadWorkerModule();
+
+    await timedDispatch({
+      checkpoints,
+      name: 'boot.INIT',
+      runnerDispatch,
+      type: toWorker.INIT,
+      timeoutMs: Math.min(120_000, phaseTimeoutMs),
+    });
+    aggregate.exerciseMatrix.realWorkerBoot = { status: 'exercised' };
+    checkMaxRuntime(t0, maxRuntimeMs);
+
+    const bootMsg = await timedDispatch({
+      checkpoints,
+      name: 'boot.USE_SAFE_STARTER_LEAGUE',
+      runnerDispatch,
+      type: toWorker.USE_SAFE_STARTER_LEAGUE,
+      payload: {
+        slotKey: 'save_slot_1',
+        options: { rngSeed: seed, userTeamId: 0, name: `Dynasty Soak ${seed}` },
+      },
+      timeoutMs: Math.min(180_000, phaseTimeoutMs),
+    });
+    if (bootMsg.type === toUI.ERROR) throw new Error(bootMsg.payload?.message || 'USE_SAFE_STARTER_LEAGUE failed');
+    view = bootMsg.payload;
+    latestBroadcastView = view;
+    aggregate.exerciseMatrix.safeStarterLeague = { status: 'exercised' };
+    checkMaxRuntime(t0, maxRuntimeMs);
+
+    if (String(view?.phase ?? '') === 'preseason') {
+      latestBroadcastView = null;
+      const msg = await timedDispatch({
+        checkpoints,
+        name: 'ci.ADVANCE_WEEK.preseason_to_regular',
+        runnerDispatch,
+        type: toWorker.ADVANCE_WEEK,
+        payload: { skipUserGame: true },
+        timeoutMs: phaseTimeoutMs,
+        meta: { purpose: 'leave_preseason' },
+      });
+      if (msg.type === toUI.ERROR) throw new Error(msg.payload?.message || 'ADVANCE_WEEK failed leaving preseason');
+      view = mergeViewWithPayload(view, msg, latestBroadcastView);
+      aggregate.exerciseMatrix.preseasonAdvance = {
+        status: String(view?.phase ?? '') === 'regular' ? 'exercised' : 'warning',
+        detail: `phase=${view?.phase ?? 'unknown'}`,
+      };
+    } else {
+      aggregate.exerciseMatrix.preseasonAdvance = {
+        status: 'not_needed',
+        detail: `Starter league began in phase ${view?.phase ?? 'unknown'}`,
+      };
+    }
+    checkMaxRuntime(t0, maxRuntimeMs);
+
+    let regularWeeksSimmed = 0;
+    for (let i = 0; i < ciWeeks; i += 1) {
+      if (String(view?.phase ?? '') !== 'regular') break;
+      const weekBefore = Number(view?.currentWeek ?? 0);
+      latestBroadcastView = null;
+      const msg = await timedDispatch({
+        checkpoints,
+        name: `ci.ADVANCE_WEEK.regular_${i + 1}`,
+        runnerDispatch,
+        type: toWorker.ADVANCE_WEEK,
+        payload: { skipUserGame: true },
+        timeoutMs: phaseTimeoutMs,
+        meta: { weekBefore },
+      });
+      if (msg.type === toUI.ERROR) throw new Error(msg.payload?.message || `ADVANCE_WEEK failed in CI regular week ${i + 1}`);
+      view = mergeViewWithPayload(view, msg, latestBroadcastView);
+      regularWeeksSimmed += 1;
+      aggregate.exerciseMatrix.regularWeeks = { status: 'exercised', count: regularWeeksSimmed };
+      checkMaxRuntime(t0, maxRuntimeMs);
+    }
+
+    if (regularWeeksSimmed === 0) {
+      aggregate.passed = false;
+      aggregate.failures.push({ code: 'ci_no_regular_weeks', message: 'CI profile did not simulate any real regular-season weeks.' });
+      aggregate.exerciseMatrix.regularWeeks = { status: 'failed', count: 0 };
+    }
+
+    const saveMsg = await timedDispatch({
+      checkpoints,
+      name: 'ci.SAVE_NOW',
+      runnerDispatch,
+      type: toWorker.SAVE_NOW,
+      timeoutMs: Math.min(120_000, phaseTimeoutMs),
+    });
+    const saveNowOk = probeHandlerSucceeded(saveMsg);
+    aggregate.exerciseMatrix.persistenceFlush = saveNowOk
+      ? { status: 'exercised' }
+      : { status: 'failed', reason: saveMsg.payload?.message || 'SAVE_NOW failed' };
+    checkMaxRuntime(t0, maxRuntimeMs);
+
+    const allSeasonsMsg = await timedDispatch({
+      checkpoints,
+      name: 'ci.GET_ALL_SEASONS',
+      runnerDispatch,
+      type: toWorker.GET_ALL_SEASONS,
+      timeoutMs: phaseTimeoutMs,
+    });
+    const txMsg = await timedDispatch({
+      checkpoints,
+      name: 'ci.GET_TRANSACTIONS_recent',
+      runnerDispatch,
+      type: toWorker.GET_TRANSACTIONS,
+      payload: { mode: 'recent', limit: 100 },
+      timeoutMs: phaseTimeoutMs,
+    });
+    const recordsMsg = await timedDispatch({
+      checkpoints,
+      name: 'ci.GET_RECORDS',
+      runnerDispatch,
+      type: toWorker.GET_RECORDS,
+      timeoutMs: phaseTimeoutMs,
+    });
+    const hofMsg = await timedDispatch({
+      checkpoints,
+      name: 'ci.GET_HALL_OF_FAME',
+      runnerDispatch,
+      type: toWorker.GET_HALL_OF_FAME,
+      timeoutMs: phaseTimeoutMs,
+    });
+    aggregate.exerciseMatrix.workerProbes = { status: 'exercised_partial', detail: 'GET_ALL_SEASONS, GET_TRANSACTIONS recent, GET_RECORDS, GET_HALL_OF_FAME' };
+
+    const skippedProbeReasons = {
+      latest_season_archive: 'CI profile does not complete a season or create a completed-season archive',
+      get_all_seasons_latest: 'CI profile has no completed season archive to find in GET_ALL_SEASONS',
+      get_transactions_by_season: 'CI profile has no completed season archive for a season-scoped transaction query',
+      player_season_stats_v1: 'CI profile does not create a completed-season player stats archive',
+      transaction_timeline_v1: 'CI profile does not create a completed-season transaction timeline archive',
+      get_season_history: 'CI profile has no completed season history to query',
+      get_draft_classes: 'CI profile does not enter draft, so draft classes are not expected',
+    };
+
+    const audit = runDynastySoakAudit({
+      viewState: view,
+      seasonIndex: 0,
+      allSeasons: allSeasonsMsg.payload?.seasons ?? null,
+      seasonHistory: null,
+      transactions: txMsg.payload?.transactions ?? [],
+      recordsPayload: recordsMsg.payload ?? null,
+      hofPayload: hofMsg.payload ?? null,
+      draftClassesPayload: null,
+    });
+    pushCheckpoint(checkpoints, 'ci.runDynastySoakAudit', 0, null);
+    lastReportSummary = audit.reportSummary ?? null;
+    mergeAudit(aggregate, audit, 'CI');
+
+    const pers = buildPersistenceAssertions({
+      auditProfile: 'ci',
+      viewState: view,
+      allSeasons: allSeasonsMsg.payload?.seasons ?? null,
+      allSeasonsProbeOk: probeHandlerSucceeded(allSeasonsMsg),
+      transactionsRecent: txMsg.payload?.transactions ?? [],
+      expectArchive: false,
+      expectTransactions: false,
+      transactionsRecentProbeOk: probeHandlerSucceeded(txMsg),
+      transactionsRecentHasExpectedData: payloadArrayHasRows(txMsg.payload, 'transactions'),
+      expectStatRows: false,
+      expectTimelineRows: false,
+      seasonTxQuerySkipped: true,
+      getSeasonHistorySkipped: true,
+      recordsProbeOk: probeHandlerSucceeded(recordsMsg) && !!(recordsMsg.payload?.recordBook || recordsMsg.payload?.records),
+      recordsProbeSkipped: false,
+      hofProbeOk: probeHandlerSucceeded(hofMsg) && (!hofMsg.payload || Array.isArray(hofMsg.payload?.players)),
+      hofProbeSkipped: false,
+      draftClassesProbeSkipped: true,
+      expectDraftClasses: false,
+      draftClassCount: 0,
+      saveNowOk,
+      skippedProbeReasons,
+    });
+    aggregate.persistenceAssertions = pers.assertions;
+    if (!pers.allOk) {
+      aggregate.passed = false;
+      aggregate.failures.push({
+        code: 'persistence_probe_failed',
+        message: 'One or more CI persistence/probe assertions failed; see persistenceAssertions in latest.json',
+      });
+    }
+
+    return finalizeAggregate(aggregate, t0, view, lastReportSummary);
+  } catch (e) {
+    aggregate.passed = false;
+    aggregate.failures.push({ code: e?.code || 'runner_fatal', message: e?.message || String(e) });
+    return finalizeAggregate(aggregate, t0, view, lastReportSummary);
+  } finally {
+    globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = false;
+    globalThis.__DYNASTY_SOAK_THROTTLE_PERSIST__ = false;
+    globalThis.__DYNASTY_SOAK_PROFILE__ = false;
+    globalThis.__DYNASTY_SOAK_LAST_BATCH__ = undefined;
+    globalThis.__dynastySoakBroadcast = null;
+  }
+}
+
+/**
+ * @param {DynastySoakRunnerOptions} opts
+ */
+export async function runDynastySoakOnce(opts = {}) {
+  const auditProfile = String(opts.auditProfile ?? (opts.ci ? 'ci' : 'full')).toLowerCase();
+  if (auditProfile === 'ci') return runCiDynastySoakOnce({ ...opts, ci: true, auditProfile: 'ci' });
+  return runFullDynastySoakOnce({ ...opts, ci: false, auditProfile: 'full' });
 }

@@ -37,7 +37,7 @@ async function main() {
   const { runDynastySoakOnce } = await import('../src/testSupport/dynastySoakRunner.js');
 
   console.log(
-    `[dynasty-soak] seed=${resolved.seed} seasons=${resolved.seasons}${resolved.ci ? ' (ci)' : ''} deep=${resolved.deep} deepEachSeason=${resolved.deepEachSeason}`,
+    `[dynasty-soak] profile=${resolved.auditProfile} seed=${resolved.seed} seasons=${resolved.seasons}${resolved.ci ? ' (ci short path)' : ''} deep=${resolved.deep} deepEachSeason=${resolved.deepEachSeason}`,
   );
   const result = await runDynastySoakOnce(resolved);
 

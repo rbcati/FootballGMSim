@@ -19,6 +19,7 @@ describe('dynastySoakCli', () => {
     ]);
     expect(errors).toEqual([]);
     expect(raw.ci).toBe(true);
+    expect(raw.auditProfile).toBe('ci');
     expect(raw.seasons).toBe(2);
     expect(raw.seed).toBe(99);
     expect(raw.deep).toBe(true);
@@ -74,9 +75,32 @@ describe('dynastySoakCli', () => {
     const { errors, resolved } = resolveDynastySoakConfig(raw);
     expect(errors).toEqual([]);
     expect(resolved.seasons).toBe(1);
+    expect(resolved.auditProfile).toBe('ci');
+    expect(resolved.phasePath).toBe('short');
     expect(resolved.ci).toBe(true);
     expect(resolved.phaseTimeoutMs).toBe(3_600_000);
     expect(resolved.maxRuntimeMs).toBeNull();
+  });
+
+  it('resolves explicit audit profiles', () => {
+    const ciParsed = parseDynastySoakArgv(['node', 'x.mjs', '--audit-profile=ci', '--seasons=9']);
+    const ciResolved = resolveDynastySoakConfig(ciParsed.raw).resolved;
+    expect(ciResolved.auditProfile).toBe('ci');
+    expect(ciResolved.seasons).toBe(1);
+    expect(ciResolved.requestedSeasons).toBe(9);
+
+    const fullParsed = parseDynastySoakArgv(['node', 'x.mjs', '--audit-profile=full', '--seasons=1']);
+    const fullResolved = resolveDynastySoakConfig(fullParsed.raw).resolved;
+    expect(fullResolved.auditProfile).toBe('full');
+    expect(fullResolved.phasePath).toBe('full-season');
+    expect(fullResolved.seasons).toBe(1);
+  });
+
+  it('rejects invalid audit profiles', () => {
+    const { raw } = parseDynastySoakArgv(['node', 'x.mjs', '--audit-profile=turbo']);
+    const { errors, resolved } = resolveDynastySoakConfig(raw);
+    expect(resolved).toBeNull();
+    expect(errors.some((e) => e.includes('audit profile'))).toBe(true);
   });
 
   it('defaults to 5 seasons when not CI', () => {
@@ -105,7 +129,16 @@ describe('dynastySoakCli', () => {
       warnings: [],
       finalPhase: 'preseason',
       finalYear: 2027,
-      harnessConfig: { ci: true, deep: true, deepEachSeason: false },
+      auditProfile: 'ci',
+      phasePath: 'short',
+      profileNotes: ['CI profile runs a short real-worker phase path and does not complete a season.'],
+      harnessConfig: { ci: true, auditProfile: 'ci', phasePath: 'short', deep: true, deepEachSeason: false },
+      exerciseMatrix: {
+        realWorkerBoot: { status: 'exercised' },
+        regularWeeks: { status: 'exercised', count: 2 },
+        playoffs: { status: 'skipped', reason: 'CI profile does not complete a full season' },
+        draft: { status: 'skipped', reason: 'CI profile does not enter draft' },
+      },
       timings: {
         phaseBreakdown: {
           boot: { ms: 5, count: 1 },
@@ -138,7 +171,11 @@ describe('dynastySoakCli', () => {
       },
       persistenceAssertions: [{ id: 'latest_season_archive', ok: true, detail: 'ok' }],
     });
-    expect(md).toContain('- **Harness:** ci=true deep=true deepEachSeason=false');
+    expect(md).toContain('profile=ci');
+    expect(md).toContain('Audit profile');
+    expect(md).toContain('What was exercised');
+    expect(md).toContain('What was skipped');
+    expect(md).toContain('Short real-worker smoke audit');
     expect(md).toContain('Phase timing breakdown');
     expect(md).toContain('GET probes');
     expect(md).toContain('| Simulation | 80 | 1 |');
