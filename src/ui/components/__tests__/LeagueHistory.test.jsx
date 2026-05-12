@@ -1,10 +1,13 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import LeagueHistory from '../LeagueHistory.jsx';
 
 describe('LeagueHistory', () => {
+  afterEach(() => {
+    cleanup();
+  });
   it('opens the selected archived season and handles missing championship data safely', async () => {
     render(
       <LeagueHistory
@@ -157,6 +160,44 @@ describe('LeagueHistory', () => {
       expect(screen.getByTestId('league-history-top-performers-s9')).toBeTruthy();
       expect(screen.getByTestId('league-history-top-performers-s9').textContent).toMatch(/Air/);
       expect(screen.getByTestId('league-history-top-performers-s9').textContent).toMatch(/4,?800/);
+    });
+  });
+
+  it('filters season archive sidebar and restores full list when cleared', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        initialSelectedSeasonId="s1"
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                { id: 's1', year: 2030, champion: { abbr: 'DAL' }, standings: [], awards: {} },
+                { id: 's2', year: 2031, champion: { abbr: 'NYG' }, standings: [], awards: {} },
+              ],
+            },
+          }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('league-history-season-archive-browser')).toBeTruthy();
+    });
+    const archiveBrowser = screen.getByTestId('league-history-season-archive-browser');
+    fireEvent.change(archiveBrowser.querySelector('input[type="search"]'), { target: { value: '2031' } });
+    await waitFor(() => {
+      expect(archiveBrowser.textContent).toMatch(/Showing 1 of 2 seasons/);
+    });
+
+    fireEvent.change(archiveBrowser.querySelector('input[type="search"]'), { target: { value: '' } });
+    await waitFor(() => {
+      expect(archiveBrowser.textContent).toMatch(/Showing 2 of 2 seasons/);
     });
   });
 

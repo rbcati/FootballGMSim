@@ -31,6 +31,7 @@ import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { getPlayerGameLogs } from "../utils/playerGameLogs.js";
 import { buildMergedPlayerAwardTimeline, buildPlayerAwardHeaderBadges } from "../../core/playerAwardTimeline.js";
 import { buildPlayerRecordContext, mergePlayerProfileSeasonRows } from "../../core/recordBookV1.js";
+import { buildShowingLabel, rowMatchesSearch, stableSortRows } from "../utils/dataBrowser.js";
 import { buildLegacyScoreReport, shouldShowLegacyProfileSection } from "../../core/legacyScore.js";
 import { buildPlayerDevelopmentModel } from "../../core/playerDevelopmentModel.js";
 import { buildProspectScoutingReport } from "../../core/scoutingModel.js";
@@ -420,6 +421,10 @@ export default function PlayerProfile({
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
   const [draftContext, setDraftContext] = useState(null);
+  const [seasonLogQuery, setSeasonLogQuery] = useState('');
+  const [seasonLogTeamFilter, setSeasonLogTeamFilter] = useState('');
+  const [seasonLogSortKey, setSeasonLogSortKey] = useState('season');
+  const [seasonLogSortDir, setSeasonLogSortDir] = useState('desc');
   const requestKey = useMemo(() => buildRouteRequestKey("player", playerId), [playerId]);
   const cacheScopeKey = useMemo(() => buildLeagueCacheScopeKey(league), [league]);
   const fetchProfileData = React.useCallback(async () => {
@@ -647,6 +652,45 @@ export default function PlayerProfile({
   const mergedProfileSeasonRows = useMemo(
     () => mergePlayerProfileSeasonRows(effectivePlayer, archivedSeasons),
     [effectivePlayer, archivedSeasons],
+  );
+
+  const displaySeasonLogRows = useMemo(() => {
+    const rows = mergedProfileSeasonRows ?? [];
+    const posU = String(player?.pos ?? player?.position ?? '').toUpperCase();
+    let out = rows;
+    if (seasonLogTeamFilter) out = out.filter((r) => String(r.team ?? '') === seasonLogTeamFilter);
+    out = out.filter((r) =>
+      rowMatchesSearch(r, seasonLogQuery, ['season', 'team', (x) => String(x.year ?? '')]),
+    );
+    const keyStatGetter = (line) => {
+      if (posU === 'QB') return Number(line.passYds ?? 0);
+      if (['RB', 'FB'].includes(posU)) return Number(line.rushYds ?? 0);
+      if (['WR', 'TE'].includes(posU)) return Number(line.recYds ?? 0);
+      if (['DE', 'DT', 'LB', 'CB', 'S', 'DL', 'EDGE'].includes(posU)) {
+        return Number(line.tackles ?? 0) + Number(line.sacks ?? 0) * 12 + Number(line.defInts ?? line.defInterceptions ?? 0) * 8;
+      }
+      if (posU === 'K') return Number(line.fgMade ?? 0);
+      return Number(line.gamesPlayed ?? line.gp ?? 0);
+    };
+    if (seasonLogSortKey === 'season') {
+      return stableSortRows(out, (l) => String(l.season ?? ''), seasonLogSortDir, (l) => String(l.team ?? ''));
+    }
+    if (seasonLogSortKey === 'team') {
+      return stableSortRows(out, (l) => String(l.team ?? ''), seasonLogSortDir, (l) => String(l.season ?? ''));
+    }
+    if (seasonLogSortKey === 'games') {
+      return stableSortRows(out, (l) => Number(l.gamesPlayed ?? l.gp ?? 0), seasonLogSortDir, (l) => String(l.season ?? ''));
+    }
+    if (seasonLogSortKey === 'keyStat') {
+      return stableSortRows(out, keyStatGetter, seasonLogSortDir, (l) => String(l.season ?? ''));
+    }
+    return stableSortRows(out, (l) => String(l.season ?? ''), 'desc', (l) => String(l.team ?? ''));
+  }, [mergedProfileSeasonRows, seasonLogQuery, seasonLogTeamFilter, seasonLogSortKey, seasonLogSortDir, player?.pos, player?.position]);
+
+  const seasonLogShowingLabel = buildShowingLabel(
+    displaySeasonLogRows.length,
+    (mergedProfileSeasonRows ?? []).length,
+    'season',
   );
   const teamJourney = [...new Set(mergedProfileSeasonRows.map((line) => line.team).filter(Boolean))];
   const careerArcRows = useMemo(() => {
@@ -1916,7 +1960,7 @@ export default function PlayerProfile({
 
           {/* ── Per-season career log (player.careerStats + archived playerSeasonStatsV1) ── */}
           {!loading && mergedProfileSeasonRows.length > 0 && (
-            <section className="card-enter">
+            <section className="card-enter" data-testid="player-profile-season-log-browser">
               <h3
                 style={{
                   fontSize: "var(--text-sm)",
@@ -1930,13 +1974,119 @@ export default function PlayerProfile({
               >
                 Season Log
               </h3>
-              <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  marginBottom: 10,
+                  alignItems: "center",
+                }}
+              >
+                <input
+                  type="search"
+                  value={seasonLogQuery}
+                  onChange={(e) => setSeasonLogQuery(e.target.value)}
+                  placeholder="Search season, team…"
+                  aria-label="Search season log"
+                  style={{
+                    flex: "1 1 140px",
+                    minWidth: 0,
+                    maxWidth: "100%",
+                    padding: "6px 10px",
+                    borderRadius: 8,
+                    border: "1px solid var(--hairline)",
+                    background: "var(--surface)",
+                    color: "var(--text)",
+                    fontSize: "0.8rem",
+                  }}
+                />
+                {teamJourney.length > 1 ? (
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                    Team
+                    <select
+                      value={seasonLogTeamFilter}
+                      onChange={(e) => setSeasonLogTeamFilter(e.target.value)}
+                      style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface)", color: "var(--text)", fontSize: "0.75rem", maxWidth: 120 }}
+                    >
+                      <option value="">All</option>
+                      {teamJourney.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                  Sort
+                  <select
+                    value={seasonLogSortKey}
+                    onChange={(e) => setSeasonLogSortKey(e.target.value)}
+                    style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface)", color: "var(--text)", fontSize: "0.75rem" }}
+                  >
+                    <option value="season">Season</option>
+                    <option value="team">Team</option>
+                    <option value="games">Games</option>
+                    <option value="keyStat">Primary stat (pos)</option>
+                  </select>
+                </label>
+                <button type="button" className="btn btn-sm" onClick={() => setSeasonLogSortDir((d) => (d === "asc" ? "desc" : "asc"))}>
+                  {seasonLogSortDir === "asc" ? "Asc ↑" : "Desc ↓"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setSeasonLogQuery("");
+                    setSeasonLogTeamFilter("");
+                    setSeasonLogSortKey("season");
+                    setSeasonLogSortDir("desc");
+                  }}
+                >
+                  Reset
+                </button>
+              </div>
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 8 }}>{seasonLogShowingLabel}</div>
+              {careerTotals.gamesPlayed > 0 ? (
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 10, lineHeight: 1.4 }}>
+                  <span style={{ fontWeight: 700, color: "var(--text)" }}>Log career totals</span>
+                  {" · "}
+                  GP {careerTotals.gamesPlayed}
+                  {["QB"].includes(player.pos) ? ` · ${careerTotals.passYds.toLocaleString()} pass yd · ${careerTotals.passTDs} pass TD` : null}
+                  {["RB", "FB"].includes(player.pos) ? ` · ${careerTotals.rushYds.toLocaleString()} rush yd` : null}
+                  {["WR", "TE"].includes(player.pos) ? ` · ${careerTotals.recYds.toLocaleString()} rec yd` : null}
+                  {["DE", "DT", "LB", "CB", "S", "DL", "EDGE"].includes(player.pos) ? ` · ${careerTotals.tackles} tkl · ${careerTotals.sacks} sk` : null}
+                </div>
+              ) : null}
+              {displaySeasonLogRows.length === 0 ? (
+                <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>No seasons match these filters. Reset to see the full log.</p>
+              ) : (
+                <>
+                  <div className="table-wrapper md:hidden" style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+                    {displaySeasonLogRows.map((line, i) => (
+                      <div
+                        key={`card-${String(line.season)}-${line.team}-${i}`}
+                        style={{
+                          border: "1px solid var(--hairline)",
+                          borderRadius: 8,
+                          padding: "8px 10px",
+                          fontSize: "0.78rem",
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, display: "flex", justifyContent: "space-between", gap: 8 }}>
+                          <span>{line.season}</span>
+                          <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{line.team}</span>
+                        </div>
+                        <div style={{ color: "var(--text-muted)", marginTop: 4 }}>GP {line.gamesPlayed ?? "—"} · OVR {line.ovr ?? "—"}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="table-wrapper hidden md:block" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
                 <Table
                   className="standings-table"
                   style={{
                     width: "100%",
                     fontVariantNumeric: "tabular-nums",
-                    minWidth: 480,
+                    minWidth: 320,
                     fontSize: "0.76rem",
                   }}
                 >
@@ -1995,8 +2145,8 @@ export default function PlayerProfile({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {[...mergedProfileSeasonRows].reverse().map((line, i) => (
-                      <TableRow key={i}>
+                    {displaySeasonLogRows.map((line, i) => (
+                      <TableRow key={`${String(line.season)}-${line.team}-${i}`}>
                         <TableCell
                           style={{
                             paddingLeft: "var(--space-4)",
@@ -2101,6 +2251,8 @@ export default function PlayerProfile({
                   </TableBody>
                 </Table>
               </div>
+                </>
+              )}
             </section>
           )}
           {!loading && mergedProfileSeasonRows.length === 0 && !isProspect && (
