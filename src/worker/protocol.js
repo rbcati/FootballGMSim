@@ -23,6 +23,7 @@ export const toWorker = Object.freeze({
   INIT:               'INIT',
   NEW_LEAGUE:         'NEW_LEAGUE',
   USE_SAFE_STARTER_LEAGUE: 'USE_SAFE_STARTER_LEAGUE',
+  RUN_DYNASTY_AUDIT_CHECKPOINT: 'RUN_DYNASTY_AUDIT_CHECKPOINT', // audit harness only; never used by normal UI
   RELOCATE_TEAM:      'RELOCATE_TEAM',
 
   /** Regular-season flow */
@@ -202,6 +203,7 @@ export const toUI = Object.freeze({
   SEASON_HISTORY:     'SEASON_HISTORY',       // { seasonId, data }
   PLAYER_CAREER:      'PLAYER_CAREER',        // { playerId, data }
   ALL_SEASONS:        'ALL_SEASONS',          // { seasons[] }
+  DYNASTY_AUDIT_CHECKPOINT: 'DYNASTY_AUDIT_CHECKPOINT', // { ok, auditOnly, archiveType, completedSeason, ... }
   GAME_LOG:           'GAME_LOG',             // { games[] }
   ALL_SAVES:          'ALL_SAVES',            // { saves[] }
 
