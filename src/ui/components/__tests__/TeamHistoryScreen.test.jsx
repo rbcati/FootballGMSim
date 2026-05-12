@@ -110,33 +110,30 @@ describe('TeamHistoryScreen', () => {
     expect(String(arg)).toMatch(/2055/);
   });
 
-  it('filters, sorts, and resets season timeline rows', async () => {
+  it('supports timeline search, numeric sort, showing counts, and reset filters', async () => {
     render(
       <TeamHistoryScreen
-        league={{ teams: [{ id: 7, name: 'Seattle', abbr: 'SEA' }], userTeamId: 7 }}
+        league={{ teams: [{ id: 1, name: 'Dallas', abbr: 'DAL' }], userTeamId: 1 }}
         actions={{
           getAllSeasons: vi.fn().mockResolvedValue({
             payload: {
               seasons: [
                 {
                   year: 2030,
-                  standings: [
-                    { id: 7, abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 420, pa: 300 },
-                    { id: 9, abbr: 'RIV', wins: 8, losses: 9, ties: 0, pf: 320, pa: 360 },
-                  ],
-                  champion: { id: 7, abbr: 'SEA' },
-                  runnerUp: { id: 9, abbr: 'RIV' },
-                  playoffBracketSnapshot: { mode: 'empty', rounds: [] },
+                  standings: [{ id: 1, name: 'Dallas', abbr: 'DAL', wins: 12, losses: 5, ties: 0, pf: 420, pa: 310 }],
+                  champion: { id: 1, abbr: 'DAL' },
+                  awards: { mvp: { playerId: 7, name: 'Title QB' } },
                 },
                 {
                   year: 2031,
-                  standings: [
-                    { id: 7, abbr: 'SEA', wins: 8, losses: 9, ties: 0, pf: 300, pa: 330 },
-                    { id: 5, abbr: 'BOS', wins: 11, losses: 6, ties: 0, pf: 390, pa: 310 },
-                  ],
-                  champion: { id: 5, abbr: 'BOS' },
-                  runnerUp: { id: 7, abbr: 'SEA' },
-                  playoffBracketSnapshot: { mode: 'empty', rounds: [] },
+                  standings: [{ id: 1, name: 'Dallas', abbr: 'DAL', wins: 9, losses: 8, ties: 0, pf: 360, pa: 340 }],
+                  runnerUp: { id: 2, abbr: 'PHI' },
+                  awards: { mvp: { playerId: 9, name: 'Ace Star' } },
+                },
+                {
+                  year: 2032,
+                  standings: [{ id: 1, name: 'Dallas', abbr: 'DAL', wins: 4, losses: 13, ties: 0, pf: 260, pa: 410 }],
+                  awards: {},
                 },
               ],
             },
@@ -152,22 +149,29 @@ describe('TeamHistoryScreen', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('team-history-timeline-showing').textContent).toContain('Showing 2 of 2 seasons');
+      expect(screen.getByTestId('team-history-timeline-count').textContent).toContain('Showing 3 of 3 seasons');
     });
 
-    fireEvent.change(screen.getByLabelText('Sort team history seasons'), { target: { value: 'wins' } });
-    const sortedRows = screen.getAllByTestId(/team-history-season-row-/i);
-    expect(sortedRows[0].textContent).toContain('2030');
+    fireEvent.change(screen.getByLabelText(/Sort team history seasons/i), { target: { value: 'wins' } });
+    let seasonCards = screen.getAllByTestId(/team-history-season-/);
+    expect(seasonCards[0].textContent).toContain('2030');
 
-    fireEvent.change(screen.getByLabelText('Search team history seasons'), { target: { value: 'champion' } });
+    fireEvent.click(screen.getByLabelText(/Toggle team history season sort direction/i));
     await waitFor(() => {
-      expect(screen.getByTestId('team-history-timeline-showing').textContent).toContain('Showing 1 of 2 seasons');
+      seasonCards = screen.getAllByTestId(/team-history-season-/);
+      expect(seasonCards[0].textContent).toContain('2032');
     });
-    expect(screen.getByTestId('team-history-season-row-2030')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+    fireEvent.change(screen.getByLabelText(/Search team history seasons/i), { target: { value: 'Ace Star' } });
     await waitFor(() => {
-      expect(screen.getByTestId('team-history-timeline-showing').textContent).toContain('Showing 2 of 2 seasons');
+      expect(screen.getByTestId('team-history-timeline-count').textContent).toContain('Showing 1 of 3 seasons');
+    });
+    expect(screen.getByTestId('team-history-season-2031')).toBeTruthy();
+    expect(screen.queryByTestId('team-history-season-2030')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-timeline-count').textContent).toContain('Showing 3 of 3 seasons');
     });
   });
 });

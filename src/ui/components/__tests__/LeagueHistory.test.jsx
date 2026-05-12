@@ -5,7 +5,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import LeagueHistory from '../LeagueHistory.jsx';
 
 describe('LeagueHistory', () => {
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+  });
 
   it('opens the selected archived season and handles missing championship data safely', async () => {
     render(
@@ -119,7 +121,8 @@ describe('LeagueHistory', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/2030 League Snapshot/i)).toBeTruthy();
+      expect(screen.getByTestId('league-season-button-s1')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Previous season/i }).hasAttribute('disabled')).toBe(true);
     });
   });
 
@@ -200,19 +203,37 @@ describe('LeagueHistory', () => {
     });
   });
 
-  it('filters and resets archived season list controls', async () => {
+  it('supports season archive search, champion filtering, and reset controls', async () => {
     render(
       <LeagueHistory
         league={{ userTeamId: 1 }}
-        initialSelectedSeasonId="s2"
         onPlayerSelect={vi.fn()}
         onOpenBoxScore={vi.fn()}
         actions={{
           getAllSeasons: vi.fn().mockResolvedValue({
             payload: {
               seasons: [
-                { id: 's1', year: 2030, champion: { abbr: 'DAL' }, standings: [], awards: { mvp: { name: 'Alpha QB' } } },
-                { id: 's2', year: 2031, champion: { abbr: 'NYG' }, standings: [], awards: { mvp: { name: 'Bravo QB' } } },
+                {
+                  id: 's1',
+                  year: 2030,
+                  champion: { id: 1, name: 'Dallas', abbr: 'DAL' },
+                  standings: [{ id: 1, name: 'Dallas', abbr: 'DAL', wins: 12, losses: 5 }],
+                  awards: { mvp: { playerId: 1, name: 'Title QB' } },
+                },
+                {
+                  id: 's2',
+                  year: 2031,
+                  champion: { id: 2, name: 'New York', abbr: 'NYG' },
+                  standings: [{ id: 1, name: 'Dallas', abbr: 'DAL', wins: 10, losses: 7 }],
+                  awards: { mvp: { playerId: 2, name: 'Apex RB' } },
+                },
+                {
+                  id: 's3',
+                  year: 2032,
+                  champion: { id: 3, name: 'Philadelphia', abbr: 'PHI' },
+                  standings: [{ id: 3, name: 'Philadelphia', abbr: 'PHI', wins: 11, losses: 6 }],
+                  awards: { mvp: { playerId: 3, name: 'Edge Star' } },
+                },
               ],
             },
           }),
@@ -224,26 +245,31 @@ describe('LeagueHistory', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('league-history-season-showing').textContent).toContain('Showing 2 of 2 seasons');
+      expect(screen.getByTestId('league-season-archive-count').textContent).toContain('Showing 3 of 3 seasons');
     });
 
-    fireEvent.change(screen.getByLabelText('Search archived seasons'), { target: { value: 'nyg' } });
+    fireEvent.change(screen.getByLabelText(/Search league history seasons/i), { target: { value: 'Dallas' } });
     await waitFor(() => {
-      expect(screen.getByTestId('league-history-season-showing').textContent).toContain('Showing 1 of 2 seasons');
+      expect(screen.getByTestId('league-season-archive-count').textContent).toContain('Showing 2 of 3 seasons');
     });
-    expect(screen.getByTestId('league-history-season-list-item-s2')).toBeTruthy();
 
-    fireEvent.click(screen.getByLabelText('Reset archived season filters'));
+    fireEvent.change(screen.getByLabelText(/Filter league history seasons by champion/i), { target: { value: 'NYG' } });
     await waitFor(() => {
-      expect(screen.getByTestId('league-history-season-showing').textContent).toContain('Showing 2 of 2 seasons');
+      expect(screen.getByTestId('league-season-archive-count').textContent).toContain('Showing 1 of 3 seasons');
+    });
+    expect(screen.getByTestId('league-season-button-s2')).toBeTruthy();
+    expect(screen.queryByTestId('league-season-button-s1')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('league-season-archive-count').textContent).toContain('Showing 3 of 3 seasons');
     });
   });
 
-  it('filters league office transactions by type and search', async () => {
+  it('supports search, type filters, sort direction, and counts in league office history', async () => {
     render(
       <LeagueHistory
         league={{ userTeamId: 1 }}
-        initialActiveTab="office"
         onPlayerSelect={vi.fn()}
         onOpenBoxScore={vi.fn()}
         actions={{
@@ -253,8 +279,9 @@ describe('LeagueHistory', () => {
           getTransactions: vi.fn().mockResolvedValue({
             payload: {
               transactions: [
-                { id: 'tx1', seasonId: 's1', week: 3, type: 'trade', typeLabel: 'Trade', playerName: 'Player One', fromTeamAbbr: 'DAL', toTeamAbbr: 'NYG' },
-                { id: 'tx2', seasonId: 's1', week: 4, type: 'signing', typeLabel: 'Signing', playerName: 'Player Two', teamAbbr: 'DAL' },
+                { id: 1, seasonId: 2032, week: 3, type: 'signing', typeLabel: 'Signing', teamAbbr: 'DAL', playerId: 10, playerName: 'Miles Carter' },
+                { id: 2, seasonId: 2033, week: 5, type: 'trade', typeLabel: 'Trade', fromTeamAbbr: 'DAL', toTeamAbbr: 'PHI', playerId: 11, playerName: 'Kane Moss' },
+                { id: 3, seasonId: 2034, week: 1, type: 'release', typeLabel: 'Release', teamAbbr: 'NYG', playerId: 12, playerName: 'Duke Lane' },
               ],
             },
           }),
@@ -262,18 +289,36 @@ describe('LeagueHistory', () => {
       />,
     );
 
+    const officeTab = await screen.findByRole('tab', { name: /League Office/i });
+    fireEvent.mouseDown(officeTab);
+    fireEvent.click(officeTab);
     await waitFor(() => {
-      expect(screen.getByTestId('league-office-showing').textContent).toContain('Showing 2 of 2 transactions');
+      expect(screen.getByTestId('league-office-count').textContent).toContain('Showing 3 of 3 transactions');
     });
 
-    fireEvent.change(screen.getByLabelText('Filter league transactions by type'), { target: { value: 'Trade' } });
+    fireEvent.change(screen.getByLabelText(/Search league office transactions/i), { target: { value: 'Miles' } });
     await waitFor(() => {
-      expect(screen.getByTestId('league-office-showing').textContent).toContain('Showing 1 of 2 transactions');
+      expect(screen.getByTestId('league-office-count').textContent).toContain('Showing 1 of 3 transactions');
     });
 
-    fireEvent.change(screen.getByLabelText('Search league transactions'), { target: { value: 'missing player' } });
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
     await waitFor(() => {
-      expect(screen.getByTestId('league-office-showing').textContent).toContain('Showing 0 of 2 transactions');
+      expect(screen.getByTestId('league-office-count').textContent).toContain('Showing 3 of 3 transactions');
+    });
+
+    fireEvent.change(screen.getByLabelText(/Filter league office transactions by type/i), { target: { value: 'Trade' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('league-office-count').textContent).toContain('Showing 1 of 3 transactions');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('league-office-count').textContent).toContain('Showing 3 of 3 transactions');
+    });
+
+    fireEvent.change(screen.getByLabelText(/Sort league office transactions/i), { target: { value: 'asc' } });
+    await waitFor(() => {
+      expect(screen.getAllByTestId(/league-office-row-/)[0].textContent).toContain('2032');
     });
   });
 });
