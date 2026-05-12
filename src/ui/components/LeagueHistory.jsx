@@ -123,14 +123,14 @@ function summarizeSeasonStoryline(season, userTeamId) {
   return lines.join(" ");
 }
 
-export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenBoxScore, initialSelectedSeasonId = null }) {
+export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenBoxScore, initialSelectedSeasonId = null, initialActiveTab = "seasons" }) {
   const api = actions ?? NOOP_ACTIONS;
   const [seasons, setSeasons] = useState([]);
   const [records, setRecords] = useState(null);
   const [recordBook, setRecordBook] = useState(null);
   const [allPlayers, setAllPlayers] = useState([]);
   const [transactions, setTransactions] = useState([]);
-  const [activeTab, setActiveTab] = useState("seasons");
+  const [activeTab, setActiveTab] = useState(initialActiveTab);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

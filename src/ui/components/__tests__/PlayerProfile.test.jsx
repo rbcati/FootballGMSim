@@ -256,17 +256,61 @@ describe('PlayerProfile', () => {
         payload: {
           player: {
             ...player,
-            careerStats: [
-              { season: 's1', year: 2030, team: 'DAL', gamesPlayed: 16, passYds: 3600, passTDs: 24, ints: 10, ovr: 79 },
-              { season: 's2', year: 2031, team: 'NYG', gamesPlayed: 17, passYds: 4200, passTDs: 31, ints: 8, ovr: 84 },
-            ],
+            careerStats: [],
           },
           stats: [],
           teammates: [],
           meta: {},
         },
       })),
-      getAllSeasons: vi.fn(async () => ({ payload: { seasons: [] } })),
+      getAllSeasons: vi.fn(async () => ({
+        payload: {
+          seasons: [
+            {
+              id: 's1',
+              year: 2030,
+              playerSeasonStatsV1: {
+                schemaVersion: 1,
+                rows: [{
+                  playerId: 11,
+                  playerName: 'Avery Fields',
+                  pos: 'QB',
+                  teamId: 1,
+                  teamAbbr: 'DAL',
+                  year: 2030,
+                  seasonId: 's1',
+                  gamesPlayed: 16,
+                  passYds: 3600,
+                  passTDs: 24,
+                  passInts: 10,
+                }],
+                meta: {},
+              },
+            },
+            {
+              id: 's2',
+              year: 2031,
+              playerSeasonStatsV1: {
+                schemaVersion: 1,
+                rows: [{
+                  playerId: 11,
+                  playerName: 'Avery Fields',
+                  pos: 'QB',
+                  teamId: 2,
+                  teamAbbr: 'NYG',
+                  year: 2031,
+                  seasonId: 's2',
+                  gamesPlayed: 17,
+                  passYds: 4200,
+                  passTDs: 31,
+                  passInts: 8,
+                }],
+                meta: {},
+              },
+            },
+          ],
+        },
+      })),
       getPlayerDraftContext: vi.fn(async () => ({ payload: { context: { known: false } } })),
       getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
     };
@@ -284,7 +328,7 @@ describe('PlayerProfile', () => {
     await waitFor(() => {
       expect(screen.getByTestId('player-profile-season-log-showing').textContent).toContain('Showing 1 of 2 seasons');
     });
-    expect(screen.getByText('DAL')).toBeTruthy();
+    expect(screen.getAllByText('DAL').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByLabelText('Reset player season log filters'));
     await waitFor(() => {

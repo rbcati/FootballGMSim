@@ -1,10 +1,12 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import LeagueHistory from '../LeagueHistory.jsx';
 
 describe('LeagueHistory', () => {
+  afterEach(() => cleanup());
+
   it('opens the selected archived season and handles missing championship data safely', async () => {
     render(
       <LeagueHistory
@@ -241,6 +243,7 @@ describe('LeagueHistory', () => {
     render(
       <LeagueHistory
         league={{ userTeamId: 1 }}
+        initialActiveTab="office"
         onPlayerSelect={vi.fn()}
         onOpenBoxScore={vi.fn()}
         actions={{
@@ -259,7 +262,6 @@ describe('LeagueHistory', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: 'League Office' }));
     await waitFor(() => {
       expect(screen.getByTestId('league-office-showing').textContent).toContain('Showing 2 of 2 transactions');
     });
