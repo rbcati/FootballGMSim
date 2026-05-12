@@ -1,8 +1,10 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import LeagueHistory from '../LeagueHistory.jsx';
+
+afterEach(() => cleanup());
 
 describe('LeagueHistory', () => {
   it('opens the selected archived season and handles missing championship data safely', async () => {
@@ -196,5 +198,38 @@ describe('LeagueHistory', () => {
       expect(screen.getByTestId('league-history-major-tx-sx')).toBeTruthy();
       expect(screen.getByTestId('league-history-major-tx-sx').textContent).toMatch(/DAL signed Test Player/);
     });
+  });
+
+  it('searches, sorts, counts, and resets the season archive picker', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                { id: 's1', year: 2030, champion: { id: 2, abbr: 'DAL', name: 'Dallas' }, standings: [{ id: 1, name: 'User', abbr: 'USR', wins: 12, losses: 5 }], awards: {} },
+                { id: 's2', year: 2031, champion: { id: 3, abbr: 'NYG', name: 'New York' }, standings: [{ id: 1, name: 'User', abbr: 'USR', wins: 6, losses: 11 }], awards: {} },
+              ],
+            },
+          }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+        }}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Showing 2 of 2 seasons/i)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Search archived seasons/i), { target: { value: 'DAL' } });
+    expect(screen.getByText(/Showing 1 of 2 seasons/i)).toBeTruthy();
+    expect(screen.getAllByTestId('league-history-season-row')[0].textContent).toMatch(/2030/);
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
+    fireEvent.change(screen.getByLabelText(/Sort archived seasons/i), { target: { value: 'userWins' } });
+    fireEvent.click(screen.getByRole('button', { name: /Desc/i }));
+    expect(screen.getAllByTestId('league-history-season-row')[0].textContent).toMatch(/2031/);
   });
 });

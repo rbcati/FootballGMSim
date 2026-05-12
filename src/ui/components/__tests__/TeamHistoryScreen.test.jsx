@@ -109,4 +109,50 @@ describe('TeamHistoryScreen', () => {
     const arg = onOpen.mock.calls[0][0];
     expect(String(arg)).toMatch(/2055/);
   });
+
+  it('searches, sorts, counts, and resets the season timeline without inventing results', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 7, name: 'Seattle', abbr: 'SEA' }], userTeamId: 7 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                {
+                  id: 's1',
+                  year: 2030,
+                  standings: [{ id: 7, name: 'Seattle', abbr: 'SEA', wins: 7, losses: 10, ties: 0, pf: 310, pa: 380 }],
+                  awards: {},
+                },
+                {
+                  id: 's2',
+                  year: 2031,
+                  standings: [{ id: 7, name: 'Seattle', abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 470, pa: 320 }],
+                  champion: { id: 7, abbr: 'SEA' },
+                  awards: { mvp: { playerId: 11, name: 'Avery Fields' } },
+                },
+              ],
+            },
+          }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Showing 2 of 2 seasons/i)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Search team seasons/i), { target: { value: 'Avery' } });
+    expect(screen.getByText(/Showing 1 of 2 seasons/i)).toBeTruthy();
+    expect(screen.getAllByTestId('team-history-season-row')[0].textContent).toMatch(/2031/);
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
+    expect(screen.getByText(/Showing 2 of 2 seasons/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Sort team seasons/i), { target: { value: 'wins' } });
+    fireEvent.click(screen.getByRole('button', { name: /Desc/i }));
+    expect(screen.getAllByTestId('team-history-season-row')[0].textContent).toMatch(/2030/);
+  });
 });
