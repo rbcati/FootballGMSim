@@ -12,6 +12,7 @@ import { summarizeNegotiationStance } from '../../core/contracts/negotiation.js'
 import { derivePlayerContractFinancials } from '../utils/contractFormatting.js';
 import { deriveTeamCapSnapshot } from '../utils/numberFormatting.js';
 import { evaluateResignRecommendation } from '../utils/contractInsights.js';
+import { buildContractOfferInsight, toneToContractInsightColor } from '../utils/contractOfferInsights.js';
 
 const PREMIUM_POSITIONS = new Set(['QB', 'LT', 'EDGE', 'CB']);
 const SORT_PRESETS = [
@@ -159,9 +160,11 @@ function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }
       const decision = String(player?.extensionDecision ?? 'pending');
       const premium = PREMIUM_POSITIONS.has(String(player?.pos ?? '').toUpperCase());
       const unresolved = !['extended', 'let_walk', 'tagged'].includes(decision);
+      const insight = buildContractOfferInsight(player, { capRoom: capSnapshot.capRoom, team }, { contract: demand });
       return {
         player,
         demand,
+        insight,
         decision,
         decisionLabel: decisionLabel(decision),
         currentCapHit,
@@ -174,7 +177,7 @@ function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }
         sortPriorityScore: (isKeyPlayer(player) ? 150 : 0) + (rec.tier === 'priority_resign' ? 80 : rec.tier === 'resign_if_price' ? 40 : 0) + (unresolved ? 20 : -15) + toNumber(player?.ovr, 60),
       };
     });
-  }, [expiringPlayers, roster, team]);
+  }, [expiringPlayers, roster, team, capSnapshot.capRoom]);
 
   const sortedRows = useMemo(() => {
     const clone = [...rows];
@@ -287,6 +290,11 @@ function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }
           <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)' }}>
             {money(previewRow.demand.baseAnnual)} AAV · {previewRow.demand.yearsTotal} years · Total {money(previewRow.demand.baseAnnual * previewRow.demand.yearsTotal)}.
           </div>
+          <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-subtle)' }}>Market estimate: {previewRow.insight.marketTierLabel}</span>
+            <span style={{ fontSize: 11, border: `1px solid ${toneToContractInsightColor(previewRow.insight.capFitTone)}`, borderRadius: 999, padding: '2px 8px', color: toneToContractInsightColor(previewRow.insight.capFitTone) }}>{previewRow.insight.capFitLabel}</span>
+            {previewRow.insight.riskTags.slice(0, 2).map((tag) => <span key={`preview-${tag}`} style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-subtle)' }}>{tag}</span>)}
+          </div>
           {capSnapshot.capRoom - Math.max(0, previewRow.projectedCapHit - previewRow.currentCapHit) < 5 ? (
             <div style={{ marginTop: 6, fontSize: 12, color: 'var(--warning)' }}>Warning: this creates cap stress heading into free agency.</div>
           ) : null}
@@ -313,6 +321,10 @@ function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }
                 <td style={{ padding: 8, fontWeight: 700 }}>
                   {row.player.name} <span style={{ color: 'var(--text-muted)' }}>({row.player.pos})</span>
                   {row.premium ? <span style={{ marginLeft: 6, fontSize: 10, border: '1px solid var(--warning)', borderRadius: 10, padding: '1px 6px', color: 'var(--warning)' }}>Key</span> : null}
+                  <div style={{ marginTop: 3, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 10, border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 6px', color: 'var(--text-subtle)' }}>{row.insight.marketTierLabel}</span>
+                    <span style={{ fontSize: 10, border: `1px solid ${toneToContractInsightColor(row.insight.capFitTone)}`, borderRadius: 999, padding: '1px 6px', color: toneToContractInsightColor(row.insight.capFitTone) }}>{row.insight.capFitLabel}</span>
+                  </div>
                 </td>
                 <td style={{ padding: 8 }}>{row.player.age ?? '—'}</td>
                 <td style={{ padding: 8 }}>{row.player.ovr ?? '—'}</td>

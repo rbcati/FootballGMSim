@@ -60,6 +60,8 @@ describe('PlayerProfile', () => {
     expect(screen.getByTestId('player-profile')).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Avery Fields'));
     expect(screen.getByTestId('player-profile-season-stats').textContent).toContain('Season stats will appear after this player records tracked stats.');
+    await waitFor(() => expect(screen.getByText('Contract Read')).toBeTruthy());
+    expect(screen.getByText('Market tier')).toBeTruthy();
   });
 
   it('shows career arc snapshot for active players', async () => {

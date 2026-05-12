@@ -52,6 +52,7 @@ import { usePlayerCompare } from "../utils/playerCompare.js";
 import { formatDemandTier } from "../utils/offseasonActionCenter.js";
 import { buildFreeAgencyMarketAnalysis } from "../../core/freeAgency/freeAgencyMarketAnalysis.js";
 import { buildFreeAgencyProfileContext } from "../utils/playerProfileContext.js";
+import { buildContractOfferInsight, toneToContractInsightColor } from "../utils/contractOfferInsights.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -287,6 +288,52 @@ function PipBar({ value, color }) {
   );
 }
 
+function InsightChip({ label, tone = "neutral" }) {
+  return (
+    <span style={{
+      fontSize: 10,
+      border: `1px solid ${toneToContractInsightColor(tone)}`,
+      borderRadius: 999,
+      padding: "1px 6px",
+      color: toneToContractInsightColor(tone),
+      background: `${toneToContractInsightColor(tone)}14`,
+      lineHeight: 1.5,
+    }}>
+      {label}
+    </span>
+  );
+}
+
+export function ContractOfferInsightBlock({ player, capRoom, compact = false, showReasons = false, offer = null }) {
+  const insight = buildContractOfferInsight(player, { capRoom }, offer ?? {});
+  const chips = [
+    { label: insight.marketTierLabel, tone: insight.hasMetadata ? "ok" : "neutral" },
+    { label: insight.capFitLabel, tone: insight.capFitTone },
+    { label: insight.termLabel, tone: "neutral" },
+    ...insight.riskTags.slice(0, compact ? 2 : 3).map((label) => ({ label, tone: label.includes("Clean") || label.includes("Need") ? "ok" : "warning" })),
+  ];
+  return (
+    <div aria-label="Contract market read" style={{ display: "grid", gap: 4, marginTop: 4 }}>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+        {chips.map((chip) => <InsightChip key={`${player?.id ?? player?.name}-${chip.label}`} label={chip.label} tone={chip.tone} />)}
+      </div>
+      {!compact && (
+        <div style={{ fontSize: 10, color: "var(--text-muted)" }}>
+          Market read: {insight.annualValueLabel} · {insight.hasMetadata ? "offer metadata" : "model estimate for your cap"}
+        </div>
+      )}
+      {showReasons && insight.reasonBullets.length > 0 ? (
+        <div style={{ display: "grid", gap: 2, fontSize: 10, color: "var(--text-subtle)" }}>
+          {insight.reasonBullets.map((reason, idx) => <div key={`why-${player?.id ?? player?.name}-${idx}`}>Why this deal? {reason}</div>)}
+        </div>
+      ) : null}
+      {insight.fallback ? (
+        <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>Contract metadata unavailable; showing safe estimate only.</div>
+      ) : null}
+    </div>
+  );
+}
+
 // ── Cap banner ────────────────────────────────────────────────────────────────
 
 function CapBanner({ userTeam }) {
@@ -448,6 +495,7 @@ function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit = 53, o
             ${(player._ask ?? 0).toFixed(1)}M / yr · {suggestedYears(player.age)}{" "}
             years
           </div>
+          <ContractOfferInsightBlock player={player} capRoom={capRoom} compact offer={{ contract: { baseAnnual: Number(annual || 0), yearsTotal: Number(years || 1), signingBonus: 0 } }} />
         </div>
         <div style={{ display: "grid", gap: 2, marginLeft: "auto", minWidth: 170 }}>
           <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
@@ -593,6 +641,10 @@ function PlayerPreviewSheet({ player, capRoom, onClose, onSubmitBid }) {
           <PlayerCard player={player} variant="hero" onClose={onClose} />
           <div style={{ marginTop: 10, fontSize: "0.8rem", color: "var(--text-muted)" }}>
             Team playbook knowledge: <strong style={{ color: "var(--text)" }}>{formatPlaybookKnowledge(player?.playbookKnowledge)}</strong>
+          </div>
+          <div style={{ marginTop: 10, border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: 10, background: "var(--surface)" }}>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700, marginBottom: 2 }}>Market context</div>
+            <ContractOfferInsightBlock player={player} capRoom={capRoom} showReasons />
           </div>
 
           {/* Bid form or trigger */}
@@ -1462,6 +1514,7 @@ export default function FreeAgency({
                               <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
                                 {player?._eval?.archetype?.archetype ?? "Balanced"} · {player?._eval?.roleProjection?.role ?? "Depth"} · {player?._eval?.simImpact?.summary}
                               </div>
+                              <ContractOfferInsightBlock player={player} capRoom={capRoom} compact />
                             </TableCell>
                             <TableCell style={{ whiteSpace: "nowrap" }}>
                               {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
@@ -1506,6 +1559,7 @@ export default function FreeAgency({
                           <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
                             {player?._eval?.archetype?.archetype ?? "Balanced"} · {player?._eval?.roleProjection?.replaceContext ?? "Depth option"}
                           </div>
+                          <ContractOfferInsightBlock player={player} capRoom={capRoom} compact />
                         </TableCell>
                         <TableCell style={{ whiteSpace: "nowrap" }}>
                           {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
@@ -1575,6 +1629,7 @@ export default function FreeAgency({
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{player?._eval?.roleProjection?.replaceContext ?? "Depth option"} · {player?._eval?.simImpact?.summary}</div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Playbook {formatPlaybookKnowledge(player?.playbookKnowledge)}</div>
                     <div style={{ fontSize: 12, marginTop: 4 }}>Demand {(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M / yr</div>
+                    <ContractOfferInsightBlock player={player} capRoom={capRoom} showReasons />
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
                       {getMarketPlayerTags(player, { capRoom, needs: needsSummary?.needs ?? [], surplus: needsSummary?.surplus ?? [] }).map((tag) => (
                         <span key={`${player.id}-${tag.label}`} style={{ fontSize: 10, border: "1px solid var(--hairline)", padding: "1px 6px", borderRadius: 999, color: toneToCssColor(tag.tone) }}>{tag.label}</span>
@@ -1623,6 +1678,7 @@ export default function FreeAgency({
                                 <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>
                                    Age {player.age} · Ask: ${(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M/yr ({askYrs} yr)
                                 </div>
+                                <ContractOfferInsightBlock player={player} capRoom={capRoom} compact />
                                <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
                                   {player?._eval?.archetype?.archetype ?? "Balanced"} · Fit {player?._eval?.schemeFit?.score ?? player.schemeFit ?? 50} ({player?._eval?.schemeFit?.tier ?? "Neutral"}) · {player?._eval?.roleProjection?.role ?? "Depth"}
                                </div>

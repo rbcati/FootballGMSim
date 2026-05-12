@@ -6089,8 +6089,10 @@ async function handleGetFreeAgents(payload, id) {
               topBidTeam: topBid ? topBid.teamName : null,
               topBidAnnual: topBid ? Math.round(topBid.contract.baseAnnual * 10) / 10 : 0,
               topBidYears: topBid ? topBid.contract.yearsTotal : 0,
+              topOfferContractModel: topBid?.contractModel ?? null,
               userBidAnnual: userOffer ? Math.round(userOffer.contract.baseAnnual * 10) / 10 : 0,
               userBidYears: userOffer ? userOffer.contract.yearsTotal : 0,
+              userOfferContractModel: userOffer?.contractModel ?? null,
               userBidValue: Math.round(userBidValue * 10) / 10,
               userTrailReason,
           }
