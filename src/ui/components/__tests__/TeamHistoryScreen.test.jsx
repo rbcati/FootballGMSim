@@ -109,4 +109,65 @@ describe('TeamHistoryScreen', () => {
     const arg = onOpen.mock.calls[0][0];
     expect(String(arg)).toMatch(/2055/);
   });
+
+  it('filters, sorts, and resets season timeline rows', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 7, name: 'Seattle', abbr: 'SEA' }], userTeamId: 7 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                {
+                  year: 2030,
+                  standings: [
+                    { id: 7, abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 420, pa: 300 },
+                    { id: 9, abbr: 'RIV', wins: 8, losses: 9, ties: 0, pf: 320, pa: 360 },
+                  ],
+                  champion: { id: 7, abbr: 'SEA' },
+                  runnerUp: { id: 9, abbr: 'RIV' },
+                  playoffBracketSnapshot: { mode: 'empty', rounds: [] },
+                },
+                {
+                  year: 2031,
+                  standings: [
+                    { id: 7, abbr: 'SEA', wins: 8, losses: 9, ties: 0, pf: 300, pa: 330 },
+                    { id: 5, abbr: 'BOS', wins: 11, losses: 6, ties: 0, pf: 390, pa: 310 },
+                  ],
+                  champion: { id: 5, abbr: 'BOS' },
+                  runnerUp: { id: 7, abbr: 'SEA' },
+                  playoffBracketSnapshot: { mode: 'empty', rounds: [] },
+                },
+              ],
+            },
+          }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-timeline-showing').textContent).toContain('Showing 2 of 2 seasons');
+    });
+
+    fireEvent.change(screen.getByLabelText('Sort team history seasons'), { target: { value: 'wins' } });
+    const sortedRows = screen.getAllByTestId(/team-history-season-row-/i);
+    expect(sortedRows[0].textContent).toContain('2030');
+
+    fireEvent.change(screen.getByLabelText('Search team history seasons'), { target: { value: 'champion' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-timeline-showing').textContent).toContain('Showing 1 of 2 seasons');
+    });
+    expect(screen.getByTestId('team-history-season-row-2030')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-timeline-showing').textContent).toContain('Showing 2 of 2 seasons');
+    });
+  });
 });
