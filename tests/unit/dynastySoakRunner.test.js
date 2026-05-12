@@ -137,6 +137,8 @@ describe('runDynastySoakOnce', () => {
     expect(result.exerciseMatrix.fullSeasonArchive.status).toBe('skipped');
     expect(result.exerciseMatrix.auditCheckpoint.status).toBe('exercised_partial');
     expect(result.auditCheckpoint).toMatchObject({ auditOnly: true, completedSeason: false, archiveType: 'audit_checkpoint' });
+    expect(result.auditCheckpoint.exercised.getAllSeasonsHandler.status).toBe('exercised');
+    expect(result.auditCheckpoint.exercised.getRecordsHandler.status).toBe('exercised');
   });
 
 
@@ -280,6 +282,8 @@ describe('runDynastySoakOnce', () => {
     expect(result.auditProfile).toBe('full');
     expect(result.harnessConfig.deep).toBe(true);
     expect(result.harnessConfig.deepEachSeason).toBe(false);
+
+    expect(calls.some((c) => c.type === toWorker.RUN_DYNASTY_AUDIT_CHECKPOINT)).toBe(false);
 
     expect(calls).toContainEqual({
       type: toWorker.GET_TRANSACTIONS,

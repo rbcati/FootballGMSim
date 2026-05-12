@@ -86,6 +86,27 @@ describe('dynasty soak batch dirty accumulator', () => {
   });
 
 
+  it('fails CI checkpoint assertions when an exercised checkpoint probe fails', () => {
+    const r = buildPersistenceAssertions({
+      auditProfile: 'ci',
+      viewState: { leagueHistory: [] },
+      expectArchive: false,
+      auditCheckpoint: {
+        ok: false,
+        auditOnly: true,
+        archiveType: 'audit_checkpoint',
+        completedSeason: false,
+        realWeeksSimulated: 2,
+        exercised: { getRecordsHandler: { status: 'failed', detail: 'GET_RECORDS handler failed' } },
+        skipped: [{ system: 'completedSeasonArchive', reason: 'CI profile does not call archiveSeason for partial data' }],
+      },
+    });
+
+    expect(r.allOk).toBe(false);
+    expect(r.assertions.find((a) => a.id === 'audit_checkpoint_probe_getRecordsHandler')?.code).toBe('audit_checkpoint_probe_failed');
+  });
+
+
   it('fails CI checkpoint assertions when a skipped checkpoint subsystem has no reason', () => {
     const r = buildPersistenceAssertions({
       auditProfile: 'ci',

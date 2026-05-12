@@ -141,6 +141,23 @@ export function mergeAudit(into, next, seasonLabel) {
   into.seasonsSimmed = Math.max(into.seasonsSimmed || 0, next.seasonsSimmed || 0);
 }
 
+
+function annotateAuditCheckpointWithWorkerProbe(auditCheckpoint, name, ok, detail) {
+  if (!auditCheckpoint || typeof auditCheckpoint !== 'object') return;
+  if (!auditCheckpoint.exercised || typeof auditCheckpoint.exercised !== 'object') {
+    auditCheckpoint.exercised = {};
+  }
+  auditCheckpoint.exercised[name] = {
+    status: ok ? 'exercised' : 'failed',
+    detail: String(detail || (ok ? 'handler probe ok' : 'handler probe failed')),
+  };
+  if (!ok) {
+    auditCheckpoint.ok = false;
+    if (!Array.isArray(auditCheckpoint.failures)) auditCheckpoint.failures = [];
+    auditCheckpoint.failures.push({ system: name, error: auditCheckpoint.exercised[name].detail });
+  }
+}
+
 function pushCheckpoint(checkpoints, name, ms, meta = null) {
   checkpoints.push({ name, ms, meta });
 }
@@ -1113,6 +1130,50 @@ async function runCiDynastySoakOnce(opts = {}) {
       type: toWorker.GET_HALL_OF_FAME,
       timeoutMs: phaseTimeoutMs,
     });
+    annotateAuditCheckpointWithWorkerProbe(
+      auditCheckpoint,
+      'getAllSeasonsHandler',
+      probeHandlerSucceeded(allSeasonsMsg),
+      probeHandlerSucceeded(allSeasonsMsg)
+        ? `GET_ALL_SEASONS ok (${Array.isArray(allSeasonsMsg.payload?.seasons) ? allSeasonsMsg.payload.seasons.length : 0} rows)`
+        : (allSeasonsMsg.payload?.message || allSeasonsMsg.payload?.error || 'GET_ALL_SEASONS failed'),
+    );
+    annotateAuditCheckpointWithWorkerProbe(
+      auditCheckpoint,
+      'getTransactionsRecentHandler',
+      probeHandlerSucceeded(txMsg),
+      probeHandlerSucceeded(txMsg)
+        ? `GET_TRANSACTIONS recent ok (${Array.isArray(txMsg.payload?.transactions) ? txMsg.payload.transactions.length : 0} rows)`
+        : (txMsg.payload?.message || txMsg.payload?.error || 'GET_TRANSACTIONS recent failed'),
+    );
+    annotateAuditCheckpointWithWorkerProbe(
+      auditCheckpoint,
+      'getRecordsHandler',
+      probeHandlerSucceeded(recordsMsg) && !!(recordsMsg.payload?.recordBook || recordsMsg.payload?.records),
+      (probeHandlerSucceeded(recordsMsg) && !!(recordsMsg.payload?.recordBook || recordsMsg.payload?.records))
+        ? 'GET_RECORDS handler returned record data'
+        : (recordsMsg.payload?.message || recordsMsg.payload?.error || 'GET_RECORDS handler failed or returned no record data'),
+    );
+    annotateAuditCheckpointWithWorkerProbe(
+      auditCheckpoint,
+      'getHallOfFameHandler',
+      probeHandlerSucceeded(hofMsg) && (!hofMsg.payload || Array.isArray(hofMsg.payload?.players)),
+      (probeHandlerSucceeded(hofMsg) && (!hofMsg.payload || Array.isArray(hofMsg.payload?.players)))
+        ? 'GET_HALL_OF_FAME handler returned a valid player list'
+        : (hofMsg.payload?.message || hofMsg.payload?.error || 'GET_HALL_OF_FAME handler failed or returned invalid data'),
+    );
+    if (auditCheckpoint?.ok === false && aggregate.exerciseMatrix.auditCheckpoint?.status !== 'failed') {
+      aggregate.passed = false;
+      aggregate.exerciseMatrix.auditCheckpoint = {
+        ...aggregate.exerciseMatrix.auditCheckpoint,
+        status: 'failed',
+        reason: auditCheckpoint.failures?.map((f) => f?.error || f?.system).filter(Boolean).join('; ') || 'audit checkpoint probe failed',
+      };
+      aggregate.failures.push({
+        code: 'audit_checkpoint_probe_failed',
+        message: aggregate.exerciseMatrix.auditCheckpoint.reason,
+      });
+    }
     aggregate.exerciseMatrix.workerProbes = { status: 'exercised_partial', detail: 'GET_ALL_SEASONS, GET_TRANSACTIONS recent, GET_RECORDS, GET_HALL_OF_FAME' };
 
     const skippedProbeReasons = {
