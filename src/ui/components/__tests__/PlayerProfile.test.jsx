@@ -250,6 +250,92 @@ describe('PlayerProfile', () => {
     expect(screen.getByText('4,100')).toBeTruthy();
   });
 
+  it('supports season log search, sort, and reset controls', async () => {
+    const seasonLogActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: {
+          player: {
+            ...player,
+            careerStats: [],
+          },
+          stats: [],
+          teammates: [],
+          meta: {},
+        },
+      })),
+      getAllSeasons: vi.fn(async () => ({
+        payload: {
+          seasons: [
+            {
+              id: 's1',
+              year: 2030,
+              playerSeasonStatsV1: {
+                schemaVersion: 1,
+                rows: [{
+                  playerId: 11,
+                  playerName: 'Avery Fields',
+                  pos: 'QB',
+                  teamId: 1,
+                  teamAbbr: 'DAL',
+                  year: 2030,
+                  seasonId: 's1',
+                  gamesPlayed: 16,
+                  passYds: 3600,
+                  passTDs: 24,
+                  passInts: 10,
+                }],
+                meta: {},
+              },
+            },
+            {
+              id: 's2',
+              year: 2031,
+              playerSeasonStatsV1: {
+                schemaVersion: 1,
+                rows: [{
+                  playerId: 11,
+                  playerName: 'Avery Fields',
+                  pos: 'QB',
+                  teamId: 2,
+                  teamAbbr: 'NYG',
+                  year: 2031,
+                  seasonId: 's2',
+                  gamesPlayed: 17,
+                  passYds: 4200,
+                  passTDs: 31,
+                  passInts: 8,
+                }],
+                meta: {},
+              },
+            },
+          ],
+        },
+      })),
+      getPlayerDraftContext: vi.fn(async () => ({ payload: { context: { known: false } } })),
+      getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+    };
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={seasonLogActions} teams={league.teams} league={league} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('player-profile-season-log-showing').textContent).toContain('Showing 2 of 2 seasons');
+    });
+
+    fireEvent.change(screen.getByLabelText('Sort player season log'), { target: { value: 'primaryStat' } });
+    const rows = screen.getAllByTestId(/player-profile-season-log-row-/i);
+    expect(rows[0].textContent).toContain('NYG');
+
+    fireEvent.change(screen.getByLabelText('Search player season log'), { target: { value: 'dal' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('player-profile-season-log-showing').textContent).toContain('Showing 1 of 2 seasons');
+    });
+    expect(screen.getAllByText('DAL').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByLabelText('Reset player season log filters'));
+    await waitFor(() => {
+      expect(screen.getByTestId('player-profile-season-log-showing').textContent).toContain('Showing 2 of 2 seasons');
+    });
+  });
+
   it('shows honest empty award timeline when no honors exist', async () => {
     render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={league} />);
     await waitFor(() => expect(screen.getByTestId('player-profile-award-timeline')).toBeTruthy());

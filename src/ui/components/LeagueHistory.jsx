@@ -9,6 +9,7 @@ import { AWARD_DISPLAY_NAMES } from '../../core/footballMeta';
 import { buildLeagueHistoryTopPerformers } from '../../core/playerSeasonStatsArchive.js';
 import { normalizeArchivedMajorTransactions } from '../../core/transactionTimeline.js';
 import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from "../utils/dataBrowser.js";
+import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from '../utils/dataBrowser.js';
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -108,6 +109,19 @@ function pct(row) {
   return (wins + ties * 0.5) / games;
 }
 
+function seasonTokenToNumber(value) {
+  if (value == null) return 0;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric;
+  const text = String(value);
+  if (text.startsWith("s")) {
+    const parsed = Number(text.slice(1));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  const fallback = Number(text.replace(/[^\d.-]/g, ""));
+  return Number.isFinite(fallback) ? fallback : 0;
+}
+
 function buildChampionMap(seasons = []) {
   const map = new Map();
   for (const season of seasons) {
@@ -136,14 +150,14 @@ function summarizeSeasonStoryline(season, userTeamId) {
   return lines.join(" ");
 }
 
-export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenBoxScore, initialSelectedSeasonId = null }) {
+export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenBoxScore, initialSelectedSeasonId = null, initialActiveTab = "seasons" }) {
   const api = actions ?? NOOP_ACTIONS;
   const [seasons, setSeasons] = useState([]);
   const [records, setRecords] = useState(null);
   const [recordBook, setRecordBook] = useState(null);
   const [allPlayers, setAllPlayers] = useState([]);
   const [transactions, setTransactions] = useState([]);
-  const [activeTab, setActiveTab] = useState("seasons");
+  const [activeTab, setActiveTab] = useState(initialActiveTab);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -373,6 +387,9 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
   const [championFilter, setChampionFilter] = useState("ALL");
   const [sortKey, setSortKey] = useState("year");
   const [sortDir, setSortDir] = useState("desc");
+  const [seasonSearch, setSeasonSearch] = useState("");
+  const [seasonSortKey, setSeasonSortKey] = useState("year");
+  const [seasonSortDirection, setSeasonSortDirection] = useState("desc");
 
   useEffect(() => {
     if (!seasons?.length) return;
@@ -415,6 +432,43 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
     }
   }, [filteredSeasons, selectedSeasonId]);
 
+  const seasonRows = useMemo(() => {
+    const filtered = (seasons ?? []).filter((season) => rowMatchesSearch(season, seasonSearch, [
+      "year",
+      (row) => row?.champion?.abbr ?? row?.champion?.name ?? "",
+      (row) => row?.runnerUp?.abbr ?? row?.runnerUp?.name ?? "",
+      (row) => row?.awards?.mvp?.name ?? "",
+      (row) => {
+        const userRow = (row?.standings ?? []).find((team) => Number(team?.id) === Number(league?.userTeamId));
+        return userRow ? `${userRow.wins ?? 0}-${userRow.losses ?? 0}${userRow.ties ? `-${userRow.ties}` : ""}` : "";
+      },
+    ]));
+    return stableSortRows(
+      filtered,
+      (season) => {
+        const userRow = (season?.standings ?? []).find((team) => Number(team?.id) === Number(league?.userTeamId));
+        switch (seasonSortKey) {
+          case "champion":
+            return String(season?.champion?.abbr ?? season?.champion?.name ?? "");
+          case "runnerUp":
+            return String(season?.runnerUp?.abbr ?? season?.runnerUp?.name ?? "");
+          case "mvp":
+            return String(season?.awards?.mvp?.name ?? "");
+          case "userWins":
+            return Number(userRow?.wins ?? 0);
+          case "year":
+          default:
+            return Number(season?.year ?? seasonTokenToNumber(season?.id));
+        }
+      },
+      seasonSortDirection,
+      (season) => Number(season?.year ?? seasonTokenToNumber(season?.id)),
+    );
+  }, [league?.userTeamId, seasonSearch, seasonSortDirection, seasonSortKey, seasons]);
+  const seasonShowingLabel = useMemo(
+    () => buildShowingLabel(seasonRows.length, seasons?.length ?? 0, "season"),
+    [seasonRows.length, seasons?.length],
+  );
   if (!seasons?.length) {
     return (
       <Card className="card-premium">
@@ -427,6 +481,7 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
   }
 
   const selected = filteredSeasons.find((s) => s.id === selectedSeasonId) ?? filteredSeasons[0] ?? null;
+  const selected = seasons.find((s) => s.id === selectedSeasonId) ?? seasons[0];
   const sortedStandings = [...(selected?.standings ?? [])].sort((a, b) => pct(b) - pct(a)).slice(0, 8);
   const championBoard = buildChampionMap(seasons).slice(0, 5);
   const playoffMentions = (selected?.standings ?? []).filter((row) => Number(row?.wins ?? 0) >= 10).slice(0, 6);
@@ -514,6 +569,60 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
                     setSortKey("year");
                     setSortDir("desc");
                   }}
+        <CardContent className="p-3 pt-0 space-y-2">
+          <input
+            aria-label="Search archived seasons"
+            value={seasonSearch}
+            onChange={(e) => setSeasonSearch(e.target.value)}
+            placeholder="Search year/champion/MVP"
+            className="h-9 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-xs"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              aria-label="Sort archived seasons"
+              value={seasonSortKey}
+              onChange={(e) => setSeasonSortKey(e.target.value)}
+              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+            >
+              <option value="year">Year</option>
+              <option value="champion">Champion</option>
+              <option value="runnerUp">Runner-up</option>
+              <option value="mvp">MVP</option>
+              <option value="userWins">User team wins</option>
+            </select>
+            <select
+              aria-label="Sort direction for archived seasons"
+              value={seasonSortDirection}
+              onChange={(e) => setSeasonSortDirection(e.target.value)}
+              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+            >
+              <option value="desc">Desc</option>
+              <option value="asc">Asc</option>
+            </select>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <div data-testid="league-history-season-showing" className="text-[10px] text-[color:var(--text-muted)]">{seasonShowingLabel}</div>
+            <button
+              type="button"
+              aria-label="Reset archived season filters"
+              className="text-[10px] text-[color:var(--accent)]"
+              onClick={() => {
+                setSeasonSearch("");
+                setSeasonSortKey("year");
+                setSeasonSortDirection("desc");
+              }}
+            >
+              Reset
+            </button>
+          </div>
+          <ScrollArea className="h-[520px]">
+            <div className="divide-y divide-[color:var(--hairline)]">
+              {seasonRows.length > 0 ? seasonRows.map((s) => (
+                <button
+                  key={s.id}
+                  data-testid={`league-history-season-list-item-${s.id}`}
+                  className={`w-full text-left px-4 py-3 ${selected?.id === s.id ? "bg-[color:var(--surface-strong)]" : ""}`}
+                  onClick={() => setSelectedSeasonId(s.id)}
                 >
                   Reset filters
                 </button>
@@ -558,6 +667,9 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
                   </button>
                 );
               })}
+              )) : (
+                <div className="px-4 py-3 text-xs text-[color:var(--text-muted)]">No archived seasons match this filter.</div>
+              )}
             </div>
           </ScrollArea>
         </CardContent>
@@ -994,6 +1106,51 @@ function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [sortDir, setSortDir] = useState("desc");
 
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [sortKey, setSortKey] = useState("date");
+  const [sortDirection, setSortDirection] = useState("desc");
+  const rows = useMemo(() => (transactions ?? []).slice(0, 160), [transactions]);
+  const typeOptions = useMemo(
+    () => uniqueFilterOptions(rows, (tx) => tx?.typeLabel ?? tx?.type ?? "Unknown"),
+    [rows],
+  );
+  const visibleRows = useMemo(() => {
+    const filtered = rows
+      .filter((tx) => typeFilter === "all" || (tx?.typeLabel ?? tx?.type ?? "Unknown") === typeFilter)
+      .filter((tx) => rowMatchesSearch(tx, search, [
+        "type",
+        "typeLabel",
+        "headline",
+        "detail",
+        "playerName",
+        "teamAbbr",
+        "fromTeamAbbr",
+        "toTeamAbbr",
+        "seasonId",
+        "week",
+      ]));
+    return stableSortRows(
+      filtered,
+      (tx) => {
+        switch (sortKey) {
+          case "type":
+            return String(tx?.typeLabel ?? tx?.type ?? "");
+          case "player":
+            return String(tx?.playerName ?? "");
+          case "date":
+          default:
+            return seasonTokenToNumber(tx?.seasonId) * 100 + Number(tx?.week ?? 0);
+        }
+      },
+      sortDirection,
+      (tx) => Number(tx?.id ?? 0),
+    );
+  }, [rows, search, sortDirection, sortKey, typeFilter]);
+  const showingLabel = useMemo(
+    () => buildShowingLabel(visibleRows.length, rows.length, "transaction"),
+    [rows.length, visibleRows.length],
+  );
+  if (!rows.length) return <div className="py-8 text-center text-[color:var(--text-muted)]">No transaction history tracked yet.</div>;
   const describe = (tx) => {
     const leg = tx.legacyType ?? "";
     const bucket = tx.type ?? "";
@@ -1088,6 +1245,78 @@ function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
                 Reset filters
               </button>
             ) : null}
+      <CardContent className="p-0">
+        <div className="px-4 py-3 border-b border-[color:var(--hairline)] space-y-2">
+          <input
+            aria-label="Search league transactions"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search player/team/type"
+            className="h-9 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-xs"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              aria-label="Filter league transactions by type"
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+            >
+              <option value="all">All types</option>
+              {typeOptions.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+            <select
+              aria-label="Sort league transactions"
+              value={`${sortKey}:${sortDirection}`}
+              onChange={(e) => {
+                const [nextKey, nextDirection] = String(e.target.value).split(":");
+                setSortKey(nextKey || "date");
+                setSortDirection(nextDirection || "desc");
+              }}
+              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+            >
+              <option value="date:desc">Newest first</option>
+              <option value="date:asc">Oldest first</option>
+              <option value="type:asc">Type A-Z</option>
+              <option value="type:desc">Type Z-A</option>
+              <option value="player:asc">Player A-Z</option>
+              <option value="player:desc">Player Z-A</option>
+            </select>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <div data-testid="league-office-showing" className="text-[10px] text-[color:var(--text-muted)]">{showingLabel}</div>
+            <button
+              type="button"
+              aria-label="Reset league transaction filters"
+              className="text-[10px] text-[color:var(--accent)]"
+              onClick={() => {
+                setSearch("");
+                setTypeFilter("all");
+                setSortKey("date");
+                setSortDirection("desc");
+              }}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+        <ScrollArea className="h-[560px]">
+          <div className="divide-y divide-[color:var(--hairline)]">
+            {visibleRows.length > 0 ? visibleRows.map((tx, idx) => (
+              <div key={`${tx.id ?? idx}`} className="px-4 py-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <strong>{tx.typeLabel ?? tx.type}</strong>
+                  <span className="text-xs text-[color:var(--text-muted)]">Week {tx.week ?? "?"}</span>
+                </div>
+                <div className="text-[color:var(--text-muted)] mt-1">{describe(tx)}</div>
+                {tx.playerId != null && (
+                  <button className="btn mt-2 text-xs" onClick={() => onPlayerSelect?.(tx.playerId)}>Open player</button>
+                )}
+              </div>
+            )) : (
+              <div className="px-4 py-3 text-xs text-[color:var(--text-muted)]">No transactions match this filter.</div>
+            )}
           </div>
           <div data-testid="league-office-count" className="flex flex-wrap gap-2 text-xs text-[color:var(--text-muted)]">
             <span>{buildShowingLabel(rows.length, transactions.length, "transaction")}</span>

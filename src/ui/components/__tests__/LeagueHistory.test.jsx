@@ -2,9 +2,13 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import LeagueHistory from '../LeagueHistory.jsx';
 
 describe('LeagueHistory', () => {
+  afterEach(() => cleanup());
+
   it('opens the selected archived season and handles missing championship data safely', async () => {
     render(
       <LeagueHistory
@@ -202,6 +206,11 @@ describe('LeagueHistory', () => {
     render(
       <LeagueHistory
         league={{ userTeamId: 1 }}
+  it('filters and resets archived season list controls', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        initialSelectedSeasonId="s2"
         onPlayerSelect={vi.fn()}
         onOpenBoxScore={vi.fn()}
         actions={{
@@ -229,6 +238,8 @@ describe('LeagueHistory', () => {
                   standings: [{ id: 3, name: 'Philadelphia', abbr: 'PHI', wins: 11, losses: 6 }],
                   awards: { mvp: { playerId: 3, name: 'Edge Star' } },
                 },
+                { id: 's1', year: 2030, champion: { abbr: 'DAL' }, standings: [], awards: { mvp: { name: 'Alpha QB' } } },
+                { id: 's2', year: 2031, champion: { abbr: 'NYG' }, standings: [], awards: { mvp: { name: 'Bravo QB' } } },
               ],
             },
           }),
@@ -265,6 +276,26 @@ describe('LeagueHistory', () => {
     render(
       <LeagueHistory
         league={{ userTeamId: 1 }}
+      expect(screen.getByTestId('league-history-season-showing').textContent).toContain('Showing 2 of 2 seasons');
+    });
+
+    fireEvent.change(screen.getByLabelText('Search archived seasons'), { target: { value: 'nyg' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('league-history-season-showing').textContent).toContain('Showing 1 of 2 seasons');
+    });
+    expect(screen.getByTestId('league-history-season-list-item-s2')).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText('Reset archived season filters'));
+    await waitFor(() => {
+      expect(screen.getByTestId('league-history-season-showing').textContent).toContain('Showing 2 of 2 seasons');
+    });
+  });
+
+  it('filters league office transactions by type and search', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        initialActiveTab="office"
         onPlayerSelect={vi.fn()}
         onOpenBoxScore={vi.fn()}
         actions={{
@@ -312,6 +343,27 @@ describe('LeagueHistory', () => {
     fireEvent.change(screen.getByLabelText(/Sort league office transactions/i), { target: { value: 'asc' } });
     await waitFor(() => {
       expect(screen.getAllByTestId(/league-office-row-/)[0].textContent).toContain('2032');
+                { id: 'tx1', seasonId: 's1', week: 3, type: 'trade', typeLabel: 'Trade', playerName: 'Player One', fromTeamAbbr: 'DAL', toTeamAbbr: 'NYG' },
+                { id: 'tx2', seasonId: 's1', week: 4, type: 'signing', typeLabel: 'Signing', playerName: 'Player Two', teamAbbr: 'DAL' },
+              ],
+            },
+          }),
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('league-office-showing').textContent).toContain('Showing 2 of 2 transactions');
+    });
+
+    fireEvent.change(screen.getByLabelText('Filter league transactions by type'), { target: { value: 'Trade' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('league-office-showing').textContent).toContain('Showing 1 of 2 transactions');
+    });
+
+    fireEvent.change(screen.getByLabelText('Search league transactions'), { target: { value: 'missing player' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('league-office-showing').textContent).toContain('Showing 0 of 2 transactions');
     });
   });
 });
