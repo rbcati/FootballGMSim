@@ -1,4 +1,5 @@
 import { calculatePlayerValue } from '../trade-logic.js';
+import { buildTradeRealismReasonTags, evaluatePlayerMarketRealism } from '../marketRealismModel.js';
 import { FOOTBALL_ROSTER_CONFIG } from '../sports/footballRosterConfig.js';
 
 const PREMIUM_POS = new Set(['QB', 'WR', 'OL', 'DL', 'CB']);
@@ -173,12 +174,21 @@ function buildIdea({ need, target, outgoingAssets, teams, cap, packageType }) {
   const valueMatch = classifyValueMatch(valueDelta);
   const capData = calculatePackageCapImpact({ target, outgoingAssets, cap });
   const warnings = buildPackageWarnings({ outgoingAssets, valueMatch });
+  const realism = evaluatePlayerMarketRealism({
+    player: target,
+    team: teams.find((x) => num(x.id) === num(target.teamId)) ?? {},
+    roster: [],
+    positionalNeed: need.needLevel === 'urgent' ? 1.7 : 1.25,
+    action: 'trade_finder',
+  });
+  const realismReasons = buildTradeRealismReasonTags(realism);
   const feasibilityLabel = classifyFeasibility({ valueMatch, warnings, capImpact: capData.capImpact });
   const confidenceReasons = [];
   if (valueMatch === 'fair') confidenceReasons.push('Near fair value package.');
   if (need.needLevel === 'urgent') confidenceReasons.push(`Addresses urgent ${need.pos} need.`);
   if (capData.capImpact != null && capData.capImpact > 6) confidenceReasons.push('Cap cost is significant.');
   if (warnings.includes(PREMIUM_PICK_WARNING)) confidenceReasons.push('Premium pick included.');
+  confidenceReasons.push(...realismReasons);
   if (valueMatch === 'expensive' || valueMatch === 'unrealistic') confidenceReasons.push('Package remains short on value.');
   const confidence = feasibilityLabel === 'likely_reasonable' && !warnings.includes(PREMIUM_PICK_WARNING) ? 'high' : feasibilityLabel === 'long_shot' || feasibilityLabel === 'cap_constrained' || feasibilityLabel === 'overpay_risk' ? 'low' : 'medium';
   return {
