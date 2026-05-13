@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { buildShowingLabel, stableSortRows } from "../utils/dataBrowser.js";
 import { buildShowingLabel, rowMatchesSearch, stableSortRows } from "../utils/dataBrowser.js";
 
 const TYPE_FILTERS = [
@@ -13,6 +14,29 @@ const TYPE_FILTERS = [
   { value: "extension", label: "Extensions" },
 ];
 
+const ACTIVITY_SORTS = {
+  newest: {
+    label: "Newest first",
+    getValue: (r) => {
+      const season = Number(String(r?.seasonId ?? "").replace(/[^0-9]/g, "")) || 0;
+      const week = Number(r?.week ?? 0);
+      return season * 1000 + week;
+    },
+    direction: "desc",
+  },
+  oldest: {
+    label: "Oldest first",
+    getValue: (r) => {
+      const season = Number(String(r?.seasonId ?? "").replace(/[^0-9]/g, "")) || 0;
+      const week = Number(r?.week ?? 0);
+      return season * 1000 + week;
+    },
+    direction: "asc",
+  },
+  type: { label: "Type (A→Z)", getValue: (r) => r?.typeLabel ?? r?.type ?? "", direction: "asc" },
+  team: { label: "Team (A→Z)", getValue: (r) => r?.teamAbbr ?? "", direction: "asc" },
+};
+
 /**
  * League-wide transaction / activity feed (mobile-first).
  */
@@ -23,6 +47,7 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
   const [teamId, setTeamId] = useState("all");
   const [type, setType] = useState("all");
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState("newest");
   const [sort, setSort] = useState({ key: "date", dir: "desc" });
 
   const teams = league?.teams ?? [];
@@ -81,6 +106,18 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
     load();
   }, [load]);
 
+  const displayedRows = useMemo(() => {
+    const def = ACTIVITY_SORTS[sortKey] ?? ACTIVITY_SORTS.newest;
+    return stableSortRows(
+      rows,
+      def.getValue,
+      def.direction,
+      (r) => Number(r?.id ?? 0),
+    );
+  }, [rows, sortKey]);
+
+  const filtersActive =
+    seasonId !== "all" || teamId !== "all" || type !== "all" || Boolean(String(search ?? "").trim()) || sortKey !== "newest";
   const displayRows = useMemo(() => {
     const filtered = (rows ?? []).filter((tx) => {
       if (type !== "all" && tx?.type !== type && tx?.typeLabel !== type) return false;
@@ -116,6 +153,7 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
     setTeamId("all");
     setType("all");
     setSearch("");
+    setSortKey("newest");
     setSort({ key: "date", dir: "desc" });
   };
 
@@ -171,9 +209,39 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
             onKeyDown={(e) => e.key === "Enter" && load()}
           />
         </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-[color:var(--text-muted)]">
+          Sort
+          <select
+            className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-sm"
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value)}
+            aria-label="Sort league activity"
+          >
+            {Object.entries(ACTIVITY_SORTS).map(([key, def]) => (
+              <option key={key} value={key}>{def.label}</option>
+            ))}
+          </select>
+        </label>
         <button type="button" className="btn btn-secondary h-9 text-sm" onClick={() => load()}>
           Refresh
         </button>
+        {filtersActive ? (
+          <button
+            type="button"
+            className="btn btn-secondary h-9 text-sm"
+            onClick={resetFilters}
+            data-testid="league-activity-reset"
+          >
+            Reset filters
+          </button>
+        ) : null}
+      </div>
+
+      <div
+        className="flex items-center justify-between text-xs text-[color:var(--text-muted)]"
+        data-testid="league-activity-count"
+      >
+        <span>{buildShowingLabel(displayedRows.length, rows.length, "transaction")}</span>
         <label className="flex flex-col gap-1 text-xs font-semibold text-[color:var(--text-muted)]">
           Sort
           <select
@@ -200,6 +268,7 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
 
       {loading ? (
         <div className="py-8 text-center text-sm text-[color:var(--text-muted)]">Loading activity…</div>
+      ) : !displayedRows.length ? (
       ) : !displayRows.length ? (
         <div className="rounded-lg border border-[color:var(--hairline)] bg-[color:var(--surface-strong)]/30 px-4 py-6 text-center text-sm text-[color:var(--text-muted)]">
           {hasActiveFilters ? "No transactions match these filters." : "Transactions will appear as your league signs, drafts, trades, releases, and retires players."}
@@ -207,6 +276,8 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
       ) : (
         <ScrollArea className="h-[min(520px,65vh)] rounded-lg border border-[color:var(--hairline)]">
           <ul className="divide-y divide-[color:var(--hairline)]">
+            {displayedRows.map((tx, idx) => (
+              <li key={`${tx.id ?? idx}-${idx}`} className="px-3 py-3 text-sm">
             {displayRows.map((tx, idx) => (
               <li key={`${tx.id ?? idx}-${idx}`} className="px-3 py-3 text-sm" data-testid="league-activity-row">
                 <div className="flex flex-wrap items-center justify-between gap-2">
