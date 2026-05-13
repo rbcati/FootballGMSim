@@ -417,6 +417,140 @@ async function timedDispatch({ checkpoints, name, runnerDispatch, type, payload 
   return msg;
 }
 
+
+function countWarningsByCode(warnings = []) {
+  const out = {};
+  for (const warning of warnings || []) {
+    const code = String(warning?.code ?? 'unknown');
+    out[code] = (out[code] || 0) + 1;
+  }
+  return out;
+}
+
+const ECONOMY_AGGREGATE_FIELDS = [
+  'teamsOverCap',
+  'teamsWithPendingOfferOvercommit',
+  'pendingOfferOvercommitCount',
+  'duplicateExpensiveSameGroupOffers',
+  'oldVeteranOffersByRebuildTeams',
+  'contenderVeteranOfferCount',
+  'severeQbNeedOfferCount',
+  'premiumYoungPlayerTradeDiscountFlags',
+  'expensiveVeteranSwapFlags',
+  'cpuOfferCount',
+  'unknownOfferValueCount',
+];
+
+function buildSeedSummary(result) {
+  const economy = result?.reportSummary?.economyRegressionSnapshot ?? null;
+  return {
+    seed: result?.seed,
+    passed: !!result?.passed,
+    severity: result?.severity ?? 'unknown',
+    runtimeMs: result?.runtimeMs ?? 0,
+    seasonsSimmed: result?.seasonsSimmed ?? 0,
+    finalPhase: result?.finalPhase ?? null,
+    finalYear: result?.finalYear ?? null,
+    failureCount: result?.failures?.length ?? 0,
+    warningCount: result?.warnings?.length ?? 0,
+    firstFailure: result?.failures?.[0]
+      ? { code: result.failures[0].code, message: result.failures[0].message }
+      : null,
+    warningsByCode: countWarningsByCode(result?.warnings ?? []),
+    economyRegressionSnapshot: economy,
+    persistenceAssertionFailures: (result?.persistenceAssertions ?? [])
+      .filter((assertion) => assertion?.ok === false)
+      .map((assertion) => ({ id: assertion.id, code: assertion.code, detail: assertion.detail })),
+  };
+}
+
+function aggregateEconomy(seedSummaries) {
+  const totals = {};
+  for (const field of ECONOMY_AGGREGATE_FIELDS) totals[field] = 0;
+  const skippedReasonsBySeed = [];
+  const warningsBySeed = [];
+  let snapshotsPresent = 0;
+  for (const seedSummary of seedSummaries) {
+    const eco = seedSummary.economyRegressionSnapshot;
+    if (!eco || typeof eco !== 'object') {
+      skippedReasonsBySeed.push({ seed: seedSummary.seed, code: 'economy_snapshot_missing', reason: 'No economyRegressionSnapshot was produced for this seed.' });
+      continue;
+    }
+    snapshotsPresent += 1;
+    for (const field of ECONOMY_AGGREGATE_FIELDS) {
+      totals[field] += Number(eco[field] ?? 0) || 0;
+    }
+    if (Array.isArray(eco.skippedReasons) && eco.skippedReasons.length) {
+      skippedReasonsBySeed.push(...eco.skippedReasons.map((row) => ({ seed: seedSummary.seed, ...row })));
+    }
+    if (Array.isArray(eco.warnings) && eco.warnings.length) {
+      warningsBySeed.push({ seed: seedSummary.seed, warnings: eco.warnings });
+    }
+  }
+  return { snapshotsPresent, totals, skippedReasonsBySeed, warningsBySeed };
+}
+
+function buildMultiSeedAggregate({ profileConfig, seedResults, t0 }) {
+  const seedSummaries = seedResults.map(buildSeedSummary);
+  const failuresBySeed = seedResults
+    .filter((result) => !result?.passed || (result?.failures?.length ?? 0) > 0)
+    .map((result) => ({ seed: result.seed, failures: result.failures ?? [], firstFailure: result.failures?.[0] ?? null }));
+  const warningsBySeed = seedResults
+    .filter((result) => (result?.warnings?.length ?? 0) > 0)
+    .map((result) => ({ seed: result.seed, warnings: result.warnings ?? [], warningsByCode: countWarningsByCode(result.warnings ?? []) }));
+  const persistenceWarningsBySeed = seedSummaries
+    .filter((summary) => summary.persistenceAssertionFailures.length > 0)
+    .map((summary) => ({ seed: summary.seed, assertionFailures: summary.persistenceAssertionFailures }));
+  const economyAggregate = aggregateEconomy(seedSummaries);
+  const totalRuntimeMs = Date.now() - t0;
+  const passedSeeds = seedResults.filter((result) => !!result?.passed).length;
+  const failedSeeds = seedResults.length - passedSeeds;
+  const warningSeeds = seedResults.filter((result) => (result?.warnings?.length ?? 0) > 0).length;
+  const passedWithoutWarnings = profileConfig.failOnWarnings
+    ? failedSeeds === 0 && warningSeeds === 0
+    : failedSeeds === 0;
+  return {
+    multiSeed: true,
+    passed: passedWithoutWarnings,
+    severity: failedSeeds > 0 ? 'error' : warningSeeds > 0 ? 'warn' : 'ok',
+    auditProfile: profileConfig.auditProfile ?? 'multi-seed-ci',
+    runnerProfile: profileConfig.runnerProfile ?? 'ci',
+    phasePath: profileConfig.phasePath ?? 'short',
+    seeds: seedResults.map((result) => result.seed),
+    seedCount: seedResults.length,
+    passCount: passedSeeds,
+    failCount: failedSeeds,
+    warningSeedCount: warningSeeds,
+    runtimeMs: totalRuntimeMs,
+    runtimeTotalMs: totalRuntimeMs,
+    runtimePerSeed: Object.fromEntries(seedResults.map((result) => [String(result.seed), result.runtimeMs ?? 0])),
+    seasons: profileConfig.seasons,
+    failOnWarnings: !!profileConfig.failOnWarnings,
+    profileNotes: profileConfig.profileNotes ?? [],
+    harnessConfig: {
+      auditProfile: profileConfig.auditProfile ?? 'multi-seed-ci',
+      runnerProfile: profileConfig.runnerProfile ?? 'ci',
+      phasePath: profileConfig.phasePath ?? 'short',
+      seeds: seedResults.map((result) => result.seed),
+      seasons: profileConfig.seasons,
+      ci: (profileConfig.runnerProfile ?? 'ci') === 'ci',
+      deep: !!profileConfig.deep,
+      deepEachSeason: !!profileConfig.deepEachSeason,
+      phaseTimeoutMs: profileConfig.phaseTimeoutMs,
+      maxRuntimeMs: profileConfig.maxRuntimeMs,
+      failOnWarnings: !!profileConfig.failOnWarnings,
+    },
+    seedSummaries,
+    failuresBySeed,
+    warningsBySeed,
+    economyAggregate,
+    persistenceWarningsBySeed,
+    results: seedResults,
+    failures: failuresBySeed.flatMap((row) => row.failures.map((failure) => ({ ...failure, seed: row.seed, message: `[seed ${row.seed}] ${failure.message}` }))),
+    warnings: warningsBySeed.flatMap((row) => row.warnings.map((warning) => ({ ...warning, seed: row.seed, message: `[seed ${row.seed}] ${warning.message}` }))),
+  };
+}
+
 /**
  * @typedef {object} DynastySoakRunnerOptions
  * @property {number} [seasons=5]
@@ -796,6 +930,7 @@ async function runFullDynastySoakOnce(opts = {}) {
       const audit = runDynastySoakAudit({
         viewState: view,
         seasonIndex: s,
+        expectedTeamCount: 32,
         allSeasons: allSeasonsMsg.payload?.seasons ?? null,
         seasonHistory,
         transactions: txMsg.payload?.transactions ?? [],
@@ -1189,6 +1324,7 @@ async function runCiDynastySoakOnce(opts = {}) {
     const audit = runDynastySoakAudit({
       viewState: view,
       seasonIndex: 0,
+      expectedTeamCount: 32,
       allSeasons: allSeasonsMsg.payload?.seasons ?? null,
       seasonHistory: null,
       transactions: txMsg.payload?.transactions ?? [],
@@ -1253,7 +1389,28 @@ async function runCiDynastySoakOnce(opts = {}) {
  * @param {DynastySoakRunnerOptions} opts
  */
 export async function runDynastySoakOnce(opts = {}) {
-  const auditProfile = String(opts.auditProfile ?? (opts.ci ? 'ci' : 'full')).toLowerCase();
+  const auditProfile = String(opts.runnerProfile ?? opts.auditProfile ?? (opts.ci ? 'ci' : 'full')).toLowerCase();
   if (auditProfile === 'ci') return runCiDynastySoakOnce({ ...opts, ci: true, auditProfile: 'ci' });
   return runFullDynastySoakOnce({ ...opts, ci: false, auditProfile: 'full' });
+}
+
+export async function runDynastySoakMultiSeed(opts = {}) {
+  const seeds = Array.isArray(opts.seeds) && opts.seeds.length ? opts.seeds : [1383, 1408, 1426];
+  const t0 = Date.now();
+  const seedResults = [];
+  const runOne = typeof opts.runOne === 'function' ? opts.runOne : runDynastySoakOnce;
+  for (const seed of seeds) {
+    if (typeof opts.onSeedStart === 'function') opts.onSeedStart(seed, seedResults.length + 1, seeds.length);
+    const result = await runOne({
+      ...opts,
+      seed,
+      seeds: undefined,
+      auditProfile: opts.runnerProfile ?? 'ci',
+      runnerProfile: opts.runnerProfile ?? 'ci',
+      ci: (opts.runnerProfile ?? 'ci') === 'ci',
+    });
+    seedResults.push({ ...result, seed });
+    if (typeof opts.onSeedComplete === 'function') opts.onSeedComplete(seedResults[seedResults.length - 1], seedResults.length, seeds.length);
+  }
+  return buildMultiSeedAggregate({ profileConfig: opts, seedResults, t0 });
 }

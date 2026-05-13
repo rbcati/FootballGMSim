@@ -333,4 +333,69 @@ describe('dynastySoakCli', () => {
     expect(slim.finalView).toBeUndefined();
     expect(slim.a).toBe(1);
   });
+
+  it('parses comma-separated seeds and resolves multi-seed-ci defaults', () => {
+    const parsed = parseDynastySoakArgv(['node', 'x.mjs', '--audit-profile=multi-seed-ci', '--seeds=1383,1408,1426']);
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.raw.seeds).toEqual([1383, 1408, 1426]);
+
+    const { errors, resolved } = resolveDynastySoakConfig(parsed.raw);
+    expect(errors).toEqual([]);
+    expect(resolved.isMultiSeed).toBe(true);
+    expect(resolved.runnerProfile).toBe('ci');
+    expect(resolved.seasons).toBe(1);
+    expect(resolved.seeds).toEqual([1383, 1408, 1426]);
+  });
+
+  it('uses default multi-seed-ci seeds when --seeds is omitted', () => {
+    const { raw } = parseDynastySoakArgv(['node', 'x.mjs', '--audit-profile=multi-seed-ci']);
+    const { resolved } = resolveDynastySoakConfig(raw);
+    expect(resolved.seeds).toEqual([1383, 1408, 1426]);
+    expect(resolved.ci).toBe(true);
+  });
+
+  it('keeps long-ci optional/manual and does not trigger it by default', () => {
+    const defaultResolved = resolveDynastySoakConfig(parseDynastySoakArgv(['node', 'x.mjs']).raw).resolved;
+    expect(defaultResolved.auditProfile).toBe('full');
+    expect(defaultResolved.isLongProfile).toBe(false);
+
+    const longResolved = resolveDynastySoakConfig(parseDynastySoakArgv(['node', 'x.mjs', '--audit-profile=long-ci']).raw).resolved;
+    expect(longResolved.auditProfile).toBe('long-ci');
+    expect(longResolved.runnerProfile).toBe('full');
+    expect(longResolved.isLongProfile).toBe(true);
+    expect(longResolved.seasons).toBe(3);
+  });
+
+  it('buildMarkdownReport includes multi-seed summary and grouped warnings', () => {
+    const md = buildMarkdownReport({
+      multiSeed: true,
+      auditProfile: 'multi-seed-ci',
+      runnerProfile: 'ci',
+      seeds: [1383, 1408],
+      seedCount: 2,
+      passCount: 1,
+      failCount: 1,
+      warningSeedCount: 1,
+      runtimeTotalMs: 1234,
+      passed: false,
+      severity: 'error',
+      failOnWarnings: false,
+      profileNotes: ['multi seed note'],
+      seedSummaries: [
+        { seed: 1383, passed: true, severity: 'warn', runtimeMs: 100, seasonsSimmed: 0, finalPhase: 'regular', finalYear: 2026, failureCount: 0, warningCount: 1, warningsByCode: { hof_empty_young: 1 }, persistenceAssertionFailures: [] },
+        { seed: 1408, passed: false, severity: 'error', runtimeMs: 200, seasonsSimmed: 0, finalPhase: 'regular', finalYear: 2026, failureCount: 1, warningCount: 0, firstFailure: { code: 'runner_fatal', message: 'boom' }, persistenceAssertionFailures: [] },
+      ],
+      warningsBySeed: [{ seed: 1383, warningsByCode: { hof_empty_young: 1 }, warnings: [{ code: 'hof_empty_young', message: 'young league' }] }],
+      failuresBySeed: [{ seed: 1408, failures: [{ code: 'runner_fatal', message: 'boom' }] }],
+      economyAggregate: { snapshotsPresent: 1, totals: { teamsOverCap: 0, cpuOfferCount: 2 }, skippedReasonsBySeed: [{ seed: 1408, code: 'economy_snapshot_missing', reason: 'No economyRegressionSnapshot was produced for this seed.' }] },
+      persistenceWarningsBySeed: [],
+    });
+    expect(md).toContain('Dynasty multi-seed soak report');
+    expect(md).toContain('Pass / fail');
+    expect(md).toContain('Seed 1383');
+    expect(md).toContain('runner_fatal');
+    expect(md).toContain('Economy warning aggregate');
+    expect(md).toContain('economy_snapshot_missing');
+  });
+
 });
