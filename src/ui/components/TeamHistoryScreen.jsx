@@ -4,6 +4,7 @@ import { buildCompletedGamePresentation, openResolvedBoxScore } from '../utils/b
 import { buildShowingLabel, rowMatchesSearch, stableSortRows } from '../utils/dataBrowser.js';
 import { buildFranchiseHistoryModel, PLAYOFF_CALIBER_WINS } from '../../core/franchiseHistoryModel.js';
 import { RECORD_BOOK_PLAYER_KEYS, RECORD_LABELS } from '../../core/recordBookV1.js';
+import { buildShowingLabel, rowMatchesSearch, stableSortRows } from '../utils/dataBrowser.js';
 
 function buildSeasonTeamMap(season) {
   const map = {};
@@ -50,12 +51,46 @@ function RecordRow({ label, value, detail }) {
   );
 }
 
+const TIMELINE_SORT_OPTIONS = [
+  { value: 'year', label: 'Year' },
+  { value: 'wins', label: 'Wins' },
+  { value: 'losses', label: 'Losses' },
+  { value: 'playoffResult', label: 'Playoff result' },
+  { value: 'pf', label: 'Points for' },
+  { value: 'pointDifferential', label: 'Point diff' },
+];
+
+function timelinePlayoffResultValue(row) {
+  if (row?.champion) return 4;
+  if (row?.runnerUp) return 3;
+  if (row?.truePlayoff) return 2;
+  if (row?.playoffCaliber) return 1;
+  return 0;
+}
+
+function buildTimelineSearchText(row) {
+  return [
+    row?.year,
+    row?.teamAbbr,
+    `${row?.wins ?? 0}-${row?.losses ?? 0}${row?.ties ? `-${row.ties}` : ''}`,
+    row?.champion ? 'champion title season' : '',
+    row?.runnerUp ? 'runner up finals' : '',
+    row?.truePlayoff ? 'documented postseason playoff bracket' : '',
+    row?.playoffCaliber ? 'playoff caliber' : '',
+    row?.eliteSeason ? 'elite season' : '',
+    row?.losingSeason ? 'losing season' : '',
+    row?.mvp?.name,
+  ].filter(Boolean).join(' ');
+}
+
 export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSelect, onBack, onOpenBoxScore, onOpenDraftHistory }) {
   const [seasons, setSeasons] = useState([]);
   const [hofPlayers, setHofPlayers] = useState([]);
   const [hofClasses, setHofClasses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [queryYear, setQueryYear] = useState('');
+  const [timelineSearch, setTimelineSearch] = useState('');
+  const [timelineSortKey, setTimelineSortKey] = useState('year');
+  const [timelineSortDir, setTimelineSortDir] = useState('desc');
   const [scope, setScope] = useState('all');
   const [timelineSort, setTimelineSort] = useState({ key: 'year', dir: 'desc' });
   const [majorMoves, setMajorMoves] = useState([]);
@@ -193,6 +228,30 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
     setScope('all');
     setTimelineSort({ key: 'year', dir: 'desc' });
   };
+      return rowMatchesSearch(row, timelineSearch, [
+        'year',
+        'wins',
+        'losses',
+        'ties',
+        'pf',
+        'pa',
+        buildTimelineSearchText,
+      ]);
+    });
+  }, [model.seasons, scope, timelineSearch]);
+
+  const timelineRows = useMemo(() => {
+    const getSortValue = (row) => {
+      if (timelineSortKey === 'playoffResult') return timelinePlayoffResultValue(row);
+      if (timelineSortKey === 'pointDifferential') {
+        return Number(row?.pointDifferential ?? (Number(row?.pf ?? 0) - Number(row?.pa ?? 0)));
+      }
+      return row?.[timelineSortKey];
+    };
+    return stableSortRows(filteredTimeline, getSortValue, timelineSortDir, (row) => row?.year);
+  }, [filteredTimeline, timelineSortDir, timelineSortKey]);
+
+  const hasTimelineFilters = Boolean(timelineSearch.trim()) || scope !== 'all' || timelineSortKey !== 'year' || timelineSortDir !== 'desc';
 
   const completedGameRows = useMemo(() => {
     const rows = [];
@@ -529,6 +588,56 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
             {buildShowingLabel(filteredTimeline.length, model.seasons?.length ?? 0, 'season')}
           </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <input
+              aria-label="Search team history seasons"
+              value={timelineSearch}
+              onChange={(e) => setTimelineSearch(e.target.value)}
+              placeholder="Search year, result, phase, MVP"
+              style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 10px', color: 'var(--text)', minWidth: 220, flex: '1 1 220px' }}
+            />
+            <select
+              aria-label="Sort team history seasons"
+              value={timelineSortKey}
+              onChange={(e) => setTimelineSortKey(e.target.value)}
+              style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 10px', color: 'var(--text)', minWidth: 150 }}
+            >
+              {TIMELINE_SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              aria-label="Toggle team history season sort direction"
+              onClick={() => setTimelineSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+            >
+              {timelineSortDir === 'desc' ? 'Newest/highest first' : 'Oldest/lowest first'}
+            </button>
+            {hasTimelineFilters ? (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setTimelineSearch('');
+                  setTimelineSortKey('year');
+                  setTimelineSortDir('desc');
+                  setScope('all');
+                }}
+              >
+                Reset filters
+              </button>
+            ) : null}
+          </div>
+          <div
+            data-testid="team-history-timeline-count"
+            style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}
+          >
+            <span>{buildShowingLabel(timelineRows.length, model.seasons?.length ?? 0, 'season')}</span>
+            <span>
+              Sort: {TIMELINE_SORT_OPTIONS.find((opt) => opt.value === timelineSortKey)?.label ?? timelineSortKey} {timelineSortDir === 'asc' ? '↑' : '↓'}
+            </span>
+            {scope !== 'all' ? <span>Scope: {scope}</span> : null}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {[
@@ -550,6 +659,11 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
           ) : (
             filteredTimeline.map((s) => (
               <div key={s.year} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }} data-testid="team-history-season-row">
+          {timelineRows.length === 0 ? (
+            <EmptyState title="No team history for this filter" body="Adjust filters or archive more seasons." />
+          ) : (
+            timelineRows.map((s) => (
+              <div key={s.year} data-testid={`team-history-season-${s.year}`} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <strong>{s.year}</strong>
                   <span>
@@ -561,6 +675,8 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
                 </div>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                   {teamSeasonResultLabel(s)} · PF {s.pf} · PA {s.pa} · Diff {s.pointDifferential}
+                  PF {s.pf} · PA {s.pa}
+                  {s.pointDifferential != null ? ` · Diff ${s.pointDifferential > 0 ? '+' : ''}${s.pointDifferential}` : ''}
                   {s.truePlayoff ? ' · Postseason (documented)' : s.playoffCaliber ? ' · Playoff-caliber' : ''}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
