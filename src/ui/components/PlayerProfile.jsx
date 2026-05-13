@@ -28,6 +28,7 @@ import { ToneChip, DevelopmentSignalRow, DevelopmentStatCard } from './PlayerDev
 import EmptyState from './EmptyState.jsx';
 import { buildRouteRequestKey, buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
+import { stableSortRows, buildShowingLabel } from "../utils/dataBrowser.js";
 import { getPlayerGameLogs } from "../utils/playerGameLogs.js";
 import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from "../utils/dataBrowser.js";
 import { buildMergedPlayerAwardTimeline, buildPlayerAwardHeaderBadges } from "../../core/playerAwardTimeline.js";
@@ -511,6 +512,8 @@ export default function PlayerProfile({
   const [extending, setExtending] = useState(false);
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
+  const [seasonLogSortField, setSeasonLogSortField] = useState('season');
+  const [seasonLogSortDir, setSeasonLogSortDir] = useState('desc');
   const [seasonLogSearch, setSeasonLogSearch] = useState("");
   const [seasonLogTeam, setSeasonLogTeam] = useState("all");
   const [seasonLogSort, setSeasonLogSort] = useState({ key: "year", dir: "desc" });
@@ -879,6 +882,22 @@ export default function PlayerProfile({
 
   const careerRows = useMemo(() => mergedProfileSeasonRows, [mergedProfileSeasonRows]);
 
+  const sortedSeasonLogRows = useMemo(() => {
+    const getVal = (row) => {
+      if (seasonLogSortField === 'ovr') return row.ovr ?? 0;
+      if (seasonLogSortField === 'gamesPlayed') return row.gamesPlayed ?? 0;
+      if (seasonLogSortField === 'primaryStat') {
+        const pos = String(effectivePlayer?.pos ?? '').toUpperCase();
+        if (['QB'].includes(pos)) return row.passYds ?? 0;
+        if (['RB', 'FB'].includes(pos)) return row.rushYds ?? 0;
+        if (['WR', 'TE'].includes(pos)) return row.recYds ?? 0;
+        if (['DE', 'DT', 'LB', 'CB', 'S', 'DL', 'EDGE'].includes(pos)) return row.tackles ?? 0;
+        return row.gamesPlayed ?? 0;
+      }
+      return row.season ?? '';
+    };
+    return stableSortRows(mergedProfileSeasonRows, getVal, seasonLogSortDir);
+  }, [mergedProfileSeasonRows, seasonLogSortField, seasonLogSortDir, effectivePlayer?.pos]);
   const seasonLogKeyStatGetter = useMemo(
     () => pickSeasonLogKeyStatGetter(effectivePlayer?.pos ?? effectivePlayer?.position),
     [effectivePlayer?.pos, effectivePlayer?.position],
@@ -2180,6 +2199,54 @@ export default function PlayerProfile({
 
           {/* ── Per-season career log (player.careerStats + archived playerSeasonStatsV1) ── */}
           {!loading && mergedProfileSeasonRows.length > 0 && (
+            <section className="card-enter" data-testid="player-profile-season-log">
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: "var(--space-2)" }}>
+                <h3
+                  style={{
+                    fontSize: "var(--text-sm)",
+                    fontWeight: 700,
+                    margin: 0,
+                    color: "var(--text-muted)",
+                    textTransform: "uppercase",
+                    letterSpacing: ".07em",
+                  }}
+                >
+                  Season Log
+                </h3>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                  <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Sort:</span>
+                  {[
+                    { key: "season", label: "Year" },
+                    { key: "gamesPlayed", label: "GP" },
+                    { key: "primaryStat", label: "Key Stat" },
+                    { key: "ovr", label: "OVR" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        if (seasonLogSortField === opt.key) {
+                          setSeasonLogSortDir((d) => d === "asc" ? "desc" : "asc");
+                        } else {
+                          setSeasonLogSortField(opt.key);
+                          setSeasonLogSortDir("desc");
+                        }
+                      }}
+                      style={{ fontSize: "0.68rem", padding: "2px 7px", fontWeight: seasonLogSortField === opt.key ? 700 : 400, opacity: seasonLogSortField === opt.key ? 1 : 0.6 }}
+                      aria-pressed={seasonLogSortField === opt.key}
+                    >
+                      {opt.label}{seasonLogSortField === opt.key ? (seasonLogSortDir === "desc" ? " ▼" : " ▲") : ""}
+                    </button>
+                  ))}
+                  <span
+                    style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginLeft: 4 }}
+                    data-testid="season-log-showing-label"
+                  >
+                    {buildShowingLabel(sortedSeasonLogRows.length, mergedProfileSeasonRows.length, "season")}
+                  </span>
+                </div>
+              </div>
             <section className="card-enter">
               <h3
                 style={{
@@ -2434,6 +2501,7 @@ export default function PlayerProfile({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {sortedSeasonLogRows.map((line, i) => (
                     {displayedSeasonLogRows.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={12} style={{ textAlign: "center", color: "var(--text-muted)", padding: "var(--space-3)" }}>

@@ -620,4 +620,60 @@ describe('PlayerProfile', () => {
     await waitFor(() => expect(screen.getByTestId('player-profile-legacy-watch')).toBeTruthy());
     expect(screen.getByText(/Legacy score/i)).toBeTruthy();
   });
+
+  it('shows season log sort controls and showing count when season log rows exist', async () => {
+    const multiSeasonActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: {
+          player: { ...player, careerStats: [] },
+          stats: [],
+          teammates: [],
+          meta: {},
+        },
+      })),
+      getAllSeasons: vi.fn(async () => ({
+        payload: {
+          seasons: [
+            {
+              id: 's1',
+              year: 2030,
+              playerSeasonStatsV1: {
+                schemaVersion: 1,
+                rows: [{ playerId: 11, playerName: 'Avery Fields', pos: 'QB', teamId: 1, teamAbbr: 'DAL', year: 2030, seasonId: 's1', gamesPlayed: 14, passYds: 3800, passTDs: 28, passInts: 8, rushYds: 0, rushTDs: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, defInts: 0, fgMade: 0, xpMade: 0 }],
+                meta: {},
+              },
+            },
+            {
+              id: 's2',
+              year: 2031,
+              playerSeasonStatsV1: {
+                schemaVersion: 1,
+                rows: [{ playerId: 11, playerName: 'Avery Fields', pos: 'QB', teamId: 1, teamAbbr: 'DAL', year: 2031, seasonId: 's2', gamesPlayed: 16, passYds: 4500, passTDs: 35, passInts: 7, rushYds: 0, rushTDs: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, defInts: 0, fgMade: 0, xpMade: 0 }],
+                meta: {},
+              },
+            },
+          ],
+        },
+      })),
+      getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+    };
+
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={multiSeasonActions} teams={league.teams} league={league} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('player-profile-season-log')).toBeTruthy();
+    });
+
+    expect(screen.getByTestId('season-log-showing-label').textContent).toMatch(/Showing 2 of 2 seasons/i);
+
+    const sortButtons = screen.getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') !== null);
+    expect(sortButtons.length).toBeGreaterThan(0);
+  });
+
+  it('season log renders safely with no archive data (safe fallback)', async () => {
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={league} />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('player-profile-season-log')).toBeNull();
+    });
+  });
 });
