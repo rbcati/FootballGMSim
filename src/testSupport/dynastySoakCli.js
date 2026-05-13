@@ -10,9 +10,9 @@ export const DYNASTY_SOAK_USAGE = `Usage: npm run audit:dynasty -- [options]
 
 Options:
   --ci                    Alias for --audit-profile=ci (fast real-worker smoke audit)
-  --audit-profile=ci|full|multi-seed-ci|long-ci|stability
-                          Profile to run: ci=short partial phase path, full=legacy manual audit, multi-seed-ci=3 short deterministic seeds, long-ci/stability=bounded 3-season manual audit
-  --seasons=N             Number of seasons to simulate with --audit-profile=full/long-ci/stability (default: full=5, long-ci=3; CI uses a short path)
+  --audit-profile=ci|full|multi-seed-ci|long-ci|stability|stability-v1
+                          Profile to run: ci=short partial phase path, full=legacy manual audit, multi-seed-ci=3 short deterministic seeds, long-ci/stability=bounded manual audit, stability-v1=manual 5-season/3-seed V1 audit
+  --seasons=N             Number of seasons to simulate with --audit-profile=full/long-ci/stability/stability-v1 (default: full=5, long-ci/stability=3, stability-v1=5; CI uses a short path)
   --seed=N                RNG seed for single-seed profiles (default: 1383)
   --seeds=A,B,C           Comma-separated seeds for multi-seed profiles (default: 1383,1408,1426)
   --fail-on-warnings      Treat warnings as a failing audit exit for manual strict mode (default: false)
@@ -42,6 +42,7 @@ function parseRequiredNumber(flag, value, errors) {
 }
 
 export const DEFAULT_MULTI_SEED_CI_SEEDS = [1383, 1408, 1426];
+export const DEFAULT_STABILITY_V1_SEEDS = [1383, 1408, 1426];
 
 export function parseSeedList(value, errors = []) {
   const rawValue = value == null ? '' : String(value);
@@ -176,22 +177,25 @@ export function resolveDynastySoakConfig(raw) {
   }
   const requestedProfile = raw.auditProfile ?? (raw.ci ? 'ci' : 'full');
   const auditProfile = String(requestedProfile || '').toLowerCase();
-  const supportedProfiles = ['ci', 'full', 'multi-seed-ci', 'long-ci', 'stability'];
+  const supportedProfiles = ['ci', 'full', 'multi-seed-ci', 'long-ci', 'stability', 'stability-v1'];
   if (!supportedProfiles.includes(auditProfile)) {
     errors.push(`Unknown audit profile: ${requestedProfile}. Expected one of: ${supportedProfiles.join(', ')}.`);
   }
-  const isMultiSeed = auditProfile === 'multi-seed-ci';
-  const isLongProfile = auditProfile === 'long-ci' || auditProfile === 'stability';
-  const runnerProfile = isMultiSeed ? 'ci' : isLongProfile ? 'full' : auditProfile;
+  const isStabilityV1 = auditProfile === 'stability-v1';
+  const isMultiSeed = auditProfile === 'multi-seed-ci' || isStabilityV1;
+  const isLongProfile = auditProfile === 'long-ci' || auditProfile === 'stability' || isStabilityV1;
+  const runnerProfile = auditProfile === 'multi-seed-ci' ? 'ci' : isLongProfile ? 'full' : auditProfile;
   const requestedSeasons =
     raw.seasons != null && Number.isFinite(Number(raw.seasons))
       ? Math.max(1, Math.min(50, Number(raw.seasons)))
       : null;
   const seasons = runnerProfile === 'ci'
     ? 1
-    : requestedSeasons ?? (isLongProfile ? 3 : 5);
+    : requestedSeasons ?? (isStabilityV1 ? 5 : isLongProfile ? 3 : 5);
   const seed = raw.seed != null && Number.isFinite(Number(raw.seed)) ? Number(raw.seed) : 1383;
-  const seeds = isMultiSeed ? (Array.isArray(raw.seeds) && raw.seeds.length ? raw.seeds : DEFAULT_MULTI_SEED_CI_SEEDS) : [seed];
+  const seeds = isMultiSeed
+    ? (Array.isArray(raw.seeds) && raw.seeds.length ? raw.seeds : (isStabilityV1 ? DEFAULT_STABILITY_V1_SEEDS : DEFAULT_MULTI_SEED_CI_SEEDS))
+    : [seed];
 
   if (raw.teams != null && Number.isFinite(raw.teams) && Number(raw.teams) !== 32) {
     errors.push(
@@ -227,16 +231,23 @@ export function resolveDynastySoakConfig(raw) {
       runnerProfile,
       isMultiSeed,
       isLongProfile,
+      isStabilityV1,
       phasePath: runnerProfile === 'ci' ? 'short' : 'full-season',
       requestedSeasons,
       effectiveSeasons: seasons,
       ciWeeks: runnerProfile === 'ci' ? 2 : null,
-      profileNotes: isMultiSeed
+      profileNotes: isStabilityV1
         ? [
-            'Multi-seed CI profile runs the existing short real-worker CI path once per deterministic seed.',
-            'It intentionally does not complete seasons; use --audit-profile=long-ci for bounded completed-season coverage.',
+            'Long-Dynasty / Multi-Seed Stability Audit V1 is optional/manual and runs completed-season coverage across deterministic seeds.',
+            'Default V1 depth is 5 seasons x 3 seeds; use --seasons and --seeds to tune release depth without changing push CI.',
+            'Warnings are balance concerns unless --fail-on-warnings is set; corruption remains a hard failure.',
           ]
-        : runnerProfile === 'ci'
+        : isMultiSeed
+          ? [
+              'Multi-seed CI profile runs the existing short real-worker CI path once per deterministic seed.',
+              'It intentionally does not complete seasons; use --audit-profile=stability-v1 for multi-seed completed-season coverage.',
+            ]
+          : runnerProfile === 'ci'
           ? [
               'CI profile runs a short real-worker phase path and does not complete a season.',
               'Use --audit-profile=full --seasons=1 for the full manual season audit.',
@@ -338,11 +349,13 @@ export function buildMultiSeedMarkdownReport(result) {
   lines.push('');
   lines.push(`- **Profile:** ${mdEscape(result.auditProfile ?? 'multi-seed-ci')}`);
   lines.push(`- **Runner profile:** ${mdEscape(result.runnerProfile ?? 'ci')}`);
-  lines.push(`- **Seeds:** ${(result.seeds ?? []).join(', ')}`);
+  lines.push(`- **Seeds tested:** ${(result.seeds ?? []).join(', ')}`);
+  lines.push(`- **Seasons per seed:** ${result.seasons ?? result.harnessConfig?.seasons ?? 'n/a'}`);
   lines.push(`- **Seed count:** ${result.seedCount ?? 0}`);
   lines.push(`- **Pass / fail:** ${result.passCount ?? 0} / ${result.failCount ?? 0}`);
   lines.push(`- **Warning seeds:** ${result.warningSeedCount ?? 0}`);
   lines.push(`- **Runtime total ms:** ${result.runtimeTotalMs ?? result.runtimeMs ?? 0}`);
+  lines.push(`- **Runtime per seed:** ${mdEscape(JSON.stringify(result.runtimePerSeed ?? {}))}`);
   lines.push(`- **Passed:** ${result.passed ? 'yes' : 'no'}`);
   lines.push(`- **Severity:** ${mdEscape(result.severity ?? 'unknown')}`);
   lines.push(`- **Fail on warnings:** ${result.failOnWarnings ? 'yes' : 'no'}`);
@@ -357,11 +370,11 @@ export function buildMultiSeedMarkdownReport(result) {
 
   lines.push('## Per-seed summary');
   lines.push('');
-  lines.push('| Seed | Passed | Severity | Runtime ms | Seasons | Final phase | Final year | Failures | Warnings | First failure |');
-  lines.push('| --- | --- | --- | ---: | ---: | --- | --- | ---: | ---: | --- |');
+  lines.push('| Seed | Passed | Severity | Runtime ms | Seasons | Final phase | Final year | Completed archives | Failures | Warnings | First failure |');
+  lines.push('| --- | --- | --- | ---: | ---: | --- | --- | ---: | ---: | ---: | --- |');
   for (const row of result.seedSummaries ?? []) {
     const firstFailure = row.firstFailure ? `${row.firstFailure.code}: ${row.firstFailure.message}` : '';
-    lines.push(`| ${row.seed} | ${row.passed ? 'yes' : 'no'} | ${mdEscape(row.severity)} | ${row.runtimeMs} | ${row.seasonsSimmed} | ${mdEscape(row.finalPhase ?? 'n/a')} | ${row.finalYear ?? 'n/a'} | ${row.failureCount} | ${row.warningCount} | ${mdEscape(firstFailure)} |`);
+    lines.push(`| ${row.seed} | ${row.passed ? 'yes' : 'no'} | ${mdEscape(row.severity)} | ${row.runtimeMs} | ${row.seasonsSimmed} | ${mdEscape(row.finalPhase ?? 'n/a')} | ${row.finalYear ?? 'n/a'} | ${row.completedSeasonCount ?? 'n/a'} | ${row.failureCount} | ${row.warningCount} | ${mdEscape(firstFailure)} |`);
   }
   lines.push('');
 
@@ -401,6 +414,19 @@ export function buildMultiSeedMarkdownReport(result) {
   }
   lines.push('');
 
+  lines.push('## Persistence/reload summary');
+  lines.push('');
+  if (!Array.isArray(result.persistenceReloadSummary) || result.persistenceReloadSummary.length === 0) lines.push('_No reload summaries recorded._');
+  else {
+    lines.push('| Seed | Reload ok | Year | Phase | Teams | Season ID | Completed archives | Tx sample | Mismatches |');
+    lines.push('| --- | --- | --- | --- | ---: | --- | ---: | ---: | --- |');
+    for (const row of result.persistenceReloadSummary) {
+      const after = row.after ?? {};
+      lines.push(`| ${row.seed} | ${row.ok === true ? 'yes' : row.ok === false ? 'no' : 'n/a'} | ${after.year ?? 'n/a'} | ${mdEscape(after.phase ?? 'n/a')} | ${after.teamCount ?? 'n/a'} | ${mdEscape(after.currentSeasonId ?? 'n/a')} | ${after.completedSeasonCount ?? 'n/a'} | ${after.transactionCountSample ?? 'n/a'} | ${mdEscape((row.mismatches ?? []).map((m) => m.key).join(', ') || '')} |`);
+    }
+  }
+  lines.push('');
+
   lines.push('## Persistence/archive warnings by seed');
   lines.push('');
   if (!result.persistenceWarningsBySeed?.length) lines.push('_None_');
@@ -409,6 +435,38 @@ export function buildMultiSeedMarkdownReport(result) {
       lines.push(`- **Seed ${row.seed}:** ${mdEscape((row.assertionFailures ?? []).map((a) => `${a.id}: ${a.detail}`).join('; '))}`);
     }
   }
+  lines.push('');
+  lines.push('## Slowest checkpoints');
+  lines.push('');
+  const slow = (result.results ?? []).flatMap((r) => (r.timings?.topSlowCheckpoints ?? []).map((c) => ({ ...c, seed: r.seed }))).sort((a, b) => (b.ms ?? 0) - (a.ms ?? 0)).slice(0, 10);
+  if (!slow.length) lines.push('_None recorded._');
+  else {
+    lines.push('| Rank | Seed | Checkpoint | ms | Metadata |');
+    lines.push('| --- | --- | --- | ---: | --- |');
+    slow.forEach((c, i) => lines.push(`| ${i + 1} | ${c.seed} | ${mdEscape(c.name)} | ${c.ms ?? 0} | ${formatCheckpointMeta(c.meta)} |`));
+  }
+  lines.push('');
+
+  lines.push('## What this proves');
+  lines.push('');
+  if (result.auditProfile === 'stability-v1') {
+    lines.push('- Completed-season dynasty flow survived the configured seeds/seasons through boot, simulation, playoffs/offseason, draft/free agency windows, save/load, and history probes.');
+    lines.push('- Hard corruption signals fail the run; economy and roster-balance concerns remain warnings unless strict mode is enabled.');
+  } else if ((result.runnerProfile ?? 'ci') === 'ci') {
+    lines.push('- Short real-worker smoke stability across deterministic seeds without completing seasons.');
+  } else {
+    lines.push('- Completed-season stability for the configured manual profile.');
+  }
+  lines.push('');
+  lines.push('## What this does not prove yet');
+  lines.push('');
+  lines.push('- It is not a 20-50 season migration/statistical distribution proof.');
+  lines.push('- It does not exercise mobile live-site browser storage or every old-save migration path.');
+  lines.push('- Balance warnings identify suspicious patterns; they are not a complete AI team-building scorecard yet.');
+  lines.push('');
+  lines.push('## Suggested next audit depth command');
+  lines.push('');
+  lines.push('`npm run audit:dynasty:stability:deep`');
   lines.push('');
   lines.push('## Notes');
   lines.push('');

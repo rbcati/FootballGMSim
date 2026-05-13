@@ -42,7 +42,7 @@ async function main() {
     );
   }
   if (resolved.isLongProfile) {
-    console.warn('[dynasty-soak] long-ci/stability is optional/manual and is not part of default push CI.');
+    console.warn('[dynasty-soak] long-ci/stability/stability-v1 is optional/manual and is not part of default push CI.');
   }
 
   const result = resolved.isMultiSeed

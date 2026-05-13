@@ -18,6 +18,8 @@ const RESPONSE_BY_REQUEST = {
   [toWorker.SIM_TO_PHASE]: [toUI.FULL_STATE, toUI.ERROR],
   [toWorker.ADVANCE_WEEK]: [toUI.WEEK_COMPLETE, toUI.ERROR, toUI.FULL_STATE],
   [toWorker.SAVE_NOW]: [toUI.SAVED, toUI.ERROR],
+  [toWorker.LOAD_SAVE]: [toUI.FULL_STATE, toUI.ERROR],
+  [toWorker.LOAD_SLOT]: [toUI.FULL_STATE, toUI.ERROR],
   [toWorker.GET_ALL_SEASONS]: [toUI.ALL_SEASONS, toUI.ERROR],
   [toWorker.GET_TRANSACTIONS]: [toUI.TRANSACTIONS, toUI.ERROR],
   [toWorker.GET_RECORDS]: [toUI.RECORDS, toUI.ERROR],
@@ -443,6 +445,9 @@ const ECONOMY_AGGREGATE_FIELDS = [
 
 function buildSeedSummary(result) {
   const economy = result?.reportSummary?.economyRegressionSnapshot ?? null;
+  const completedSeasonCount = Array.isArray(result?.finalView?.leagueHistory)
+    ? result.finalView.leagueHistory.length
+    : (result?.reloadSummary?.after?.completedSeasonCount ?? result?.reportSummary?.completedSeasonCount ?? null);
   return {
     seed: result?.seed,
     passed: !!result?.passed,
@@ -451,6 +456,9 @@ function buildSeedSummary(result) {
     seasonsSimmed: result?.seasonsSimmed ?? 0,
     finalPhase: result?.finalPhase ?? null,
     finalYear: result?.finalYear ?? null,
+    completedSeasonCount,
+    currentSeasonId: result?.reloadSummary?.after?.currentSeasonId ?? result?.finalView?.seasonId ?? null,
+    userTeamId: result?.reloadSummary?.after?.userTeamId ?? result?.finalView?.userTeamId ?? null,
     failureCount: result?.failures?.length ?? 0,
     warningCount: result?.warnings?.length ?? 0,
     firstFailure: result?.failures?.[0]
@@ -458,6 +466,7 @@ function buildSeedSummary(result) {
       : null,
     warningsByCode: countWarningsByCode(result?.warnings ?? []),
     economyRegressionSnapshot: economy,
+    reloadSummary: result?.reloadSummary ?? null,
     persistenceAssertionFailures: (result?.persistenceAssertions ?? [])
       .filter((assertion) => assertion?.ok === false)
       .map((assertion) => ({ id: assertion.id, code: assertion.code, detail: assertion.detail })),
@@ -544,6 +553,13 @@ function buildMultiSeedAggregate({ profileConfig, seedResults, t0 }) {
     failuresBySeed,
     warningsBySeed,
     economyAggregate,
+    persistenceReloadSummary: seedSummaries.map((summary) => ({
+      seed: summary.seed,
+      ok: summary.reloadSummary?.ok ?? null,
+      before: summary.reloadSummary?.before ?? null,
+      after: summary.reloadSummary?.after ?? null,
+      mismatches: summary.reloadSummary?.mismatches ?? [],
+    })),
     persistenceWarningsBySeed,
     results: seedResults,
     failures: failuresBySeed.flatMap((row) => row.failures.map((failure) => ({ ...failure, seed: row.seed, message: `[seed ${row.seed}] ${failure.message}` }))),
@@ -569,6 +585,33 @@ function buildMultiSeedAggregate({ profileConfig, seedResults, t0 }) {
 /**
  * @param {DynastySoakRunnerOptions} opts
  */
+function snapshotReloadFields(view, transactionsRecent = []) {
+  const leagueHistory = Array.isArray(view?.leagueHistory) ? view.leagueHistory : [];
+  return {
+    year: view?.year ?? null,
+    phase: view?.phase ?? null,
+    teamCount: Array.isArray(view?.teams) ? view.teams.length : null,
+    currentSeasonId: view?.seasonId ?? view?.currentSeasonId ?? null,
+    completedSeasonCount: leagueHistory.length,
+    transactionCountSample: Array.isArray(transactionsRecent) ? transactionsRecent.length : null,
+    userTeamId: view?.userTeamId ?? null,
+  };
+}
+
+function compareReloadSummary(before, after) {
+  const required = ['year', 'phase', 'teamCount', 'currentSeasonId', 'completedSeasonCount', 'userTeamId'];
+  const mismatches = [];
+  for (const key of required) {
+    if (String(before?.[key] ?? '') !== String(after?.[key] ?? '')) {
+      mismatches.push({ key, before: before?.[key] ?? null, after: after?.[key] ?? null });
+    }
+  }
+  if (Number(after?.transactionCountSample ?? 0) < Math.min(5, Number(before?.transactionCountSample ?? 0))) {
+    mismatches.push({ key: 'transactionCountSample', before: before?.transactionCountSample ?? null, after: after?.transactionCountSample ?? null });
+  }
+  return { ok: mismatches.length === 0, before, after, mismatches };
+}
+
 async function runFullDynastySoakOnce(opts = {}) {
   const seasons = Math.max(1, Math.min(50, Number(opts.seasons) || 5));
   const seed = Number.isFinite(Number(opts.seed)) ? Number(opts.seed) : 1383;
@@ -586,6 +629,7 @@ async function runFullDynastySoakOnce(opts = {}) {
       ? null
       : Number(opts.maxRuntimeMs);
   const runnerDispatch = typeof opts.dispatchWorker === 'function' ? opts.dispatchWorker : dispatchWorker;
+  const requestedAuditProfile = String(opts.auditProfile ?? 'full');
   const runnerLoadWorkerModule = typeof opts.loadWorkerModule === 'function' ? opts.loadWorkerModule : loadWorkerModule;
 
   const checkpoints = [];
@@ -620,7 +664,7 @@ async function runFullDynastySoakOnce(opts = {}) {
     },
     harnessConfig: {
       ci,
-      auditProfile: 'full',
+      auditProfile: requestedAuditProfile,
       phasePath: 'full-season',
       deep,
       deepEachSeason,
@@ -630,7 +674,7 @@ async function runFullDynastySoakOnce(opts = {}) {
     smallerLeagueNote:
       'Only 32-team safe starter leagues are supported for this harness. Smaller default leagues are deferred (playoff seeding and conference balance are coupled to 32 teams).',
     persistenceAssertions: [],
-    auditProfile: 'full',
+    auditProfile: requestedAuditProfile,
     phasePath: 'full-season',
     profileNotes: opts.profileNotes ?? ['Full profile preserves the legacy full-season SIM_TO_PHASE audit and may be slow.'],
     exerciseMatrix: buildFullExerciseMatrix(),
@@ -1024,17 +1068,86 @@ async function runFullDynastySoakOnce(opts = {}) {
       pushCheckpoint(checkpoints, `S${s}.ADVANCE_WEEK`, Date.now() - tProbe, null);
     }
 
+    let finalRecentTransactions = [];
+    try {
+      const saveT = Date.now();
+      const saveMsg = await runnerDispatch(toWorker.SAVE_NOW, {}, { timeoutMs: Math.min(120_000, phaseTimeoutMs) });
+      pushCheckpoint(checkpoints, 'final.SAVE_NOW', Date.now() - saveT, null);
+      const saveOk = probeHandlerSucceeded(saveMsg);
+      aggregate.persistenceAssertions.push({
+        id: 'final_save_now_flush',
+        ok: saveOk,
+        code: saveOk ? undefined : 'save_now_failed',
+        detail: saveOk ? 'Final SAVE_NOW flush ok before reload proof' : (saveMsg.payload?.message || 'Final SAVE_NOW flush failed'),
+      });
+      const beforeTx = await runnerDispatch(toWorker.GET_TRANSACTIONS, { mode: 'recent', limit: 100 }, { timeoutMs: phaseTimeoutMs });
+      finalRecentTransactions = beforeTx.payload?.transactions ?? [];
+      const before = snapshotReloadFields(view, finalRecentTransactions);
+      const loadT = Date.now();
+      const loadMsg = await runnerDispatch(toWorker.LOAD_SAVE, { leagueId: 'save_slot_1' }, { timeoutMs: Math.min(180_000, phaseTimeoutMs) });
+      pushCheckpoint(checkpoints, 'final.LOAD_SAVE', Date.now() - loadT, null);
+      if (!probeHandlerSucceeded(loadMsg)) {
+        aggregate.reloadSummary = { ok: false, before, after: null, mismatches: [{ key: 'LOAD_SAVE', before: 'ok', after: loadMsg.payload?.message || 'failed' }] };
+      } else {
+        view = loadMsg.payload;
+        const reloadAllSeasons = await runnerDispatch(toWorker.GET_ALL_SEASONS, {}, { timeoutMs: phaseTimeoutMs });
+        const reloadTx = await runnerDispatch(toWorker.GET_TRANSACTIONS, { mode: 'recent', limit: 100 }, { timeoutMs: phaseTimeoutMs });
+        const reloadRecords = await runnerDispatch(toWorker.GET_RECORDS, {}, { timeoutMs: phaseTimeoutMs });
+        const reloadHof = await runnerDispatch(toWorker.GET_HALL_OF_FAME, {}, { timeoutMs: phaseTimeoutMs });
+        const reloadDraftClasses = await runnerDispatch(toWorker.GET_DRAFT_CLASSES, {}, { timeoutMs: phaseTimeoutMs });
+        const reloadedLatest = Array.isArray(view?.leagueHistory) && view.leagueHistory.length ? view.leagueHistory[view.leagueHistory.length - 1] : null;
+        let reloadHistoryOk = true;
+        if (reloadedLatest?.id) {
+          const reloadHistory = await runnerDispatch(toWorker.GET_SEASON_HISTORY, { seasonId: reloadedLatest.id }, { timeoutMs: phaseTimeoutMs });
+          reloadHistoryOk = probeHandlerSucceeded(reloadHistory) && !!reloadHistory.payload?.data;
+        }
+        const after = snapshotReloadFields(view, reloadTx.payload?.transactions ?? []);
+        aggregate.reloadSummary = compareReloadSummary(before, after);
+        aggregate.reloadSummary.handlerProbeOk = {
+          allSeasons: probeHandlerSucceeded(reloadAllSeasons),
+          seasonHistory: reloadHistoryOk,
+          recentTransactions: probeHandlerSucceeded(reloadTx),
+          draftClasses: probeHandlerSucceeded(reloadDraftClasses),
+          records: probeHandlerSucceeded(reloadRecords) && !!(reloadRecords.payload?.recordBook || reloadRecords.payload?.records),
+          hallOfFame: probeHandlerSucceeded(reloadHof) && (!reloadHof.payload || Array.isArray(reloadHof.payload?.players)),
+        };
+        if (Object.values(aggregate.reloadSummary.handlerProbeOk).some((ok) => !ok)) {
+          aggregate.reloadSummary.ok = false;
+          aggregate.reloadSummary.mismatches.push({ key: 'reload_handler_probe', before: 'ok', after: JSON.stringify(aggregate.reloadSummary.handlerProbeOk) });
+        }
+      }
+      aggregate.persistenceAssertions.push({
+        id: 'reload_same_persistence_path',
+        ok: aggregate.reloadSummary?.ok === true,
+        code: aggregate.reloadSummary?.ok === true ? undefined : 'reload_corrupted_state',
+        detail: aggregate.reloadSummary?.ok === true
+          ? `Reload preserved year=${aggregate.reloadSummary.after.year} phase=${aggregate.reloadSummary.after.phase} seasons=${aggregate.reloadSummary.after.completedSeasonCount}`
+          : `Reload mismatch: ${JSON.stringify(aggregate.reloadSummary?.mismatches ?? [])}`,
+      });
+      if (aggregate.reloadSummary?.ok !== true) {
+        aggregate.passed = false;
+        aggregate.failures.push({ code: 'reload_corrupted_state', message: 'Save/load proof lost or corrupted critical dynasty state; see reloadSummary.' });
+      }
+    } catch (err) {
+      aggregate.passed = false;
+      aggregate.reloadSummary = { ok: false, error: err?.message || String(err) };
+      aggregate.failures.push({ code: 'reload_probe_throw', message: err?.message || String(err) });
+    }
+
     aggregate.severity = aggregate.failures.length ? 'error' : aggregate.warnings.length ? 'warn' : 'ok';
+    if (opts.failOnWarnings && aggregate.warnings.length > 0) aggregate.passed = false;
     aggregate.runtimeMs = Date.now() - t0;
     aggregate.seed = seed;
     aggregate.finalPhase = view?.phase ?? null;
     aggregate.finalYear = view?.year ?? null;
     aggregate.reportSummary = lastReportSummary;
+    aggregate.finalView = view;
     aggregate.timings.bootMs = checkpoints.filter((c) => c.name.startsWith('boot.')).reduce((a, c) => a + c.ms, 0);
     aggregate.timings.topSlowCheckpoints = topSlowCheckpoints(checkpoints);
     aggregate.timings.phaseBreakdown = buildPhaseBreakdown(checkpoints);
     aggregate.timings.totalMs = aggregate.runtimeMs;
     aggregate.dynastySoakSimBatch = view?.dynastySoakSimBatch ?? null;
+    aggregate.finalView = view;
 
     return aggregate;
   } catch (e) {
@@ -1391,7 +1504,7 @@ async function runCiDynastySoakOnce(opts = {}) {
 export async function runDynastySoakOnce(opts = {}) {
   const auditProfile = String(opts.runnerProfile ?? opts.auditProfile ?? (opts.ci ? 'ci' : 'full')).toLowerCase();
   if (auditProfile === 'ci') return runCiDynastySoakOnce({ ...opts, ci: true, auditProfile: 'ci' });
-  return runFullDynastySoakOnce({ ...opts, ci: false, auditProfile: 'full' });
+  return runFullDynastySoakOnce({ ...opts, ci: false, auditProfile: opts.auditProfile ?? 'full' });
 }
 
 export async function runDynastySoakMultiSeed(opts = {}) {
@@ -1405,7 +1518,7 @@ export async function runDynastySoakMultiSeed(opts = {}) {
       ...opts,
       seed,
       seeds: undefined,
-      auditProfile: opts.runnerProfile ?? 'ci',
+      auditProfile: opts.auditProfile ?? opts.runnerProfile ?? 'ci',
       runnerProfile: opts.runnerProfile ?? 'ci',
       ci: (opts.runnerProfile ?? 'ci') === 'ci',
     });

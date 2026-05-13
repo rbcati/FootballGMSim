@@ -44,6 +44,20 @@ function isBadNum(v) {
   return !Number.isFinite(v) || Number.isNaN(v) || v === Infinity || v === -Infinity;
 }
 
+function isBadCriticalValue(v) {
+  if (v == null) return true;
+  return typeof v === 'number' && isBadNum(v);
+}
+
+function scanCriticalFields(obj, paths, label, fail) {
+  for (const path of paths) {
+    const value = path.split('.').reduce((acc, key) => (acc == null ? undefined : acc[key]), obj);
+    if (isBadCriticalValue(value)) {
+      fail('critical_value_invalid', `${label}.${path} is ${value == null ? 'null/missing' : 'non-finite'}`, { label, path, value });
+    }
+  }
+}
+
 function emptySummary() {
   return {
     rosterHealth: 'ok',
@@ -499,8 +513,14 @@ function collectAllPlayers(viewState) {
   const out = [];
   for (const t of teams) {
     for (const p of t?.roster || []) {
-      if (p && typeof p === 'object') out.push({ ...p, teamId: p.teamId ?? t.id });
+      if (p && typeof p === 'object') out.push({ ...p, teamId: p.teamId ?? t.id, _auditContainer: `team:${t.id}` });
     }
+  }
+  for (const p of viewState?.freeAgents || []) {
+    if (p && typeof p === 'object') out.push({ ...p, teamId: p.teamId ?? null, _auditContainer: 'freeAgents' });
+  }
+  for (const p of viewState?.draftPool || viewState?.draftClass || []) {
+    if (p && typeof p === 'object') out.push({ ...p, teamId: p.teamId ?? null, _auditContainer: 'draftPool' });
   }
   return out;
 }
@@ -586,12 +606,30 @@ export function runDynastySoakAudit(input = {}) {
     }
   }
 
+  if (!Number.isFinite(year) || year < 1900) {
+    fail('league_year_invalid', `League year is invalid: ${viewState?.year}`);
+    bumpSummary(summary, 'historyHealth', 'fail');
+  }
+  if (!metaPhase) {
+    fail('league_phase_invalid', 'League phase is missing');
+    bumpSummary(summary, 'historyHealth', 'fail');
+  }
+
   // --- Roster / cap / AI strategy ---
   let teamsWithoutQb = 0;
   const archetypes = [];
   for (const team of teams) {
     const tid = team?.id;
     const roster = Array.isArray(team?.roster) ? team.roster : [];
+    if (team?.id == null || team.id === '') {
+      fail('team_id_missing', 'Team missing id');
+      bumpSummary(summary, 'rosterHealth', 'fail');
+    }
+    if (!Array.isArray(team?.roster)) {
+      fail('roster_container_missing', `Team ${tid} roster container missing or invalid`, { teamId: tid });
+      bumpSummary(summary, 'rosterHealth', 'fail');
+    }
+    scanCriticalFields(team, ['capUsed', 'capTotal', 'capRoom', 'wins', 'losses', 'ptsFor', 'ptsAgainst'], `team:${tid}`, fail);
     const n = roster.length;
     if (n === 0) {
       fail('roster_empty', `Team ${tid} has an empty roster`, { teamId: tid });
@@ -609,6 +647,21 @@ export function runDynastySoakAudit(input = {}) {
       if (c < need) {
         warn(`depth_${label.toLowerCase()}`, `Team ${tid} has ${c} ${label} (warn if < ${need})`, { teamId: tid });
         bumpSummary(summary, 'rosterHealth', 'warn');
+      }
+    }
+
+    for (const p of roster.slice(0, 120)) {
+      scanCriticalFields(p, ['id', 'age', 'ovr', 'potential'], `player:${p?.id ?? 'missing'}@team:${tid}`, fail);
+      if (!p?.pos && !p?.position) {
+        fail('player_position_missing', `Player ${p?.id ?? 'unknown'} on team ${tid} missing position`, { teamId: tid, playerId: p?.id });
+        bumpSummary(summary, 'rosterHealth', 'fail');
+      }
+      const contract = p?.contract ?? p;
+      for (const key of ['baseAnnual', 'yearsRemaining']) {
+        if (contract?.[key] != null && isBadNum(num(contract[key]))) {
+          fail('contract_value_invalid', `Player ${p?.id ?? 'unknown'} contract.${key} is non-finite`, { playerId: p?.id, key });
+          bumpSummary(summary, 'capHealth', 'fail');
+        }
       }
     }
 
@@ -674,6 +727,15 @@ export function runDynastySoakAudit(input = {}) {
     }
   }
 
+  const teamsWithoutViableQb = teams.filter((team) => {
+    const roster = Array.isArray(team?.roster) ? team.roster : [];
+    return !roster.some((p) => String(p?.pos ?? p?.position ?? '').toUpperCase() === 'QB' && num(p?.ovr) >= 55);
+  }).length;
+  if (teamsWithoutViableQb >= 8) {
+    warn('qb_scarcity_collapse', `${teamsWithoutViableQb} teams lack a viable 55+ OVR QB option`);
+    bumpSummary(summary, 'rosterHealth', 'warn');
+  }
+
   if (teamsWithoutQb >= 2) {
     fail('multi_team_no_qb', `${teamsWithoutQb} teams lack a QB`);
     bumpSummary(summary, 'rosterHealth', 'fail');
@@ -718,6 +780,25 @@ export function runDynastySoakAudit(input = {}) {
       if (!season?.transactionTimelineV1) {
         warn('transaction_timeline_archive_missing', `Completed season archive ${seasonId} missing transactionTimelineV1`, { seasonId });
         bumpSummary(summary, 'transactionHealth', 'warn');
+      }
+      const archivedStandings = Array.isArray(season?.standings) ? season.standings : [];
+      if (archivedStandings.length) {
+        let totalWins = 0;
+        let totalLosses = 0;
+        for (const row of archivedStandings) {
+          const wins = num(row?.wins);
+          const losses = num(row?.losses);
+          if (isBadNum(wins) || isBadNum(losses) || wins < 0 || losses < 0 || wins > 25 || losses > 25) {
+            fail('archived_standings_impossible', `Completed season ${seasonId} has invalid standings row`, { seasonId, wins, losses });
+            bumpSummary(summary, 'historyHealth', 'fail');
+          }
+          totalWins += Number.isFinite(wins) ? wins : 0;
+          totalLosses += Number.isFinite(losses) ? losses : 0;
+        }
+        if (archivedStandings.length >= 30 && Math.abs(totalWins - totalLosses) > 8) {
+          warn('archived_standings_unbalanced', `Completed season ${seasonId} win/loss totals differ (${totalWins}/${totalLosses})`, { seasonId });
+          bumpSummary(summary, 'historyHealth', 'warn');
+        }
       }
     }
     if (seasonIndex > 0 && leagueHistory.length < seasonIndex) {
@@ -809,6 +890,21 @@ export function runDynastySoakAudit(input = {}) {
 
   // --- Record book rebuild ---
   const allPlayers = collectAllPlayers(viewState);
+  const seenPlayerIds = new Map();
+  for (const p of allPlayers) {
+    const pid = p?.id;
+    if (pid == null || pid === '') {
+      fail('player_id_missing', `Player missing id in ${p?._auditContainer ?? 'unknown'}`);
+      bumpSummary(summary, 'rosterHealth', 'fail');
+      continue;
+    }
+    const key = String(pid);
+    if (seenPlayerIds.has(key)) {
+      fail('duplicate_player_id', `Player id ${key} appears in both ${seenPlayerIds.get(key)} and ${p?._auditContainer ?? 'unknown'}`, { playerId: pid });
+      bumpSummary(summary, 'rosterHealth', 'fail');
+    }
+    seenPlayerIds.set(key, p?._auditContainer ?? 'unknown');
+  }
   try {
     rebuildRecordBookV1({
       leagueHistory,
@@ -879,6 +975,11 @@ export function runDynastySoakAudit(input = {}) {
     warn('economy_rebuild_old_veteran_offer', `${economyRegressionSnapshot.oldVeteranOffersByRebuildTeams} old expensive veteran CPU offer(s) by rebuild teams`);
     bumpSummary(summary, 'aiHealth', 'warn');
   }
+  const contenderTeams = teams.filter((team) => ['contender', 'playoff_hunt', 'desperate'].includes(String(team?.archetype ?? team?.strategy?.archetype ?? team?.teamArchetype ?? '').toLowerCase()));
+  if (contenderTeams.length >= 4 && economyRegressionSnapshot.cpuOfferCount > 0 && economyRegressionSnapshot.contenderVeteranOfferCount === 0) {
+    warn('economy_contenders_no_win_now_moves', 'Contender archetypes exist but no win-now veteran CPU offer activity was observed in the snapshot');
+    bumpSummary(summary, 'aiHealth', 'warn');
+  }
   if (economyRegressionSnapshot.premiumYoungPlayerTradeDiscountFlags > 0 || economyRegressionSnapshot.expensiveVeteranSwapFlags > 0) {
     warn('economy_trade_realism_flags', 'Trade realism warning flags detected in economy regression snapshot', {
       premiumYoungPlayerTradeDiscountFlags: economyRegressionSnapshot.premiumYoungPlayerTradeDiscountFlags,
@@ -888,7 +989,27 @@ export function runDynastySoakAudit(input = {}) {
   }
 
   // --- Transactions + draft class memory ---
+  const finiteOvrs = allPlayers.map((p) => num(p?.ovr)).filter(Number.isFinite);
+  if (finiteOvrs.length >= 500) {
+    const avgOvr = finiteOvrs.reduce((sum, value) => sum + value, 0) / finiteOvrs.length;
+    const eliteCount = finiteOvrs.filter((value) => value >= 90).length;
+    if (avgOvr < 58 || avgOvr > 78 || eliteCount > teams.length * 2.5) {
+      warn('league_talent_distribution_outlier', `League talent distribution looks unrealistic: avgOvr=${Math.round(avgOvr * 10) / 10}, elite90=${eliteCount}`);
+      bumpSummary(summary, 'developmentHealth', 'warn');
+    }
+  }
+
   const rawTx = Array.isArray(input.transactions) ? input.transactions : [];
+  if (rawTx.length > 5000) {
+    fail('transactions_exploded', `Recent transaction sample unexpectedly huge (${rawTx.length})`);
+    bumpSummary(summary, 'transactionHealth', 'fail');
+  }
+  for (const tx of rawTx.slice(0, 1000)) {
+    if (tx?.playerId != null && !seenPlayerIds.has(String(tx.playerId)) && !String(tx?.type ?? '').toLowerCase().includes('draft')) {
+      warn('transaction_orphan_player_ref', `Transaction ${tx?.id ?? 'unknown'} references missing player ${tx.playerId}`, { transactionId: tx?.id, playerId: tx.playerId });
+      bumpSummary(summary, 'transactionHealth', 'warn');
+    }
+  }
   if (seasonIndex >= 2 && rawTx.length < 3) {
     warn('transactions_sparse', `Very few transactions (${rawTx.length}) after ${seasonIndex} seasons`);
     bumpSummary(summary, 'transactionHealth', 'warn');
@@ -946,6 +1067,29 @@ export function runDynastySoakAudit(input = {}) {
   if (Array.isArray(draftClasses) && seasonIndex >= 2 && draftClasses.length === 0) {
     warn('draft_classes_empty', 'GET_DRAFT_CLASSES returned no seasons after multiple sims');
     bumpSummary(summary, 'draftHealth', 'warn');
+  }
+  if (Array.isArray(draftClasses)) {
+    for (const klass of draftClasses.slice(0, 20)) {
+      if (!klass || typeof klass !== 'object' || !klass.seasonId) {
+        fail('draft_class_shape', 'Draft class entry missing seasonId or object shape');
+        bumpSummary(summary, 'draftHealth', 'fail');
+      }
+      const picks = Array.isArray(klass?.picks) ? klass.picks : Array.isArray(klass?.players) ? klass.players : [];
+      const draftOvrs = picks.map((pick) => num(pick?.ovr ?? pick?.player?.ovr)).filter(Number.isFinite);
+      if (draftOvrs.length >= 20) {
+        const avgDraftOvr = draftOvrs.reduce((sum, value) => sum + value, 0) / draftOvrs.length;
+        if (avgDraftOvr < 45 || avgDraftOvr > 82) {
+          warn('draft_class_quality_outlier', `Draft class ${klass?.seasonId ?? 'unknown'} average OVR looks unrealistic (${Math.round(avgDraftOvr * 10) / 10})`);
+          bumpSummary(summary, 'draftHealth', 'warn');
+        }
+      }
+      for (const pick of picks.slice(0, 256)) {
+        if (pick && typeof pick === 'object' && (pick.playerId == null && pick.id == null)) {
+          fail('draft_class_player_broken', `Draft class ${klass?.seasonId ?? 'unknown'} contains a broken player/pick object`);
+          bumpSummary(summary, 'draftHealth', 'fail');
+        }
+      }
+    }
   }
 
   // --- GET payloads ---
