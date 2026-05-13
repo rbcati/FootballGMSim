@@ -37,6 +37,19 @@ describe('GameDetailV2 tactical recap stability', () => {
     expect(html).toContain('Deciding stretch');
   });
 
+
+  it('renders final score context even when deeper tactical sections are unavailable', () => {
+    const html = renderToString(
+      <GameDetailV2
+        game={{ awayScore: 17, homeScore: 24 }}
+        {...teams}
+      />,
+    );
+
+    expect(html).toContain('HME by 7');
+    expect(html).toMatch(/AWY.*17.*-.*24.*HME/);
+  });
+
   it('fails safely (returns empty output) for partial/malformed detail payloads', () => {
     const html = renderToString(
       <GameDetailV2

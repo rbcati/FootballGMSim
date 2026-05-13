@@ -38,7 +38,9 @@ export function toPlayerArray(sideStats, teamId) {
 function leader(players, sortKey, { min = 1 } = {}) {
   return players
     .filter((p) => Number(p.stats?.[sortKey] ?? 0) >= min)
-    .sort((a, b) => Number(b.stats?.[sortKey] ?? 0) - Number(a.stats?.[sortKey] ?? 0))[0] ?? null;
+    .sort((a, b) => Number(b.stats?.[sortKey] ?? 0) - Number(a.stats?.[sortKey] ?? 0)
+      || String(a?.name ?? '').localeCompare(String(b?.name ?? ''))
+      || String(a?.playerId ?? '').localeCompare(String(b?.playerId ?? '')))[0] ?? null;
 }
 
 export function deriveLeaders(game) {
@@ -216,7 +218,9 @@ function getSidePlayers(game, side) {
 function getLeaderByStat(players, statKey, min = 1) {
   return players
     .filter((player) => Number(player?.stats?.[statKey] ?? 0) >= min)
-    .sort((a, b) => Number(b?.stats?.[statKey] ?? 0) - Number(a?.stats?.[statKey] ?? 0))[0] ?? null;
+    .sort((a, b) => Number(b?.stats?.[statKey] ?? 0) - Number(a?.stats?.[statKey] ?? 0)
+      || String(a?.name ?? '').localeCompare(String(b?.name ?? ''))
+      || String(a?.playerId ?? '').localeCompare(String(b?.playerId ?? '')))[0] ?? null;
 }
 
 export function deriveTeamLeaders(game = {}) {

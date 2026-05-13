@@ -54,6 +54,11 @@ function TacticalBar({ label, awayValue, homeValue, awayRaw, homeRaw }: {
 }
 
 export default function GameDetailV2({ game, awayTeam, homeTeam }: { game: any; awayTeam: any; homeTeam: any; }) {
+  const awayScore = Number(game?.awayScore);
+  const homeScore = Number(game?.homeScore);
+  const hasFinalScore = Number.isFinite(awayScore) && Number.isFinite(homeScore);
+  const winnerAbbr = hasFinalScore && awayScore !== homeScore ? (awayScore > homeScore ? awayTeam?.abbr ?? 'Away' : homeTeam?.abbr ?? 'Home') : null;
+  const margin = hasFinalScore ? Math.abs(awayScore - homeScore) : null;
   const digest = useMemo(() => (Array.isArray(game?.eventDigest) ? game.eventDigest : []), [game?.eventDigest]);
   const developmentFlash = useMemo(() => {
     const source = game?.developmentFlash ?? game?.summary?.developmentFlash;
@@ -151,11 +156,20 @@ export default function GameDetailV2({ game, awayTeam, homeTeam }: { game: any; 
   }, [digest, driveStats, awayTeam?.abbr, homeTeam?.abbr]);
 
   const hasRecapData = digest.length > 0 || tacticalReasons.length > 0 || headlineMoments.length > 0 || comparisonRows.length > 0 || flowStory.length > 0 || developmentFlash.length > 0;
-  if (!hasRecapData) return null;
+  if (!hasRecapData && !hasFinalScore) return null;
 
   return (
     <section className="bs-section" data-testid="tactical-recap-v2">
-      <h4>Tactical recap</h4>
+      <div className="bs-section-header">
+        <h4>Tactical recap</h4>
+        {hasFinalScore ? <span className="bs-section-count">{awayTeam?.abbr ?? 'Away'} {awayScore} · {homeTeam?.abbr ?? 'Home'} {homeScore}</span> : null}
+      </div>
+      {hasFinalScore ? (
+        <div className="gdv2-final-strip" data-testid="game-detail-v2-final-score">
+          <strong>{winnerAbbr ? `${winnerAbbr} by ${margin}` : 'Final tied'}</strong>
+          <span>{awayTeam?.abbr ?? 'Away'} {awayScore} - {homeScore} {homeTeam?.abbr ?? 'Home'}</span>
+        </div>
+      ) : null}
 
       {tacticalReasons.length ? <div className="gdv2-reason-list">{tacticalReasons.map((reason) => <div key={reason} className="gdv2-reason">{reason}</div>)}</div> : null}
       {headlineMoments.length ? <div className="gdv2-headlines">{headlineMoments.map((moment, idx) => <div key={`headline-${idx}`} className="gdv2-headline-item">{moment}</div>)}</div> : null}

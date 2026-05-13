@@ -2,6 +2,7 @@ import React from 'react';
 import BoxScorePanel from './BoxScorePanel.jsx';
 import { EmptyState, ScreenHeader, SectionCard } from './ScreenSystem.jsx';
 import { buildWeeklyDecisionImpact } from '../utils/weeklyDecisionImpact.js';
+import { buildBoxScoreViewModel } from '../utils/boxScoreViewModel.js';
 
 function findScheduleGame(league, gameId) {
   for (const week of league?.schedule?.weeks ?? []) {
@@ -20,6 +21,11 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
   const scheduleGame = findScheduleGame(league, gameId);
   const userTeam = (league?.teams ?? []).find((team) => Number(team?.id) === Number(league?.userTeamId));
   const prepContext = buildWeeklyDecisionImpact({ league, userTeam, lastGame: scheduleGame });
+  const detailVm = buildBoxScoreViewModel({ league, game: scheduleGame ?? league?.gameById?.[gameId], gameId, context: { season: league?.seasonId, week: weekFromId ?? league?.week } });
+  const screenTitle = detailVm?.availableData?.finalScore ? detailVm.headlineSummary : 'Game Book';
+  const screenSubtitle = detailVm?.availableData?.finalScore
+    ? `${detailVm.finalScoreLine} · Game Book sections show only data recorded for this final.`
+    : 'Scan the final, review the recap narrative, compare team stats, then drill into player leaders and play detail.';
 
   if (!gameId) {
     return (
@@ -44,8 +50,8 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
     <div className="app-screen-stack" data-testid="game-book">
       <ScreenHeader
         eyebrow="Game Book"
-        title="Game Book"
-        subtitle="Scan the final, review the recap narrative, compare team stats, then drill into player leaders and play detail."
+        title={screenTitle}
+        subtitle={screenSubtitle}
         onBack={onBack}
         backLabel="Return to HQ"
         primaryAction={(
@@ -56,7 +62,8 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
         metadata={[
           { label: 'Game ID', value: gameId },
           { label: 'Season', value: league?.seasonId ?? '—' },
-          { label: 'Week', value: weekFromId ?? '—' },
+          { label: 'Week', value: detailVm?.week ?? weekFromId ?? '—' },
+          { label: 'Final', value: detailVm?.finalScoreLine ?? '—' },
         ]}
       />
       <SectionCard variant="compact" title="Preparation Context" subtitle="Pregame context captured before kickoff. This strip does not assign direct causality.">
