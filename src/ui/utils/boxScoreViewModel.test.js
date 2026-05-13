@@ -75,6 +75,41 @@ describe('buildBoxScoreViewModel', () => {
     expect(vm.playerStatSections.find((section) => section.key === 'rushing')?.teams.away[0].name).toBe('Away RB');
   });
 
+
+  it('builds deterministic top performer cards for passing/rushing/receiving/defense/kicking only from recorded stats', () => {
+    const vm = buildBoxScoreViewModel({
+      game: {
+        homeId: 1,
+        awayId: 2,
+        homeScore: 31,
+        awayScore: 24,
+        playerStats: {
+          home: {
+            11: { name: 'Home QB', stats: { passAtt: 31, passYd: 280, passTD: 2 } },
+            22: { name: 'Home WR', stats: { targets: 9, receptions: 7, recYd: 118, recTD: 1 } },
+            44: { name: 'Home K', stats: { fieldGoalsAttempted: 2, fieldGoalsMade: 2, extraPointsAttempted: 3, extraPointsMade: 3, points: 9 } },
+          },
+          away: {
+            33: { name: 'Away RB', stats: { rushAtt: 18, rushYd: 121, rushTD: 1 } },
+            55: { name: 'Away Edge', stats: { tackles: 5, sacks: 2, forcedFumbles: 1 } },
+          },
+        },
+      },
+    });
+    expect(vm.statLeaderCards.map((card) => card.key)).toEqual(['passing', 'rushing', 'receiving', 'defense', 'kicking']);
+    expect(vm.statLeaderCards.find((card) => card.key === 'passing')?.line).toContain('Home QB');
+    expect(vm.statLeaderCards.find((card) => card.key === 'rushing')?.line).toContain('Away RB');
+    expect(vm.statLeaderCards.find((card) => card.key === 'receiving')?.line).toContain('Home WR');
+    expect(vm.statLeaderCards.find((card) => card.key === 'defense')?.line).toContain('Away Edge');
+    expect(vm.statLeaderCards.find((card) => card.key === 'kicking')?.line).toContain('Home K');
+  });
+
+  it('marks stat leader cards unavailable instead of fabricating missing groups', () => {
+    const vm = buildBoxScoreViewModel({ game: { homeId: 1, awayId: 2, homeScore: 13, awayScore: 10, playerStats: { home: {}, away: {} } } });
+    expect(vm.statLeaderCards).toHaveLength(5);
+    expect(vm.statLeaderCards.every((card) => card.available === false && card.line === 'Not recorded')).toBe(true);
+  });
+
   it('does not render quarter/scoring availability when old archives omit those sections', () => {
     const vm = buildBoxScoreViewModel({ game: { homeId: 1, awayId: 2, homeScore: 6, awayScore: 3 } });
     expect(vm.archiveQuality).toBe('Score only');

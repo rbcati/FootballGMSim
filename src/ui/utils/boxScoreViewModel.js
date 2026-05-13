@@ -19,8 +19,13 @@ function teamInfo(league, id, side, game) {
   };
 }
 
+function normalizePlayerId(id) {
+  const numeric = Number(id);
+  return Number.isFinite(numeric) ? numeric : id;
+}
+
 function normalizePlayers(raw = {}, side, teamId) {
-  return Object.entries(raw || {}).map(([id, row]) => ({ playerId: Number(id), teamId, teamSide: side, ...row, stats: row?.stats ?? row ?? {} }));
+  return Object.entries(raw || {}).map(([id, row]) => ({ playerId: normalizePlayerId(id), teamId, teamSide: side, ...row, stats: row?.stats ?? row ?? {} }));
 }
 
 function formatScoreLine(awayTeam, homeTeam, finalScore) {
@@ -128,6 +133,74 @@ export function buildPlayerStatSections(playerTables = {}, sortOverrides = {}) {
   }).filter((section) => !section.empty);
 }
 
+
+function formatPlayerName(player) {
+  return player?.name ?? player?.playerName ?? 'Unknown player';
+}
+
+function firstFiniteStat(stats = {}, keys = []) {
+  for (const key of keys) {
+    const value = toNum(stats?.[key]);
+    if (value != null) return { key, value };
+  }
+  return null;
+}
+
+function sortLeaderCandidates(players, primaryKeys = [], tieKeys = []) {
+  return [...players].sort((a, b) => {
+    const aPrimary = firstFiniteStat(a?.stats, primaryKeys)?.value ?? -Infinity;
+    const bPrimary = firstFiniteStat(b?.stats, primaryKeys)?.value ?? -Infinity;
+    if (aPrimary !== bPrimary) return bPrimary - aPrimary;
+    for (const key of tieKeys) {
+      const aTie = toNum(a?.stats?.[key]) ?? -Infinity;
+      const bTie = toNum(b?.stats?.[key]) ?? -Infinity;
+      if (aTie !== bTie) return bTie - aTie;
+    }
+    return String(a?.teamSide ?? '').localeCompare(String(b?.teamSide ?? ''))
+      || String(formatPlayerName(a)).localeCompare(String(formatPlayerName(b)))
+      || String(a?.playerId ?? '').localeCompare(String(b?.playerId ?? ''));
+  });
+}
+
+function formatLeaderLine(player, statKeys = []) {
+  if (!player) return 'Not recorded';
+  const parts = statKeys
+    .map(([key, label]) => {
+      const value = player?.stats?.[key];
+      if (value == null || Number(value) === 0) return null;
+      return `${value} ${label}`;
+    })
+    .filter(Boolean);
+  return `${formatPlayerName(player)}${parts.length ? ` — ${parts.join(', ')}` : ''}`;
+}
+
+const LEADER_SPECS = [
+  { key: 'passing', label: 'Passing', includeKeys: ['passAtt', 'passYd'], primaryKeys: ['passYd'], tieKeys: ['passTD', 'passComp'], lineKeys: [['passYd', 'yds'], ['passTD', 'TD'], ['interceptions', 'INT']] },
+  { key: 'rushing', label: 'Rushing', includeKeys: ['rushAtt', 'rushYd'], primaryKeys: ['rushYd'], tieKeys: ['rushTD', 'rushAtt'], lineKeys: [['rushYd', 'yds'], ['rushTD', 'TD'], ['rushAtt', 'att']] },
+  { key: 'receiving', label: 'Receiving', includeKeys: ['targets', 'receptions', 'recYd'], primaryKeys: ['recYd'], tieKeys: ['recTD', 'receptions'], lineKeys: [['recYd', 'yds'], ['recTD', 'TD'], ['receptions', 'rec']] },
+  { key: 'defense', label: 'Defense', includeKeys: ['tackles', 'sacks', 'interceptions', 'passesDefended', 'forcedFumbles'], primaryKeys: ['sacks', 'interceptions', 'tackles'], tieKeys: ['passesDefended', 'forcedFumbles'], lineKeys: [['tackles', 'tkl'], ['sacks', 'sack'], ['interceptions', 'INT'], ['forcedFumbles', 'FF']] },
+  { key: 'kicking', label: 'Kicking', includeKeys: ['fieldGoalsAttempted', 'extraPointsAttempted', 'points'], primaryKeys: ['points', 'fieldGoalsMade'], tieKeys: ['extraPointsMade'], lineKeys: [['points', 'pts'], ['fieldGoalsMade', 'FGM'], ['fieldGoalsAttempted', 'FGA'], ['extraPointsMade', 'XPM']] },
+];
+
+export function buildStatLeaderCards(playerTables = {}) {
+  const players = [...(playerTables.away ?? []), ...(playerTables.home ?? [])];
+  return LEADER_SPECS.map((spec) => {
+    const candidates = players.filter((player) => spec.includeKeys.some((key) => (toNum(player?.stats?.[key]) ?? 0) > 0));
+    const player = sortLeaderCandidates(candidates, spec.primaryKeys, spec.tieKeys)[0] ?? null;
+    return {
+      key: spec.key,
+      label: spec.label,
+      player,
+      playerId: player?.playerId ?? null,
+      teamSide: player?.teamSide ?? null,
+      teamId: player?.teamId ?? null,
+      statKey: player ? firstFiniteStat(player?.stats, spec.primaryKeys)?.key ?? null : null,
+      line: formatLeaderLine(player, spec.lineKeys),
+      available: Boolean(player),
+    };
+  });
+}
+
 function normalizeScoringSummary(rows) {
   if (!Array.isArray(rows)) return [];
   return rows.map((row, idx) => ({
@@ -194,6 +267,7 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {} } = 
     scoringSummary,
     playerTables,
     playerStatSections: buildPlayerStatSections(playerTables),
+    statLeaderCards: buildStatLeaderCards(playerTables),
     availableData: {
       finalScore: hasScore,
       quarterScores: hasQuarter,

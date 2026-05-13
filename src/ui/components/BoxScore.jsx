@@ -3,7 +3,6 @@ import { EmptyState } from "./ScreenSystem.jsx";
 import { buildBoxScoreViewModel, buildPlayerStatSections } from "../utils/boxScoreViewModel.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { buildGameBookStory } from "../utils/gameBookStory.js";
-import { getTopPerformers } from "../utils/gameBookHighlights.js";
 import { getPlayerProfileId, hasValidPlayerProfileId, openPlayerProfile } from "../utils/playerProfileNavigation.js";
 
 const QUALITY_BADGE_CLASS = {
@@ -42,6 +41,12 @@ function tableTestId(title) {
   return `game-book-table-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
 }
 
+function leaderProfileRole(card) {
+  if (["passing", "rushing", "receiving"].includes(card?.key)) return "Top offensive player";
+  if (card?.key === "defense") return "Top defensive player";
+  return `${card?.label ?? "Box score"} leader`;
+}
+
 function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, onTeamSelect, embedded = false }) {
   const canLoadArchive = Boolean(gameId && typeof actions?.getBoxScore === "function");
   const { data: archiveGame } = useStableRouteRequest({
@@ -61,7 +66,7 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
   }
 
   const storyBullets = buildGameBookStory(vm);
-  const topPerformers = getTopPerformers(vm);
+  const statLeaderCards = vm.statLeaderCards ?? [];
   const gameContextBase = {
     source: "game-book",
     gameId: vm.gameId ?? gameId,
@@ -185,20 +190,20 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
         {storyBullets.length ? <ul>{storyBullets.map((b) => <li key={b}>{b}</li>)}</ul> : <p>No detailed team/player stats were recorded for this game.</p>}
       </section>
       <section className="bs-section" data-testid="game-book-top-performers">
-        <h4>Top performers</h4>
+        <div className="bs-section-header">
+          <h4>Top performers</h4>
+          <span className="bs-section-count">Real box-score leaders only</span>
+        </div>
         <div className="bs-leaders-grid">
-          <article className="bs-leader-card">
-            <span className="bs-leader-label">Offense</span>
-            {topPerformers.offensePlayer && onPlayerSelect ? (
-              <button type="button" className="btn-link bs-leader-name" data-testid="game-book-top-performer-link" onClick={() => openGameBookPlayer(topPerformers.offensePlayer, "Top offensive player")}>{topPerformers.offense}</button>
-            ) : <p className="bs-leader-name">{topPerformers.offense}</p>}
-          </article>
-          <article className="bs-leader-card">
-            <span className="bs-leader-label">Defense</span>
-            {topPerformers.defensePlayer && onPlayerSelect ? (
-              <button type="button" className="btn-link bs-leader-name" data-testid="game-book-top-performer-link" onClick={() => openGameBookPlayer(topPerformers.defensePlayer, "Top defensive player")}>{topPerformers.defense}</button>
-            ) : <p className="bs-leader-name">{topPerformers.defense}</p>}
-          </article>
+          {statLeaderCards.map((card) => (
+            <article key={card.key} className={card.available ? "bs-leader-card" : "bs-leader-card is-empty"} data-testid={`game-book-leader-${card.key}`}>
+              <span className="bs-leader-label">{card.label}</span>
+              {card.player && onPlayerSelect ? (
+                <button type="button" className="btn-link bs-leader-name" data-testid="game-book-top-performer-link" onClick={() => openGameBookPlayer(card.player, leaderProfileRole(card))}>{card.line}</button>
+              ) : <p className="bs-leader-name">{card.line}</p>}
+              {card.teamSide ? <span className="bs-leader-team">{card.teamSide === "away" ? vm.awayTeam.abbr : vm.homeTeam.abbr}</span> : <span className="bs-leader-team">Stat group missing</span>}
+            </article>
+          ))}
         </div>
       </section>
       <section className="bs-section" data-testid="game-book-quarter-scores">
