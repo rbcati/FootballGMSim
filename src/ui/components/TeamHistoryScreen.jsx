@@ -1,29 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScreenHeader, SectionCard, EmptyState } from './ScreenSystem.jsx';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from '../utils/boxScoreAccess.js';
-import { buildShowingLabel, rowMatchesSearch, stableSortRows } from '../utils/dataBrowser.js';
 import { buildFranchiseHistoryModel, PLAYOFF_CALIBER_WINS } from '../../core/franchiseHistoryModel.js';
 import { RECORD_BOOK_PLAYER_KEYS, RECORD_LABELS } from '../../core/recordBookV1.js';
-import { stableSortRows, buildShowingLabel } from '../utils/dataBrowser.js';
-import { buildShowingLabel, stableSortRows } from '../utils/dataBrowser.js';
 import { buildShowingLabel, rowMatchesSearch, stableSortRows } from '../utils/dataBrowser.js';
-import { stableSortRows, buildShowingLabel } from '../utils/dataBrowser.js';
-import { buildShowingLabel, rowMatchesSearch, stableSortRows } from '../utils/dataBrowser.js';
-
-const TIMELINE_SORT_OPTIONS = [
-  { value: 'yearDesc', label: 'Year (newest)', key: 'year', direction: 'desc' },
-  { value: 'yearAsc', label: 'Year (oldest)', key: 'year', direction: 'asc' },
-  { value: 'winsDesc', label: 'Wins (most)', key: 'wins', direction: 'desc' },
-  { value: 'winsAsc', label: 'Wins (fewest)', key: 'wins', direction: 'asc' },
-  { value: 'pfDesc', label: 'Points for', key: 'pf', direction: 'desc' },
-  { value: 'paAsc', label: 'Points against (fewest)', key: 'pa', direction: 'asc' },
-  { value: 'diffDesc', label: 'Point diff (best)', key: 'pointDifferential', direction: 'desc' },
-];
-
-const TIMELINE_SORT_BY_VALUE = TIMELINE_SORT_OPTIONS.reduce((acc, opt) => {
-  acc[opt.value] = opt;
-  return acc;
-}, {});
 
 function buildSeasonTeamMap(season) {
   const map = {};
@@ -36,26 +16,6 @@ function buildSeasonTeamMap(season) {
 function formatPct(p) {
   if (!Number.isFinite(p) || p <= 0) return '—';
   return `${(p * 100).toFixed(1)}%`;
-}
-
-function teamSeasonResultLabel(row) {
-  if (row?.champion) return 'Champion';
-  if (row?.runnerUp) return 'Runner-up';
-  if (row?.truePlayoff) return 'Documented postseason';
-  if (row?.playoffCaliber) return 'Playoff-caliber';
-  if (row?.eliteSeason) return 'Elite season';
-  if (row?.losingSeason) return 'Losing season';
-  return 'Archived season';
-}
-
-function teamSeasonSortValue(row, sortKey) {
-  if (sortKey === 'wins') return row?.wins;
-  if (sortKey === 'losses') return row?.losses;
-  if (sortKey === 'pf') return row?.pf;
-  if (sortKey === 'pa') return row?.pa;
-  if (sortKey === 'pointDifferential') return row?.pointDifferential;
-  if (sortKey === 'result') return teamSeasonResultLabel(row);
-  return row?.year;
 }
 
 function RecordRow({ label, value, detail }) {
@@ -107,20 +67,10 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
   const [hofPlayers, setHofPlayers] = useState([]);
   const [hofClasses, setHofClasses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [seasonQueryText, setSeasonQueryText] = useState('');
-  const [scope, setScope] = useState('all');
-  const [timelineSortKey, setTimelineSortKey] = useState('year');
-  const [timelineSortDir, setTimelineSortDir] = useState('desc');
   const [timelineSearch, setTimelineSearch] = useState('');
   const [timelineSortKey, setTimelineSortKey] = useState('year');
   const [timelineSortDir, setTimelineSortDir] = useState('desc');
   const [scope, setScope] = useState('all');
-  const [sortKey, setSortKey] = useState('year');
-  const [sortDir, setSortDir] = useState('desc');
-  const [sortField, setSortField] = useState('year');
-  const [sortDir, setSortDir] = useState('desc');
-  const [timelineSort, setTimelineSort] = useState('yearDesc');
-  const [timelineSort, setTimelineSort] = useState({ key: 'year', dir: 'desc' });
   const [majorMoves, setMajorMoves] = useState([]);
   const [draftFlash, setDraftFlash] = useState([]);
 
@@ -231,111 +181,12 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
 
   const { summary, franchiseRecords, franchiseLegends, playoffHistory, bestGames, milestones } = model;
 
-  const scopeFilteredSeasonRows = useMemo(
-    () =>
-      (model.seasons ?? []).filter((row) => {
-        if (scope === 'champions' && !row.champion) return false;
-        if (scope === 'playoff' && !row.playoffCaliber) return false;
-        if (scope === 'losing' && !row.losingSeason) return false;
-        if (scope === 'elite' && !row.eliteSeason) return false;
-        return true;
-      }),
-    [model.seasons, scope],
-  );
-
-  const searchFilteredSeasonRows = useMemo(
-    () =>
-      scopeFilteredSeasonRows.filter((row) =>
-        rowMatchesSearch(row, seasonQueryText, [
-          'year',
-          (r) => `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ''}`,
-          (r) => (r.champion ? 'champion title ring' : ''),
-          (r) => (r.runnerUp ? 'runner-up finalist' : ''),
-          (r) => (r.truePlayoff ? 'postseason playoffs bracket' : ''),
-          (r) => (r.playoffCaliber ? 'playoff-caliber' : ''),
-          (r) => (r.eliteSeason ? 'elite' : ''),
-          (r) => (r.losingSeason ? 'losing season' : ''),
-          (r) => r.mvp?.name,
-          (r) => r.pf,
-          (r) => r.pa,
-          (r) => r.pointDifferential,
-        ]),
-      ),
-    [scopeFilteredSeasonRows, seasonQueryText],
-  );
-
-  const displaySeasonTimeline = useMemo(() => {
-    const getters = {
-      year: (r) => Number(r.year ?? 0),
-      wins: (r) => Number(r.wins ?? 0),
-      losses: (r) => Number(r.losses ?? 0),
-      pf: (r) => Number(r.pf ?? 0),
-      pa: (r) => Number(r.pa ?? 0),
-      winPct: (r) => Number(r.winPct ?? 0),
-    };
-    const get = getters[timelineSortKey] ?? getters.year;
-    return stableSortRows(searchFilteredSeasonRows, get, timelineSortDir, (r) => Number(r.year ?? 0));
-  }, [searchFilteredSeasonRows, timelineSortKey, timelineSortDir]);
-
-  const seasonTimelineShowingLabel = buildShowingLabel(
-    displaySeasonTimeline.length,
-    scopeFilteredSeasonRows.length,
-    'season',
-  );
-  const totalTimeline = (model.seasons ?? []).length;
-
   const filteredTimeline = useMemo(() => {
-    const filtered = (model.seasons ?? []).filter((row) => {
-    const rows = (model.seasons ?? []).filter((row) => {
+    return (model.seasons ?? []).filter((row) => {
       if (scope === 'champions' && !row.champion) return false;
       if (scope === 'playoff' && !row.playoffCaliber) return false;
       if (scope === 'losing' && !row.losingSeason) return false;
       if (scope === 'elite' && !row.eliteSeason) return false;
-      const trimmed = queryYear.trim();
-      if (!trimmed) return true;
-      if (String(row.year).includes(trimmed)) return true;
-      return rowMatchesSearch(
-        row,
-        trimmed,
-        [(r) => r?.mvp?.name ?? '', (r) => (r?.champion ? 'champion' : '')],
-      );
-    });
-    const sortDef = TIMELINE_SORT_BY_VALUE[timelineSort] ?? TIMELINE_SORT_BY_VALUE.yearDesc;
-    return stableSortRows(
-      filtered,
-      (r) => r?.[sortDef.key],
-      sortDef.direction,
-      (r) => r?.year,
-    );
-  }, [model.seasons, queryYear, scope, timelineSort]);
-
-  const filtersActive = Boolean(queryYear.trim()) || scope !== 'all' || timelineSort !== 'yearDesc';
-  const resetTimelineFilters = () => {
-    setQueryYear('');
-    setScope('all');
-    setTimelineSort('yearDesc');
-  };
-      return rowMatchesSearch(row, queryYear, [
-        'year',
-        'wins',
-        'losses',
-        'pf',
-        'pa',
-        (r) => `${r?.wins ?? 0}-${r?.losses ?? 0}${r?.ties ? `-${r.ties}` : ''}`,
-        (r) => teamSeasonResultLabel(r),
-        (r) => r?.mvp?.name,
-      ]);
-    });
-    return stableSortRows(filtered, (r) => r[sortField] ?? r.year, sortDir);
-  }, [model.seasons, queryYear, scope, sortField, sortDir]);
-    return stableSortRows(rows, (row) => teamSeasonSortValue(row, timelineSort.key), timelineSort.dir, (row) => row?.year);
-  }, [model.seasons, queryYear, scope, timelineSort]);
-
-  const resetTimelineFilters = () => {
-    setQueryYear('');
-    setScope('all');
-    setTimelineSort({ key: 'year', dir: 'desc' });
-  };
       return rowMatchesSearch(row, timelineSearch, [
         'year',
         'wins',
@@ -346,46 +197,6 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
         buildTimelineSearchText,
       ]);
     });
-    return stableSortRows(filtered, sortKey, sortDir);
-  }, [model.seasons, queryYear, scope, sortKey, sortDir]);
-
-  const totalSeasonCount = (model.seasons ?? []).length;
-  const hasActiveFilters = scope !== 'all' || queryYear.trim() !== '';
-  const resetFilters = () => { setQueryYear(''); setScope('all'); setSortKey('year'); setSortDir('desc'); };
-  const toggleSort = (key) => {
-    if (sortKey === key) { setSortDir((d) => d === 'asc' ? 'desc' : 'asc'); }
-    else { setSortKey(key); setSortDir(key === 'year' ? 'desc' : 'desc'); }
-  };
-    const getValue = (row) => {
-      if (sortKey === 'wins') return row.wins ?? 0;
-      if (sortKey === 'losses') return row.losses ?? 0;
-      if (sortKey === 'pf') return row.pf ?? 0;
-      if (sortKey === 'pa') return row.pa ?? 0;
-      return row.year ?? 0;
-    };
-    return stableSortRows(filtered, getValue, sortDir, (r) => r.year ?? 0);
-  }, [model.seasons, queryYear, scope, sortKey, sortDir]);
-
-  const timelineShowingLabel = useMemo(
-    () => buildShowingLabel(filteredTimeline.length, (model.seasons ?? []).length, 'season'),
-    [filteredTimeline.length, model.seasons],
-  );
-
-  const toggleTimelineSort = (key) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortKey(key);
-      setSortDir(key === 'year' ? 'desc' : 'desc');
-    }
-  };
-
-  const resetTimelineFilters = () => {
-    setQueryYear('');
-    setScope('all');
-    setSortKey('year');
-    setSortDir('desc');
-  };
   }, [model.seasons, scope, timelineSearch]);
 
   const timelineRows = useMemo(() => {
@@ -699,128 +510,8 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
         )}
       </SectionCard>
 
-      <SectionCard title="Season-by-season timeline" subtitle="Search and sort archived franchise seasons. Counts reflect the current scope chips.">
-        {(model.seasons ?? []).length === 0 ? (
-          <EmptyState
-            title="No franchise seasons in the archive yet"
-            body="Finish and archive seasons to unlock year-by-year records, tags, and MVP links for this team."
-          />
-        ) : (
-          <div data-testid="team-history-season-timeline">
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'center' }}>
-              <input
-                value={seasonQueryText}
-                onChange={(e) => setSeasonQueryText(e.target.value)}
-                placeholder="Search year, record, MVP, PF/PA…"
-                aria-label="Search franchise seasons"
-                style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--hairline)',
-                  borderRadius: 8,
-                  padding: '6px 10px',
-                  color: 'var(--text)',
-                  minWidth: 0,
-                  flex: '1 1 160px',
-                  maxWidth: '100%',
-                }}
-              />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-xs)', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-                <span>Sort</span>
-                <select
-                  value={timelineSortKey}
-                  onChange={(e) => setTimelineSortKey(e.target.value)}
-                  style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '4px 8px', color: 'var(--text)' }}
-                >
-                  <option value="year">Year</option>
-                  <option value="wins">Wins</option>
-                  <option value="losses">Losses</option>
-                  <option value="pf">Points for</option>
-                  <option value="pa">Points allowed</option>
-                  <option value="winPct">Win %</option>
-                </select>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={() => setTimelineSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
-                  aria-label={`Sort direction ${timelineSortDir === 'asc' ? 'ascending' : 'descending'}`}
-                >
-                  {timelineSortDir === 'asc' ? 'Asc ↑' : 'Desc ↓'}
-                </button>
-              </label>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  setSeasonQueryText('');
-                  setScope('all');
-                  setTimelineSortKey('year');
-                  setTimelineSortDir('desc');
       <SectionCard title="Season-by-season timeline">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'center' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-          <input
-            value={queryYear}
-            onChange={(e) => setQueryYear(e.target.value)}
-            placeholder="Filter by year"
-            data-testid="team-history-year-filter"
-            style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 10px', color: 'var(--text)', minWidth: 120, maxWidth: 160 }}
-            aria-label="Filter by year"
-            style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 10px', color: 'var(--text)', minWidth: 120, maxWidth: 160 }}
-            style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 10px', color: 'var(--text)', minWidth: 130 }}
-        <div
-          data-testid="team-history-timeline-controls"
-          style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'center' }}
-        >
-          <input
-            value={queryYear}
-            onChange={(e) => setQueryYear(e.target.value)}
-            placeholder="Search year or MVP"
-            aria-label="Search seasons by year or MVP"
-            style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 10px', color: 'var(--text)', minWidth: 160, flex: '1 1 160px' }}
-          />
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-            Sort
-            <select
-              value={timelineSort}
-              onChange={(e) => setTimelineSort(e.target.value)}
-              aria-label="Sort seasons"
-              style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 8px', color: 'var(--text)' }}
         <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-          <input
-            value={queryYear}
-            onChange={(e) => setQueryYear(e.target.value)}
-            placeholder="Search year, record, result, MVP"
-            style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 10px', color: 'var(--text)', minWidth: 160 }}
-            aria-label="Search team seasons"
-          />
-          <select
-            value={timelineSort.key}
-            onChange={(e) => setTimelineSort((curr) => ({ ...curr, key: e.target.value }))}
-            style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 10px', color: 'var(--text)' }}
-            aria-label="Sort team seasons"
-          >
-            <option value="year">Sort: Year</option>
-            <option value="wins">Sort: Wins</option>
-            <option value="losses">Sort: Losses</option>
-            <option value="pf">Sort: Points for</option>
-            <option value="pa">Sort: Points allowed</option>
-            <option value="pointDifferential">Sort: Point diff</option>
-            <option value="result">Sort: Result</option>
-          </select>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setTimelineSort((curr) => ({ ...curr, dir: curr.dir === 'asc' ? 'desc' : 'asc' }))}
-          >
-            {timelineSort.dir === 'asc' ? 'Asc' : 'Desc'}
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={resetTimelineFilters}>
-            Reset filters
-          </button>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-            {buildShowingLabel(filteredTimeline.length, model.seasons?.length ?? 0, 'season')}
-          </span>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <input
               aria-label="Search team history seasons"
@@ -839,7 +530,6 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
-          </label>
             <button
               type="button"
               className="btn btn-secondary"
@@ -861,67 +551,6 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
               >
                 Reset filters
               </button>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-              {[
-                { key: 'all', label: 'All-time' },
-                { key: 'playoff', label: 'Playoff-caliber' },
-                { key: 'champions', label: 'Championship years' },
-                { key: 'elite', label: 'Elite seasons' },
-                { key: 'losing', label: 'Losing seasons' },
-              ].map((opt) => (
-                <button key={opt.key} type="button" className="btn" onClick={() => setScope(opt.key)} style={{ opacity: scope === opt.key ? 1 : 0.7 }}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 8 }}>{seasonTimelineShowingLabel}</div>
-            <div style={{ display: 'grid', gap: 6, maxHeight: 420, overflow: 'auto' }}>
-              {displaySeasonTimeline.length === 0 ? (
-                <EmptyState
-                  title="No seasons match these filters"
-                  body="Clear search text, reset filters, or pick a different scope to see the full franchise timeline."
-                />
-              ) : (
-                displaySeasonTimeline.map((s) => (
-                  <div
-                    key={String(s.seasonId ?? `year-${s.year}`)}
-                    style={{
-                      border: '1px solid var(--hairline)',
-                      borderRadius: 8,
-                      padding: 'clamp(6px, 2vw, 10px)',
-                      fontSize: 'clamp(0.72rem, 2.8vw, var(--text-sm))',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                      <strong>{s.year}</strong>
-                      <span>
-                        {s.wins}-{s.losses}
-                        {s.ties ? `-${s.ties}` : ''}
-                        {s.champion ? ' · Champion' : ''}
-                        {s.runnerUp ? ' · Runner-up' : ''}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                      PF {s.pf} · PA {s.pa}
-                      {s.truePlayoff ? ' · Postseason (documented)' : s.playoffCaliber ? ' · Playoff-caliber' : ''}
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                      {s.champion ? <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 8px' }}>Title season</span> : null}
-                      {s.eliteSeason ? <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 8px' }}>Elite year</span> : null}
-                      {s.losingSeason ? <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 8px' }}>Losing season</span> : null}
-                    </div>
-                    {s.mvp?.playerId != null ? (
-                      <button type="button" className="btn-link" onClick={() => onPlayerSelect?.(s.mvp.playerId)}>
-                        League MVP: {s.mvp.name}
-                      </button>
-                    ) : null}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
             ) : null}
           </div>
           <div
@@ -942,139 +571,21 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
             { key: 'elite', label: 'Elite seasons' },
             { key: 'losing', label: 'Losing seasons' },
           ].map((opt) => (
-            <button key={opt.key} type="button" className="btn" onClick={() => setScope(opt.key)} style={{ opacity: scope === opt.key ? 1 : 0.7, fontSize: 'var(--text-xs)' }}>
+            <button key={opt.key} type="button" className="btn" onClick={() => setScope(opt.key)} style={{ opacity: scope === opt.key ? 1 : 0.7 }}>
               {opt.label}
             </button>
           ))}
-          {hasActiveFilters ? (
-            <button type="button" className="btn btn-secondary" onClick={resetFilters} style={{ fontSize: 'var(--text-xs)' }} data-testid="team-history-reset-filters">
-              Reset
-            </button>
-          ) : null}
-        </div>
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }} data-testid="team-history-showing-label">
-            {buildShowingLabel(filteredTimeline.length, totalSeasonCount, 'seasons')}
-          </span>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>·</span>
-          {(queryYear || scope !== 'all' || sortKey !== 'year' || sortDir !== 'desc') ? (
-            <button type="button" className="btn btn-secondary" onClick={resetTimelineFilters} style={{ fontSize: 'var(--text-xs)' }}>
-              Reset filters
-            </button>
-          ) : null}
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8, alignItems: 'center' }}>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginRight: 4 }}>Sort by:</span>
-          {[
-            { key: 'year', label: 'Year' },
-            { key: 'wins', label: 'Wins' },
-            { key: 'losses', label: 'Losses' },
-            { key: 'pf', label: 'PF' },
-            { key: 'pa', label: 'PA' },
-          ].map((col) => (
-            <button
-              key={col.key}
-              type="button"
-              className="btn"
-              onClick={() => toggleSort(col.key)}
-              data-testid={`team-history-sort-${col.key}`}
-              style={{ fontSize: 11, opacity: sortKey === col.key ? 1 : 0.6, padding: '2px 8px', minWidth: 0 }}
-            >
-              {col.label} {sortKey === col.key ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-            </button>
-          ))}
-        </div>
-
-              onClick={() => toggleTimelineSort(col.key)}
-              style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', opacity: sortKey === col.key ? 1 : 0.6 }}
-              data-testid={`team-history-sort-${col.key}`}
-            >
-              {col.label}{sortKey === col.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
-            </button>
-          ))}
-        </div>
-        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 8 }} data-testid="team-history-showing-label">
-          {timelineShowingLabel}
-          {filtersActive ? (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={resetTimelineFilters}
-              data-testid="team-history-timeline-reset"
-            >
-              Reset filters
-            </button>
-          ) : null}
           </div>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10, alignItems: 'center' }}>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 600, marginRight: 2 }}>Sort:</span>
-          {[
-            { key: 'year', label: 'Year' },
-            { key: 'wins', label: 'Wins' },
-            { key: 'losses', label: 'Losses' },
-          ].map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              className="btn"
-              onClick={() => {
-                if (sortField === opt.key) {
-                  setSortDir((d) => d === 'asc' ? 'desc' : 'asc');
-                } else {
-                  setSortField(opt.key);
-                  setSortDir(opt.key === 'year' ? 'desc' : 'desc');
-                }
-              }}
-              style={{ fontSize: 'var(--text-xs)', opacity: sortField === opt.key ? 1 : 0.6, fontWeight: sortField === opt.key ? 700 : 400 }}
-              aria-pressed={sortField === opt.key}
-            >
-              {opt.label}{sortField === opt.key ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => { setQueryYear(''); setScope('all'); setSortField('year'); setSortDir('desc'); }}
-            style={{ fontSize: 'var(--text-xs)', marginLeft: 4 }}
-            data-testid="team-history-reset-filters"
-          >
-            Reset
-          </button>
-          <span
-            style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginLeft: 4 }}
-            data-testid="team-history-showing-label"
-          >
-            {buildShowingLabel(filteredTimeline.length, (model.seasons ?? []).length, 'season')}
-          </span>
-        </div>
-        {totalTimeline > 0 ? (
-          <div
-            data-testid="team-history-timeline-count"
-            style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 8 }}
-          >
-            {buildShowingLabel(filteredTimeline.length, totalTimeline, 'season')}
-          </div>
-        ) : null}
         <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto' }}>
-          {filteredTimeline.length === 0 ? (
-            <EmptyState title={(model.seasons ?? []).length ? 'No team history for this filter' : 'No archived team seasons yet'} body={(model.seasons ?? []).length ? 'Adjust filters or archive more seasons.' : 'Complete and archive seasons to populate this franchise timeline.'} />
-          ) : (
-            filteredTimeline.map((s) => (
-              <div key={s.year} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }} data-testid="team-history-season-row">
           {timelineRows.length === 0 ? (
             <EmptyState title="No team history for this filter" body="Adjust filters or archive more seasons." />
           ) : (
-            filteredTimeline.map((s) => (
-              <div key={s.year} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }} data-testid={`team-history-season-${s.year}`}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-              <div key={s.year} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
             timelineRows.map((s) => (
               <div key={s.year} data-testid={`team-history-season-${s.year}`} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <strong>{s.year}</strong>
-                  <span style={{ fontSize: 'var(--text-sm)' }}>
+                  <span>
                     {s.wins}-{s.losses}
                     {s.ties ? `-${s.ties}` : ''}
                     {s.champion ? ' · Champion' : ''}
@@ -1082,7 +593,6 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
                   </span>
                 </div>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                  {teamSeasonResultLabel(s)} · PF {s.pf} · PA {s.pa} · Diff {s.pointDifferential}
                   PF {s.pf} · PA {s.pa}
                   {s.pointDifferential != null ? ` · Diff ${s.pointDifferential > 0 ? '+' : ''}${s.pointDifferential}` : ''}
                   {s.truePlayoff ? ' · Postseason (documented)' : s.playoffCaliber ? ' · Playoff-caliber' : ''}

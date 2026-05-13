@@ -1,159 +1,64 @@
 /**
  * dataBrowser.js — Reusable data-browsing helpers for search, sort, filter,
  * and presentation across history/archive surfaces.
- *
- * Used by Team History, Player Profile, League History, League Activity, etc.
  */
 
-/**
- * Lowercase + trim for search comparison. Returns '' for nullish input.
- * @param {*} text
- * @returns {string}
- */
-export function normalizeSearchText(text) {
-  if (text == null) return '';
-  return String(text).trim().toLowerCase();
-}
-
-/**
- * Returns true when `row` matches a search query.
- * Checks every field listed in `keys` against the normalized query.
- *
- * @param {object} row
- * @param {string} query — raw user input (will be normalized)
- * @param {string[]} keys — property names to match against
- * @returns {boolean}
- */
-export function rowMatchesSearch(row, query, keys) {
-  const q = normalizeSearchText(query);
-  if (!q) return true;
-  if (!row || !keys?.length) return false;
-  return keys.some((k) => {
-    const v = row[k];
-    if (v == null) return false;
-    return normalizeSearchText(v).includes(q);
-  });
-}
-
-/**
- * Compare two values for sorting (numbers compared numerically,
- * strings compared with localeCompare, nullish pushed to the end).
- *
- * @param {*} a
- * @param {*} b
- * @param {'asc'|'desc'} dir
- * @returns {number}
- */
-export function compareValues(a, b, dir = 'asc') {
-  const aNull = a == null || a === '';
-  const bNull = b == null || b === '';
-  if (aNull && bNull) return 0;
-  if (aNull) return 1;
-  if (bNull) return -1;
-
-  const aNum = Number(a);
-  const bNum = Number(b);
-  const bothNumeric = Number.isFinite(aNum) && Number.isFinite(bNum);
-
-  let cmp;
-  if (bothNumeric) {
-    cmp = aNum - bNum;
-  } else {
-    cmp = String(a).localeCompare(String(b), undefined, { sensitivity: 'base' });
-  }
-  return dir === 'desc' ? -cmp : cmp;
-}
-
-/**
- * Stable sort that preserves original order for equal elements.
- *
- * @param {Array} rows
- * @param {string} key — property to sort by
- * @param {'asc'|'desc'} dir
- * @returns {Array} — new sorted array
- */
-export function stableSortRows(rows, key, dir = 'asc') {
-  if (!rows?.length || !key) return rows ?? [];
-  const indexed = rows.map((row, i) => ({ row, i }));
-  indexed.sort((a, b) => {
-    const cmp = compareValues(a.row[key], b.row[key], dir);
-    return cmp !== 0 ? cmp : a.i - b.i;
-  });
-  return indexed.map((e) => e.row);
-}
-
-/**
- * Extract unique non-empty string values for a given key from rows.
- * Useful for building filter dropdowns.
- *
- * @param {Array} rows
- * @param {string} key
- * @returns {string[]}
- */
-export function uniqueFilterOptions(rows, key) {
-  if (!rows?.length || !key) return [];
-  const set = new Set();
-  for (const row of rows) {
-    const v = row[key];
-    if (v != null && v !== '') set.add(String(v));
-  }
-  return [...set].sort();
-}
-
-/**
- * Build a "Showing X of Y items" label.
- *
- * @param {number} visible
- * @param {number} total
- * @param {string} [noun='items']
- * @returns {string}
- */
-export function buildShowingLabel(visible, total, noun = 'items') {
-  if (total === 0) return `No ${noun}`;
-  if (visible === total) return `${total} ${noun}`;
-  return `Showing ${visible} of ${total} ${noun}`;
 export function normalizeSearchText(value) {
-  return String(value ?? "")
+  return String(value ?? '')
     .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
     .trim();
+}
+
+function readField(row, field) {
+  if (typeof field === 'function') return field(row);
+  return row?.[field];
 }
 
 export function rowMatchesSearch(row, query, fields = []) {
   const needle = normalizeSearchText(query);
   if (!needle) return true;
+  if (!row || !fields?.length) return false;
   const haystack = fields
-    .map((field) => (typeof field === "function" ? field(row) : row?.[field]))
-    .filter((value) => value != null)
-    .join(" ");
+    .map((field) => readField(row, field))
+    .filter((value) => value != null && value !== '')
+    .join(' ');
   return normalizeSearchText(haystack).includes(needle);
 }
 
-export function compareValues(aValue, bValue, direction = "asc") {
-  const dir = direction === "desc" ? -1 : 1;
+export function compareValues(aValue, bValue, direction = 'asc') {
+  const dir = direction === 'desc' ? -1 : 1;
+  const aEmpty = aValue == null || aValue === '';
+  const bEmpty = bValue == null || bValue === '';
+  if (aEmpty && bEmpty) return 0;
+  if (aEmpty) return 1;
+  if (bEmpty) return -1;
+
   const aNum = Number(aValue);
   const bNum = Number(bValue);
-  const bothNumeric = Number.isFinite(aNum) && Number.isFinite(bNum) && String(aValue ?? "").trim() !== "" && String(bValue ?? "").trim() !== "";
+  const bothNumeric = Number.isFinite(aNum) && Number.isFinite(bNum);
   if (bothNumeric) {
     if (aNum === bNum) return 0;
     return aNum > bNum ? dir : -dir;
   }
-  const textCompare = String(aValue ?? "").localeCompare(String(bValue ?? ""), undefined, {
+
+  return String(aValue).localeCompare(String(bValue), undefined, {
     numeric: true,
-    sensitivity: "base",
-  });
-  return textCompare * dir;
+    sensitivity: 'base',
+  }) * dir;
 }
 
-export function stableSortRows(rows = [], getValue, direction = "asc", fallbackGetValue = null) {
-  return [...(Array.isArray(rows) ? rows : [])]
+export function stableSortRows(rows = [], keyOrGetter, direction = 'asc', fallbackKeyOrGetter = null) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!keyOrGetter) return [...list];
+  return list
     .map((row, index) => ({ row, index }))
     .sort((a, b) => {
-      const primary = compareValues(getValue?.(a.row), getValue?.(b.row), direction);
+      const primary = compareValues(readField(a.row, keyOrGetter), readField(b.row, keyOrGetter), direction);
       if (primary !== 0) return primary;
-      if (fallbackGetValue) {
-        const fallback = compareValues(fallbackGetValue(a.row), fallbackGetValue(b.row), "asc");
+      if (fallbackKeyOrGetter) {
+        const fallback = compareValues(readField(a.row, fallbackKeyOrGetter), readField(b.row, fallbackKeyOrGetter), 'asc');
         if (fallback !== 0) return fallback;
       }
       return a.index - b.index;
@@ -161,13 +66,20 @@ export function stableSortRows(rows = [], getValue, direction = "asc", fallbackG
     .map(({ row }) => row);
 }
 
-export function uniqueFilterOptions(rows = [], getValue) {
-  return Array.from(new Set((Array.isArray(rows) ? rows : []).map(getValue).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+export function uniqueFilterOptions(rows = [], keyOrGetter) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!keyOrGetter) return [];
+  return [...new Set(
+    list
+      .map((row) => readField(row, keyOrGetter))
+      .filter((value) => value != null && value !== '')
+      .map((value) => String(value)),
+  )].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 }
 
-export function buildShowingLabel(visibleCount, totalCount, noun = "row") {
-  const safeVisible = Number.isFinite(Number(visibleCount)) ? Number(visibleCount) : 0;
-  const safeTotal = Number.isFinite(Number(totalCount)) ? Number(totalCount) : 0;
-  const label = safeTotal === 1 ? noun : `${noun}s`;
-  return `Showing ${safeVisible} of ${safeTotal} ${label}`;
+export function buildShowingLabel(visible, total, noun = 'items') {
+  const safeVisible = Number.isFinite(Number(visible)) ? Number(visible) : 0;
+  const safeTotal = Number.isFinite(Number(total)) ? Number(total) : 0;
+  const labelNoun = safeTotal === 1 || noun.endsWith('s') ? noun : `${noun}s`;
+  return `Showing ${safeVisible} of ${safeTotal} ${labelNoun}`;
 }

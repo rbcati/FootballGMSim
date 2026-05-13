@@ -1,21 +1,10 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
-import LeagueHistory, { AwardsHistory } from '../LeagueHistory.jsx';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import LeagueHistory from '../LeagueHistory.jsx';
 
-afterEach(() => cleanup());
-
 describe('LeagueHistory', () => {
-  afterEach(() => {
-    cleanup();
-  });
-  afterEach(() => cleanup());
   afterEach(() => {
     cleanup();
   });
@@ -176,95 +165,6 @@ describe('LeagueHistory', () => {
     });
   });
 
-  it('filters season archive sidebar and restores full list when cleared', async () => {
-    render(
-      <LeagueHistory
-        league={{ userTeamId: 1 }}
-        initialSelectedSeasonId="s1"
-  it('season search filters the season list and updates showing count', async () => {
-    render(
-      <LeagueHistory
-        league={{ userTeamId: 1 }}
-        onPlayerSelect={vi.fn()}
-        onOpenBoxScore={vi.fn()}
-        actions={{
-          getAllSeasons: vi.fn().mockResolvedValue({
-            payload: {
-              seasons: [
-                { id: 's1', year: 2030, champion: { abbr: 'DAL' }, standings: [], awards: {} },
-                { id: 's2', year: 2031, champion: { abbr: 'NYG' }, standings: [], awards: {} },
-                { id: 's1', year: 2030, champion: { abbr: 'DAL', name: 'Dallas' }, standings: [], awards: {} },
-                { id: 's2', year: 2031, champion: { abbr: 'NYG', name: 'Giants' }, standings: [], awards: {} },
-                { id: 's3', year: 2032, champion: { abbr: 'DAL', name: 'Dallas' }, standings: [], awards: {} },
-              ],
-            },
-          }),
-          getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
-          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
-          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
-        }}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('league-history-season-archive-browser')).toBeTruthy();
-    });
-    const archiveBrowser = screen.getByTestId('league-history-season-archive-browser');
-    fireEvent.change(archiveBrowser.querySelector('input[type="search"]'), { target: { value: '2031' } });
-    await waitFor(() => {
-      expect(archiveBrowser.textContent).toMatch(/Showing 1 of 2 seasons/);
-    });
-
-    fireEvent.change(archiveBrowser.querySelector('input[type="search"]'), { target: { value: '' } });
-    await waitFor(() => {
-      expect(archiveBrowser.textContent).toMatch(/Showing 2 of 2 seasons/);
-      expect(screen.getByTestId('league-history-season-search')).toBeTruthy();
-    });
-    const showingEl = screen.getByTestId('league-history-season-showing');
-    expect(showingEl.textContent).toMatch(/Showing 3 of 3/i);
-
-    const searchInput = screen.getByTestId('league-history-season-search');
-    fireEvent.change(searchInput, { target: { value: '2031' } });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('league-history-season-showing').textContent).toMatch(/Showing 1 of 3/i);
-    });
-  });
-
-  it('awards search filters by winner name and updates showing count', async () => {
-    render(
-      <LeagueHistory
-        league={{ userTeamId: 1 }}
-        initialSelectedSeasonId="s1"
-        onPlayerSelect={vi.fn()}
-        onOpenBoxScore={vi.fn()}
-        actions={{
-          getAllSeasons: vi.fn().mockResolvedValue({
-            payload: {
-              seasons: [
-                { id: 's1', year: 2030, champion: { abbr: 'DAL' }, standings: [], awards: { mvp: { playerId: 1, name: 'Alpha Player', pos: 'QB' } } },
-                { id: 's2', year: 2031, champion: { abbr: 'NYG' }, standings: [], awards: { mvp: { playerId: 2, name: 'Beta Player', pos: 'RB' } } },
-              ],
-            },
-          }),
-          getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
-          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
-          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
-        }}
-      />,
-    );
-
-    // Awards TabsContent is force-mounted; just wait for loading to complete
-    const awardsSearch = await screen.findByTestId('league-history-awards-search');
-    expect(screen.getByTestId('league-history-awards-showing').textContent).toMatch(/Showing 2 of 2/i);
-
-    fireEvent.change(awardsSearch, { target: { value: 'Alpha' } });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('league-history-awards-showing').textContent).toMatch(/Showing 1 of 2/i);
-    });
-  });
-
   it('renders major transactions from transactionTimelineV1 when present', async () => {
     render(
       <LeagueHistory
@@ -303,62 +203,6 @@ describe('LeagueHistory', () => {
     });
   });
 
-  it('renders season search input in the sidebar when seasons exist', async () => {
-    render(
-      <LeagueHistory
-        league={{ userTeamId: 1 }}
-        initialSelectedSeasonId="s1"
-  it('shows season search input and showing label on initial load', async () => {
-});
-
-describe('LeagueHistory · AwardsHistory tab', () => {
-  afterEach(() => cleanup());
-
-  it('filters by champion search, sorts, and resets while keeping count honest', async () => {
-    const seasons = [
-      { id: 'sA', year: 2030, champion: { abbr: 'DAL', name: 'Dallas' }, awards: { mvp: { playerId: 1, name: 'Star Alpha' } } },
-      { id: 'sB', year: 2031, champion: { abbr: 'NYG', name: 'NY Giants' }, awards: { mvp: { playerId: 2, name: 'Star Bravo' } } },
-      { id: 'sC', year: 2032, champion: { abbr: 'DAL', name: 'Dallas' }, awards: { mvp: { playerId: 3, name: 'Star Charlie' } } },
-    ];
-    render(<AwardsHistory seasons={seasons} onPlayerSelect={vi.fn()} />);
-    expect(screen.getByTestId('league-history-awards-count').textContent).toMatch(/Showing 3 of 3 seasons/);
-
-    fireEvent.change(screen.getByPlaceholderText(/search year, champion, or winner/i), {
-      target: { value: 'NYG' },
-    });
-    expect(screen.getByTestId('league-history-awards-count').textContent).toMatch(/Showing 1 of 3 seasons/);
-    expect(screen.queryAllByText('NY Giants').length).toBeGreaterThanOrEqual(0);
-
-    fireEvent.click(screen.getByTestId('league-history-awards-reset'));
-    expect(screen.getByTestId('league-history-awards-count').textContent).toMatch(/Showing 3 of 3 seasons/);
-
-    fireEvent.change(screen.getByLabelText(/sort awards history/i), { target: { value: 'yearAsc' } });
-    const yearCells = screen.getAllByText(/^203[012]$/).map((el) => el.textContent);
-    expect(yearCells[0]).toBe('2030');
-    expect(yearCells[yearCells.length - 1]).toBe('2032');
-  });
-
-  it('shows safe Showing-0 state when filter excludes every season', () => {
-    const seasons = [
-      { id: 'sA', year: 2030, champion: { abbr: 'DAL' }, awards: {} },
-      { id: 'sB', year: 2031, champion: { abbr: 'NYG' }, awards: {} },
-    ];
-    render(<AwardsHistory seasons={seasons} onPlayerSelect={vi.fn()} />);
-    fireEvent.change(screen.getByPlaceholderText(/search year, champion, or winner/i), {
-      target: { value: 'zzz-no-match' },
-    });
-    expect(screen.getByTestId('league-history-awards-count').textContent).toMatch(/Showing 0 of 2 seasons/);
-    expect(screen.getByText(/No award seasons match the current filters/i)).toBeTruthy();
-  });
-
-  it('does not invent winners — empty award cells stay as em dashes', () => {
-    const seasons = [
-      { id: 's1', year: 2030, standings: [], awards: {} },
-    ];
-    render(<AwardsHistory seasons={seasons} onPlayerSelect={vi.fn()} />);
-    expect(screen.getByTestId('league-history-awards-count').textContent).toMatch(/Showing 1 of 1 season/);
-    expect(screen.queryByText(/TBD champion|Star Alpha/)).toBeNull();
-  it('searches, sorts, counts, and resets the season archive picker', async () => {
   it('supports season archive search, champion filtering, and reset controls', async () => {
     render(
       <LeagueHistory
@@ -369,13 +213,6 @@ describe('LeagueHistory · AwardsHistory tab', () => {
           getAllSeasons: vi.fn().mockResolvedValue({
             payload: {
               seasons: [
-                { id: 's1', year: 2030, standings: [{ id: 1, wins: 8, losses: 9 }], awards: {}, champion: { abbr: 'DAL' } },
-                { id: 's2', year: 2031, standings: [], awards: {}, champion: { abbr: 'NYG' } },
-                { id: 's1', year: 2030, standings: [], awards: {}, champion: { abbr: 'DAL' } },
-                { id: 's2', year: 2031, standings: [], awards: {}, champion: { abbr: 'NYG' } },
-                { id: 's3', year: 2032, standings: [], awards: {}, champion: { abbr: 'DAL' } },
-                { id: 's1', year: 2030, champion: { id: 2, abbr: 'DAL', name: 'Dallas' }, standings: [{ id: 1, name: 'User', abbr: 'USR', wins: 12, losses: 5 }], awards: {} },
-                { id: 's2', year: 2031, champion: { id: 3, abbr: 'NYG', name: 'New York' }, standings: [{ id: 1, name: 'User', abbr: 'USR', wins: 6, losses: 11 }], awards: {} },
                 {
                   id: 's1',
                   year: 2030,
@@ -408,24 +245,6 @@ describe('LeagueHistory · AwardsHistory tab', () => {
     );
 
     await waitFor(() => {
-      const searchInputs = screen.queryAllByTestId('league-history-season-search');
-      expect(searchInputs.length).toBeGreaterThan(0);
-      const showingLabels = screen.queryAllByTestId('league-history-season-showing');
-      expect(showingLabels.some((el) => el.textContent.includes('3 of 3'))).toBe(true);
-    });
-  });
-
-  it('filters season list by search query', async () => {
-    await waitFor(() => expect(screen.getByText(/Showing 2 of 2 seasons/i)).toBeTruthy());
-    fireEvent.change(screen.getByLabelText(/Search archived seasons/i), { target: { value: 'DAL' } });
-    expect(screen.getByText(/Showing 1 of 2 seasons/i)).toBeTruthy();
-    expect(screen.getAllByTestId('league-history-season-row')[0].textContent).toMatch(/2030/);
-
-    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
-    fireEvent.change(screen.getByLabelText(/Sort archived seasons/i), { target: { value: 'userWins' } });
-    fireEvent.click(screen.getByRole('button', { name: /Desc/i }));
-    expect(screen.getAllByTestId('league-history-season-row')[0].textContent).toMatch(/2031/);
-    await waitFor(() => {
       expect(screen.getByTestId('league-season-archive-count').textContent).toContain('Showing 3 of 3 seasons');
     });
 
@@ -454,33 +273,6 @@ describe('LeagueHistory · AwardsHistory tab', () => {
         onPlayerSelect={vi.fn()}
         onOpenBoxScore={vi.fn()}
         actions={{
-          getAllSeasons: vi.fn().mockResolvedValue({
-            payload: {
-              seasons: [
-                { id: 's1', year: 2030, standings: [], awards: {}, champion: { abbr: 'DAL' } },
-                { id: 's2', year: 2031, standings: [], awards: {}, champion: { abbr: 'NYG' } },
-              ],
-            },
-          }),
-          getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
-          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
-          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
-        }}
-      />,
-    );
-    await waitFor(() => {
-      expect(screen.getByText(/No archived seasons yet/i)).toBeTruthy();
-
-    await waitFor(() => {
-      const inputs = screen.queryAllByTestId('league-history-season-search');
-      expect(inputs.length).toBeGreaterThan(0);
-    });
-
-    const inputs = screen.queryAllByTestId('league-history-season-search');
-    fireEvent.change(inputs[0], { target: { value: '2030' } });
-    await waitFor(() => {
-      const labels = screen.queryAllByTestId('league-history-season-showing');
-      expect(labels.some((el) => el.textContent.includes('1 of 2'))).toBe(true);
           getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [{ id: 's1', year: 2030, standings: [], awards: {} }] } }),
           getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
           getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
