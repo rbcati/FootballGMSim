@@ -4,6 +4,8 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import LeagueHistory from '../LeagueHistory.jsx';
 
+afterEach(() => cleanup());
+
 describe('LeagueHistory', () => {
   afterEach(() => {
     cleanup();
@@ -203,6 +205,7 @@ describe('LeagueHistory', () => {
     });
   });
 
+  it('searches, sorts, counts, and resets the season archive picker', async () => {
   it('supports season archive search, champion filtering, and reset controls', async () => {
     render(
       <LeagueHistory
@@ -213,6 +216,8 @@ describe('LeagueHistory', () => {
           getAllSeasons: vi.fn().mockResolvedValue({
             payload: {
               seasons: [
+                { id: 's1', year: 2030, champion: { id: 2, abbr: 'DAL', name: 'Dallas' }, standings: [{ id: 1, name: 'User', abbr: 'USR', wins: 12, losses: 5 }], awards: {} },
+                { id: 's2', year: 2031, champion: { id: 3, abbr: 'NYG', name: 'New York' }, standings: [{ id: 1, name: 'User', abbr: 'USR', wins: 6, losses: 11 }], awards: {} },
                 {
                   id: 's1',
                   year: 2030,
@@ -244,6 +249,15 @@ describe('LeagueHistory', () => {
       />,
     );
 
+    await waitFor(() => expect(screen.getByText(/Showing 2 of 2 seasons/i)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Search archived seasons/i), { target: { value: 'DAL' } });
+    expect(screen.getByText(/Showing 1 of 2 seasons/i)).toBeTruthy();
+    expect(screen.getAllByTestId('league-history-season-row')[0].textContent).toMatch(/2030/);
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
+    fireEvent.change(screen.getByLabelText(/Sort archived seasons/i), { target: { value: 'userWins' } });
+    fireEvent.click(screen.getByRole('button', { name: /Desc/i }));
+    expect(screen.getAllByTestId('league-history-season-row')[0].textContent).toMatch(/2031/);
     await waitFor(() => {
       expect(screen.getByTestId('league-season-archive-count').textContent).toContain('Showing 3 of 3 seasons');
     });

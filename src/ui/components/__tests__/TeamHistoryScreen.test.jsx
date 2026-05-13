@@ -110,6 +110,10 @@ describe('TeamHistoryScreen', () => {
     expect(String(arg)).toMatch(/2055/);
   });
 
+  it('searches, sorts, counts, and resets the season timeline without inventing results', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 7, name: 'Seattle', abbr: 'SEA' }], userTeamId: 7 }}
   it('supports timeline search, numeric sort, showing counts, and reset filters', async () => {
     render(
       <TeamHistoryScreen
@@ -119,6 +123,17 @@ describe('TeamHistoryScreen', () => {
             payload: {
               seasons: [
                 {
+                  id: 's1',
+                  year: 2030,
+                  standings: [{ id: 7, name: 'Seattle', abbr: 'SEA', wins: 7, losses: 10, ties: 0, pf: 310, pa: 380 }],
+                  awards: {},
+                },
+                {
+                  id: 's2',
+                  year: 2031,
+                  standings: [{ id: 7, name: 'Seattle', abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 470, pa: 320 }],
+                  champion: { id: 7, abbr: 'SEA' },
+                  awards: { mvp: { playerId: 11, name: 'Avery Fields' } },
                   year: 2030,
                   standings: [{ id: 1, name: 'Dallas', abbr: 'DAL', wins: 12, losses: 5, ties: 0, pf: 420, pa: 310 }],
                   champion: { id: 1, abbr: 'DAL' },
@@ -148,6 +163,16 @@ describe('TeamHistoryScreen', () => {
       />,
     );
 
+    await waitFor(() => expect(screen.getByText(/Showing 2 of 2 seasons/i)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Search team seasons/i), { target: { value: 'Avery' } });
+    expect(screen.getByText(/Showing 1 of 2 seasons/i)).toBeTruthy();
+    expect(screen.getAllByTestId('team-history-season-row')[0].textContent).toMatch(/2031/);
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
+    expect(screen.getByText(/Showing 2 of 2 seasons/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Sort team seasons/i), { target: { value: 'wins' } });
+    fireEvent.click(screen.getByRole('button', { name: /Desc/i }));
+    expect(screen.getAllByTestId('team-history-season-row')[0].textContent).toMatch(/2030/);
     await waitFor(() => {
       expect(screen.getByTestId('team-history-timeline-count').textContent).toContain('Showing 3 of 3 seasons');
     });

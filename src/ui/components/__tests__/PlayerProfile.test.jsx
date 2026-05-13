@@ -250,6 +250,11 @@ describe('PlayerProfile', () => {
     expect(screen.getByText('4,100')).toBeTruthy();
   });
 
+  it('filters, sorts, counts, and resets archived player season rows', async () => {
+    const logActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: {
+          player: { ...player, careerStats: [] },
   it('supports season log search, sort, and reset controls', async () => {
     const seasonLogActions = {
       getPlayerCareer: vi.fn(async () => ({
@@ -269,6 +274,7 @@ describe('PlayerProfile', () => {
             {
               id: 's1',
               year: 2030,
+              awards: { mvp: { playerId: 11, name: 'Avery Fields', teamId: 1 } },
               playerSeasonStatsV1: {
                 schemaVersion: 1,
                 rows: [{
@@ -279,6 +285,11 @@ describe('PlayerProfile', () => {
                   teamAbbr: 'DAL',
                   year: 2030,
                   seasonId: 's1',
+                  gamesPlayed: 12,
+                  passYds: 4100,
+                  passTDs: 31,
+                  passInts: 9,
+                }],
                   gamesPlayed: 16,
                   passYds: 3600,
                   passTDs: 24,
@@ -290,6 +301,7 @@ describe('PlayerProfile', () => {
             {
               id: 's2',
               year: 2031,
+              awards: {},
               playerSeasonStatsV1: {
                 schemaVersion: 1,
                 rows: [{
@@ -300,6 +312,30 @@ describe('PlayerProfile', () => {
                   teamAbbr: 'NYG',
                   year: 2031,
                   seasonId: 's2',
+                  gamesPlayed: 10,
+                  passYds: 2500,
+                  passTDs: 15,
+                  passInts: 7,
+                }],
+              },
+            },
+          ],
+        },
+      })),
+      getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+    };
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={logActions} teams={league.teams} league={league} />);
+
+    await waitFor(() => expect(screen.getByText(/Showing 2 of 2 seasons/i)).toBeTruthy());
+    expect(screen.getByTestId('player-profile')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Filter player season log by team/i), { target: { value: 'NYG' } });
+    expect(screen.getByText(/Showing 1 of 2 seasons/i)).toBeTruthy();
+    expect(screen.getAllByTestId('player-profile-season-log-row')[0].textContent).toMatch(/NYG/);
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
+    fireEvent.change(screen.getByLabelText(/Sort player season log/i), { target: { value: 'keyStat' } });
+    expect(screen.getAllByTestId('player-profile-season-log-row')[0].textContent).toMatch(/4,100/);
+    expect(screen.getAllByTestId('player-profile-season-log-row')[0].textContent).toMatch(/Most Valuable Player/);
                   gamesPlayed: 17,
                   passYds: 4200,
                   passTDs: 31,
