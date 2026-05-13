@@ -50,6 +50,7 @@ describe('WeeklyResultsCenter', () => {
     expect(screen.getByText('Weekly League Recap')).toBeTruthy();
     expect(screen.getByText('Weekly Spotlight')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /open game book/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/close game|point margin|blowout/i).length).toBeGreaterThan(0);
   });
 
   it('shows game-plan recap and reasons when prep impact exists', () => {

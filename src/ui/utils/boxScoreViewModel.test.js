@@ -32,4 +32,54 @@ describe('buildBoxScoreViewModel', () => {
     expect(story).toContain('turnover battle');
     expect(story).toContain('294 passing yards');
   });
+
+  it('builds final score headline and team comparison rows from existing stats only', () => {
+    const vm = buildBoxScoreViewModel({
+      league: { teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] },
+      game: {
+        played: true,
+        homeId: 1,
+        awayId: 2,
+        homeScore: 24,
+        awayScore: 27,
+        teamStats: { home: { totalYards: 330, turnovers: 2 }, away: { totalYards: 360, turnovers: 0 } },
+      },
+    });
+    expect(vm.finalScoreLine).toBe('BUF 27 - 24 KC');
+    expect(vm.headlineSummary).toBe('BUF defeated KC by 3');
+    expect(vm.teamComparisonRows.map((row) => row.label)).toEqual(['Total Yards', 'Turnovers']);
+    expect(vm.teamComparisonRows.find((row) => row.key === 'turnovers')?.winner).toBe('away');
+  });
+
+  it('builds sorted player stat sections with stable defaults', () => {
+    const vm = buildBoxScoreViewModel({
+      game: {
+        homeId: 1,
+        awayId: 2,
+        homeScore: 14,
+        awayScore: 10,
+        playerStats: {
+          home: {
+            10: { name: 'Lower QB', stats: { passAtt: 20, passYd: 150 } },
+            11: { name: 'Higher QB', stats: { passAtt: 25, passYd: 240 } },
+          },
+          away: {
+            20: { name: 'Away RB', stats: { rushAtt: 15, rushYd: 80 } },
+          },
+        },
+      },
+    });
+    const passing = vm.playerStatSections.find((section) => section.key === 'passing');
+    expect(passing?.showingLabel).toBe('Showing 2 passers');
+    expect(passing?.teams.home.map((player) => player.name)).toEqual(['Higher QB', 'Lower QB']);
+    expect(vm.playerStatSections.find((section) => section.key === 'rushing')?.teams.away[0].name).toBe('Away RB');
+  });
+
+  it('does not render quarter/scoring availability when old archives omit those sections', () => {
+    const vm = buildBoxScoreViewModel({ game: { homeId: 1, awayId: 2, homeScore: 6, awayScore: 3 } });
+    expect(vm.archiveQuality).toBe('Score only');
+    expect(vm.availableData.quarterScores).toBe(false);
+    expect(vm.availableData.scoringSummary).toBe(false);
+    expect(vm.playerStatSections).toEqual([]);
+  });
 });

@@ -94,4 +94,31 @@ describe('BoxScore game book rendering', () => {
     expect(scoringBlock?.textContent).toContain('8:12');
     expect(scoringBlock?.textContent).toContain('7-0');
   });
+
+  it('renders final score density, data availability chips, sorted player rows, and embedded back action', () => {
+    const onBack = vi.fn();
+    const game = {
+      homeId: 1,
+      awayId: 2,
+      homeScore: 30,
+      awayScore: 27,
+      teamStats: { home: { totalYards: 410, turnovers: 1 }, away: { totalYards: 350, turnovers: 2 } },
+      playerStats: {
+        home: {
+          11: { name: 'Second QB', stats: { passAtt: 15, passYd: 120 } },
+          12: { name: 'First QB', stats: { passAtt: 30, passYd: 280 } },
+        },
+        away: {},
+      },
+    };
+    const { container, getByTestId, getByText, getAllByText } = render(<BoxScore gameId="g-density" league={{ ...baseLeague, gameById: { 'g-density': game } }} onBack={onBack} embedded />);
+    expect(getByText('KC defeated BUF by 3')).toBeTruthy();
+    expect(getAllByText('Team stats').length).toBeGreaterThan(0);
+    expect(getByText('Showing 2 passers')).toBeTruthy();
+    const passingText = container.querySelector('[data-testid="game-book-table-passing"]').textContent;
+    expect(passingText.indexOf('First QB')).toBeLessThan(passingText.indexOf('Second QB'));
+    fireEvent.click(getByTestId('game-book-back-action'));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
 });

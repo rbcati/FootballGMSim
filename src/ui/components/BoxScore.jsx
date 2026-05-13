@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { EmptyState } from "./ScreenSystem.jsx";
-import { buildBoxScoreViewModel } from "../utils/boxScoreViewModel.js";
+import { buildBoxScoreViewModel, buildPlayerStatSections } from "../utils/boxScoreViewModel.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { buildGameBookStory } from "../utils/gameBookStory.js";
 import { getTopPerformers } from "../utils/gameBookHighlights.js";
@@ -35,7 +35,6 @@ export function PlayerButton({ player, onSelect, context }) {
   );
 }
 
-const asNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 const desc = "desc";
 const mdash = "—";
 
@@ -43,7 +42,7 @@ function tableTestId(title) {
   return `game-book-table-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
 }
 
-function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSelect, embedded = false }) {
+function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, onTeamSelect, embedded = false }) {
   const canLoadArchive = Boolean(gameId && typeof actions?.getBoxScore === "function");
   const { data: archiveGame } = useStableRouteRequest({
     requestKey: canLoadArchive ? `boxscore:${gameId}` : null,
@@ -83,13 +82,6 @@ function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSele
   const qCount = Math.max(qHome.length, qAway.length, 4);
   const hasQuarter = qHome.length || qAway.length;
   const headers = Array.from({ length: qCount }, (_, i) => (i < 4 ? `Q${i + 1}` : `OT${i - 3}`));
-  const teamVal = (side, ...keys) => {
-    const stats = vm.teamTotals?.[side] ?? {};
-    for (const key of keys) {
-      if (stats[key] != null) return stats[key];
-    }
-    return null;
-  };
   const formatScoreAfter = (score) => {
     if (!score) return mdash;
     if (typeof score === "string") return score;
@@ -97,41 +89,30 @@ function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSele
     return mdash;
   };
 
-  const teamRows = [
-    ["Pass Yards", teamVal("away", "passYards", "passYd", "passYds"), teamVal("home", "passYards", "passYd", "passYds")],
-    ["Rush Yards", teamVal("away", "rushYards", "rushYd", "rushYds"), teamVal("home", "rushYards", "rushYd", "rushYds")],
-    ["Total Yards", teamVal("away", "totalYards"), teamVal("home", "totalYards")],
-    ["Turnovers", teamVal("away", "turnovers"), teamVal("home", "turnovers")],
-    ["Sacks", teamVal("away", "sacks"), teamVal("home", "sacks")],
-    ["Sacks Allowed", teamVal("away", "sacksAllowed"), teamVal("home", "sacksAllowed")],
-    ["Penalties", teamVal("away", "penalties"), teamVal("home", "penalties")],
-    ["First Downs", teamVal("away", "firstDowns"), teamVal("home", "firstDowns")],
-    ["Time of Possession", teamVal("away", "timePossession"), teamVal("home", "timePossession")],
-  ].filter(([, a, h]) => a != null || h != null);
-
-  const tables = [
-    { title: "Passing", defaultSort: "passYd", cols: [["passComp", "Cmp"], ["passAtt", "Att"], ["passYd", "Yds"], ["passTD", "TD"], ["interceptions", "INT"], ["sacked", "Sck"], ["passerRating", "Rate"]], include: (s) => asNum(s.passAtt) > 0 },
-    { title: "Rushing", defaultSort: "rushYd", cols: [["rushAtt", "Att"], ["rushYd", "Yds"], ["rushTD", "TD"], ["fumbles", "Fum"], ["rushLong", "Long"]], include: (s) => asNum(s.rushAtt) > 0 },
-    { title: "Receiving", defaultSort: "recYd", cols: [["targets", "Tgt"], ["receptions", "Rec"], ["recYd", "Yds"], ["recTD", "TD"], ["drops", "Drop"], ["recLong", "Long"]], include: (s) => asNum(s.receptions) > 0 || asNum(s.targets) > 0 },
-    { title: "Defense", defaultSort: "tackles", cols: [["tackles", "Tkl"], ["sacks", "Sack"], ["tfl", "TFL"], ["interceptions", "INT"], ["passesDefended", "PD"], ["forcedFumbles", "FF"], ["fumbleRecoveries", "FR"], ["defTD", "TD"]], include: (s) => asNum(s.tackles) > 0 || asNum(s.sacks) > 0 },
-    { title: "Special Teams", defaultSort: "points", cols: [["fieldGoalsMade", "FGM"], ["fieldGoalsAttempted", "FGA"], ["extraPointsMade", "XPM"], ["extraPointsAttempted", "XPA"], ["punts", "Punt"], ["puntYards", "Punt Yds"], ["kickReturns", "KR"], ["kickReturnYards", "KR Yds"], ["puntReturns", "PR"], ["puntReturnYards", "PR Yds"], ["returnTD", "TD"]], include: (s) => asNum(s.fieldGoalsAttempted) > 0 || asNum(s.extraPointsAttempted) > 0 || asNum(s.punts) > 0 || asNum(s.kickReturns) > 0 || asNum(s.puntReturns) > 0 },
-    { title: "Kicking", defaultSort: "points", cols: [["fieldGoalsMade", "FGM"], ["fieldGoalsAttempted", "FGA"], ["fieldGoalPct", "FG%"], ["extraPointsMade", "XPM"], ["extraPointsAttempted", "XPA"], ["points", "Pts"]], include: (s) => asNum(s.fieldGoalsAttempted) > 0 || asNum(s.extraPointsAttempted) > 0 },
-    { title: "Punting", defaultSort: "puntYards", cols: [["punts", "Punt"], ["puntYards", "Yds"], ["puntAvg", "Avg"], ["puntLong", "Long"], ["puntsInside20", "In20"]], include: (s) => asNum(s.punts) > 0 },
-    { title: "Returns", defaultSort: "returnYards", cols: [["kickReturns", "KR"], ["kickReturnYards", "KR Yds"], ["puntReturns", "PR"], ["puntReturnYards", "PR Yds"], ["returnTD", "TD"]], include: (s) => asNum(s.kickReturns) > 0 || asNum(s.puntReturns) > 0 },
-    { title: "Blocking", defaultSort: "passBlockWinRate", cols: [["passBlockWins", "PBW"], ["passBlockAttempts", "PBA"], ["passBlockWinRate", "PBWR"], ["runBlockWins", "RBW"], ["runBlockAttempts", "RBA"], ["runBlockWinRate", "RBWR"]], include: (s) => asNum(s.passBlockAttempts) > 0 || asNum(s.runBlockAttempts) > 0 },
+  const teamRows = vm.teamComparisonRows ?? [];
+  const dataChips = [
+    ["Score", vm.availableData?.finalScore],
+    ["Quarter", vm.availableData?.quarterScores],
+    ["Team stats", vm.availableData?.teamStats],
+    ["Player stats", vm.availableData?.playerStats],
+    ["Scoring", vm.availableData?.scoringSummary],
   ];
 
+  const tableSections = buildPlayerStatSections(vm.playerTables, sortState);
+
   const renderTable = (spec) => {
-    const sort = sortState[spec.title] ?? { key: spec.defaultSort, dir: desc };
-    const sortPlayers = (players) => [...players].sort((a, b) => ((asNum(b.stats?.[sort.key]) ?? -Infinity) - (asNum(a.stats?.[sort.key]) ?? -Infinity)) * (sort.dir === desc ? 1 : -1));
-    const away = sortPlayers((vm.playerTables?.away ?? []).filter((p) => spec.include(p.stats ?? {})));
-    const home = sortPlayers((vm.playerTables?.home ?? []).filter((p) => spec.include(p.stats ?? {})));
+    const sort = spec.sort ?? { key: spec.defaultSort, dir: desc };
+    const away = spec.teams?.away ?? [];
+    const home = spec.teams?.home ?? [];
     if (!away.length && !home.length) return null;
     const rows = [[vm.awayTeam, away], [vm.homeTeam, home]];
     return (
       <section key={spec.title} className="bs-section" data-testid={tableTestId(spec.title)}>
-        <h4>{spec.title}</h4>
-        <div className="bs-table-wrap">
+        <div className="bs-section-header">
+          <h4>{spec.title}</h4>
+          <span className="bs-section-count">{spec.showingLabel}</span>
+        </div>
+        <div className="bs-table-wrap bs-table-wrap--compact">
           <table className="box-score-table">
             <thead>
               <tr>
@@ -164,16 +145,39 @@ function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSele
   return (
     <div className={embedded ? "card" : "modal-content"}>
       <div className="box-score-header">
-        <h2>Game Book</h2>
-        {!embedded && <button type="button" className="btn" onClick={onClose}>Close</button>}
+        <div>
+          <h2>Game Book</h2>
+          <p className="bs-header-subtitle">Final score, leaders, team comparison, and recorded scoring context.</p>
+        </div>
+        <div className="bs-header-actions">
+          {embedded && onBack ? <button type="button" className="btn btn-sm btn-secondary" data-testid="game-book-back-action" onClick={onBack}>Back to flow</button> : null}
+          {!embedded && <button type="button" className="btn" onClick={onClose}>Close</button>}
+        </div>
       </div>
       <section className="bs-section bs-summary-card">
-        <h3><TeamButton team={vm.awayTeam} onSelect={onTeamSelect} /> vs <TeamButton team={vm.homeTeam} onSelect={onTeamSelect} /></h3>
-        <div className="bs-scoreline" data-testid="game-book-final-score">
-          {vm.awayTeam.abbr} {vm.finalScore.away ?? mdash} - {vm.finalScore.home ?? mdash} {vm.homeTeam.abbr}
+        <div className="bs-final-hero">
+          <div className={vm.winnerSide === "away" ? "bs-final-team is-winner" : "bs-final-team"}>
+            <span className="bs-team-kicker">Away</span>
+            <strong><TeamButton team={vm.awayTeam} onSelect={onTeamSelect} /></strong>
+            <span className="bs-final-score-number">{vm.finalScore.away ?? mdash}</span>
+          </div>
+          <div className="bs-final-center">
+            <span className="bs-final-pill">Final</span>
+            <span className="bs-final-margin">{vm.margin != null ? `${vm.margin}-point ${vm.margin === 1 ? "game" : "margin"}` : "Score pending"}</span>
+          </div>
+          <div className={vm.winnerSide === "home" ? "bs-final-team is-winner" : "bs-final-team"}>
+            <span className="bs-team-kicker">Home</span>
+            <strong><TeamButton team={vm.homeTeam} onSelect={onTeamSelect} /></strong>
+            <span className="bs-final-score-number">{vm.finalScore.home ?? mdash}</span>
+          </div>
         </div>
+        <h3>{vm.headlineSummary}</h3>
+        <div className="bs-scoreline" data-testid="game-book-final-score">{vm.finalScoreLine}</div>
         <div>Week {vm.week ?? mdash} · Season {vm.season ?? mdash}</div>
-        <span className={`status-chip ${QUALITY_BADGE_CLASS[vm.archiveQuality] ?? "muted"}`}>{vm.archiveQuality}</span>
+        <div className="bs-data-chip-row" aria-label="Recorded game data">
+          <span className={`status-chip ${QUALITY_BADGE_CLASS[vm.archiveQuality] ?? "muted"}`}>{vm.archiveQuality}</span>
+          {dataChips.map(([label, exists]) => <span key={label} className={exists ? "bs-data-chip is-available" : "bs-data-chip"}>{label}</span>)}
+        </div>
         {vm.detailWarning ? <p>{vm.detailWarning}</p> : null}
       </section>
       <section className="bs-section" data-testid="game-book-decision-summary">
@@ -228,7 +232,7 @@ function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSele
           <div className="bs-table-wrap">
             <table className="box-score-table">
               <thead><tr><th>Stat</th><th>{vm.awayTeam.abbr}</th><th>{vm.homeTeam.abbr}</th></tr></thead>
-              <tbody>{teamRows.map(([label, a, h]) => <tr key={label}><td>{label}</td><td>{a ?? mdash}</td><td>{h ?? mdash}</td></tr>)}</tbody>
+              <tbody>{teamRows.map((row) => <tr key={row.key ?? row.label}><td>{row.label}</td><td className={row.winner === "away" ? "bs-compare-value--winner" : undefined}>{row.away ?? mdash}</td><td className={row.winner === "home" ? "bs-compare-value--winner" : undefined}>{row.home ?? mdash}</td></tr>)}</tbody>
             </table>
           </div>
         ) : <p>Team totals were not recorded for this game.</p>}
@@ -259,7 +263,12 @@ function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSele
       {vm.prepImpact?.length ? (
         <section className="bs-section"><h4>Game-plan impact</h4><ul>{vm.prepImpact.map((item, i) => <li key={`${i}-${item}`}>{item}</li>)}</ul></section>
       ) : null}
-      {tables.map(renderTable)}
+      {tableSections.length ? tableSections.map(renderTable) : (
+        <section className="bs-section" data-testid="game-book-player-stats-empty">
+          <h4>Player stat tables</h4>
+          <p>Player box score rows were not recorded for this game.</p>
+        </section>
+      )}
     </div>
   );
 }
