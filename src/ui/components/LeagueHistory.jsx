@@ -9,6 +9,7 @@ import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOption
 import { AWARD_DISPLAY_NAMES } from '../../core/footballMeta';
 import { buildLeagueHistoryTopPerformers } from '../../core/playerSeasonStatsArchive.js';
 import { normalizeArchivedMajorTransactions } from '../../core/transactionTimeline.js';
+import { buildShowingLabel, rowMatchesSearch, stableSortRows } from "../utils/dataBrowser.js";
 import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from '../utils/dataBrowser.js';
 import { rowMatchesSearch, buildShowingLabel } from "../utils/dataBrowser.js";
 import { buildShowingLabel, rowMatchesSearch, stableSortRows } from '../utils/dataBrowser.js';
@@ -403,6 +404,7 @@ function SeasonDraftClassSnippet({ seasonId, year, actions, onPlayerSelect }) {
 
 function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, league, initialSelectedSeasonId = null }) {
   const [selectedSeasonId, setSelectedSeasonId] = useState(initialSelectedSeasonId ?? seasons?.[0]?.id ?? null);
+  const [seasonSearch, setSeasonSearch] = useState("");
   const [seasonArchiveQuery, setSeasonArchiveQuery] = useState('');
   const [championFilter, setChampionFilter] = useState('all');
   const [seasonArchiveSort, setSeasonArchiveSort] = useState('desc');
@@ -556,6 +558,23 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
     );
   }
 
+  const filteredSeasons = useMemo(() => {
+    if (!seasonSearch.trim()) return seasons;
+    return seasons.filter((s) =>
+      rowMatchesSearch(s, seasonSearch, [
+        (r) => String(r.year ?? ''),
+        (r) => r.champion?.abbr ?? '',
+        (r) => r.champion?.name ?? '',
+      ]),
+    );
+  }, [seasons, seasonSearch]);
+
+  const seasonListLabel = useMemo(
+    () => buildShowingLabel(filteredSeasons.length, seasons.length, 'season'),
+    [filteredSeasons.length, seasons.length],
+  );
+
+  const selected = seasons.find((s) => s.id === selectedSeasonId) ?? seasons[0];
   const selected = filteredSeasons.find((s) => s.id === selectedSeasonId) ?? filteredSeasons[0] ?? null;
   const sortedStandings = [...(selected?.standings ?? [])].sort((a, b) => pct(b) - pct(a)).slice(0, 8);
   const championBoard = buildChampionMap(seasons).slice(0, 5);
@@ -594,6 +613,23 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
       <Card className="card-premium">
+        <CardHeader>
+          <CardTitle>Season Archive</CardTitle>
+          <input
+            type="text"
+            value={seasonSearch}
+            onChange={(e) => setSeasonSearch(e.target.value)}
+            placeholder="Search year or champion…"
+            aria-label="Search seasons"
+            className="mt-2 h-8 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+            data-testid="league-history-season-search"
+          />
+          <div className="text-[10px] text-[color:var(--text-muted)] mt-1" data-testid="league-history-season-showing">{seasonListLabel}</div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <ScrollArea className="h-[480px]">
+            <div className="divide-y divide-[color:var(--hairline)]">
+              {filteredSeasons.map((s) => (
         <CardHeader><CardTitle>Season Archive</CardTitle></CardHeader>
         <CardContent className="p-0 space-y-0">
           <div className="p-3 space-y-2 border-b border-[color:var(--hairline)]">
@@ -771,6 +807,10 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
                 >
                   Reset filters
                 </button>
+              ))}
+              {filteredSeasons.length === 0 && (
+                <div className="px-4 py-3 text-xs text-[color:var(--text-muted)]">No seasons match your search.</div>
+              )}
               ) : null}
             </div>
             <div
@@ -1231,6 +1271,24 @@ function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
 
 function AwardsHistory({ seasons, onPlayerSelect }) {
   const [awardsSearch, setAwardsSearch] = useState("");
+  const [awardsSortDir, setAwardsSortDir] = useState("desc");
+
+  const filteredAwardSeasons = useMemo(() => {
+    let rows = seasons ?? [];
+    if (awardsSearch.trim()) {
+      rows = rows.filter((s) =>
+        rowMatchesSearch(s, awardsSearch, [
+          (r) => String(r.year ?? ''),
+          (r) => r.champion?.abbr ?? '',
+          (r) => r.awards?.mvp?.name ?? '',
+          (r) => r.awards?.opoy?.name ?? '',
+          (r) => r.awards?.dpoy?.name ?? '',
+          (r) => r.awards?.roty?.name ?? '',
+        ]),
+      );
+    }
+    return stableSortRows(rows, (r) => r.year ?? 0, awardsSortDir);
+  }, [seasons, awardsSearch, awardsSortDir]);
 
   const filteredAwardSeasons = useMemo(() => {
     if (!awardsSearch.trim()) return seasons ?? [];
@@ -1280,10 +1338,34 @@ export function AwardsHistory({ seasons, onPlayerSelect }) {
 
   if (!totalSeasons) return <div className="py-8 text-center text-[color:var(--text-muted)]">No award history yet.</div>;
 
+  const awardsShowingLabel = buildShowingLabel(filteredAwardSeasons.length, seasons.length, 'season');
+
   return (
     <Card className="card-premium">
       <CardHeader>
         <CardTitle>Awards by Season</CardTitle>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <input
+            type="text"
+            value={awardsSearch}
+            onChange={(e) => setAwardsSearch(e.target.value)}
+            placeholder="Search year, champion, or player…"
+            aria-label="Search awards"
+            className="h-8 w-full sm:w-64 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+            data-testid="awards-history-search"
+          />
+          <button
+            type="button"
+            className="btn text-xs"
+            onClick={() => setAwardsSortDir((d) => d === "asc" ? "desc" : "asc")}
+          >
+            Year {awardsSortDir === "asc" ? "▲" : "▼"}
+          </button>
+          {awardsSearch && (
+            <button type="button" className="btn btn-secondary text-xs" onClick={() => setAwardsSearch("")}>Reset</button>
+          )}
+        </div>
+        <div className="text-[10px] text-[color:var(--text-muted)] mt-1" data-testid="awards-history-showing">{awardsShowingLabel}</div>
       </CardHeader>
       <CardContent className="p-0">
         <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-[color:var(--hairline)]">
@@ -1371,6 +1453,7 @@ export function AwardsHistory({ seasons, onPlayerSelect }) {
             <TableBody>
               {filteredAwardSeasons.length === 0 ? (
                 <TableRow>
+                  <TableCell colSpan={6} className="text-center text-[color:var(--text-muted)] py-6">No awards match your search.</TableCell>
                   <TableCell colSpan={6} className="py-6 text-center text-xs text-[color:var(--text-muted)]">No seasons match your search.</TableCell>
               {displayedSeasons.length === 0 ? (
                 <TableRow>
@@ -1409,6 +1492,8 @@ export function AwardsHistory({ seasons, onPlayerSelect }) {
 }
 
 function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
+  const [officeSearch, setOfficeSearch] = useState("");
+  const [officeType, setOfficeType] = useState("all");
   const [txQuery, setTxQuery] = useState('');
   const [txTypeFilter, setTxTypeFilter] = useState('all');
   const [txSortNewest, setTxSortNewest] = useState(true);
@@ -1548,7 +1633,88 @@ function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
 
   if (!transactions?.length) return <div className="py-8 text-center text-[color:var(--text-muted)]">No transaction history tracked yet.</div>;
 
+  const txBucket = (tx) => {
+    const leg = tx.legacyType ?? "";
+    const bucket = tx.type ?? "";
+    if (leg === "TRADE" || bucket === "trade") return "trade";
+    if (leg === "SIGN" || bucket === "signing") return "signing";
+    if (leg === "RELEASE" || bucket === "release") return "release";
+    if (leg === "DRAFT" || bucket === "draft") return "draft";
+    if (leg === "RETIREMENT" || bucket === "retirement") return "retirement";
+    if (leg === "EXTEND" || bucket === "extension") return "extension";
+    return bucket || "other";
+  };
+
+  const allRows = useMemo(() => (transactions ?? []).slice(0, 120), [transactions]);
+
+  const filteredRows = useMemo(() => {
+    let rows = allRows;
+    if (officeType !== "all") rows = rows.filter((tx) => txBucket(tx) === officeType);
+    if (officeSearch.trim()) {
+      rows = rows.filter((tx) =>
+        rowMatchesSearch(tx, officeSearch, ['playerName', 'teamAbbr', 'headline', 'typeLabel', 'fromTeamAbbr', 'toTeamAbbr']),
+      );
+    }
+    return rows;
+  }, [allRows, officeType, officeSearch]);
+
+  if (!transactions?.length) return <div className="py-8 text-center text-[color:var(--text-muted)]">No transaction history tracked yet.</div>;
+
+  const officeShowingLabel = buildShowingLabel(filteredRows.length, allRows.length, 'transaction');
+
   return (
+    <Card className="card-premium">
+      <CardHeader>
+        <CardTitle>League Moves Log</CardTitle>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <input
+            type="text"
+            value={officeSearch}
+            onChange={(e) => setOfficeSearch(e.target.value)}
+            placeholder="Search player or team…"
+            aria-label="Search transactions"
+            className="h-8 w-full sm:w-48 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+            data-testid="office-history-search"
+          />
+          <select
+            value={officeType}
+            onChange={(e) => setOfficeType(e.target.value)}
+            className="h-8 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+            data-testid="office-history-type-filter"
+          >
+            <option value="all">All types</option>
+            <option value="trade">Trades</option>
+            <option value="signing">Signings</option>
+            <option value="release">Releases</option>
+            <option value="draft">Draft</option>
+            <option value="retirement">Retirements</option>
+            <option value="extension">Extensions</option>
+          </select>
+          {(officeSearch || officeType !== "all") && (
+            <button type="button" className="btn btn-secondary text-xs" onClick={() => { setOfficeSearch(""); setOfficeType("all"); }}>Reset</button>
+          )}
+        </div>
+        <div className="text-[10px] text-[color:var(--text-muted)] mt-1" data-testid="office-history-showing">{officeShowingLabel}</div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <ScrollArea className="h-[520px]">
+          <div className="divide-y divide-[color:var(--hairline)]">
+            {filteredRows.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm text-[color:var(--text-muted)]">No transactions match your search.</div>
+            ) : (
+              filteredRows.map((tx, idx) => (
+                <div key={`${tx.id ?? idx}`} className="px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <strong>{tx.typeLabel ?? tx.type}</strong>
+                    <span className="text-xs text-[color:var(--text-muted)]">Week {tx.week ?? "?"}</span>
+                  </div>
+                  <div className="text-[color:var(--text-muted)] mt-1">{describe(tx)}</div>
+                  {tx.playerId != null && (
+                    <button className="btn mt-2 text-xs" onClick={() => onPlayerSelect?.(tx.playerId)}>Open player</button>
+                  )}
+                </div>
+              ))
+            )}
     <Card className="card-premium" data-testid="league-office-history-browser">
       <CardHeader><CardTitle>League Moves Log</CardTitle></CardHeader>
       <CardContent className="p-0 space-y-0">

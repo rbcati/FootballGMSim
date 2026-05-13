@@ -250,6 +250,27 @@ describe('TeamHistoryScreen', () => {
     expect(String(arg)).toMatch(/2055/);
   });
 
+  const multiSeasonActions = {
+    getAllSeasons: vi.fn().mockResolvedValue({
+      payload: {
+        seasons: [
+          { year: 2030, standings: [{ id: 1, abbr: 'ALP', wins: 12, losses: 5, ties: 0, pf: 450, pa: 300 }], champion: { id: 1, abbr: 'ALP' }, playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+          { year: 2031, standings: [{ id: 1, abbr: 'ALP', wins: 6, losses: 11, ties: 0, pf: 280, pa: 400 }], playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+          { year: 2032, standings: [{ id: 1, abbr: 'ALP', wins: 10, losses: 7, ties: 0, pf: 380, pa: 350 }], playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+        ],
+      },
+    }),
+    getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+    getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+    getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+    getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+  };
+
+  it('shows "Showing X of Y seasons" label', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 1, name: 'Alpha', abbr: 'ALP' }], userTeamId: 1 }}
+        actions={multiSeasonActions}
   it('filters timeline by year search, shows count, and resets', async () => {
     const seasons = [
       { year: 2030, standings: [{ id: 1, abbr: 'ALP', wins: 12, losses: 5, ties: 0, pf: 400, pa: 300 }] },
@@ -270,6 +291,36 @@ describe('TeamHistoryScreen', () => {
         onPlayerSelect={vi.fn()}
       />,
     );
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-showing-label').textContent).toMatch(/Showing 3 of 3 seasons/);
+    });
+  });
+
+  it('sorts timeline by wins descending when Wins sort is clicked', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 1, name: 'Alpha', abbr: 'ALP' }], userTeamId: 1 }}
+        actions={multiSeasonActions}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-sort-wins')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('team-history-sort-wins'));
+    await waitFor(() => {
+      const cards = screen.getAllByTestId(/^team-history-season-/);
+      expect(cards[0].textContent).toContain('2030');
+      expect(cards[cards.length - 1].textContent).toContain('2031');
+    });
+  });
+
+  it('filters timeline by year and updates showing label', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 1, name: 'Alpha', abbr: 'ALP' }], userTeamId: 1 }}
+        actions={multiSeasonActions}
 
     const count = await screen.findByTestId('team-history-timeline-count');
     expect(count.textContent).toMatch(/Showing 3 of 3 seasons/);
@@ -350,6 +401,32 @@ describe('TeamHistoryScreen', () => {
         onPlayerSelect={vi.fn()}
       />,
     );
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-showing-label')).toBeTruthy();
+    });
+    fireEvent.change(screen.getByLabelText('Filter by year'), { target: { value: '2031' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-showing-label').textContent).toMatch(/Showing 1 of 3 seasons/);
+    });
+  });
+
+  it('resets filters restores full list', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 1, name: 'Alpha', abbr: 'ALP' }], userTeamId: 1 }}
+        actions={multiSeasonActions}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('team-history-showing-label')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Filter by year'), { target: { value: '2031' } });
+    await waitFor(() => expect(screen.getByTestId('team-history-showing-label').textContent).toMatch(/1 of 3/));
+    fireEvent.click(screen.getByText('Reset filters'));
+    await waitFor(() => expect(screen.getByTestId('team-history-showing-label').textContent).toMatch(/3 of 3/));
+  });
+
+  it('empty history state renders safely with showing label', async () => {
 
     await screen.findByTestId('team-history-timeline-count');
     fireEvent.change(screen.getByLabelText(/sort seasons/i), { target: { value: 'winsDesc' } });
@@ -382,6 +459,8 @@ describe('TeamHistoryScreen', () => {
         onPlayerSelect={vi.fn()}
       />,
     );
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-showing-label').textContent).toMatch(/Showing 0 of 0 seasons/);
     await waitFor(() => expect(screen.queryByTestId('team-history-timeline-count')).toBeNull());
     await waitFor(() => expect(screen.getByText(/Showing 2 of 2 seasons/i)).toBeTruthy());
     fireEvent.change(screen.getByLabelText(/Search team seasons/i), { target: { value: 'Avery' } });

@@ -37,6 +37,7 @@ import { buildShowingLabel, rowMatchesSearch, stableSortRows } from "../utils/da
 import { buildLegacyScoreReport, shouldShowLegacyProfileSection } from "../../core/legacyScore.js";
 import { buildPlayerDevelopmentModel } from "../../core/playerDevelopmentModel.js";
 import { buildProspectScoutingReport } from "../../core/scoutingModel.js";
+import { buildShowingLabel, stableSortRows, rowMatchesSearch } from "../utils/dataBrowser.js";
 import { buildShowingLabel, rowMatchesSearch, stableSortRows } from "../utils/dataBrowser.js";
 
 const SEASON_LOG_SORTS = {
@@ -513,6 +514,9 @@ export default function PlayerProfile({
   const [extending, setExtending] = useState(false);
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
+  const [seasonLogSortKey, setSeasonLogSortKey] = useState("season");
+  const [seasonLogSortDir, setSeasonLogSortDir] = useState("desc");
+  const [seasonLogSearch, setSeasonLogSearch] = useState("");
   const [seasonLogSortField, setSeasonLogSortField] = useState('season');
   const [seasonLogSortDir, setSeasonLogSortDir] = useState('desc');
   const [seasonLogSearch, setSeasonLogSearch] = useState("");
@@ -756,6 +760,45 @@ export default function PlayerProfile({
     () => mergePlayerProfileSeasonRows(effectivePlayer, archivedSeasons),
     [effectivePlayer, archivedSeasons],
   );
+  const seasonLogRows = useMemo(() => {
+    let rows = mergedProfileSeasonRows;
+    if (seasonLogSearch.trim()) {
+      rows = rows.filter((line) =>
+        rowMatchesSearch(line, seasonLogSearch, ['season', 'team', (r) => String(r.year ?? r.season ?? '')]),
+      );
+    }
+    const getValue = (row) => {
+      if (seasonLogSortKey === 'gp') return row.gamesPlayed ?? row.gp ?? 0;
+      if (seasonLogSortKey === 'ovr') return row.ovr ?? 0;
+      if (seasonLogSortKey === 'passYds') return row.passYds ?? 0;
+      if (seasonLogSortKey === 'rushYds') return row.rushYds ?? 0;
+      if (seasonLogSortKey === 'recYds') return row.recYds ?? 0;
+      if (seasonLogSortKey === 'tackles') return row.tackles ?? 0;
+      return row.year ?? (typeof row.season === 'number' ? row.season : 0);
+    };
+    return stableSortRows(rows, getValue, seasonLogSortDir, (r) => r.year ?? 0);
+  }, [mergedProfileSeasonRows, seasonLogSearch, seasonLogSortKey, seasonLogSortDir]);
+
+  const seasonLogShowingLabel = useMemo(
+    () => buildShowingLabel(seasonLogRows.length, mergedProfileSeasonRows.length, 'season'),
+    [seasonLogRows.length, mergedProfileSeasonRows.length],
+  );
+
+  const toggleSeasonLogSort = (key) => {
+    if (seasonLogSortKey === key) {
+      setSeasonLogSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSeasonLogSortKey(key);
+      setSeasonLogSortDir(key === 'season' ? 'desc' : 'desc');
+    }
+  };
+
+  const resetSeasonLogFilters = () => {
+    setSeasonLogSearch('');
+    setSeasonLogSortKey('season');
+    setSeasonLogSortDir('desc');
+  };
+
 
   const displaySeasonLogRows = useMemo(() => {
     const rows = mergedProfileSeasonRows ?? [];
@@ -2242,6 +2285,7 @@ export default function PlayerProfile({
 
           {/* ── Per-season career log (player.careerStats + archived playerSeasonStatsV1) ── */}
           {!loading && mergedProfileSeasonRows.length > 0 && (
+            <section className="card-enter" data-testid="player-profile-season-log">
             <section className="card-enter" data-testid="player-profile-season-log-browser">
             <section className="card-enter" data-testid="player-profile-season-log">
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: "var(--space-2)" }}>
@@ -2305,6 +2349,43 @@ export default function PlayerProfile({
               >
                 Season Log
               </h3>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                <input
+                  value={seasonLogSearch}
+                  onChange={(e) => setSeasonLogSearch(e.target.value)}
+                  placeholder="Search season/team…"
+                  aria-label="Search season log"
+                  style={{ background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 8, padding: "4px 8px", color: "var(--text)", minWidth: 100, maxWidth: 160, fontSize: "0.76rem" }}
+                />
+                {[
+                  { key: "season", label: "Year" },
+                  { key: "gp", label: "GP" },
+                  { key: "ovr", label: "OVR" },
+                  ...(["QB"].includes(player.pos) ? [{ key: "passYds", label: "YDS" }] : []),
+                  ...(["RB", "FB"].includes(player.pos) ? [{ key: "rushYds", label: "RYDS" }] : []),
+                  ...(["WR", "TE"].includes(player.pos) ? [{ key: "recYds", label: "YDS" }] : []),
+                  ...(["DE", "DT", "LB", "CB", "S", "DL", "EDGE"].includes(player.pos) ? [{ key: "tackles", label: "TKL" }] : []),
+                ].map((col) => (
+                  <button
+                    key={col.key}
+                    type="button"
+                    className="btn"
+                    onClick={() => toggleSeasonLogSort(col.key)}
+                    style={{ fontSize: "0.7rem", padding: "2px 6px", opacity: seasonLogSortKey === col.key ? 1 : 0.6 }}
+                    data-testid={`season-log-sort-${col.key}`}
+                  >
+                    {col.label}{seasonLogSortKey === col.key ? (seasonLogSortDir === "asc" ? " ▲" : " ▼") : ""}
+                  </button>
+                ))}
+                {(seasonLogSearch || seasonLogSortKey !== "season" || seasonLogSortDir !== "desc") ? (
+                  <button type="button" className="btn btn-secondary" onClick={resetSeasonLogFilters} style={{ fontSize: "0.7rem", padding: "2px 6px" }}>
+                    Reset
+                  </button>
+                ) : null}
+              </div>
+              <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginBottom: 6 }} data-testid="season-log-showing-label">
+                {seasonLogShowingLabel}
+              </div>
               <div
                 style={{
                   display: "flex",
@@ -2646,6 +2727,7 @@ export default function PlayerProfile({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {seasonLogRows.map((line, i) => (
                     {displaySeasonLogRows.map((line, i) => (
                       <TableRow key={`${String(line.season)}-${line.team}-${i}`}>
                     {sortedSeasonLogRows.map((line, i) => (
