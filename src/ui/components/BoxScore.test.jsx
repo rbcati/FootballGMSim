@@ -41,11 +41,19 @@ describe('BoxScore game book rendering', () => {
     expect(html).not.toContain('Special Teams');
   });
 
-  it('player buttons trigger selection handlers when ids are present', () => {
+  it('player buttons trigger selection handlers with Game Book return context when ids are present', () => {
     const onSelect = vi.fn();
-    const { container } = render(<PlayerButton player={{ playerId: 55, name: 'Tester' }} onSelect={onSelect} context={{ source: 'test' }} />);
+    const player = { playerId: 55, name: 'Tester', stats: { passYd: 123 } };
+    const { container } = render(<PlayerButton player={player} onSelect={onSelect} context={{ source: 'game-book', gameId: 'g-context', returnTo: 'game-book' }} />);
     fireEvent.click(container.querySelector('button'));
     expect(onSelect.mock.calls[0][0]).toBe(55);
+    expect(onSelect.mock.calls[0][1]).toMatchObject({
+      source: 'game-book',
+      gameId: 'g-context',
+      returnTo: 'game-book',
+      player,
+      statLine: player.stats,
+    });
   });
 
   it('top performers trigger player profile selection when ids are present', () => {
@@ -54,6 +62,14 @@ describe('BoxScore game book rendering', () => {
     const { getAllByTestId } = render(<BoxScore gameId="g4" league={{ ...baseLeague, gameById: { g4: game } }} onPlayerSelect={onSelect} embedded />);
     fireEvent.click(getAllByTestId('game-book-top-performer-link')[0]);
     expect(onSelect.mock.calls[0][0]).toBe(11);
+    expect(onSelect.mock.calls[0][1]).toMatchObject({
+      source: 'game-book',
+      gameId: 'g4',
+      week: 2,
+      seasonId: 2031,
+      role: 'Top offensive player',
+      returnTo: 'game-book',
+    });
   });
 
   it('renders Defense and scoring summary rows when detailed stats exist', () => {
