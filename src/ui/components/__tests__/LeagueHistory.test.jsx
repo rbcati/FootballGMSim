@@ -10,6 +10,9 @@ import LeagueHistory from '../LeagueHistory.jsx';
 afterEach(() => cleanup());
 
 describe('LeagueHistory', () => {
+  afterEach(() => {
+    cleanup();
+  });
   afterEach(() => cleanup());
   afterEach(() => {
     cleanup();
@@ -171,6 +174,11 @@ describe('LeagueHistory', () => {
     });
   });
 
+  it('filters season archive sidebar and restores full list when cleared', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        initialSelectedSeasonId="s1"
   it('season search filters the season list and updates showing count', async () => {
     render(
       <LeagueHistory
@@ -181,6 +189,8 @@ describe('LeagueHistory', () => {
           getAllSeasons: vi.fn().mockResolvedValue({
             payload: {
               seasons: [
+                { id: 's1', year: 2030, champion: { abbr: 'DAL' }, standings: [], awards: {} },
+                { id: 's2', year: 2031, champion: { abbr: 'NYG' }, standings: [], awards: {} },
                 { id: 's1', year: 2030, champion: { abbr: 'DAL', name: 'Dallas' }, standings: [], awards: {} },
                 { id: 's2', year: 2031, champion: { abbr: 'NYG', name: 'Giants' }, standings: [], awards: {} },
                 { id: 's3', year: 2032, champion: { abbr: 'DAL', name: 'Dallas' }, standings: [], awards: {} },
@@ -195,6 +205,17 @@ describe('LeagueHistory', () => {
     );
 
     await waitFor(() => {
+      expect(screen.getByTestId('league-history-season-archive-browser')).toBeTruthy();
+    });
+    const archiveBrowser = screen.getByTestId('league-history-season-archive-browser');
+    fireEvent.change(archiveBrowser.querySelector('input[type="search"]'), { target: { value: '2031' } });
+    await waitFor(() => {
+      expect(archiveBrowser.textContent).toMatch(/Showing 1 of 2 seasons/);
+    });
+
+    fireEvent.change(archiveBrowser.querySelector('input[type="search"]'), { target: { value: '' } });
+    await waitFor(() => {
+      expect(archiveBrowser.textContent).toMatch(/Showing 2 of 2 seasons/);
       expect(screen.getByTestId('league-history-season-search')).toBeTruthy();
     });
     const showingEl = screen.getByTestId('league-history-season-showing');

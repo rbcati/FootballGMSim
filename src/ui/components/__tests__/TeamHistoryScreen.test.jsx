@@ -60,6 +60,7 @@ describe('TeamHistoryScreen', () => {
     });
   });
 
+  it('filters and sorts season timeline with stable search and showing label', async () => {
   it('shows showing count and sort controls after seasons load', async () => {
     render(
       <TeamHistoryScreen
@@ -68,6 +69,21 @@ describe('TeamHistoryScreen', () => {
           getAllSeasons: vi.fn().mockResolvedValue({
             payload: {
               seasons: [
+                {
+                  year: 2030,
+                  id: 's1',
+                  standings: [{ id: 7, abbr: 'SEA', wins: 8, losses: 9, ties: 0, pf: 300, pa: 310 }],
+                  awards: { mvp: { playerId: 1, name: 'Alex Peak' } },
+                  playoffBracketSnapshot: { mode: 'empty', rounds: [] },
+                },
+                {
+                  year: 2032,
+                  id: 's2',
+                  standings: [{ id: 7, abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 410, pa: 300 }],
+                  champion: { id: 7, abbr: 'SEA' },
+                  awards: {},
+                  playoffBracketSnapshot: { mode: 'empty', rounds: [] },
+                },
                 { year: 2030, standings: [{ id: 7, abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 420, pa: 300 }], champion: { id: 7, abbr: 'SEA' }, playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
                 { year: 2031, standings: [{ id: 7, abbr: 'SEA', wins: 8, losses: 9, ties: 0, pf: 320, pa: 330 }], playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
                 { year: 2032, standings: [{ id: 7, abbr: 'SEA', wins: 5, losses: 12, ties: 0, pf: 280, pa: 390 }], playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
@@ -84,6 +100,34 @@ describe('TeamHistoryScreen', () => {
       />,
     );
     await waitFor(() => {
+      expect(screen.getByTestId('team-history-season-timeline')).toBeTruthy();
+    });
+    const timeline = screen.getByTestId('team-history-season-timeline');
+    expect(screen.getByText(/Showing 2 of 2 seasons/i)).toBeTruthy();
+
+    const search = screen.getByLabelText(/Search franchise seasons/i);
+    fireEvent.change(search, { target: { value: 'alex' } });
+    await waitFor(() => {
+      expect(screen.getByText(/Showing 1 of 2 seasons/i)).toBeTruthy();
+    });
+    const gridAfterSearch = timeline.querySelector('[style*="display: grid"]');
+    expect(gridAfterSearch).toBeTruthy();
+    expect(within(gridAfterSearch).getByText('2030')).toBeTruthy();
+    expect(within(gridAfterSearch).queryByText('2032')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Showing 2 of 2 seasons/i)).toBeTruthy();
+    });
+
+    const sortSelect = timeline.querySelector('select');
+    expect(sortSelect).toBeTruthy();
+    fireEvent.change(sortSelect, { target: { value: 'wins' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sort direction/i }));
+    await waitFor(() => {
+      const grid = timeline.querySelector('[style*="display: grid"]');
+      const blob = grid?.textContent ?? '';
+      expect(blob.indexOf('8-9')).toBeLessThan(blob.indexOf('12-5'));
       const showLabel = screen.getByTestId('team-history-showing-label');
       expect(showLabel.textContent).toMatch(/Showing 3 of 3 seasons/i);
     });

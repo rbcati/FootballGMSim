@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -9,6 +9,7 @@ import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOption
 import { AWARD_DISPLAY_NAMES } from '../../core/footballMeta';
 import { buildLeagueHistoryTopPerformers } from '../../core/playerSeasonStatsArchive.js';
 import { normalizeArchivedMajorTransactions } from '../../core/transactionTimeline.js';
+import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from '../utils/dataBrowser.js';
 import { rowMatchesSearch, buildShowingLabel } from "../utils/dataBrowser.js";
 import { buildShowingLabel, rowMatchesSearch, stableSortRows } from '../utils/dataBrowser.js';
 
@@ -228,7 +229,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
           <TabsTrigger value="compare">Compare Players</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="seasons">
+        <TabsContent value="seasons" data-testid="league-history-season-archive-browser">
           <SeasonExplorer seasons={seasons} actions={api} onPlayerSelect={onPlayerSelect} onOpenBoxScore={onOpenBoxScore} league={league} initialSelectedSeasonId={initialSelectedSeasonId} />
         </TabsContent>
 
@@ -240,7 +241,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
           <AwardsHistory seasons={seasons} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
 
-        <TabsContent value="office">
+        <TabsContent value="office" data-testid="league-history-office-tab">
           <LeagueOfficeHistory transactions={transactions} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
 
@@ -402,6 +403,71 @@ function SeasonDraftClassSnippet({ seasonId, year, actions, onPlayerSelect }) {
 
 function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, league, initialSelectedSeasonId = null }) {
   const [selectedSeasonId, setSelectedSeasonId] = useState(initialSelectedSeasonId ?? seasons?.[0]?.id ?? null);
+  const [seasonArchiveQuery, setSeasonArchiveQuery] = useState('');
+  const [championFilter, setChampionFilter] = useState('all');
+  const [seasonArchiveSort, setSeasonArchiveSort] = useState('desc');
+
+  const championFilterOptions = useMemo(() => {
+    const rows = seasons ?? [];
+    const withAbbr = uniqueFilterOptions(
+      rows.filter((s) => s?.champion?.abbr || s?.champion?.name),
+      (s) => s?.champion?.abbr ?? s?.champion?.name,
+    );
+    const noneAvailable = rows.some((s) => !s?.champion);
+    return { withAbbr, noneAvailable };
+  }, [seasons]);
+
+  const filteredArchiveSeasons = useMemo(() => {
+    let rows = [...(seasons ?? [])];
+    if (championFilter === '__none__') {
+      rows = rows.filter((s) => !s?.champion);
+    } else if (championFilter !== 'all') {
+      rows = rows.filter((s) => {
+        const ab = s?.champion?.abbr ?? s?.champion?.name ?? '';
+        return String(ab) === championFilter;
+      });
+    }
+    rows = rows.filter((s) =>
+      rowMatchesSearch(s, seasonArchiveQuery, [
+        'year',
+        (x) => x?.id,
+        (x) => x?.champion?.abbr,
+        (x) => x?.champion?.name,
+        (x) => x?.runnerUp?.abbr,
+        (x) => x?.runnerUp?.name,
+      ]),
+    );
+    const dir = seasonArchiveSort === 'asc' ? 'asc' : 'desc';
+    return stableSortRows(rows, (x) => Number(x?.year ?? 0), dir, (x) => String(x?.id ?? ''));
+  }, [seasons, seasonArchiveQuery, championFilter, seasonArchiveSort]);
+
+  const seasonArchiveShowingLabel = buildShowingLabel(filteredArchiveSeasons.length, (seasons ?? []).length, 'season');
+
+  const selected = useMemo(
+    () => (!seasons?.length ? null : seasons.find((s) => s.id === selectedSeasonId) ?? seasons[0] ?? null),
+    [seasons, selectedSeasonId],
+  );
+
+  const topPerformers = useMemo(
+    () => (selected ? buildLeagueHistoryTopPerformers(selected, { perBucket: 2 }) : null),
+    [selected],
+  );
+
+  const seasonMajorTx = useMemo(() => {
+    if (!selected) return [];
+    const v1 = selected?.transactionTimelineV1?.rows;
+    if (Array.isArray(v1) && v1.length) return v1.slice(0, 10);
+    const raw = selected?.majorTransactions;
+    if (!Array.isArray(raw) || !raw.length) return [];
+    const teams = league?.teams ?? [];
+    const teamsById = new Map(teams.map((t) => [Number(t.id), t]));
+    return normalizeArchivedMajorTransactions(raw, {
+      teams,
+      teamsById,
+      year: selected?.year ?? null,
+      phase: null,
+    }).slice(0, 10);
+  }, [selected, league?.teams]);
   const [seasonListSearch, setSeasonListSearch] = useState("");
 
   const filteredSeasonList = useMemo(() => {
@@ -505,6 +571,7 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
     .filter((entry) => entry.award?.name);
   const championshipGame = (selected?.gameIndex ?? []).find((g) => String(g?.id) === String(selected?.championshipGameId)) ?? null;
   const notableGames = Array.isArray(selected?.notableGames) ? selected.notableGames : [];
+  const selectedSeasonIndex = seasons.findIndex((s) => s.id === selected?.id);
   const selectedSeasonIndex = filteredSeasons.findIndex((s) => s.id === selected?.id);
   const topPerformers = useMemo(() => buildLeagueHistoryTopPerformers(selected, { perBucket: 2 }), [selected]);
   const hasSeasonFilters = Boolean(search.trim()) || championFilter !== "ALL" || sortKey !== "year" || sortDir !== "desc";
@@ -528,6 +595,49 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
     <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
       <Card className="card-premium">
         <CardHeader><CardTitle>Season Archive</CardTitle></CardHeader>
+        <CardContent className="p-0 space-y-0">
+          <div className="p-3 space-y-2 border-b border-[color:var(--hairline)]">
+            <input
+              type="search"
+              value={seasonArchiveQuery}
+              onChange={(e) => setSeasonArchiveQuery(e.target.value)}
+              placeholder="Search year, teams, champion…"
+              className="h-9 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-sm"
+              aria-label="Search archived seasons"
+            />
+            <div className="flex flex-wrap gap-2 items-center">
+              <label className="text-xs text-[color:var(--text-muted)] flex items-center gap-1">
+                Champion
+                <select
+                  value={championFilter}
+                  onChange={(e) => setChampionFilter(e.target.value)}
+                  className="h-8 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-1 text-xs max-w-[140px]"
+                >
+                  <option value="all">All</option>
+                  {championFilterOptions.noneAvailable ? <option value="__none__">No champion in archive</option> : null}
+                  {championFilterOptions.withAbbr.map((abbr) => (
+                    <option key={abbr} value={abbr}>{abbr}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setSeasonArchiveSort((d) => (d === 'asc' ? 'desc' : 'asc'))}
+              >
+                Year {seasonArchiveSort === 'asc' ? '↑' : '↓'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  setSeasonArchiveQuery('');
+                  setChampionFilter('all');
+                  setSeasonArchiveSort('desc');
+                }}
+              >
+                Reset
+              </button>
         <CardContent className="p-0">
           <div className="px-3 py-2 border-b border-[color:var(--hairline)]">
             <input
@@ -703,6 +813,30 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
                 );
               })}
             </div>
+            <div className="text-[10px] text-[color:var(--text-muted)] leading-tight">{seasonArchiveShowingLabel}</div>
+          </div>
+          <ScrollArea className="h-[460px] lg:h-[520px]">
+            {filteredArchiveSeasons.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-[color:var(--text-muted)]">
+                No seasons match these filters. Clear search or reset to see the full archive.
+              </div>
+            ) : (
+              <div className="divide-y divide-[color:var(--hairline)]" data-testid="league-history-season-archive-list">
+                {filteredArchiveSeasons.map((s) => (
+                  <button
+                    key={s.id}
+                    className={`w-full text-left px-4 py-2.5 sm:py-3 ${selected?.id === s.id ? "bg-[color:var(--surface-strong)]" : ""}`}
+                    onClick={() => setSelectedSeasonId(s.id)}
+                  >
+                    <div className="font-bold text-sm leading-tight">{s.year}</div>
+                    <div className="text-[11px] sm:text-xs text-[color:var(--text-muted)] leading-snug">
+                      {(s.champion?.abbr ?? s.champion?.name) || "—"}
+                      <span className="text-[color:var(--text-subtle)]"> · champ</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </ScrollArea>
         </CardContent>
       </Card>
@@ -1275,6 +1409,11 @@ export function AwardsHistory({ seasons, onPlayerSelect }) {
 }
 
 function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
+  const [txQuery, setTxQuery] = useState('');
+  const [txTypeFilter, setTxTypeFilter] = useState('all');
+  const [txSortNewest, setTxSortNewest] = useState(true);
+
+  const describeTx = useCallback((tx) => {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [sort, setSort] = useState({ key: "date", dir: "desc" });
@@ -1301,7 +1440,58 @@ function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
     if (isDraft) return `${tx.teamAbbr ?? "??"} drafted ${tx.playerName ?? "player"}.`;
     if (isRetire) return `${tx.playerName ?? "Player"} retired${tx.detail ? ` (${tx.detail})` : ""}.`;
     return tx.headline ?? tx.typeLabel ?? tx.type;
-  };
+  }, []);
+
+  const typeOptions = useMemo(
+    () => uniqueFilterOptions(transactions ?? [], (t) => t?.typeLabel ?? t?.type),
+    [transactions],
+  );
+
+  const filteredTransactions = useMemo(() => {
+    let rows = [...(transactions ?? [])];
+    if (txTypeFilter !== 'all') {
+      rows = rows.filter((t) => String(t?.typeLabel ?? t?.type ?? '') === txTypeFilter);
+    }
+    rows = rows.filter((t) =>
+      rowMatchesSearch(t, txQuery, [
+        'playerName',
+        'teamAbbr',
+        'fromTeamAbbr',
+        'toTeamAbbr',
+        'typeLabel',
+        'type',
+        'headline',
+        'seasonId',
+        (x) => describeTx(x),
+      ]),
+    );
+    const dir = txSortNewest ? 'desc' : 'asc';
+    const seasonOrdinal = (sid) => {
+      const s = String(sid ?? '');
+      const m = /^s(\d+)$/i.exec(s);
+      if (m) return Number(m[1]);
+      const n = Number(s);
+      return Number.isFinite(n) ? n : 0;
+    };
+    return stableSortRows(
+      rows,
+      (t) => seasonOrdinal(t?.seasonId) * 1e4 + Number(t?.week ?? 0),
+      dir,
+      (t) => Number(t?.id ?? t?.rawId ?? 0),
+    );
+  }, [transactions, txQuery, txTypeFilter, txSortNewest, describeTx]);
+
+  const txCap = 200;
+  const visibleTransactions = filteredTransactions.slice(0, txCap);
+  const txShowingLabel = buildShowingLabel(visibleTransactions.length, filteredTransactions.length, 'move');
+
+  if (!transactions?.length) {
+    return (
+      <div className="py-8 text-center text-[color:var(--text-muted)]" data-testid="league-office-history-empty">
+        No transaction history tracked yet.
+      </div>
+    );
+  }
 
   const typeOptions = useMemo(
     () => ["all", ...uniqueFilterOptions(transactions ?? [], (tx) => tx?.typeLabel ?? tx?.type).slice(0, 12)],
@@ -1359,8 +1549,67 @@ function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
   if (!transactions?.length) return <div className="py-8 text-center text-[color:var(--text-muted)]">No transaction history tracked yet.</div>;
 
   return (
-    <Card className="card-premium">
+    <Card className="card-premium" data-testid="league-office-history-browser">
       <CardHeader><CardTitle>League Moves Log</CardTitle></CardHeader>
+      <CardContent className="p-0 space-y-0">
+        <div className="px-4 py-3 space-y-2 border-b border-[color:var(--hairline)]">
+          <input
+            type="search"
+            value={txQuery}
+            onChange={(e) => setTxQuery(e.target.value)}
+            placeholder="Search player, team, headline, season…"
+            className="h-9 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+            aria-label="Search transactions"
+          />
+          <div className="flex flex-wrap gap-2 items-center">
+            <label className="text-xs text-[color:var(--text-muted)] flex items-center gap-1">
+              Type
+              <select
+                value={txTypeFilter}
+                onChange={(e) => setTxTypeFilter(e.target.value)}
+                className="h-8 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs max-w-[160px]"
+              >
+                <option value="all">All types</option>
+                {typeOptions.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </label>
+            <button type="button" className="btn btn-sm" onClick={() => setTxSortNewest((v) => !v)}>
+              {txSortNewest ? 'Newest first' : 'Oldest first'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setTxQuery('');
+                setTxTypeFilter('all');
+                setTxSortNewest(true);
+              }}
+            >
+              Reset
+            </button>
+          </div>
+          <div className="text-[10px] text-[color:var(--text-muted)]">{txShowingLabel}{filteredTransactions.length > txCap ? ' (list capped)' : ''}</div>
+        </div>
+        {visibleTransactions.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-[color:var(--text-muted)]" data-testid="league-office-history-filtered-empty">
+            No moves match these filters. Reset to see the full log.
+          </div>
+        ) : (
+          <ScrollArea className="h-[520px]">
+            <div className="divide-y divide-[color:var(--hairline)]">
+              {visibleTransactions.map((tx, idx) => (
+                <div key={`${tx.id ?? idx}`} className="px-4 py-2.5 sm:py-3 text-sm">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <strong className="text-[13px] sm:text-sm">{tx.typeLabel ?? tx.type}</strong>
+                    <span className="text-[10px] sm:text-xs text-[color:var(--text-muted)] tabular-nums shrink-0">
+                      {tx.seasonId != null ? `${tx.seasonId} · ` : ''}Week {tx.week ?? "?"}
+                    </span>
+                  </div>
+                  <div className="text-[color:var(--text-muted)] mt-1 text-xs sm:text-sm leading-snug">{describeTx(tx)}</div>
+                  {tx.playerId != null && (
+                    <button type="button" className="btn mt-2 text-xs" onClick={() => onPlayerSelect?.(tx.playerId)}>Open player</button>
       <CardContent className="p-0">
         <div className="p-3 space-y-2 border-b border-[color:var(--hairline)]">
           <input
