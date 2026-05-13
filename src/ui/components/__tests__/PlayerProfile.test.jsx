@@ -250,6 +250,204 @@ describe('PlayerProfile', () => {
     expect(screen.getByText('4,100')).toBeTruthy();
   });
 
+  it('filters and counts the season log, then resets', async () => {
+    const multiSeasonActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: { player: { ...player, careerStats: [] }, stats: [], teammates: [], meta: {} },
+  it('filters, sorts, counts, and resets archived player season rows', async () => {
+    const logActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: {
+          player: { ...player, careerStats: [] },
+  it('supports season log search, sort, and reset controls', async () => {
+    const seasonLogActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: {
+          player: {
+            ...player,
+            careerStats: [],
+          },
+          stats: [],
+          teammates: [],
+          meta: {},
+        },
+      })),
+      getAllSeasons: vi.fn(async () => ({
+        payload: {
+          seasons: [
+            {
+              id: 's1', year: 2030,
+              playerSeasonStatsV1: { schemaVersion: 1, rows: [
+                { playerId: 11, playerName: 'Avery Fields', pos: 'QB', teamId: 1, teamAbbr: 'DAL', year: 2030, seasonId: 's1', gamesPlayed: 14, passYds: 4100, passTDs: 28, passInts: 9, rushYds: 0, rushTDs: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, defInts: 0, fgMade: 0, xpMade: 0 },
+              ], meta: {} },
+            },
+            {
+              id: 's2', year: 2031,
+              playerSeasonStatsV1: { schemaVersion: 1, rows: [
+                { playerId: 11, playerName: 'Avery Fields', pos: 'QB', teamId: 2, teamAbbr: 'NYG', year: 2031, seasonId: 's2', gamesPlayed: 16, passYds: 4800, passTDs: 34, passInts: 7, rushYds: 0, rushTDs: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, defInts: 0, fgMade: 0, xpMade: 0 },
+              ], meta: {} },
+            },
+            {
+              id: 's3', year: 2032,
+              playerSeasonStatsV1: { schemaVersion: 1, rows: [
+                { playerId: 11, playerName: 'Avery Fields', pos: 'QB', teamId: 2, teamAbbr: 'NYG', year: 2032, seasonId: 's3', gamesPlayed: 16, passYds: 3900, passTDs: 22, passInts: 11, rushYds: 0, rushTDs: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, defInts: 0, fgMade: 0, xpMade: 0 },
+              ], meta: {} },
+              id: 's1',
+              year: 2030,
+              awards: { mvp: { playerId: 11, name: 'Avery Fields', teamId: 1 } },
+              playerSeasonStatsV1: {
+                schemaVersion: 1,
+                rows: [{
+                  playerId: 11,
+                  playerName: 'Avery Fields',
+                  pos: 'QB',
+                  teamId: 1,
+                  teamAbbr: 'DAL',
+                  year: 2030,
+                  seasonId: 's1',
+                  gamesPlayed: 12,
+                  passYds: 4100,
+                  passTDs: 31,
+                  passInts: 9,
+                }],
+                  gamesPlayed: 16,
+                  passYds: 3600,
+                  passTDs: 24,
+                  passInts: 10,
+                }],
+                meta: {},
+              },
+            },
+            {
+              id: 's2',
+              year: 2031,
+              awards: {},
+              playerSeasonStatsV1: {
+                schemaVersion: 1,
+                rows: [{
+                  playerId: 11,
+                  playerName: 'Avery Fields',
+                  pos: 'QB',
+                  teamId: 2,
+                  teamAbbr: 'NYG',
+                  year: 2031,
+                  seasonId: 's2',
+                  gamesPlayed: 10,
+                  passYds: 2500,
+                  passTDs: 15,
+                  passInts: 7,
+                }],
+              },
+            },
+          ],
+        },
+      })),
+      getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+    };
+
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={multiSeasonActions} teams={league.teams} league={league} />);
+
+    await waitFor(() => expect(screen.getByText('Season Log')).toBeTruthy());
+
+    const count = screen.getByTestId('player-profile-season-log-count');
+    expect(count.textContent).toMatch(/Showing 3 of 3 seasons/);
+
+    fireEvent.change(screen.getByPlaceholderText(/search by team or year/i), { target: { value: 'NYG' } });
+    await waitFor(() =>
+      expect(screen.getByTestId('player-profile-season-log-count').textContent).toMatch(/Showing 2 of 3 seasons/),
+    );
+
+    fireEvent.click(screen.getByTestId('player-profile-season-log-reset'));
+    await waitFor(() =>
+      expect(screen.getByTestId('player-profile-season-log-count').textContent).toMatch(/Showing 3 of 3 seasons/),
+    );
+  });
+
+  it('sorts the season log oldest-first when requested', async () => {
+    const multiSeasonActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: { player: { ...player, careerStats: [] }, stats: [], teammates: [], meta: {} },
+      })),
+      getAllSeasons: vi.fn(async () => ({
+        payload: {
+          seasons: [
+            {
+              id: 's1', year: 2030,
+              playerSeasonStatsV1: { schemaVersion: 1, rows: [
+                { playerId: 11, playerName: 'Avery Fields', pos: 'QB', teamId: 1, teamAbbr: 'DAL', year: 2030, seasonId: 's1', gamesPlayed: 14, passYds: 4100, passTDs: 28, passInts: 9, rushYds: 0, rushTDs: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, defInts: 0, fgMade: 0, xpMade: 0 },
+              ], meta: {} },
+            },
+            {
+              id: 's2', year: 2031,
+              playerSeasonStatsV1: { schemaVersion: 1, rows: [
+                { playerId: 11, playerName: 'Avery Fields', pos: 'QB', teamId: 2, teamAbbr: 'NYG', year: 2031, seasonId: 's2', gamesPlayed: 16, passYds: 4800, passTDs: 34, passInts: 7, rushYds: 0, rushTDs: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, defInts: 0, fgMade: 0, xpMade: 0 },
+              ], meta: {} },
+            },
+          ],
+        },
+      })),
+      getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+    };
+
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={multiSeasonActions} teams={league.teams} league={league} />);
+
+    await waitFor(() => expect(screen.getByText('4,800')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(/sort season log/i), { target: { value: 'seasonAsc' } });
+
+    await waitFor(() => {
+      const yds = [...document.querySelectorAll('td')]
+        .map((td) => td.textContent ?? '')
+        .filter((t) => t === '4,100' || t === '4,800');
+      expect(yds[0]).toBe('4,100');
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={logActions} teams={league.teams} league={league} />);
+
+    await waitFor(() => expect(screen.getByText(/Showing 2 of 2 seasons/i)).toBeTruthy());
+    expect(screen.getByTestId('player-profile')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Filter player season log by team/i), { target: { value: 'NYG' } });
+    expect(screen.getByText(/Showing 1 of 2 seasons/i)).toBeTruthy();
+    expect(screen.getAllByTestId('player-profile-season-log-row')[0].textContent).toMatch(/NYG/);
+
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
+    fireEvent.change(screen.getByLabelText(/Sort player season log/i), { target: { value: 'keyStat' } });
+    expect(screen.getAllByTestId('player-profile-season-log-row')[0].textContent).toMatch(/4,100/);
+    expect(screen.getAllByTestId('player-profile-season-log-row')[0].textContent).toMatch(/Most Valuable Player/);
+                  gamesPlayed: 17,
+                  passYds: 4200,
+                  passTDs: 31,
+                  passInts: 8,
+                }],
+                meta: {},
+              },
+            },
+          ],
+        },
+      })),
+      getPlayerDraftContext: vi.fn(async () => ({ payload: { context: { known: false } } })),
+      getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+    };
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={seasonLogActions} teams={league.teams} league={league} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('player-profile-season-log-showing').textContent).toContain('Showing 2 of 2 seasons');
+    });
+
+    fireEvent.change(screen.getByLabelText('Sort player season log'), { target: { value: 'primaryStat' } });
+    const rows = screen.getAllByTestId(/player-profile-season-log-row-/i);
+    expect(rows[0].textContent).toContain('NYG');
+
+    fireEvent.change(screen.getByLabelText('Search player season log'), { target: { value: 'dal' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('player-profile-season-log-showing').textContent).toContain('Showing 1 of 2 seasons');
+    });
+    expect(screen.getAllByText('DAL').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByLabelText('Reset player season log filters'));
+    await waitFor(() => {
+      expect(screen.getByTestId('player-profile-season-log-showing').textContent).toContain('Showing 2 of 2 seasons');
+    });
+  });
+
   it('shows honest empty award timeline when no honors exist', async () => {
     render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={league} />);
     await waitFor(() => expect(screen.getByTestId('player-profile-award-timeline')).toBeTruthy());
@@ -421,5 +619,61 @@ describe('PlayerProfile', () => {
     );
     await waitFor(() => expect(screen.getByTestId('player-profile-legacy-watch')).toBeTruthy());
     expect(screen.getByText(/Legacy score/i)).toBeTruthy();
+  });
+
+  it('shows season log sort controls and showing count when season log rows exist', async () => {
+    const multiSeasonActions = {
+      getPlayerCareer: vi.fn(async () => ({
+        payload: {
+          player: { ...player, careerStats: [] },
+          stats: [],
+          teammates: [],
+          meta: {},
+        },
+      })),
+      getAllSeasons: vi.fn(async () => ({
+        payload: {
+          seasons: [
+            {
+              id: 's1',
+              year: 2030,
+              playerSeasonStatsV1: {
+                schemaVersion: 1,
+                rows: [{ playerId: 11, playerName: 'Avery Fields', pos: 'QB', teamId: 1, teamAbbr: 'DAL', year: 2030, seasonId: 's1', gamesPlayed: 14, passYds: 3800, passTDs: 28, passInts: 8, rushYds: 0, rushTDs: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, defInts: 0, fgMade: 0, xpMade: 0 }],
+                meta: {},
+              },
+            },
+            {
+              id: 's2',
+              year: 2031,
+              playerSeasonStatsV1: {
+                schemaVersion: 1,
+                rows: [{ playerId: 11, playerName: 'Avery Fields', pos: 'QB', teamId: 1, teamAbbr: 'DAL', year: 2031, seasonId: 's2', gamesPlayed: 16, passYds: 4500, passTDs: 35, passInts: 7, rushYds: 0, rushTDs: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, defInts: 0, fgMade: 0, xpMade: 0 }],
+                meta: {},
+              },
+            },
+          ],
+        },
+      })),
+      getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+    };
+
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={multiSeasonActions} teams={league.teams} league={league} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('player-profile-season-log')).toBeTruthy();
+    });
+
+    expect(screen.getByTestId('season-log-showing-label').textContent).toMatch(/Showing 2 of 2 seasons/i);
+
+    const sortButtons = screen.getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') !== null);
+    expect(sortButtons.length).toBeGreaterThan(0);
+  });
+
+  it('season log renders safely with no archive data (safe fallback)', async () => {
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={league} />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('player-profile-season-log')).toBeNull();
+    });
   });
 });

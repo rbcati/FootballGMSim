@@ -5,10 +5,21 @@ import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
+import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from "../utils/dataBrowser.js";
 import { AWARD_DISPLAY_NAMES } from '../../core/footballMeta';
 import { buildLeagueHistoryTopPerformers } from '../../core/playerSeasonStatsArchive.js';
 import { normalizeArchivedMajorTransactions } from '../../core/transactionTimeline.js';
 import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from '../utils/dataBrowser.js';
+import { rowMatchesSearch, buildShowingLabel } from "../utils/dataBrowser.js";
+import { buildShowingLabel, rowMatchesSearch, stableSortRows } from '../utils/dataBrowser.js';
+
+const AWARDS_HISTORY_SORTS = {
+  yearDesc: { label: 'Year (newest)', getValue: (s) => Number(s?.year ?? 0), direction: 'desc' },
+  yearAsc: { label: 'Year (oldest)', getValue: (s) => Number(s?.year ?? 0), direction: 'asc' },
+  champion: { label: 'Champion', getValue: (s) => s?.champion?.abbr ?? '', direction: 'asc' },
+  mvp: { label: 'MVP name', getValue: (s) => s?.awards?.mvp?.name ?? '', direction: 'asc' },
+};
+import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from "../utils/dataBrowser.js";
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -73,6 +84,32 @@ const PLAYER_LEADER_LABELS = {
   fieldGoalsMade: "Field goals",
 };
 
+const SEASON_SORT_OPTIONS = [
+  { value: "year", label: "Year" },
+  { value: "champion", label: "Champion" },
+  { value: "userWins", label: "Your wins" },
+];
+
+function buildSeasonArchiveSearchText(season) {
+  return [
+    season?.year,
+    season?.champion?.abbr,
+    season?.champion?.name,
+    season?.runnerUp?.abbr,
+    season?.runnerUp?.name,
+    season?.awards?.mvp?.name,
+    (season?.standings ?? []).map((team) => `${team?.abbr ?? ""} ${team?.name ?? ""}`).join(" "),
+  ].filter(Boolean).join(" ");
+}
+
+function transactionTypeLabel(tx) {
+  return tx?.typeLabel ?? tx?.type ?? tx?.legacyType ?? "Other";
+}
+
+function transactionSortStamp(tx) {
+  return `${tx?.seasonId ?? tx?.year ?? ""} ${tx?.week ?? ""} ${tx?.id ?? tx?.rawId ?? ""}`;
+}
+
 function pct(row) {
   const wins = Number(row?.wins ?? 0);
   const losses = Number(row?.losses ?? 0);
@@ -108,6 +145,29 @@ function summarizeSeasonStoryline(season, userTeamId) {
     lines.push(`Your franchise finished ${userRow.wins}-${userRow.losses}${userRow.ties ? `-${userRow.ties}` : ""}.`);
   }
   return lines.join(" ");
+}
+
+function userTeamStandingForSeason(season, userTeamId) {
+  return (season?.standings ?? []).find((row) => Number(row?.id) === Number(userTeamId)) ?? null;
+}
+
+function seasonArchiveSortValue(season, sortKey, userTeamId) {
+  if (sortKey === "champion") return season?.champion?.abbr ?? season?.champion?.name ?? "";
+  if (sortKey === "teams") return season?.standings?.length ?? 0;
+  if (sortKey === "userWins") return userTeamStandingForSeason(season, userTeamId)?.wins ?? "";
+  return season?.year;
+}
+
+function seasonArchiveSearchFields(season) {
+  return [
+    season?.year,
+    season?.champion?.abbr,
+    season?.champion?.name,
+    season?.runnerUp?.abbr,
+    season?.runnerUp?.name,
+    season?.awards?.mvp?.name,
+    ...(season?.standings ?? []).flatMap((team) => [team?.abbr, team?.name, `${team?.wins ?? 0}-${team?.losses ?? 0}`]),
+  ].filter(Boolean).join(" ");
 }
 
 export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenBoxScore, initialSelectedSeasonId = null }) {
@@ -177,7 +237,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
           <RecordsExplorer records={records} recordBook={recordBook} seasons={seasons} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
 
-        <TabsContent value="awards">
+        <TabsContent value="awards" forceMount style={activeTab !== "awards" ? { display: "none" } : undefined}>
           <AwardsHistory seasons={seasons} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
 
@@ -408,6 +468,24 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
       phase: null,
     }).slice(0, 10);
   }, [selected, league?.teams]);
+  const [seasonListSearch, setSeasonListSearch] = useState("");
+
+  const filteredSeasonList = useMemo(() => {
+    if (!seasonListSearch.trim()) return seasons ?? [];
+    return (seasons ?? []).filter((s) =>
+      rowMatchesSearch(s, seasonListSearch, [
+        (row) => String(row?.year ?? ""),
+        (row) => row?.champion?.abbr,
+        (row) => row?.champion?.name,
+      ])
+    );
+  }, [seasons, seasonListSearch]);
+  const [seasonSearch, setSeasonSearch] = useState("");
+  const [seasonSort, setSeasonSort] = useState({ key: "year", dir: "desc" });
+  const [search, setSearch] = useState("");
+  const [championFilter, setChampionFilter] = useState("ALL");
+  const [sortKey, setSortKey] = useState("year");
+  const [sortDir, setSortDir] = useState("desc");
 
   useEffect(() => {
     if (!seasons?.length) return;
@@ -418,6 +496,54 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
     }
     setSelectedSeasonId((prev) => prev ?? seasons[0]?.id ?? null);
   }, [initialSelectedSeasonId, seasons]);
+
+  const browsedSeasons = useMemo(() => {
+    const filtered = (seasons ?? []).filter((season) => rowMatchesSearch(season, seasonSearch, [
+      "year",
+      (s) => s?.champion?.abbr,
+      (s) => s?.champion?.name,
+      (s) => s?.runnerUp?.abbr,
+      (s) => s?.runnerUp?.name,
+      (s) => s?.awards?.mvp?.name,
+      seasonArchiveSearchFields,
+    ]));
+    return stableSortRows(filtered, (season) => seasonArchiveSortValue(season, seasonSort.key, league?.userTeamId), seasonSort.dir, (season) => season?.year);
+  }, [seasons, seasonSearch, seasonSort, league?.userTeamId]);
+
+  const resetSeasonBrowser = () => {
+    setSeasonSearch("");
+    setSeasonSort({ key: "year", dir: "desc" });
+  };
+  const championOptions = useMemo(
+    () => uniqueFilterOptions(seasons, (season) => season?.champion?.abbr ?? season?.champion?.name ?? ""),
+    [seasons],
+  );
+
+  const filteredSeasons = useMemo(() => {
+    const rows = (seasons ?? []).filter((season) => {
+      const champion = season?.champion?.abbr ?? season?.champion?.name ?? "";
+      if (championFilter !== "ALL" && champion !== championFilter) return false;
+      return rowMatchesSearch(season, search, [
+        "year",
+        buildSeasonArchiveSearchText,
+      ]);
+    });
+    return stableSortRows(rows, (season) => {
+      if (sortKey === "champion") return season?.champion?.abbr ?? season?.champion?.name ?? "";
+      if (sortKey === "userWins") {
+        return (season?.standings ?? []).find((row) => Number(row?.id) === Number(league?.userTeamId))?.wins ?? -1;
+      }
+      return season?.year ?? 0;
+    }, sortDir, (season) => season?.year ?? 0);
+  }, [championFilter, league?.userTeamId, search, seasons, sortDir, sortKey]);
+
+  useEffect(() => {
+    if (!filteredSeasons.length) return;
+    const exists = filteredSeasons.some((season) => String(season?.id) === String(selectedSeasonId));
+    if (!exists) {
+      setSelectedSeasonId(filteredSeasons[0]?.id ?? null);
+    }
+  }, [filteredSeasons, selectedSeasonId]);
 
   if (!seasons?.length) {
     return (
@@ -430,6 +556,7 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
     );
   }
 
+  const selected = filteredSeasons.find((s) => s.id === selectedSeasonId) ?? filteredSeasons[0] ?? null;
   const sortedStandings = [...(selected?.standings ?? [])].sort((a, b) => pct(b) - pct(a)).slice(0, 8);
   const championBoard = buildChampionMap(seasons).slice(0, 5);
   const playoffMentions = (selected?.standings ?? []).filter((row) => Number(row?.wins ?? 0) >= 10).slice(0, 6);
@@ -445,6 +572,24 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
   const championshipGame = (selected?.gameIndex ?? []).find((g) => String(g?.id) === String(selected?.championshipGameId)) ?? null;
   const notableGames = Array.isArray(selected?.notableGames) ? selected.notableGames : [];
   const selectedSeasonIndex = seasons.findIndex((s) => s.id === selected?.id);
+  const selectedSeasonIndex = filteredSeasons.findIndex((s) => s.id === selected?.id);
+  const topPerformers = useMemo(() => buildLeagueHistoryTopPerformers(selected, { perBucket: 2 }), [selected]);
+  const hasSeasonFilters = Boolean(search.trim()) || championFilter !== "ALL" || sortKey !== "year" || sortDir !== "desc";
+
+  const seasonMajorTx = useMemo(() => {
+    const v1 = selected?.transactionTimelineV1?.rows;
+    if (Array.isArray(v1) && v1.length) return v1.slice(0, 10);
+    const raw = selected?.majorTransactions;
+    if (!Array.isArray(raw) || !raw.length) return [];
+    const teams = league?.teams ?? [];
+    const teamsById = new Map(teams.map((t) => [Number(t.id), t]));
+    return normalizeArchivedMajorTransactions(raw, {
+      teams,
+      teamsById,
+      year: selected?.year ?? null,
+      phase: null,
+    }).slice(0, 10);
+  }, [selected, league?.teams]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
@@ -493,6 +638,180 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
               >
                 Reset
               </button>
+        <CardContent className="p-0">
+          <div className="px-3 py-2 border-b border-[color:var(--hairline)]">
+            <input
+              type="search"
+              value={seasonListSearch}
+              onChange={(e) => setSeasonListSearch(e.target.value)}
+              placeholder="Search year or champion…"
+              aria-label="Search seasons"
+              className="h-8 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+              data-testid="league-history-season-search"
+            />
+            <div
+              className="mt-1 text-[10px] text-[color:var(--text-muted)]"
+              data-testid="league-history-season-showing"
+            >
+              {buildShowingLabel(filteredSeasonList.length, (seasons ?? []).length, "season")}
+            </div>
+          </div>
+          <ScrollArea className="h-[460px]">
+            <div className="divide-y divide-[color:var(--hairline)]">
+              {filteredSeasonList.length === 0 ? (
+                <div className="px-4 py-4 text-xs text-[color:var(--text-muted)]">No seasons match your search.</div>
+              ) : (
+                filteredSeasonList.map((s) => (
+                  <button
+                    key={s.id}
+                    className={`w-full text-left px-4 py-3 ${selected?.id === s.id ? "bg-[color:var(--surface-strong)]" : ""}`}
+                    onClick={() => setSelectedSeasonId(s.id)}
+                  >
+                    <div className="font-bold text-sm">{s.year}</div>
+                    <div className="text-xs text-[color:var(--text-muted)]">{s.champion?.abbr ?? "TBD"} champion</div>
+                  </button>
+                ))
+              )}
+          <div className="p-3 space-y-2 border-b border-[color:var(--hairline)]">
+            <input
+              type="search"
+              value={seasonSearch}
+              onChange={(e) => setSeasonSearch(e.target.value)}
+              placeholder="Search year, team, champion, MVP"
+              className="h-9 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+              aria-label="Search archived seasons"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={seasonSort.key}
+                onChange={(e) => setSeasonSort((curr) => ({ ...curr, key: e.target.value }))}
+                className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs"
+                aria-label="Sort archived seasons"
+              >
+                <option value="year">Year</option>
+                <option value="champion">Champion</option>
+                <option value="userWins">User wins</option>
+                <option value="teams">Teams</option>
+              </select>
+              <button type="button" className="btn text-xs" onClick={() => setSeasonSort((curr) => ({ ...curr, dir: curr.dir === "asc" ? "desc" : "asc" }))}>
+                {seasonSort.dir === "asc" ? "Asc" : "Desc"}
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[color:var(--text-muted)]">
+              <span>{buildShowingLabel(browsedSeasons.length, seasons.length, "season")}</span>
+              <button type="button" className="text-[color:var(--accent)]" onClick={resetSeasonBrowser}>Reset filters</button>
+            </div>
+          </div>
+          <ScrollArea className="h-[520px]">
+            <div className="divide-y divide-[color:var(--hairline)]">
+              {browsedSeasons.length === 0 ? (
+                <div className="px-4 py-6 text-sm text-[color:var(--text-muted)]">No archived seasons match this search.</div>
+              ) : browsedSeasons.map((s) => (
+                <button
+                  key={s.id}
+                  className={`w-full text-left px-4 py-3 ${selected?.id === s.id ? "bg-[color:var(--surface-strong)]" : ""}`}
+                  onClick={() => setSelectedSeasonId(s.id)}
+                  data-testid="league-history-season-row"
+                >
+                  <div className="font-bold text-sm">{s.year}</div>
+                  <div className="text-xs text-[color:var(--text-muted)]">
+                    {s.champion?.abbr || s.champion?.name ? `${s.champion?.abbr ?? s.champion?.name} champion` : "Champion unavailable"}
+                    {s.runnerUp?.abbr || s.runnerUp?.name ? ` · over ${s.runnerUp?.abbr ?? s.runnerUp?.name}` : ""}
+                  </div>
+        <CardContent className="p-3 space-y-3">
+          <div className="space-y-2">
+            <input
+              aria-label="Search league history seasons"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search year, champion, team, MVP"
+              className="h-9 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+            />
+            <div className="flex flex-wrap gap-2">
+              <select
+                aria-label="Filter league history seasons by champion"
+                className="h-9 min-w-[130px] rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-sm"
+                value={championFilter}
+                onChange={(e) => setChampionFilter(e.target.value)}
+              >
+                <option value="ALL">All champions</option>
+                {championOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+              <select
+                aria-label="Sort league history seasons"
+                className="h-9 min-w-[120px] rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-sm"
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value)}
+              >
+                {SEASON_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-secondary h-9 text-sm"
+                aria-label="Toggle league history season sort direction"
+                onClick={() => setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))}
+              >
+                {sortDir === "desc" ? "Newest/highest first" : "Oldest/lowest first"}
+              </button>
+              {hasSeasonFilters ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary h-9 text-sm"
+                  onClick={() => {
+                    setSearch("");
+                    setChampionFilter("ALL");
+                    setSortKey("year");
+                    setSortDir("desc");
+                  }}
+                >
+                  Reset filters
+                </button>
+              ) : null}
+            </div>
+            <div
+              data-testid="league-season-archive-count"
+              className="flex flex-wrap gap-2 text-xs text-[color:var(--text-muted)]"
+            >
+              <span>{buildShowingLabel(filteredSeasons.length, seasons.length, "season")}</span>
+              <span>Sort: {SEASON_SORT_OPTIONS.find((option) => option.value === sortKey)?.label ?? sortKey} {sortDir === "asc" ? "↑" : "↓"}</span>
+              {championFilter !== "ALL" ? <span>Champion: {championFilter}</span> : null}
+            </div>
+          </div>
+          <ScrollArea className="h-[520px]">
+            <div className="divide-y divide-[color:var(--hairline)]">
+              {filteredSeasons.length === 0 ? (
+                <div className="px-4 py-6 text-sm text-[color:var(--text-muted)]">
+                  No archived seasons match these filters.
+                </div>
+              ) : filteredSeasons.map((s) => {
+                const userRow = (s?.standings ?? []).find((row) => Number(row?.id) === Number(league?.userTeamId));
+                return (
+                  <button
+                    key={s.id}
+                    data-testid={`league-season-button-${s.id}`}
+                    className={`w-full text-left px-4 py-3 ${selected?.id === s.id ? "bg-[color:var(--surface-strong)]" : ""}`}
+                    onClick={() => setSelectedSeasonId(s.id)}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-bold text-sm">{s.year}</div>
+                      {s.champion?.abbr ? <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">{s.champion.abbr}</Badge> : null}
+                    </div>
+                    <div className="text-xs text-[color:var(--text-muted)]">
+                      {s.champion?.abbr ?? s.champion?.name ?? "Champion TBD"}
+                      {s.runnerUp?.abbr || s.runnerUp?.name ? ` over ${s.runnerUp?.abbr ?? s.runnerUp?.name}` : ""}
+                    </div>
+                    <div className="text-[11px] text-[color:var(--text-muted)] mt-1">
+                      {userRow ? `You: ${userRow.wins}-${userRow.losses}${userRow.ties ? `-${userRow.ties}` : ""}` : "League snapshot"}
+                      {s.awards?.mvp?.name ? ` · MVP ${s.awards.mvp.name}` : ""}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
             <div className="text-[10px] text-[color:var(--text-muted)] leading-tight">{seasonArchiveShowingLabel}</div>
           </div>
@@ -524,12 +843,18 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
 
       <Card className="card-premium">
         <CardHeader>
-          <CardTitle>{selected?.year} League Snapshot</CardTitle>
+          <CardTitle>{selected?.year ?? "Filtered"} League Snapshot</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {!selected ? (
+            <div className="rounded-md border border-[color:var(--hairline)] px-4 py-8 text-center text-sm text-[color:var(--text-muted)]">
+              No archived seasons match the current search or champion filter.
+            </div>
+          ) : (
+            <>
           <div className="flex flex-wrap items-center gap-2">
-            <button className="btn" onClick={() => selectedSeasonIndex > 0 && setSelectedSeasonId(seasons[selectedSeasonIndex - 1].id)} disabled={selectedSeasonIndex <= 0}>Previous season</button>
-            <button className="btn" onClick={() => selectedSeasonIndex < seasons.length - 1 && setSelectedSeasonId(seasons[selectedSeasonIndex + 1].id)} disabled={selectedSeasonIndex >= seasons.length - 1}>Next season</button>
+            <button className="btn" onClick={() => selectedSeasonIndex > 0 && setSelectedSeasonId(filteredSeasons[selectedSeasonIndex - 1].id)} disabled={selectedSeasonIndex <= 0}>Previous season</button>
+            <button className="btn" onClick={() => selectedSeasonIndex < filteredSeasons.length - 1 && setSelectedSeasonId(filteredSeasons[selectedSeasonIndex + 1].id)} disabled={selectedSeasonIndex >= filteredSeasons.length - 1}>Next season</button>
           </div>
           <div className="rounded-md border border-[color:var(--hairline)] px-3 py-2 text-sm text-[color:var(--text-muted)]">{seasonStoryline}</div>
 
@@ -538,7 +863,7 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
           <section className="rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface-strong)]/40 p-4 space-y-3" data-testid={`league-history-season-story-${selected?.id ?? 'none'}`}>
             <div className="text-xs font-black uppercase tracking-wide text-[color:var(--text-subtle)]">Season story</div>
             <div className="text-lg font-black text-[color:var(--text)]">
-              {selected?.champion?.abbr ?? selected?.champion?.name ?? "Champion TBD"}
+              {selected?.champion?.abbr ?? selected?.champion?.name ?? "Champion unavailable"}
               {selected?.runnerUp?.abbr || selected?.runnerUp?.name ? (
                 <span className="text-[color:var(--text-muted)] font-semibold text-base"> over {selected?.runnerUp?.abbr ?? selected?.runnerUp?.name}</span>
               ) : null}
@@ -582,7 +907,7 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
           </section>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <SummaryBox label="Champion" value={selected?.champion?.name ?? "TBD"} />
+            <SummaryBox label="Champion" value={selected?.champion?.name ?? selected?.champion?.abbr ?? "—"} muted={!selected?.champion} />
             <SummaryBox label="Runner-up" value={selected?.runnerUp?.name ?? "—"} muted={!selected?.runnerUp} />
             <SummaryBox label="MVP" value={selected?.awards?.mvp?.name ?? "—"} onClick={selected?.awards?.mvp?.playerId != null ? () => onPlayerSelect?.(selected.awards.mvp.playerId) : undefined} />
           </div>
@@ -806,6 +1131,8 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
               </div>
             </section>
           )}
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -903,12 +1230,132 @@ function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
 }
 
 function AwardsHistory({ seasons, onPlayerSelect }) {
+  const [awardsSearch, setAwardsSearch] = useState("");
+
+  const filteredAwardSeasons = useMemo(() => {
+    if (!awardsSearch.trim()) return seasons ?? [];
+    return (seasons ?? []).filter((s) =>
+      rowMatchesSearch(s, awardsSearch, [
+        (row) => String(row?.year ?? ""),
+        (row) => row?.champion?.abbr,
+        (row) => row?.champion?.name,
+        (row) => row?.awards?.mvp?.name,
+        (row) => row?.awards?.opoy?.name,
+        (row) => row?.awards?.dpoy?.name,
+        (row) => row?.awards?.roty?.name,
+      ])
+    );
+  }, [seasons, awardsSearch]);
+
   if (!seasons?.length) return <div className="py-8 text-center text-[color:var(--text-muted)]">No award history yet.</div>;
+export function AwardsHistory({ seasons, onPlayerSelect }) {
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('yearDesc');
+
+  const totalSeasons = (seasons ?? []).length;
+  const displayedSeasons = useMemo(() => {
+    const trimmed = String(search ?? '').trim();
+    const filtered = (seasons ?? []).filter((s) =>
+      !trimmed
+        ? true
+        : rowMatchesSearch(
+            s,
+            trimmed,
+            [
+              (r) => r?.year ?? '',
+              (r) => r?.champion?.abbr ?? '',
+              (r) => r?.champion?.name ?? '',
+              (r) => r?.awards?.mvp?.name ?? '',
+              (r) => r?.awards?.opoy?.name ?? '',
+              (r) => r?.awards?.dpoy?.name ?? '',
+              (r) => r?.awards?.roty?.name ?? '',
+            ],
+          ),
+    );
+    const def = AWARDS_HISTORY_SORTS[sortKey] ?? AWARDS_HISTORY_SORTS.yearDesc;
+    return stableSortRows(filtered, def.getValue, def.direction, (r) => Number(r?.year ?? 0));
+  }, [seasons, search, sortKey]);
+
+  const filtersActive = Boolean(String(search ?? '').trim()) || sortKey !== 'yearDesc';
+
+  if (!totalSeasons) return <div className="py-8 text-center text-[color:var(--text-muted)]">No award history yet.</div>;
 
   return (
     <Card className="card-premium">
-      <CardHeader><CardTitle>Awards by Season</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle>Awards by Season</CardTitle>
+      </CardHeader>
       <CardContent className="p-0">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-[color:var(--hairline)]">
+          <input
+            type="search"
+            value={awardsSearch}
+            onChange={(e) => setAwardsSearch(e.target.value)}
+            placeholder="Search year, champion, or winner…"
+            aria-label="Search awards"
+            className="h-8 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs flex-1 min-w-[160px]"
+            data-testid="league-history-awards-search"
+          />
+          {awardsSearch ? (
+            <button
+              type="button"
+              className="btn text-xs px-2 py-1"
+              onClick={() => setAwardsSearch("")}
+              data-testid="league-history-awards-reset"
+            >
+              Clear
+            </button>
+          ) : null}
+          <span
+            className="text-[10px] text-[color:var(--text-muted)]"
+            data-testid="league-history-awards-showing"
+          >
+            {buildShowingLabel(filteredAwardSeasons.length, (seasons ?? []).length, "season")}
+          </span>
+        </div>
+        <ScrollArea className="h-[520px]">
+        <div
+          className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-[color:var(--hairline)]"
+          data-testid="league-history-awards-controls"
+        >
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search year, champion, or winner"
+            aria-label="Search awards history"
+            className="h-9 flex-1 min-w-[180px] rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+          />
+          <label className="flex items-center gap-2 text-xs font-semibold text-[color:var(--text-muted)]">
+            Sort
+            <select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value)}
+              aria-label="Sort awards history"
+              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-sm"
+            >
+              {Object.entries(AWARDS_HISTORY_SORTS).map(([key, def]) => (
+                <option key={key} value={key}>{def.label}</option>
+              ))}
+            </select>
+          </label>
+          {filtersActive ? (
+            <button
+              type="button"
+              className="btn btn-secondary h-9 text-xs"
+              onClick={() => { setSearch(''); setSortKey('yearDesc'); }}
+              data-testid="league-history-awards-reset"
+            >
+              Reset
+            </button>
+          ) : null}
+          <span
+            className="text-xs text-[color:var(--text-muted)] ml-auto"
+            data-testid="league-history-awards-count"
+          >
+            {buildShowingLabel(displayedSeasons.length, totalSeasons, 'season')}
+          </span>
+        </div>
         <ScrollArea className="h-[560px]">
           <Table>
             <TableHeader>
@@ -922,7 +1369,17 @@ function AwardsHistory({ seasons, onPlayerSelect }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {seasons.map((s) => (
+              {filteredAwardSeasons.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-6 text-center text-xs text-[color:var(--text-muted)]">No seasons match your search.</TableCell>
+              {displayedSeasons.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="pl-5 py-6 text-center text-[color:var(--text-muted)]">
+                    No award seasons match the current filters.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+              {displayedSeasons.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="pl-5 font-bold">{s.year}</TableCell>
                   <TableCell>{s.champion?.abbr ?? "—"}</TableCell>
@@ -931,7 +1388,18 @@ function AwardsHistory({ seasons, onPlayerSelect }) {
                   <TableCell><AwardCell award={s.awards?.dpoy} onPlayerSelect={onPlayerSelect} /></TableCell>
                   <TableCell><AwardCell award={s.awards?.roty} onPlayerSelect={onPlayerSelect} /></TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                filteredAwardSeasons.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="pl-5 font-bold">{s.year}</TableCell>
+                    <TableCell>{s.champion?.abbr ?? "—"}</TableCell>
+                    <TableCell><AwardCell award={s.awards?.mvp} onPlayerSelect={onPlayerSelect} /></TableCell>
+                    <TableCell><AwardCell award={s.awards?.opoy} onPlayerSelect={onPlayerSelect} /></TableCell>
+                    <TableCell><AwardCell award={s.awards?.dpoy} onPlayerSelect={onPlayerSelect} /></TableCell>
+                    <TableCell><AwardCell award={s.awards?.roty} onPlayerSelect={onPlayerSelect} /></TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </ScrollArea>
@@ -946,6 +1414,13 @@ function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
   const [txSortNewest, setTxSortNewest] = useState(true);
 
   const describeTx = useCallback((tx) => {
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [sort, setSort] = useState({ key: "date", dir: "desc" });
+  const [typeFilter, setTypeFilter] = useState("ALL");
+  const [sortDir, setSortDir] = useState("desc");
+
+  const describe = (tx) => {
     const leg = tx.legacyType ?? "";
     const bucket = tx.type ?? "";
     const isTrade = leg === "TRADE" || bucket === "trade";
@@ -1018,6 +1493,61 @@ function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
     );
   }
 
+  const typeOptions = useMemo(
+    () => ["all", ...uniqueFilterOptions(transactions ?? [], (tx) => tx?.typeLabel ?? tx?.type).slice(0, 12)],
+    [transactions],
+  );
+
+  const browsedRows = useMemo(() => {
+    const filtered = (transactions ?? []).filter((tx) => {
+      const txType = tx?.typeLabel ?? tx?.type ?? "";
+      if (typeFilter !== "all" && txType !== typeFilter) return false;
+      return rowMatchesSearch(tx, search, [
+        "type",
+        "typeLabel",
+    () => uniqueFilterOptions(transactions, (tx) => transactionTypeLabel(tx)),
+    [transactions],
+  );
+
+  const rows = useMemo(() => {
+    const filtered = (transactions ?? []).filter((tx) => {
+      if (typeFilter !== "ALL" && transactionTypeLabel(tx) !== typeFilter) return false;
+      return rowMatchesSearch(tx, search, [
+        "headline",
+        "detail",
+        "playerName",
+        "teamAbbr",
+        "fromTeamAbbr",
+        "toTeamAbbr",
+        "seasonId",
+        "week",
+        describe,
+      ]);
+    });
+    const sorted = stableSortRows(filtered, (tx) => {
+      if (sort.key === "type") return tx?.typeLabel ?? tx?.type;
+      if (sort.key === "player") return tx?.playerName ?? tx?.headline;
+      if (sort.key === "team") return tx?.teamAbbr ?? tx?.fromTeamAbbr ?? tx?.toTeamAbbr;
+      return `${tx?.seasonId ?? ""}-${String(tx?.week ?? 0).padStart(2, "0")}-${String(tx?.id ?? 0).padStart(8, "0")}`;
+    }, sort.dir, (tx) => tx?.id ?? tx?.headline);
+    return sorted.slice(0, 120);
+  }, [transactions, typeFilter, search, sort]);
+
+  const resetOfficeBrowser = () => {
+    setSearch("");
+    setTypeFilter("all");
+    setSort({ key: "date", dir: "desc" });
+  };
+        transactionTypeLabel,
+      ]);
+    });
+    return stableSortRows(filtered, transactionSortStamp, sortDir, (tx) => tx?.headline ?? tx?.playerName ?? "");
+  }, [search, sortDir, transactions, typeFilter]);
+
+  const hasFilters = Boolean(search.trim()) || typeFilter !== "ALL" || sortDir !== "desc";
+
+  if (!transactions?.length) return <div className="py-8 text-center text-[color:var(--text-muted)]">No transaction history tracked yet.</div>;
+
   return (
     <Card className="card-premium" data-testid="league-office-history-browser">
       <CardHeader><CardTitle>League Moves Log</CardTitle></CardHeader>
@@ -1080,6 +1610,124 @@ function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
                   <div className="text-[color:var(--text-muted)] mt-1 text-xs sm:text-sm leading-snug">{describeTx(tx)}</div>
                   {tx.playerId != null && (
                     <button type="button" className="btn mt-2 text-xs" onClick={() => onPlayerSelect?.(tx.playerId)}>Open player</button>
+      <CardContent className="p-0">
+        <div className="p-3 space-y-2 border-b border-[color:var(--hairline)]">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search player, team, type, detail"
+            className="h-9 w-full rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+            aria-label="Search league office transactions"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs" aria-label="Filter league office transactions by type">
+              {typeOptions.map((option) => <option key={option} value={option}>{option === "all" ? "All types" : option}</option>)}
+            </select>
+            <select value={sort.key} onChange={(e) => setSort((curr) => ({ ...curr, key: e.target.value }))} className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-xs" aria-label="Sort league office transactions">
+              <option value="date">Sort: Date</option>
+              <option value="type">Sort: Type</option>
+              <option value="player">Sort: Player</option>
+              <option value="team">Sort: Team</option>
+            </select>
+            <button type="button" className="btn text-xs" onClick={() => setSort((curr) => ({ ...curr, dir: curr.dir === "asc" ? "desc" : "asc" }))}>
+              {sort.dir === "asc" ? "Asc" : "Desc"}
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[color:var(--text-muted)]">
+            <span>{buildShowingLabel(browsedRows.length, transactions.length, "transaction")}</span>
+            <button type="button" className="text-[color:var(--accent)]" onClick={resetOfficeBrowser}>Reset filters</button>
+          </div>
+        </div>
+        <ScrollArea className="h-[560px]">
+          <div className="divide-y divide-[color:var(--hairline)]">
+            {browsedRows.length === 0 ? (
+              <div className="px-4 py-6 text-sm text-[color:var(--text-muted)]">No transactions match these filters.</div>
+            ) : browsedRows.map((tx, idx) => (
+              <div key={`${tx.id ?? idx}`} className="px-4 py-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <strong>{tx.typeLabel ?? tx.type}</strong>
+                  <span className="text-xs text-[color:var(--text-muted)]">Week {tx.week ?? "?"}</span>
+                </div>
+                <div className="text-[color:var(--text-muted)] mt-1">{describe(tx)}</div>
+                {tx.playerId != null && (
+                  <button className="btn mt-2 text-xs" onClick={() => onPlayerSelect?.(tx.playerId)}>Open player</button>
+                )}
+              </div>
+            ))}
+      <CardContent className="p-3 space-y-3">
+        <div className="space-y-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <input
+              aria-label="Search league office transactions"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search player, team, type"
+              className="h-9 flex-1 min-w-[180px] rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+            />
+            <select
+              aria-label="Filter league office transactions by type"
+              className="h-9 min-w-[150px] rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-sm"
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+            >
+              <option value="ALL">All types</option>
+              {typeOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+            <select
+              aria-label="Sort league office transactions"
+              className="h-9 min-w-[140px] rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-sm"
+              value={sortDir}
+              onChange={(e) => setSortDir(e.target.value)}
+            >
+              <option value="desc">Newest first</option>
+              <option value="asc">Oldest first</option>
+            </select>
+            {hasFilters ? (
+              <button
+                type="button"
+                className="btn btn-secondary h-9 text-sm"
+                onClick={() => {
+                  setSearch("");
+                  setTypeFilter("ALL");
+                  setSortDir("desc");
+                }}
+              >
+                Reset filters
+              </button>
+            ) : null}
+          </div>
+          <div data-testid="league-office-count" className="flex flex-wrap gap-2 text-xs text-[color:var(--text-muted)]">
+            <span>{buildShowingLabel(rows.length, transactions.length, "transaction")}</span>
+            {typeFilter !== "ALL" ? <span>Type: {typeFilter}</span> : null}
+            <span>Sort: {sortDir === "desc" ? "Newest first" : "Oldest first"}</span>
+          </div>
+        </div>
+        {rows.length === 0 ? (
+          <div className="rounded-md border border-[color:var(--hairline)] px-4 py-8 text-center text-sm text-[color:var(--text-muted)]">
+            No transactions match these filters.
+          </div>
+        ) : (
+          <ScrollArea className="h-[560px]">
+            <div className="divide-y divide-[color:var(--hairline)]">
+              {rows.map((tx, idx) => (
+                <div key={`${tx.id ?? idx}`} data-testid={`league-office-row-${tx.id ?? idx}`} className="px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <strong>{transactionTypeLabel(tx)}</strong>
+                    <span className="text-xs text-[color:var(--text-muted)]">
+                      {tx.seasonId ?? tx.year ?? "Season ?"}
+                      {tx.week != null ? ` · Week ${tx.week}` : ""}
+                    </span>
+                  </div>
+                  <div className="text-[color:var(--text-muted)] mt-1">{describe(tx)}</div>
+                  <div className="mt-1 text-xs text-[color:var(--text-muted)]">
+                    {[tx.teamAbbr, tx.fromTeamAbbr && tx.toTeamAbbr ? `${tx.fromTeamAbbr} ↔ ${tx.toTeamAbbr}` : null].filter(Boolean).join(" · ")}
+                  </div>
+                  {tx.playerId != null && (
+                    <button className="btn mt-2 text-xs" onClick={() => onPlayerSelect?.(tx.playerId)}>Open player</button>
                   )}
                 </div>
               ))}
