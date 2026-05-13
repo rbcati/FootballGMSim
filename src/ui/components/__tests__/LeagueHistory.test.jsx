@@ -303,6 +303,11 @@ describe('LeagueHistory', () => {
     });
   });
 
+  it('renders season search input in the sidebar when seasons exist', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        initialSelectedSeasonId="s1"
   it('shows season search input and showing label on initial load', async () => {
 });
 
@@ -364,6 +369,8 @@ describe('LeagueHistory · AwardsHistory tab', () => {
           getAllSeasons: vi.fn().mockResolvedValue({
             payload: {
               seasons: [
+                { id: 's1', year: 2030, standings: [{ id: 1, wins: 8, losses: 9 }], awards: {}, champion: { abbr: 'DAL' } },
+                { id: 's2', year: 2031, standings: [], awards: {}, champion: { abbr: 'NYG' } },
                 { id: 's1', year: 2030, standings: [], awards: {}, champion: { abbr: 'DAL' } },
                 { id: 's2', year: 2031, standings: [], awards: {}, champion: { abbr: 'NYG' } },
                 { id: 's3', year: 2032, standings: [], awards: {}, champion: { abbr: 'DAL' } },
@@ -461,6 +468,8 @@ describe('LeagueHistory · AwardsHistory tab', () => {
         }}
       />,
     );
+    await waitFor(() => {
+      expect(screen.getByText(/No archived seasons yet/i)).toBeTruthy();
 
     await waitFor(() => {
       const inputs = screen.queryAllByTestId('league-history-season-search');

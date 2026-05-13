@@ -4,6 +4,7 @@ import { buildCompletedGamePresentation, openResolvedBoxScore } from '../utils/b
 import { buildShowingLabel, rowMatchesSearch, stableSortRows } from '../utils/dataBrowser.js';
 import { buildFranchiseHistoryModel, PLAYOFF_CALIBER_WINS } from '../../core/franchiseHistoryModel.js';
 import { RECORD_BOOK_PLAYER_KEYS, RECORD_LABELS } from '../../core/recordBookV1.js';
+import { stableSortRows, buildShowingLabel } from '../utils/dataBrowser.js';
 import { buildShowingLabel, stableSortRows } from '../utils/dataBrowser.js';
 import { buildShowingLabel, rowMatchesSearch, stableSortRows } from '../utils/dataBrowser.js';
 import { stableSortRows, buildShowingLabel } from '../utils/dataBrowser.js';
@@ -345,6 +346,16 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
         buildTimelineSearchText,
       ]);
     });
+    return stableSortRows(filtered, sortKey, sortDir);
+  }, [model.seasons, queryYear, scope, sortKey, sortDir]);
+
+  const totalSeasonCount = (model.seasons ?? []).length;
+  const hasActiveFilters = scope !== 'all' || queryYear.trim() !== '';
+  const resetFilters = () => { setQueryYear(''); setScope('all'); setSortKey('year'); setSortDir('desc'); };
+  const toggleSort = (key) => {
+    if (sortKey === key) { setSortDir((d) => d === 'asc' ? 'desc' : 'asc'); }
+    else { setSortKey(key); setSortDir(key === 'year' ? 'desc' : 'desc'); }
+  };
     const getValue = (row) => {
       if (sortKey === 'wins') return row.wins ?? 0;
       if (sortKey === 'losses') return row.losses ?? 0;
@@ -751,6 +762,8 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
             value={queryYear}
             onChange={(e) => setQueryYear(e.target.value)}
             placeholder="Filter by year"
+            data-testid="team-history-year-filter"
+            style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 10px', color: 'var(--text)', minWidth: 120, maxWidth: 160 }}
             aria-label="Filter by year"
             style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 10px', color: 'var(--text)', minWidth: 120, maxWidth: 160 }}
             style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 10px', color: 'var(--text)', minWidth: 130 }}
@@ -929,10 +942,22 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
             { key: 'elite', label: 'Elite seasons' },
             { key: 'losing', label: 'Losing seasons' },
           ].map((opt) => (
-            <button key={opt.key} type="button" className="btn" onClick={() => setScope(opt.key)} style={{ opacity: scope === opt.key ? 1 : 0.7 }}>
+            <button key={opt.key} type="button" className="btn" onClick={() => setScope(opt.key)} style={{ opacity: scope === opt.key ? 1 : 0.7, fontSize: 'var(--text-xs)' }}>
               {opt.label}
             </button>
           ))}
+          {hasActiveFilters ? (
+            <button type="button" className="btn btn-secondary" onClick={resetFilters} style={{ fontSize: 'var(--text-xs)' }} data-testid="team-history-reset-filters">
+              Reset
+            </button>
+          ) : null}
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }} data-testid="team-history-showing-label">
+            {buildShowingLabel(filteredTimeline.length, totalSeasonCount, 'seasons')}
+          </span>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>·</span>
           {(queryYear || scope !== 'all' || sortKey !== 'year' || sortDir !== 'desc') ? (
             <button type="button" className="btn btn-secondary" onClick={resetTimelineFilters} style={{ fontSize: 'var(--text-xs)' }}>
               Reset filters
@@ -952,6 +977,15 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
               key={col.key}
               type="button"
               className="btn"
+              onClick={() => toggleSort(col.key)}
+              data-testid={`team-history-sort-${col.key}`}
+              style={{ fontSize: 11, opacity: sortKey === col.key ? 1 : 0.6, padding: '2px 8px', minWidth: 0 }}
+            >
+              {col.label} {sortKey === col.key ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+            </button>
+          ))}
+        </div>
+
               onClick={() => toggleTimelineSort(col.key)}
               style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', opacity: sortKey === col.key ? 1 : 0.6 }}
               data-testid={`team-history-sort-${col.key}`}

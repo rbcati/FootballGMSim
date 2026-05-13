@@ -226,6 +226,22 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
         <button type="button" className="btn btn-secondary h-9 text-sm" onClick={() => load()}>
           Refresh
         </button>
+        {(type !== 'all' || teamId !== 'all' || seasonId !== 'all' || search.trim()) ? (
+          <button
+            type="button"
+            className="btn btn-secondary h-9 text-sm"
+            data-testid="league-activity-reset"
+            onClick={() => { setSeasonId('all'); setTeamId('all'); setType('all'); setSearch(''); }}
+          >
+            Reset
+          </button>
+        ) : null}
+      </div>
+
+      {!loading && (
+        <div className="text-xs text-[color:var(--text-muted)]" data-testid="league-activity-showing">
+          {buildShowingLabel(rows.length, rows.length, 'transactions')}
+          {(type !== 'all' || teamId !== 'all' || search.trim()) ? ' (filtered)' : ''}
         {(search || type !== "all" || teamId !== "all" || seasonId !== "all") && (
           <button
             type="button"

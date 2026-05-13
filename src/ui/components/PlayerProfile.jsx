@@ -37,6 +37,7 @@ import { buildShowingLabel, rowMatchesSearch, stableSortRows } from "../utils/da
 import { buildLegacyScoreReport, shouldShowLegacyProfileSection } from "../../core/legacyScore.js";
 import { buildPlayerDevelopmentModel } from "../../core/playerDevelopmentModel.js";
 import { buildProspectScoutingReport } from "../../core/scoutingModel.js";
+import { stableSortRows, buildShowingLabel } from "../utils/dataBrowser.js";
 import { buildShowingLabel, stableSortRows, rowMatchesSearch } from "../utils/dataBrowser.js";
 import { buildShowingLabel, rowMatchesSearch, stableSortRows } from "../utils/dataBrowser.js";
 
@@ -760,6 +761,17 @@ export default function PlayerProfile({
     () => mergePlayerProfileSeasonRows(effectivePlayer, archivedSeasons),
     [effectivePlayer, archivedSeasons],
   );
+  const [seasonLogSortKey, setSeasonLogSortKey] = useState('year');
+  const [seasonLogSortDir, setSeasonLogSortDir] = useState('desc');
+  const sortedSeasonLogRows = useMemo(
+    () => stableSortRows(mergedProfileSeasonRows, seasonLogSortKey, seasonLogSortDir),
+    [mergedProfileSeasonRows, seasonLogSortKey, seasonLogSortDir],
+  );
+  const toggleSeasonLogSort = (key) => {
+    if (seasonLogSortKey === key) { setSeasonLogSortDir((d) => d === 'asc' ? 'desc' : 'asc'); }
+    else { setSeasonLogSortKey(key); setSeasonLogSortDir('desc'); }
+  };
+  const seasonLogSortArrow = (key) => seasonLogSortKey === key ? (seasonLogSortDir === 'asc' ? ' ↑' : ' ↓') : '';
   const seasonLogRows = useMemo(() => {
     let rows = mergedProfileSeasonRows;
     if (seasonLogSearch.trim()) {
@@ -2286,6 +2298,7 @@ export default function PlayerProfile({
           {/* ── Per-season career log (player.careerStats + archived playerSeasonStatsV1) ── */}
           {!loading && mergedProfileSeasonRows.length > 0 && (
             <section className="card-enter" data-testid="player-profile-season-log">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: "var(--space-2)" }}>
             <section className="card-enter" data-testid="player-profile-season-log-browser">
             <section className="card-enter" data-testid="player-profile-season-log">
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: "var(--space-2)" }}>
@@ -2301,6 +2314,10 @@ export default function PlayerProfile({
                 >
                   Season Log
                 </h3>
+                <span style={{ fontSize: 11, color: "var(--text-muted)" }} data-testid="player-season-log-count">
+                  {buildShowingLabel(sortedSeasonLogRows.length, mergedProfileSeasonRows.length, 'seasons')}
+                </span>
+              </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
                   <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Sort:</span>
                   {[
@@ -2677,56 +2694,61 @@ export default function PlayerProfile({
                         style={{
                           textAlign: "left",
                           paddingLeft: "var(--space-4)",
+                          cursor: "pointer",
+                          userSelect: "none",
                         }}
+                        onClick={() => toggleSeasonLogSort('year')}
                       >
-                        Season
+                        Season{seasonLogSortArrow('year')}
                       </TableHead>
-                      <TableHead style={{ textAlign: "left" }}>Team</TableHead>
+                      <TableHead style={{ textAlign: "left", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('team')}>Team{seasonLogSortArrow('team')}</TableHead>
                       <TableHead style={{ textAlign: "center" }}>Pos</TableHead>
+                      <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('gamesPlayed')}>GP{seasonLogSortArrow('gamesPlayed')}</TableHead>
                       <TableHead style={{ textAlign: "center" }}>GP</TableHead>
                       <TableHead style={{ textAlign: "center" }}>Awards</TableHead>
                       {["QB"].includes(player.pos) && (
                         <>
-                          <TableHead style={{ textAlign: "center" }}>YDS</TableHead>
-                          <TableHead style={{ textAlign: "center" }}>TD</TableHead>
-                          <TableHead style={{ textAlign: "center" }}>INT</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('passYds')}>YDS{seasonLogSortArrow('passYds')}</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('passTDs')}>TD{seasonLogSortArrow('passTDs')}</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('ints')}>INT{seasonLogSortArrow('ints')}</TableHead>
                           <TableHead style={{ textAlign: "center" }}>CMP%</TableHead>
                         </>
                       )}
                       {["RB", "FB"].includes(player.pos) && (
                         <>
-                          <TableHead style={{ textAlign: "center" }}>RYDS</TableHead>
-                          <TableHead style={{ textAlign: "center" }}>RTD</TableHead>
-                          <TableHead style={{ textAlign: "center" }}>REC</TableHead>
-                          <TableHead style={{ textAlign: "center" }}>RCYDS</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('rushYds')}>RYDS{seasonLogSortArrow('rushYds')}</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('rushTDs')}>RTD{seasonLogSortArrow('rushTDs')}</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('receptions')}>REC{seasonLogSortArrow('receptions')}</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('recYds')}>RCYDS{seasonLogSortArrow('recYds')}</TableHead>
                         </>
                       )}
                       {["WR", "TE"].includes(player.pos) && (
                         <>
-                          <TableHead style={{ textAlign: "center" }}>REC</TableHead>
-                          <TableHead style={{ textAlign: "center" }}>YDS</TableHead>
-                          <TableHead style={{ textAlign: "center" }}>TD</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('receptions')}>REC{seasonLogSortArrow('receptions')}</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('recYds')}>YDS{seasonLogSortArrow('recYds')}</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('recTDs')}>TD{seasonLogSortArrow('recTDs')}</TableHead>
                         </>
                       )}
                       {["DE", "DT", "LB", "CB", "S", "DL", "EDGE"].includes(
                         player.pos,
                       ) && (
                         <>
-                          <TableHead style={{ textAlign: "center" }}>TKL</TableHead>
-                          <TableHead style={{ textAlign: "center" }}>SCK</TableHead>
-                          <TableHead style={{ textAlign: "center" }}>D-INT</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('tackles')}>TKL{seasonLogSortArrow('tackles')}</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('sacks')}>SCK{seasonLogSortArrow('sacks')}</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('defInts')}>D-INT{seasonLogSortArrow('defInts')}</TableHead>
                         </>
                       )}
                       {["K"].includes(player.pos) && (
                         <>
-                          <TableHead style={{ textAlign: "center" }}>FGM</TableHead>
-                          <TableHead style={{ textAlign: "center" }}>XPM</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('fgMade')}>FGM{seasonLogSortArrow('fgMade')}</TableHead>
+                          <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('xpMade')}>XPM{seasonLogSortArrow('xpMade')}</TableHead>
                         </>
                       )}
-                      <TableHead style={{ textAlign: "center" }}>OVR</TableHead>
+                      <TableHead style={{ textAlign: "center", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSeasonLogSort('ovr')}>OVR{seasonLogSortArrow('ovr')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {sortedSeasonLogRows.map((line, i) => (
                     {seasonLogRows.map((line, i) => (
                     {displaySeasonLogRows.map((line, i) => (
                       <TableRow key={`${String(line.season)}-${line.team}-${i}`}>

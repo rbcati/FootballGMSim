@@ -250,6 +250,20 @@ describe('TeamHistoryScreen', () => {
     expect(String(arg)).toMatch(/2055/);
   });
 
+  it('shows showing label and supports sort by wins', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 7, name: 'Seattle', abbr: 'SEA' }], userTeamId: 7 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                { year: 2030, standings: [{ id: 7, abbr: 'SEA', wins: 8, losses: 9, ties: 0, pf: 300, pa: 310 }], champion: { id: 2, abbr: 'OTH' }, runnerUp: { id: 3, abbr: 'THD' }, playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+                { year: 2031, standings: [{ id: 7, abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 420, pa: 280 }], champion: { id: 7, abbr: 'SEA' }, runnerUp: { id: 2, abbr: 'OTH' }, playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+                { year: 2032, standings: [{ id: 7, abbr: 'SEA', wins: 5, losses: 12, ties: 0, pf: 250, pa: 400 }], champion: { id: 2, abbr: 'OTH' }, runnerUp: { id: 3, abbr: 'THD' }, playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+              ],
+            },
+          }),
   const multiSeasonActions = {
     getAllSeasons: vi.fn().mockResolvedValue({
       payload: {
@@ -292,6 +306,22 @@ describe('TeamHistoryScreen', () => {
       />,
     );
     await waitFor(() => {
+      expect(screen.getByTestId('team-history-showing-label').textContent).toBe('3 seasons');
+    });
+
+    const winsBtn = screen.getByTestId('team-history-sort-wins');
+    expect(winsBtn).toBeTruthy();
+    fireEvent.click(winsBtn);
+    await waitFor(() => {
+      const seasonCards = screen.getAllByTestId(/^team-history-season-/);
+      expect(seasonCards.length).toBe(3);
+    });
+  });
+
+  it('filters seasons by year and shows reset button', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 7, name: 'Seattle', abbr: 'SEA' }], userTeamId: 7 }}
       expect(screen.getByTestId('team-history-showing-label').textContent).toMatch(/Showing 3 of 3 seasons/);
     });
   });
@@ -361,6 +391,8 @@ describe('TeamHistoryScreen', () => {
           getAllSeasons: vi.fn().mockResolvedValue({
             payload: {
               seasons: [
+                { year: 2030, standings: [{ id: 7, abbr: 'SEA', wins: 8, losses: 9, ties: 0, pf: 300, pa: 310 }], champion: { id: 2, abbr: 'OTH' }, runnerUp: { id: 3, abbr: 'THD' }, playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
+                { year: 2031, standings: [{ id: 7, abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 420, pa: 280 }], champion: { id: 7, abbr: 'SEA' }, runnerUp: { id: 2, abbr: 'OTH' }, playoffBracketSnapshot: { mode: 'empty', rounds: [] } },
                 {
                   id: 's1',
                   year: 2030,
@@ -402,6 +434,21 @@ describe('TeamHistoryScreen', () => {
       />,
     );
     await waitFor(() => {
+      expect(screen.getByTestId('team-history-showing-label').textContent).toBe('2 seasons');
+    });
+
+    const yearInput = screen.getByTestId('team-history-year-filter');
+    fireEvent.change(yearInput, { target: { value: '2031' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-showing-label').textContent).toBe('Showing 1 of 2 seasons');
+    });
+
+    const resetBtn = screen.getByTestId('team-history-reset-filters');
+    fireEvent.click(resetBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-showing-label').textContent).toBe('2 seasons');
       expect(screen.getByTestId('team-history-showing-label')).toBeTruthy();
     });
     fireEvent.change(screen.getByLabelText('Filter by year'), { target: { value: '2031' } });
