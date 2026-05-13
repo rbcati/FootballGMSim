@@ -52,6 +52,9 @@ import { usePlayerCompare } from "../utils/playerCompare.js";
 import { formatDemandTier } from "../utils/offseasonActionCenter.js";
 import { buildFreeAgencyMarketAnalysis } from "../../core/freeAgency/freeAgencyMarketAnalysis.js";
 import { buildFreeAgencyProfileContext } from "../utils/playerProfileContext.js";
+import { buildContractOfferInsight, toneToContractInsightColor } from "../utils/contractOfferInsights.js";
+import { evaluatePendingOfferCapReservation } from "../../core/pendingOfferCapModel.js";
+import { buildShowingLabel, stableSortRows } from "../utils/dataBrowser.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -187,18 +190,13 @@ export function sortFreeAgentsForView(displayed, { sortPreset, sortKey, sortDir,
     arr.sort((a, b) => (rowFor(a).riskFlags?.length ?? 0) - (rowFor(b).riskFlags?.length ?? 0) || (rowFor(b).sortKeys?.fitScore ?? 0) - (rowFor(a).sortKeys?.fitScore ?? 0));
     return arr;
   }
-  arr.sort((a, b) => {
-    let va = a[sortKey];
-    let vb = b[sortKey];
-    if (sortKey === "ask") {
-      va = a._ask;
-      vb = b._ask;
-    }
-    if (va === vb) return 0;
-    if (sortDir === "asc") return va > vb ? 1 : -1;
-    return va < vb ? 1 : -1;
-  });
-  return arr;
+  return stableSortRows(arr, (player) => {
+    const marketRow = rowFor(player);
+    if (sortKey === "ask") return player._ask;
+    if (sortKey === "fitScore") return marketRow.sortKeys?.fitScore ?? player?._eval?.schemeFit?.score ?? player.schemeFit ?? 0;
+    if (sortKey === "capFit") return marketRow.sortKeys?.capFit ?? marketRow.sortKeys?.affordability ?? 0;
+    return player?.[sortKey];
+  }, sortDir, (player) => player?.name);
 }
 
 // ── Shared sub-components (identical signature & appearance to Roster.jsx) ────
@@ -284,6 +282,115 @@ function PipBar({ value, color }) {
         />
       ))}
     </span>
+  );
+}
+
+function InsightChip({ label, tone = "neutral" }) {
+  return (
+    <span style={{
+      fontSize: 10,
+      border: `1px solid ${toneToContractInsightColor(tone)}`,
+      borderRadius: 999,
+      padding: "1px 6px",
+      color: toneToContractInsightColor(tone),
+      background: `${toneToContractInsightColor(tone)}14`,
+      lineHeight: 1.5,
+    }}>
+      {label}
+    </span>
+  );
+}
+
+export function ContractOfferInsightBlock({ player, capRoom, compact = false, showReasons = false, offer = null }) {
+  const insight = buildContractOfferInsight(player, { capRoom }, offer ?? {});
+  const chips = [
+    { label: insight.marketTierLabel, tone: insight.hasMetadata ? "ok" : "neutral" },
+    { label: insight.capFitLabel, tone: insight.capFitTone },
+    { label: insight.termLabel, tone: "neutral" },
+    ...insight.riskTags.slice(0, compact ? 2 : 3).map((label) => ({ label, tone: label.includes("Clean") || label.includes("Need") ? "ok" : "warning" })),
+  ];
+  return (
+    <div aria-label="Contract market read" style={{ display: "grid", gap: 4, marginTop: 4 }}>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+        {chips.map((chip) => <InsightChip key={`${player?.id ?? player?.name}-${chip.label}`} label={chip.label} tone={chip.tone} />)}
+      </div>
+      {!compact && (
+        <div style={{ fontSize: 10, color: "var(--text-muted)" }}>
+          Market read: {insight.annualValueLabel} · {insight.hasMetadata ? "offer metadata" : "model estimate for your cap"}
+        </div>
+      )}
+      {showReasons && insight.reasonBullets.length > 0 ? (
+        <div style={{ display: "grid", gap: 2, fontSize: 10, color: "var(--text-subtle)" }}>
+          {insight.reasonBullets.map((reason, idx) => <div key={`why-${player?.id ?? player?.name}-${idx}`}>Why this deal? {reason}</div>)}
+        </div>
+      ) : null}
+      {insight.fallback ? (
+        <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>Contract metadata unavailable; showing safe estimate only.</div>
+      ) : null}
+    </div>
+  );
+}
+
+
+const RESERVATION_TONE = Object.freeze({
+  safe: 'var(--success)',
+  manageable: 'var(--accent)',
+  tight: 'var(--warning)',
+  overcommitted: 'var(--danger)',
+  unknown: 'var(--text-muted)',
+});
+
+function formatCapValue(value) {
+  return Number.isFinite(Number(value)) ? `$${Number(value).toFixed(1)}M` : 'Unknown';
+}
+
+function CapImpactStat({ label, value, color = 'var(--text)' }) {
+  return (
+    <div style={{ border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', padding: '8px 10px', background: 'var(--surface)' }}>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
+      <div style={{ fontSize: 'var(--text-sm)', fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+    </div>
+  );
+}
+
+export function PendingCapImpactPanel({ reservation }) {
+  const status = reservation?.capReservationStatus ?? 'unknown';
+  const tone = RESERVATION_TONE[status] ?? RESERVATION_TONE.unknown;
+  const rows = Array.isArray(reservation?.offerRows) ? reservation.offerRows : [];
+  return (
+    <Card className="card-premium" style={{ marginBottom: "var(--space-4)" }}>
+      <CardContent style={{ padding: "var(--space-4)", display: "grid", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 800 }}>Pending cap impact</div>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 3 }}>Annual cap reservation if every pending bid is accepted.</div>
+          </div>
+          <Badge variant="outline" style={{ color: tone, borderColor: tone, background: `${tone}14` }}>{reservation?.capReservationStatusLabel ?? 'Unknown'}</Badge>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
+          <CapImpactStat label="Current Room" value={formatCapValue(reservation?.currentCapRoom)} color={tone} />
+          <CapImpactStat label="Pending Offers" value={String(reservation?.pendingOfferCount ?? 0)} />
+          <CapImpactStat label="Annual Reserved" value={formatCapValue(reservation?.pendingAnnualCommitment)} color={reservation?.pendingAnnualCommitment > 0 ? "var(--warning)" : "var(--text)"} />
+          <CapImpactStat label="After Pending" value={formatCapValue(reservation?.estimatedCapRoomAfterPending)} color={tone} />
+        </div>
+        {rows.length > 0 ? (
+          <div style={{ display: "grid", gap: 4 }}>
+            {rows.slice(0, 4).map((row) => (
+              <div key={`${row.playerId ?? row.playerName}-${row.annualValue ?? 'unknown'}`} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.playerName}</span>
+                <strong style={{ color: row.status === 'unknown' ? "var(--text-muted)" : "var(--text)", whiteSpace: "nowrap" }}>{row.status === 'unknown' ? 'Unknown annual' : `${formatCapValue(row.annualValue)} / yr`}{row.years ? ` · ${row.years}y` : ''}</strong>
+              </div>
+            ))}
+            {rows.length > 4 ? <div style={{ fontSize: "10px", color: "var(--text-subtle)" }}>+{rows.length - 4} more pending offer{rows.length - 4 === 1 ? '' : 's'}</div> : null}
+          </div>
+        ) : (
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>No pending bids are reserving cap right now.</div>
+        )}
+        {(reservation?.warnings ?? []).map((warning) => (
+          <div key={warning} role="status" style={{ fontSize: "var(--text-xs)", color: status === 'overcommitted' ? "var(--danger)" : "var(--warning)", background: `${status === 'overcommitted' ? 'var(--danger)' : 'var(--warning)'}14`, border: `1px solid ${status === 'overcommitted' ? 'var(--danger)' : 'var(--warning)'}55`, borderRadius: "var(--radius-md)", padding: "8px 10px" }}>{warning}</div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -381,7 +488,7 @@ function CapBanner({ userTeam }) {
 // Renders as a full-width <td colSpan=7> in its own table row, appearing
 // directly below the highlighted player row (two-row pattern from Roster.jsx).
 
-function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit = 53, onSubmit, onCancel, asDiv }) {
+export function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit = 53, pendingCapContext = null, onSubmit, onCancel, asDiv }) {
   const defaultSalary = suggestedSalary(player.ovr, player.pos, player.age);
   const defaultYears = suggestedYears(player.age);
   const [annual, setAnnual] = useState(defaultSalary);
@@ -408,8 +515,20 @@ function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit = 53, o
 
   const Wrapper = asDiv ? 'div' : 'td';
   const props = asDiv ? {} : { colSpan: 9 };
-  const postMoveCap = Number(capRoom) - Number(annual || 0);
+  const proposedReservation = useMemo(() => {
+    if (!pendingCapContext) return null;
+    return evaluatePendingOfferCapReservation({
+      ...pendingCapContext,
+      proposedOffer: {
+        player,
+        replaceExisting: true,
+        offer: { contract: { baseAnnual: Number(annual || 0), yearsTotal: Number(years || 1), signingBonus: 0 } },
+      },
+    });
+  }, [pendingCapContext, player, annual, years]);
+  const postMoveCap = proposedReservation?.estimatedCapRoomAfterPending ?? (Number(capRoom) - Number(annual || 0));
   const postMoveRoster = Number(rosterCount) + 1;
+  const projectedWarnings = proposedReservation?.warnings ?? [];
 
   return (
     <Wrapper
@@ -448,14 +567,18 @@ function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit = 53, o
             ${(player._ask ?? 0).toFixed(1)}M / yr · {suggestedYears(player.age)}{" "}
             years
           </div>
+          <ContractOfferInsightBlock player={player} capRoom={capRoom} compact offer={{ contract: { baseAnnual: Number(annual || 0), yearsTotal: Number(years || 1), signingBonus: 0 } }} />
         </div>
         <div style={{ display: "grid", gap: 2, marginLeft: "auto", minWidth: 170 }}>
           <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-            Cap after bid: <strong style={{ color: postMoveCap < 0 ? "var(--danger)" : "var(--text)" }}>${postMoveCap.toFixed(1)}M</strong>
+            Cap after all pending: <strong style={{ color: postMoveCap < 0 ? "var(--danger)" : postMoveCap < 5 ? "var(--warning)" : "var(--text)" }}>{formatCapValue(postMoveCap)}</strong>
           </div>
           <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
             Roster after signing: <strong style={{ color: postMoveRoster > rosterLimit ? "var(--warning)" : "var(--text)" }}>{postMoveRoster}/{rosterLimit}</strong>
           </div>
+          {projectedWarnings.slice(0, 1).map((warning) => (
+            <div key={warning} style={{ fontSize: "10px", color: postMoveCap < 0 ? "var(--danger)" : "var(--warning)" }}>{warning}</div>
+          ))}
         </div>
 
         {/* Inputs */}
@@ -553,7 +676,7 @@ function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit = 53, o
 
 // ── Player Preview Bottom Sheet ──────────────────────────────────────────────
 
-function PlayerPreviewSheet({ player, capRoom, onClose, onSubmitBid }) {
+function PlayerPreviewSheet({ player, capRoom, pendingCapContext = null, onClose, onSubmitBid }) {
   const [phase, setPhase] = useState("view"); // "view" | "bid"
   const offers = player?.offers || {};
 
@@ -593,6 +716,10 @@ function PlayerPreviewSheet({ player, capRoom, onClose, onSubmitBid }) {
           <PlayerCard player={player} variant="hero" onClose={onClose} />
           <div style={{ marginTop: 10, fontSize: "0.8rem", color: "var(--text-muted)" }}>
             Team playbook knowledge: <strong style={{ color: "var(--text)" }}>{formatPlaybookKnowledge(player?.playbookKnowledge)}</strong>
+          </div>
+          <div style={{ marginTop: 10, border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: 10, background: "var(--surface)" }}>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700, marginBottom: 2 }}>Market context</div>
+            <ContractOfferInsightBlock player={player} capRoom={capRoom} showReasons />
           </div>
 
           {/* Bid form or trigger */}
@@ -642,6 +769,7 @@ function PlayerPreviewSheet({ player, capRoom, onClose, onSubmitBid }) {
                 <SignInlineForm
                   player={player}
                   capRoom={capRoom}
+                  pendingCapContext={pendingCapContext}
                   asDiv
                   onCancel={() => setPhase("view")}
                   onSubmit={(c) => { onSubmitBid(player.id, c); onClose(); }}
@@ -772,6 +900,16 @@ export default function FreeAgency({
   }), [userTeam, evaluatedFaPool, capRoom, capUsed, deadCap]);
 
   const marketRowsById = useMemo(() => new Map((marketAnalysis?.marketRows ?? []).map((r) => [r.playerId, r])), [marketAnalysis]);
+  const pendingCapContext = useMemo(() => ({
+    team: userTeam,
+    freeAgents: evaluatedFaPool,
+    teamId: activeTeamId,
+    currentCapRoom: capRoom,
+  }), [userTeam, evaluatedFaPool, activeTeamId, capRoom]);
+  const pendingCapReservation = useMemo(
+    () => evaluatePendingOfferCapReservation(pendingCapContext),
+    [pendingCapContext],
+  );
 
   const displayed = useMemo(() => {
     const base = filterFreeAgentsForView(evaluatedFaPool, {
@@ -886,6 +1024,22 @@ export default function FreeAgency({
     setNameFilter("");
     setShowCapPreview(true);
     showFlash(isResignPhase ? "Re-sign priorities loaded: OVR 75+." : "Top-target quick filter loaded: OVR 75+.");
+  };
+
+  const resetMarketFilters = () => {
+    setNameFilter("");
+    setPosFilter("ALL");
+    setMinOvr(0);
+    setMaxAge(40);
+    setMinSchemeFit(0);
+    setDemandTier("ALL");
+    setFitTierFilter("ALL");
+    setArchetypeFilter("ALL");
+    setRoleFilter("ALL");
+    setPositionNeedOnly(false);
+    setWatchOnly(false);
+    setMarketFilter("all");
+    setAdvancedFilters([]);
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -1042,6 +1196,7 @@ export default function FreeAgency({
       )}
 
       <CapBanner userTeam={userTeam} />
+      <PendingCapImpactPanel reservation={pendingCapReservation} />
 
       {flash && (
         <div
@@ -1217,6 +1372,10 @@ export default function FreeAgency({
           </div>
         </CardContent>
       </Card>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: "var(--space-3)", fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+        <span>{buildShowingLabel(sortedAgents.length, evaluatedFaPool.length, faState?.phase === "offseason_resign" ? "re-sign target" : "free agent")}</span>
+        <Button type="button" variant="outline" onClick={resetMarketFilters}>Reset filters</Button>
+      </div>
       <AdvancedPlayerSearch
         filters={advancedFilters}
         onChange={setAdvancedFilters}
@@ -1462,6 +1621,7 @@ export default function FreeAgency({
                               <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
                                 {player?._eval?.archetype?.archetype ?? "Balanced"} · {player?._eval?.roleProjection?.role ?? "Depth"} · {player?._eval?.simImpact?.summary}
                               </div>
+                              <ContractOfferInsightBlock player={player} capRoom={capRoom} compact />
                             </TableCell>
                             <TableCell style={{ whiteSpace: "nowrap" }}>
                               {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
@@ -1485,6 +1645,7 @@ export default function FreeAgency({
                             <SignInlineForm
                               player={player}
                               capRoom={capRoom}
+                              pendingCapContext={pendingCapContext}
                               rosterCount={rosterCount}
                               rosterLimit={rosterLimit}
                               onCancel={() => setSigningPlayerId(null)}
@@ -1506,6 +1667,7 @@ export default function FreeAgency({
                           <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
                             {player?._eval?.archetype?.archetype ?? "Balanced"} · {player?._eval?.roleProjection?.replaceContext ?? "Depth option"}
                           </div>
+                          <ContractOfferInsightBlock player={player} capRoom={capRoom} compact />
                         </TableCell>
                         <TableCell style={{ whiteSpace: "nowrap" }}>
                           {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
@@ -1575,6 +1737,7 @@ export default function FreeAgency({
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{player?._eval?.roleProjection?.replaceContext ?? "Depth option"} · {player?._eval?.simImpact?.summary}</div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Playbook {formatPlaybookKnowledge(player?.playbookKnowledge)}</div>
                     <div style={{ fontSize: 12, marginTop: 4 }}>Demand {(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M / yr</div>
+                    <ContractOfferInsightBlock player={player} capRoom={capRoom} showReasons />
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
                       {getMarketPlayerTags(player, { capRoom, needs: needsSummary?.needs ?? [], surplus: needsSummary?.surplus ?? [] }).map((tag) => (
                         <span key={`${player.id}-${tag.label}`} style={{ fontSize: 10, border: "1px solid var(--hairline)", padding: "1px 6px", borderRadius: 999, color: toneToCssColor(tag.tone) }}>{tag.label}</span>
@@ -1623,6 +1786,7 @@ export default function FreeAgency({
                                 <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>
                                    Age {player.age} · Ask: ${(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M/yr ({askYrs} yr)
                                 </div>
+                                <ContractOfferInsightBlock player={player} capRoom={capRoom} compact />
                                <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
                                   {player?._eval?.archetype?.archetype ?? "Balanced"} · Fit {player?._eval?.schemeFit?.score ?? player.schemeFit ?? 50} ({player?._eval?.schemeFit?.tier ?? "Neutral"}) · {player?._eval?.roleProjection?.role ?? "Depth"}
                                </div>
@@ -1676,7 +1840,7 @@ export default function FreeAgency({
 
                         {isSigningThis ? (
                             <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: "var(--space-3)", marginTop: "var(--space-2)" }}>
-                               <SignInlineForm player={player} capRoom={capRoom} rosterCount={rosterCount} rosterLimit={rosterLimit} asDiv onCancel={() => setSigningPlayerId(null)} onSubmit={(c) => handleSign(player.id, c)} />
+                               <SignInlineForm player={player} capRoom={capRoom} pendingCapContext={pendingCapContext} rosterCount={rosterCount} rosterLimit={rosterLimit} asDiv onCancel={() => setSigningPlayerId(null)} onSubmit={(c) => handleSign(player.id, c)} />
                             </div>
                         ) : (
                             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
@@ -1710,6 +1874,7 @@ export default function FreeAgency({
         <PlayerPreviewSheet
           player={previewPlayer}
           capRoom={capRoom}
+          pendingCapContext={pendingCapContext}
           onClose={() => setPreviewPlayer(null)}
           onSubmitBid={handleSign}
         />

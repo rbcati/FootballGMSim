@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { derivePlayerContractFinancials } from './contractFormatting.js';
+import { buildContractOfferInsight } from './contractOfferInsights.js';
 
 describe('derivePlayerContractFinancials', () => {
   it('normalizes salary from canonical and legacy fields', () => {
@@ -16,5 +17,17 @@ describe('derivePlayerContractFinancials', () => {
     const missing = derivePlayerContractFinancials({ contract: { yearsTotal: 4 } });
     expect(missing.annualSalary).toBeNull();
     expect(missing.totalValue).toBeNull();
+  });
+});
+
+
+describe('contract insight money labels', () => {
+  it('formats annual values from contract model metadata', () => {
+    const insight = buildContractOfferInsight(
+      { contractModel: { marketTier: 'quality starter', capFit: 'safe', suggestedAnnual: 12.25, suggestedYears: 3 } },
+      { capRoom: 40 },
+    );
+    expect(insight.annualValueLabel).toBe('$12.3M/yr');
+    expect(insight.termLabel).toContain('3 yrs');
   });
 });

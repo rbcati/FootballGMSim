@@ -7,13 +7,10 @@
  * For CI, `npm run test:soak` runs fast Vitest audit coverage instead.
  */
 import 'fake-indexeddb/auto';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import {
   parseDynastySoakArgv,
   resolveDynastySoakConfig,
-  buildMarkdownReport,
-  slimDynastySoakResultForJson,
+  writeDynastySoakReports,
   DYNASTY_SOAK_USAGE,
 } from '../src/testSupport/dynastySoakCli.js';
 
@@ -37,19 +34,16 @@ async function main() {
   const { runDynastySoakOnce } = await import('../src/testSupport/dynastySoakRunner.js');
 
   console.log(
-    `[dynasty-soak] seed=${resolved.seed} seasons=${resolved.seasons}${resolved.ci ? ' (ci)' : ''} deep=${resolved.deep} deepEachSeason=${resolved.deepEachSeason}`,
+    `[dynasty-soak] profile=${resolved.auditProfile} seed=${resolved.seed} seasons=${resolved.seasons}${resolved.ci ? ' (ci short path)' : ''} deep=${resolved.deep} deepEachSeason=${resolved.deepEachSeason}`,
   );
+  if (resolved.auditProfile === 'full') {
+    console.warn(
+      '[dynasty-soak] full profile is a manual full-season SIM_TO_PHASE audit; a single worker request may run for a long time before --max-runtime-ms is checked.',
+    );
+  }
   const result = await runDynastySoakOnce(resolved);
 
-  const outDir = resolve(process.cwd(), resolved.outDir || 'artifacts/dynasty-soak');
-  await mkdir(outDir, { recursive: true });
-  await writeFile(
-    resolve(outDir, 'latest.json'),
-    JSON.stringify(slimDynastySoakResultForJson(result), null, 2),
-    'utf8',
-  );
-  const md = buildMarkdownReport(result);
-  await writeFile(resolve(outDir, 'latest.md'), md, 'utf8');
+  const { outDir } = await writeDynastySoakReports(result, resolved.outDir || 'artifacts/dynasty-soak');
 
   console.log(
     `[dynasty-soak] passed=${result.passed} runtimeMs=${result.runtimeMs} failures=${result.failures?.length ?? 0} warnings=${result.warnings?.length ?? 0}`,

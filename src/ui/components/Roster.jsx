@@ -67,6 +67,7 @@ import EmptyState from "./EmptyState.jsx";
 import { getPositionColor } from "../constants/positionColors.js";
 import { deriveRosterReadinessModel } from "../utils/rosterReadinessModel.js";
 import { markWeeklyPrepStep } from "../utils/weeklyPrep.js";
+import { buildShowingLabel, rowMatchesSearch, stableSortRows } from "../utils/dataBrowser.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -235,42 +236,21 @@ function SchemeFitIndicator({ fit, bonus, topAttr, schemeName }) {
   );
 }
 
+function getRosterSortValue(player, sortKey) {
+  switch (sortKey) {
+    case "ovr": return player?.ovr ?? 0;
+    case "age": return player?.age ?? 0;
+    case "salary": return derivePlayerContractFinancials(player).annualSalary ?? 0;
+    case "fit": return player?.schemeFit ?? 50;
+    case "morale": return player?.morale ?? 75;
+    case "pos": return player?.pos ?? "";
+    case "name": return player?.name ?? "";
+    default: return 0;
+  }
+}
+
 function sortPlayers(players, sortKey, sortDir) {
-  return [...players].sort((a, b) => {
-    let va, vb;
-    switch (sortKey) {
-      case "ovr":
-        va = a.ovr ?? 0;
-        vb = b.ovr ?? 0;
-        break;
-      case "age":
-        va = a.age ?? 0;
-        vb = b.age ?? 0;
-        break;
-      case "salary":
-        va = derivePlayerContractFinancials(a).annualSalary ?? 0;
-        vb = derivePlayerContractFinancials(b).annualSalary ?? 0;
-        break;
-      case "fit":
-        va = a.schemeFit ?? 50;
-        vb = b.schemeFit ?? 50;
-        break;
-      case "morale":
-        va = a.morale ?? 75;
-        vb = b.morale ?? 75;
-        break;
-      case "name":
-        va = a.name ?? "";
-        vb = b.name ?? "";
-        break;
-      default:
-        va = 0;
-        vb = 0;
-    }
-    if (va < vb) return sortDir === "asc" ? -1 : 1;
-    if (va > vb) return sortDir === "asc" ? 1 : -1;
-    return 0;
-  });
+  return stableSortRows(players, (player) => getRosterSortValue(player, sortKey), sortDir, (player) => player?.name);
 }
 
 function getContractYearsLeft(player) {
@@ -510,6 +490,7 @@ function RosterTable({
   const [releasing, setReleasing] = useState(null);
   const [extending, setExtending] = useState(null);
   const [advancedFilters, setAdvancedFilters] = useState([]);
+  const [search, setSearch] = useState("");
   const [evaluationMode, setEvaluationMode] = useState(true);
   const {
     compareIds,
@@ -523,9 +504,10 @@ function RosterTable({
 
   const displayed = useMemo(() => {
     const quickFiltered = applyRosterQuickFilter(players, posFilter);
-    const filtered = applyAdvancedPlayerFilters(quickFiltered, advancedFilters);
+    const searched = quickFiltered.filter((player) => rowMatchesSearch(player, search, ["name", "pos", (p) => p?.college, (p) => p?.archetype]));
+    const filtered = applyAdvancedPlayerFilters(searched, advancedFilters);
     return sortPlayers(filtered, sortKey, sortDir);
-  }, [players, posFilter, sortKey, sortDir, advancedFilters]);
+  }, [players, posFilter, search, sortKey, sortDir, advancedFilters]);
   const evaluatedDisplayed = useMemo(() => displayed.map((player) => ({
     player,
     eval: buildPlayerEvaluation(player, {
@@ -542,6 +524,8 @@ function RosterTable({
   );
 
   const activeFilters = isResignPhase ? ["EXPIRING", "STARTERS", "DEPTH", "INJURED", "DEVELOPMENT", ...POSITIONS] : ["STARTERS", "DEPTH", "INJURED", "EXPIRING", "DEVELOPMENT", ...POSITIONS];
+  const hasActiveFilters = Boolean(search.trim()) || posFilter !== "ALL" || advancedFilters.length > 0;
+  const resetBrowseFilters = () => { setSearch(""); setPosFilter("ALL"); setAdvancedFilters([]); };
 
   useEffect(() => {
     if (initialFilter) setPosFilter(initialFilter);
@@ -664,6 +648,17 @@ function RosterTable({
           <span><strong style={{ color: "#BF5AF2" }}>{decisionSummary.trade_or_tag}</strong> tag/trade calls</span>
         </div>
       )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: "var(--space-3)" }}>
+        <Input
+          aria-label="Search roster players"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search roster by player, position, college"
+          style={{ minHeight: 36, flex: "1 1 220px" }}
+        />
+        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{buildShowingLabel(displayed.length, players.length, "player")}</span>
+        {hasActiveFilters ? <Button type="button" variant="outline" onClick={resetBrowseFilters}>Reset filters</Button> : null}
+      </div>
       <div className="roster-filter-bar" style={{ marginBottom: "var(--space-4)" }}>
 
         {activeFilters.map((pos) => (
@@ -850,7 +845,7 @@ function RosterTable({
                       title="No players match this filter"
                       subtitle="Try clearing one or more roster filters."
                       action="Reset filter"
-                      onAction={() => setPosFilter("ALL")}
+                      onAction={resetBrowseFilters}
                     />
                   </TableCell>
                 </TableRow>
@@ -1884,14 +1879,16 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFil
   const [sortKey, setSortKey] = useState("ovr");
   const [sortDir, setSortDir] = useState("desc");
   const [advancedFilters, setAdvancedFilters] = useState([]);
+  const [search, setSearch] = useState("");
 
   const activeFilters = isResignPhase ? ["EXPIRING", "STARTERS", "DEPTH", "INJURED", "DEVELOPMENT", ...POSITIONS] : ["STARTERS", "DEPTH", "INJURED", "EXPIRING", "DEVELOPMENT", ...POSITIONS];
 
   const displayed = useMemo(() => {
     const quickFiltered = applyRosterQuickFilter(players, posFilter);
-    const filtered = applyAdvancedPlayerFilters(quickFiltered, advancedFilters);
+    const searched = quickFiltered.filter((player) => rowMatchesSearch(player, search, ["name", "pos", (p) => p?.college, (p) => p?.archetype]));
+    const filtered = applyAdvancedPlayerFilters(searched, advancedFilters);
     return sortPlayers(filtered, sortKey, sortDir);
-  }, [players, posFilter, sortKey, sortDir, advancedFilters]);
+  }, [players, posFilter, search, sortKey, sortDir, advancedFilters]);
   const direction = useMemo(() => classifyTeamDirection(team, week), [team, week]);
   const decisionSummary = useMemo(
     () => buildExpiringDecisionSummary(players, { team, roster: players, direction }),
@@ -1927,6 +1924,18 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFil
         flexDirection: "column",
         gap: "var(--space-3)",
       }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <Input
+            aria-label="Search roster cards"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search roster"
+            style={{ minHeight: 36, flex: "1 1 200px" }}
+          />
+          {(search.trim() || posFilter !== "ALL" || advancedFilters.length > 0) ? (
+            <Button type="button" variant="outline" onClick={() => { setSearch(""); setPosFilter("ALL"); setAdvancedFilters([]); }}>Reset filters</Button>
+          ) : null}
+        </div>
         <AdvancedPlayerSearch
           filters={advancedFilters}
           onChange={setAdvancedFilters}
@@ -2025,7 +2034,7 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFil
         fontSize: "var(--text-xs)", color: "var(--text-muted)",
         marginBottom: "var(--space-3)",
       }}>
-        {displayed.length} player{displayed.length !== 1 ? "s" : ""}
+        {buildShowingLabel(displayed.length, players.length, "player")}
         {posFilter !== "ALL" ? ` · ${posFilter}` : ""}
       </div>
 

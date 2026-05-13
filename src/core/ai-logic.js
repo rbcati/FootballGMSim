@@ -17,6 +17,9 @@ import { getTeamContextForNegotiation } from './teamContext/negotiationContext.j
 import { evaluateContractOffer } from './contracts/negotiation.js';
 import { evaluateReSigningPriority } from './retention/reSigning.js';
 import { buildFreeAgencyMarketAnalysis } from './freeAgency/freeAgencyMarketAnalysis.js';
+import { buildContractFromMarket, evaluateContractMarket } from './contractModel.js';
+import { evaluatePendingOfferCapReservation } from './pendingOfferCapModel.js';
+import { evaluatePlayerMarketRealism, normalizePositionGroup } from './marketRealismModel.js';
 
 class AiLogic {
     static NEED_GROUP_TO_POS = Object.freeze({
@@ -481,6 +484,25 @@ class AiLogic {
             return legacyGetCandidates(pos);
         };
 
+
+        const hasDuplicateExpensivePendingOffer = (pos, proposedCapHit) => {
+            if (pos === 'QB' || proposedCapHit < 10 || !freeAgentsMap) return false;
+            const group = normalizePositionGroup(pos);
+            return Object.values(freeAgentsMap)
+                .flat()
+                .filter(Boolean)
+                .some((player) => {
+                    if (normalizePositionGroup(player?.pos) !== group) return false;
+                    return Array.isArray(player?.offers) && player.offers.some((offer) => {
+                        if (Number(offer?.teamId) !== Number(teamId)) return false;
+                        const c = offer?.contract ?? {};
+                        const years = Math.max(1, Number(c.yearsTotal ?? c.years ?? 1));
+                        const annual = Number(c.baseAnnual ?? 0) + (Number(c.signingBonus ?? 0) / years);
+                        return annual >= 10;
+                    });
+                });
+        };
+
         // 4. Attempt to fill each high need position
         for (const pos of highNeedPositions) {
             const candidates = getCandidatesForPos(pos);
@@ -497,17 +519,70 @@ class AiLogic {
                 // Check if we already have an active offer out to this player
                 if (fa.offers && fa.offers.find(o => o.teamId === teamId)) continue;
 
-                // Calculate Ask / Offer
+                // Calculate Ask / Offer through the V1 contract model.
                 const demand = demandByPlayerId.get(fa.id) ?? calculateExtensionDemand(fa);
                 if (!demand) continue;
+                const market = evaluateContractMarket(fa, {
+                    team,
+                    strategy,
+                    teamArchetype: strategy?.archetype,
+                    capHealth: strategy?.capHealth,
+                    teamCapRoom: team.capRoom,
+                    positionalNeed: needs[pos] ?? 1,
+                });
+                const marketRiskTags = Array.isArray(market.riskTags) ? market.riskTags : [];
                 const age = Number(fa?.age ?? 27);
                 const isVeteran = age >= 30;
-                const isExpensive = Number(demand?.baseAnnual ?? 0) >= 14;
-                const avoidVeteranSpend = (['rebuild', 'development'].includes(strategy?.archetype) && isVeteran && isExpensive)
-                    || (strategy?.archetype === 'retool' && age >= 31 && isExpensive);
-                if (avoidVeteranSpend) continue;
+                const demandAnnual = Number(demand?.baseAnnual ?? market.suggestedAnnual ?? 0);
+                const modelAnnualForRisk = Number(market?.annualCapHit ?? market?.suggestedAnnual ?? demandAnnual);
+                const oldExpensiveNonQb = isVeteran && fa.pos !== 'QB' && modelAnnualForRisk >= 10;
+                const oldExpensiveQbRebuild = fa.pos === 'QB' && age >= 33 && demandAnnual >= 14 && ['rebuild', 'development'].includes(strategy?.archetype);
+                if ((['rebuild', 'development'].includes(strategy?.archetype) && oldExpensiveNonQb) || oldExpensiveQbRebuild) continue;
+                if (strategy?.archetype === 'retool' && age >= 31 && oldExpensiveNonQb) continue;
+                if (marketRiskTags.includes('long veteran commitment') && ['rebuild', 'development', 'retool'].includes(strategy?.archetype)) continue;
 
-                const capHit = demand.baseAnnual + (demand.signingBonus / demand.yearsTotal);
+                const qbDesperate = pos === 'QB' && Number(needs.QB ?? 0) >= 1.12;
+                const realism = evaluatePlayerMarketRealism({
+                    player: fa,
+                    team,
+                    roster: strategy?.roster ?? cache.getPlayersByTeam(teamId),
+                    strategy,
+                    positionalNeed: needs[pos] ?? 1,
+                    capRoom: team.capRoom,
+                    proposedAnnual: modelAnnualForRisk,
+                    action: 'free_agency',
+                });
+                if (realism.shouldAvoid && !realism.flags.includes('qb_need_exception') && !qbDesperate) continue;
+
+                const demandYears = Math.max(1, Number(demand?.yearsTotal ?? demand?.years ?? market.suggestedYears ?? 1));
+                const modelAnnual = Number(market.suggestedAnnual ?? demandAnnual);
+                const baseAnnual = Math.round(Math.min(modelAnnual, demandAnnual * 1.08) * 10) / 10;
+                const years = Math.max(1, Math.min(Number(market.suggestedYears ?? demandYears), demandYears));
+                const bonusRatio = demandAnnual > 0 ? Math.min(0.22, Number(demand?.signingBonus ?? 0) / Math.max(1, demandAnnual * demandYears)) : 0;
+                const offerContract = buildContractFromMarket({
+                    ...market,
+                    suggestedAnnual: baseAnnual,
+                    suggestedYears: years,
+                    signingBonus: Math.round(baseAnnual * years * bonusRatio * 10) / 10,
+                }, { startYear: cache.getMeta().year });
+                offerContract.years = offerContract.yearsTotal;
+
+                const capHit = offerContract.baseAnnual + (offerContract.signingBonus / offerContract.yearsTotal);
+                if (hasDuplicateExpensivePendingOffer(pos, capHit)) continue;
+
+                const pendingCap = evaluatePendingOfferCapReservation({
+                    team,
+                    freeAgents: freeAgentsMap ? Object.values(freeAgentsMap).flat().filter(Boolean) : [],
+                    teamId,
+                    currentCapRoom: team.capRoom,
+                    proposedOffer: { player: fa, offer: { teamId, contract: offerContract } },
+                });
+                const pendingAfter = Number(pendingCap?.estimatedCapRoomAfterPending ?? team.capRoom);
+                const pendingStatus = pendingCap?.capReservationStatus;
+                const pendingBlocks = ['overcommitted'].includes(pendingStatus) || pendingAfter < 0;
+                const pendingQbException = pos === 'QB' && Number(needs.QB ?? 0) >= 1.12 && pendingAfter >= -2;
+                if (pendingBlocks && !pendingQbException) continue;
+
                 const capHealth = Number(strategy?.capHealth ?? 55);
                 let capLimit = strategy?.archetype === 'contender'
                     ? 0.74
@@ -519,9 +594,8 @@ class AiLogic {
                 if (capHealth < 28) capLimit *= 0.68;
                 else if (capHealth < 40) capLimit *= 0.86;
                 const maxAllowedHit = Math.max(3, Number(team.capRoom ?? 0) * capLimit);
-                const qbDesperate = pos === 'QB' && Number(needs.QB ?? 0) >= 1.12;
                 if (!urgentPos && capHit > maxAllowedHit) {
-                    const qbException = qbDesperate && capHit <= maxAllowedHit * 1.28 && capHealth >= 18;
+                    const qbException = qbDesperate && (market.controlledException || realism.flags.includes('qb_need_exception')) && capHit <= maxAllowedHit * 1.8;
                     if (!qbException) continue;
                 }
 
@@ -531,9 +605,21 @@ class AiLogic {
                     const offer = {
                         teamId,
                         teamName: team.name, // Snapshot name
-                        contract: {
-                            ...demand,
-                            startYear: cache.getMeta().year
+                        contract: offerContract,
+                        contractModel: {
+                            marketTier: market.marketTier,
+                            capFit: market.capFit,
+                            riskTags: market.riskTags,
+                            reasons: [...new Set([...(market.reasons ?? []), ...(realism.reasons ?? [])])],
+                            marketRealism: {
+                                marketDemandScore: realism.marketDemandScore,
+                                fitScore: realism.fitScore,
+                                capRisk: realism.capRisk,
+                                ageRisk: realism.ageRisk,
+                                contractBurden: realism.contractBurden,
+                                teamFitTier: realism.teamFitTier,
+                                flags: realism.flags,
+                            },
                         },
                         timestamp: Date.now()
                     };

@@ -3897,6 +3897,179 @@ async function handleSimToPhase({ targetPhase }, id) {
   }
 }
 
+
+// ── Handler: RUN_DYNASTY_AUDIT_CHECKPOINT ───────────────────────────────────
+
+function auditCheckpointEntry(name, status, detail = '', extra = {}) {
+  const entry = { status, detail: String(detail || '') };
+  if (status === 'skipped') entry.reason = String(detail || 'skipped by audit checkpoint');
+  return { name, entry: { ...entry, ...extra } };
+}
+
+async function handleRunDynastyAuditCheckpoint(payload = {}, id) {
+  try {
+    if (!(typeof globalThis !== 'undefined' && globalThis.__DYNASTY_SOAK_AUDIT_CHECKPOINT_ENABLED__ === true)) {
+      post(toUI.DYNASTY_AUDIT_CHECKPOINT, { ok: false, error: 'Dynasty audit checkpoint is only available to the explicit audit harness.' }, id);
+      return;
+    }
+
+    const meta = ensureDynastyMeta(cache.getMeta());
+    if (!cache.isLoaded() || !meta?.currentSeasonId) {
+      post(toUI.DYNASTY_AUDIT_CHECKPOINT, { ok: false, error: 'No league loaded for dynasty audit checkpoint.' }, id);
+      return;
+    }
+
+    const realWeeksSimulated = Math.max(0, Number(payload?.realWeeksSimulated ?? 0) || 0);
+    if (realWeeksSimulated < 1) {
+      post(toUI.DYNASTY_AUDIT_CHECKPOINT, { ok: false, error: 'Dynasty audit checkpoint requires at least one real ADVANCE_WEEK before it can run.' }, id);
+      return;
+    }
+
+    const checkpointId = `audit_checkpoint_${meta.currentSeasonId}_${Date.now()}`;
+    const sourcePhase = String(meta?.phase ?? 'unknown');
+    const sourceYear = Number(meta?.year ?? new Date().getUTCFullYear());
+    const sourceSeasonId = meta?.currentSeasonId ?? null;
+    const exercised = {};
+    const skipped = [];
+    const failures = [];
+
+    const mark = (name, status, detail, extra = {}) => {
+      const { entry } = auditCheckpointEntry(name, status, detail, extra);
+      if (status === 'skipped') skipped.push({ system: name, reason: entry.reason || detail });
+      else exercised[name] = entry;
+    };
+    const failProbe = (name, error) => {
+      const message = error?.message || String(error || 'unknown failure');
+      exercised[name] = { status: 'failed', detail: message };
+      failures.push({ system: name, error: message });
+    };
+
+    try {
+      await flushDirty(true);
+      mark('forcedDirtyFlush', 'exercised', 'flushDirty(true) completed before audit metadata write');
+    } catch (err) {
+      failProbe('forcedDirtyFlush', err);
+    }
+
+    let playerSeasonStatsV1 = null;
+    try {
+      const statsRows = cache.getAllSeasonStats();
+      const teams = cache.getAllTeams();
+      playerSeasonStatsV1 = buildPlayerSeasonStatsArchiveRows(statsRows, {
+        teams,
+        year: sourceYear,
+        seasonId: sourceSeasonId,
+        createdAt: new Date().toISOString(),
+      });
+      if (Array.isArray(playerSeasonStatsV1?.rows) && playerSeasonStatsV1.rows.length > 0) {
+        mark('playerSeasonStatsV1Shape', 'exercised', `${playerSeasonStatsV1.rows.length} current-state stat rows shaped without archiving`, { rowCount: playerSeasonStatsV1.rows.length });
+      } else {
+        skipped.push({ system: 'playerSeasonStatsV1Shape', reason: 'Current partial season has no player stat rows to shape safely.' });
+      }
+    } catch (err) {
+      failProbe('playerSeasonStatsV1Shape', err);
+    }
+
+    try {
+      const txRows = await Transactions.loadRecent(400).catch(() => []);
+      if (Array.isArray(txRows) && txRows.length > 0) {
+        const teams = cache.getAllTeams();
+        const players = cache.getAllPlayers();
+        const ctx = {
+          teams,
+          teamsById: new Map(teams.map((t) => [Number(t.id), t])),
+          players,
+          playersById: new Map(players.map((pl) => [Number(pl.id), pl])),
+          year: sourceYear,
+          phase: sourcePhase,
+        };
+        const normalized = dedupeNormalizedTransactions(txRows.map((tx) => normalizeRawTransaction(tx, ctx)));
+        const compact = compactRowsForArchive(normalized, 32);
+        mark('transactionTimelineV1Shape', 'exercised', `${compact.length} compact transaction rows shaped from ${txRows.length} recent DB rows`, { rowCount: compact.length });
+      } else {
+        skipped.push({ system: 'transactionTimelineV1Shape', reason: 'No DB transactions exist yet in this partial CI run.' });
+      }
+    } catch (err) {
+      failProbe('transactionTimelineV1Shape', err);
+    }
+
+    let seasonsCount = null;
+    try {
+      const seasons = await Seasons.loadRecent(5);
+      seasonsCount = Array.isArray(seasons) ? seasons.length : 0;
+      mark('dbSeasonsRead', 'exercised', `Seasons.loadRecent read ${seasonsCount} completed-season rows without treating checkpoint as a season`, { count: seasonsCount });
+    } catch (err) {
+      failProbe('dbSeasonsRead', err);
+    }
+
+    skipped.push(
+      { system: 'normalLeagueHistoryWrite', reason: 'Audit checkpoint deliberately does not write leagueHistory or completed-season rows.' },
+      { system: 'getSeasonHistoryCompletedSeason', reason: 'Partial CI run has no safe completed-season id for GET_SEASON_HISTORY.' },
+      { system: 'completedSeasonArchive', reason: 'archiveSeason is reserved for completed seasons and is not called by this checkpoint.' },
+    );
+
+    const checkpoint = {
+      id: checkpointId,
+      ok: failures.length === 0,
+      auditOnly: true,
+      archiveType: 'audit_checkpoint',
+      completedSeason: false,
+      sourcePhase,
+      sourceYear,
+      sourceSeasonId,
+      realWeeksSimulated,
+      createdAt: new Date().toISOString(),
+      exercised,
+      skipped,
+      failures,
+      rowCounts: {
+        playerSeasonStatsV1: Array.isArray(playerSeasonStatsV1?.rows) ? playerSeasonStatsV1.rows.length : 0,
+        dbSeasons: seasonsCount,
+      },
+    };
+
+    try {
+      const existing = Array.isArray(meta?.dynastyAuditCheckpoints) ? meta.dynastyAuditCheckpoints : [];
+      const checkpointForSave = {
+        id: checkpoint.id,
+        auditOnly: true,
+        archiveType: checkpoint.archiveType,
+        completedSeason: false,
+        sourcePhase,
+        sourceYear,
+        sourceSeasonId,
+        realWeeksSimulated,
+        createdAt: checkpoint.createdAt,
+        exercised: Object.fromEntries(Object.entries(exercised).map(([k, v]) => [k, { status: v.status, detail: v.detail, rowCount: v.rowCount, count: v.count }])),
+        skipped,
+        failures,
+      };
+      cache.setMeta({ dynastyAuditCheckpoints: [...existing.filter((row) => row?.id !== checkpoint.id), checkpointForSave].slice(-5) });
+      await flushDirty(true);
+      const persisted = await Meta.load();
+      const persistedFound = Array.isArray(persisted?.dynastyAuditCheckpoints)
+        && persisted.dynastyAuditCheckpoints.some((row) => row?.id === checkpoint.id && row?.auditOnly === true && row?.completedSeason === false);
+      if (persistedFound) {
+        checkpoint.exercised.dbAuditCheckpointWriteRead = { status: 'exercised', detail: 'audit-only checkpoint metadata persisted to Meta and read back from IndexedDB' };
+      } else {
+        checkpoint.ok = false;
+        checkpoint.failures.push({ system: 'dbAuditCheckpointWriteRead', error: 'persisted checkpoint metadata was not found on Meta.load()' });
+        checkpoint.exercised.dbAuditCheckpointWriteRead = { status: 'failed', detail: 'persisted checkpoint metadata was not found on Meta.load()' };
+      }
+    } catch (err) {
+      checkpoint.ok = false;
+      failProbe('dbAuditCheckpointWriteRead', err);
+      checkpoint.failures = failures;
+      checkpoint.exercised = exercised;
+    }
+
+    post(toUI.DYNASTY_AUDIT_CHECKPOINT, checkpoint, id);
+  } catch (err) {
+    console.error('[Worker] RUN_DYNASTY_AUDIT_CHECKPOINT failed:', err);
+    post(toUI.DYNASTY_AUDIT_CHECKPOINT, { ok: false, error: err?.message || String(err) }, id);
+  }
+}
+
 // ── Handler: GET_SEASON_HISTORY ───────────────────────────────────────────────
 
 async function handleGetSeasonHistory({ seasonId }, id) {
@@ -5788,6 +5961,14 @@ async function handleGetFreeAgents(payload, id) {
             }
         }
 
+        const annualCapHitForOffer = (offer) => {
+            const c = offer?.contract ?? {};
+            const years = Math.max(1, Number(c.yearsTotal ?? c.years ?? 1));
+            const baseAnnual = Number(c.baseAnnual ?? c.annualSalary ?? c.annual ?? 0);
+            const signingBonus = Number(c.signingBonus ?? 0);
+            return Math.round((baseAnnual + (signingBonus / years)) * 10) / 10;
+        };
+
         // Calculate user's bid value if they have one
         let userBidValue = 0;
         if (userOffer) {
@@ -5915,9 +6096,13 @@ async function handleGetFreeAgents(payload, id) {
               topOfferValue: Math.round(topOfferValue * 10) / 10,
               topBidTeam: topBid ? topBid.teamName : null,
               topBidAnnual: topBid ? Math.round(topBid.contract.baseAnnual * 10) / 10 : 0,
+              topBidAnnualCapHit: topBid ? annualCapHitForOffer(topBid) : 0,
               topBidYears: topBid ? topBid.contract.yearsTotal : 0,
+              topOfferContractModel: topBid?.contractModel ?? null,
               userBidAnnual: userOffer ? Math.round(userOffer.contract.baseAnnual * 10) / 10 : 0,
+              userBidAnnualCapHit: userOffer ? annualCapHitForOffer(userOffer) : 0,
               userBidYears: userOffer ? userOffer.contract.yearsTotal : 0,
+              userOfferContractModel: userOffer?.contractModel ?? null,
               userBidValue: Math.round(userBidValue * 10) / 10,
               userTrailReason,
           }
@@ -10047,6 +10232,7 @@ async function handleMessage(event) {
       case toWorker.DUPLICATE_SAVE:     return await handleDuplicateSave(payload, id);
       case toWorker.NEW_LEAGUE:         return await handleNewLeague(payload, id);
       case toWorker.USE_SAFE_STARTER_LEAGUE: return await handleUseSafeStarterLeague(payload, id);
+      case toWorker.RUN_DYNASTY_AUDIT_CHECKPOINT: return await handleRunDynastyAuditCheckpoint(payload, id);
       case toWorker.ADVANCE_WEEK:       return await handleAdvanceWeek(payload, id);
       case toWorker.SIM_TO_WEEK:        return await handleSimToWeek(payload, id);
       case toWorker.SIM_TO_PLAYOFFS:    return await handleSimToWeek({ targetWeek: 18 }, id);

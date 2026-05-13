@@ -40,6 +40,124 @@ describe('dynasty soak batch dirty accumulator', () => {
     expect(finalDirty.seasonStats).toEqual(['s1_p1', 's1_p2']);
     expect(finalDirty.draftPicks).toEqual(['2028_1_1', '2028_1_2']);
   });
+  it('marks CI full-season-only probes as skipped with reasons without failing', () => {
+    const r = buildPersistenceAssertions({
+      auditProfile: 'ci',
+      viewState: { leagueHistory: [] },
+      allSeasons: [],
+      allSeasonsProbeOk: true,
+      transactionsRecent: [],
+      expectArchive: false,
+      expectTransactions: false,
+      transactionsRecentProbeOk: true,
+      transactionsRecentHasExpectedData: false,
+      expectStatRows: false,
+      expectTimelineRows: false,
+      seasonTxQuerySkipped: true,
+      getSeasonHistorySkipped: true,
+      recordsProbeOk: true,
+      hofProbeOk: true,
+      draftClassesProbeSkipped: true,
+      saveNowOk: true,
+      auditCheckpoint: {
+        ok: true,
+        auditOnly: true,
+        archiveType: 'audit_checkpoint',
+        completedSeason: false,
+        realWeeksSimulated: 2,
+        exercised: { forcedDirtyFlush: { status: 'exercised', detail: 'ok' } },
+        skipped: [{ system: 'completedSeasonArchive', reason: 'CI profile does not call archiveSeason for partial data' }],
+      },
+      skippedProbeReasons: {
+        latest_season_archive: 'CI profile does not complete a season',
+        get_all_seasons_latest: 'CI profile has no completed archive',
+        get_transactions_by_season: 'CI profile has no completed archive',
+        player_season_stats_v1: 'CI profile does not create a stat archive',
+        transaction_timeline_v1: 'CI profile does not create a transaction archive',
+        get_season_history: 'CI profile has no season history',
+        get_draft_classes: 'CI profile does not enter draft',
+      },
+    });
+
+    expect(r.allOk).toBe(true);
+    const skipped = r.assertions.filter((a) => a.status === 'skipped');
+    expect(skipped.length).toBeGreaterThan(0);
+    expect(skipped.every((a) => a.skipped === true && a.detail)).toBe(true);
+  });
+
+
+  it('fails CI checkpoint assertions when an exercised checkpoint probe fails', () => {
+    const r = buildPersistenceAssertions({
+      auditProfile: 'ci',
+      viewState: { leagueHistory: [] },
+      expectArchive: false,
+      auditCheckpoint: {
+        ok: false,
+        auditOnly: true,
+        archiveType: 'audit_checkpoint',
+        completedSeason: false,
+        realWeeksSimulated: 2,
+        exercised: { getRecordsHandler: { status: 'failed', detail: 'GET_RECORDS handler failed' } },
+        skipped: [{ system: 'completedSeasonArchive', reason: 'CI profile does not call archiveSeason for partial data' }],
+      },
+    });
+
+    expect(r.allOk).toBe(false);
+    expect(r.assertions.find((a) => a.id === 'audit_checkpoint_probe_getRecordsHandler')?.code).toBe('audit_checkpoint_probe_failed');
+  });
+
+
+  it('fails CI checkpoint assertions when a skipped checkpoint subsystem has no reason', () => {
+    const r = buildPersistenceAssertions({
+      auditProfile: 'ci',
+      viewState: { leagueHistory: [] },
+      expectArchive: false,
+      auditCheckpoint: {
+        ok: true,
+        auditOnly: true,
+        archiveType: 'audit_checkpoint',
+        completedSeason: false,
+        realWeeksSimulated: 2,
+        exercised: { forcedDirtyFlush: { status: 'exercised', detail: 'ok' } },
+        skipped: [{ system: 'completedSeasonArchive', reason: '' }],
+      },
+    });
+
+    expect(r.allOk).toBe(false);
+    expect(r.assertions.find((a) => a.code === 'audit_checkpoint_skipped_without_reason')).toBeTruthy();
+  });
+
+  it('fails CI exercised probes when handlers fail', () => {
+    const r = buildPersistenceAssertions({
+      auditProfile: 'ci',
+      viewState: { leagueHistory: [] },
+      expectArchive: false,
+      allSeasonsProbeOk: false,
+      transactionsRecent: [],
+      expectTransactions: false,
+      transactionsRecentProbeOk: false,
+      seasonTxQuerySkipped: true,
+      getSeasonHistorySkipped: true,
+      recordsProbeOk: false,
+      hofProbeOk: true,
+      draftClassesProbeSkipped: true,
+      skippedProbeReasons: {
+        latest_season_archive: 'CI profile does not complete a season',
+        get_all_seasons_latest: 'CI profile has no completed archive',
+        get_transactions_by_season: 'CI profile has no completed archive',
+        player_season_stats_v1: 'CI profile does not create a stat archive',
+        transaction_timeline_v1: 'CI profile does not create a transaction archive',
+        get_season_history: 'CI profile has no season history',
+        get_draft_classes: 'CI profile does not enter draft',
+      },
+    });
+
+    expect(r.allOk).toBe(false);
+    expect(r.assertions.find((a) => a.id === 'get_all_seasons_probe')?.ok).toBe(false);
+    expect(r.assertions.find((a) => a.id === 'transactions_recent_available')?.ok).toBe(false);
+    expect(r.assertions.find((a) => a.id === 'get_records')?.ok).toBe(false);
+  });
+
 });
 
 describe('buildPersistenceAssertions', () => {

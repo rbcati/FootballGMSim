@@ -62,5 +62,52 @@ describe('shouldBlockCpuUniformPlayerSwap', () => {
   it('allows non-QB uniform swaps', () => {
     expect(shouldBlockCpuUniformPlayerSwap({ pos: 'WR' }, { pos: 'CB' })).toBe(false);
   });
+
+  it('blocks directionless veteran-for-veteran swaps involving a quarterback', () => {
+    const expensiveQb = { pos: 'QB', age: 35, ovr: 76, potential: 76, contract: { baseAnnual: 22 } };
+    const expensiveWr = { pos: 'WR', age: 33, ovr: 79, potential: 79, contract: { baseAnnual: 14 } };
+
+    expect(shouldBlockCpuUniformPlayerSwap(expensiveQb, expensiveWr)).toBe(true);
+  });
 });
 
+
+describe('Trade Market Realism V2 valuation guardrails', () => {
+  it('protects young premium quarterbacks from being undervalued', () => {
+    const youngQb = {
+      pos: 'QB',
+      ovr: 77,
+      potential: 90,
+      age: 23,
+      contract: { baseAnnual: 5 },
+    };
+    const veteranRb = {
+      pos: 'RB',
+      ovr: 84,
+      potential: 84,
+      age: 30,
+      contract: { baseAnnual: 9 },
+    };
+
+    expect(calculatePlayerValue(youngQb)).toBeGreaterThan(calculatePlayerValue(veteranRb));
+  });
+
+  it('contract burden lowers offer value for old expensive veterans', () => {
+    const reasonableVeteran = {
+      pos: 'CB',
+      ovr: 82,
+      potential: 82,
+      age: 31,
+      contract: { baseAnnual: 7 },
+    };
+    const burdenVeteran = {
+      pos: 'CB',
+      ovr: 82,
+      potential: 82,
+      age: 31,
+      contract: { baseAnnual: 24 },
+    };
+
+    expect(calculatePlayerValue(burdenVeteran)).toBeLessThan(calculatePlayerValue(reasonableVeteran));
+  });
+});

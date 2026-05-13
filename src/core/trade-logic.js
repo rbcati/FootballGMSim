@@ -29,6 +29,11 @@ import NewsEngine       from './news-engine.js';
 import { Constants }    from './constants.js';
 import { Utils as U }   from './utils.js';
 import { buildAiTeamStrategy } from './aiTeamStrategy.js';
+import {
+  adjustTradeValueForMarketRealism,
+  buildTradeRealismReasonTags,
+  evaluateTradeActionRealism,
+} from './marketRealismModel.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -101,7 +106,7 @@ export function calculatePlayerValue(player) {
   const ovrWeight = age <= 25 ? 0.8 : 1.5;
 
   const rawValue = ((ovr * ovrWeight) + (pot * potWeight)) * posMult;
-  return Math.max(0, rawValue - agePenalty - contractPenalty);
+  return adjustTradeValueForMarketRealism(player, Math.max(0, rawValue - agePenalty - contractPenalty));
 }
 
 // ── Roster Analysis ───────────────────────────────────────────────────────────
@@ -251,10 +256,21 @@ export async function runAIToAITrades() {
   // Randomise order so the same teams don't always trade first.
   const shuffled = U.shuffle([...allTeams]);
 
-  // Build surplus/need map upfront — avoids repeated roster scans.
+  // Build surplus/need/strategy maps upfront — avoids repeated roster scans.
   const surplusMap = {};
   const needsMap   = {};
+  const rosterMap = {};
+  const strategyMap = {};
   for (const team of shuffled) {
+    const roster = cache.getPlayersByTeam(team.id);
+    rosterMap[team.id] = roster;
+    strategyMap[team.id] = buildAiTeamStrategy({
+      team,
+      roster,
+      league: { year: meta?.year, phase: meta?.phase },
+      phase: meta?.phase,
+      year: meta?.year,
+    });
     surplusMap[team.id] = getSurplusPlayers(team.id);
     needsMap[team.id]   = getTeamNeeds(team.id);
   }
@@ -301,8 +317,33 @@ export async function runAIToAITrades() {
       // Both players must have positive value (sanity check).
       if (valueA <= 0 || valueB <= 0) continue;
 
-      // Check trade fairness: values must be within ±VALUE_TOLERANCE.
-      const ratio = valueA / valueB;
+      const realismForTeamA = evaluateTradeActionRealism({
+        acquiringTeam: teamA,
+        acquiringRoster: rosterMap[teamA.id] ?? [],
+        acquiringStrategy: strategyMap[teamA.id] ?? {},
+        player: playerFromB,
+        positionalNeed: 1 + Number(topNeed?.urgency ?? 0) / 50,
+      });
+      const realismForTeamB = evaluateTradeActionRealism({
+        acquiringTeam: teamB,
+        acquiringRoster: rosterMap[teamB.id] ?? [],
+        acquiringStrategy: strategyMap[teamB.id] ?? {},
+        player: playerFromA,
+        positionalNeed: 1 + Number(teamBTopNeed?.urgency ?? 0) / 50,
+      });
+      if (realismForTeamA.shouldAvoid || realismForTeamB.shouldAvoid) continue;
+
+      const directionlessVeteranSwap = Number(playerFromA?.age ?? 27) >= 30
+        && Number(playerFromB?.age ?? 27) >= 30
+        && (realismForTeamA.capRisk >= 55 || realismForTeamB.capRisk >= 55)
+        && !realismForTeamA.flags.includes('contender_rental')
+        && !realismForTeamB.flags.includes('contender_rental');
+      if (directionlessVeteranSwap) continue;
+
+      // Check trade fairness: values must be within ±VALUE_TOLERANCE after team-fit realism.
+      const teamAIncomingValue = valueB * (0.72 + realismForTeamA.fitScore / 100);
+      const teamBIncomingValue = valueA * (0.72 + realismForTeamB.fitScore / 100);
+      const ratio = teamAIncomingValue / teamBIncomingValue;
       if (ratio < (1 - VALUE_TOLERANCE) || ratio > (1 + VALUE_TOLERANCE)) continue;
 
       if (shouldBlockCpuUniformPlayerSwap(playerFromA, playerFromB)) continue;
@@ -647,7 +688,15 @@ export function generateAITradeProposalsForUser({
 
     const offerType = computeOfferType({ userDirection, aiDirection, userCapRoom, week });
     const urgency = nearDeadline && aiDirection === 'contender' ? 'high' : aiDirection === 'desperate' ? 'high' : 'medium';
-    const reason = offerReasonCopy(offerType, aiTeam.abbr, topUserNeed.pos, week);
+    const offerRealism = evaluateTradeActionRealism({
+      acquiringTeam: userTeam,
+      acquiringRoster: cache.getPlayersByTeam(userTeamId),
+      acquiringStrategy: buildAiTeamStrategy({ team: userTeam, roster: cache.getPlayersByTeam(userTeamId), league: { year: meta?.year, phase: meta?.phase }, phase: meta?.phase, year: meta?.year }),
+      player: aiOfferCandidate.player,
+      positionalNeed: 1 + Number(topUserNeed?.urgency ?? 0) / 50,
+    });
+    const realismTags = buildTradeRealismReasonTags(offerRealism);
+    const reason = [offerReasonCopy(offerType, aiTeam.abbr, topUserNeed.pos, week), ...realismTags].join(' · ');
     const stance = stanceCopy(aiDirection, offerType, nearDeadline);
     const offeringPickSnapshots = [];
     const receivingPickSnapshots = [];
