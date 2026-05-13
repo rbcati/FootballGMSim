@@ -19,7 +19,8 @@
     "check:netlify-cli-build": "npx --yes netlify-cli@latest build --context production --offline",
     "check:netlify-rules": "node scripts/validate-netlify-rules.mjs",
     "check:deploy": "npm run check:netlify-parity && npm run check:netlify-rules && npm run check:netlify-cli-build && npm run check:netlify-cli-build:preview",
-    "check:netlify-cli-build:preview": "npx --yes netlify-cli@latest build --context deploy-preview --offline"
+    "check:netlify-cli-build:preview": "npx --yes netlify-cli@latest build --context deploy-preview --offline",
+    "audit:dynasty:multi": "npm run audit:dynasty -- --audit-profile=multi-seed-ci"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

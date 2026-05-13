@@ -548,6 +548,12 @@ export function runDynastySoakAudit(input = {}) {
   const leagueHistory = viewState?.leagueHistory ?? [];
   const incomingTradeOffers = Array.isArray(viewState?.incomingTradeOffers) ? viewState.incomingTradeOffers : [];
 
+  const expectedTeamCount = input.expectedTeamCount == null ? null : Number(input.expectedTeamCount);
+  if (Number.isFinite(expectedTeamCount) && teams.length !== expectedTeamCount) {
+    fail('team_count_unstable', `Expected ${expectedTeamCount} teams, found ${teams.length}`);
+    bumpSummary(summary, 'historyHealth', 'fail');
+  }
+
   // --- Phase / user / schedule ---
   if (userTeamId == null || userTeamId === '') {
     fail('user_team_missing', 'userTeamId is missing from view state');
@@ -567,6 +573,15 @@ export function runDynastySoakAudit(input = {}) {
     }
     if (metaPhase === 'regular' && standings.length === 0) {
       fail('standings_empty', 'Standings empty during regular season');
+      bumpSummary(summary, 'historyHealth', 'fail');
+    }
+  }
+  for (const row of standings) {
+    const wins = num(row?.wins);
+    const losses = num(row?.losses);
+    const ties = num(row?.ties ?? 0);
+    if (isBadNum(wins) || isBadNum(losses) || isBadNum(ties) || wins < 0 || losses < 0 || ties < 0) {
+      fail('standings_impossible', `Team ${row?.id ?? row?.teamId ?? 'unknown'} has invalid standings values`, { wins, losses, ties });
       bumpSummary(summary, 'historyHealth', 'fail');
     }
   }
@@ -678,12 +693,41 @@ export function runDynastySoakAudit(input = {}) {
   }
 
   // --- League history / champion ---
+  if (Array.isArray(leagueHistory) && leagueHistory.length) {
+    const seenSeasonIds = new Set();
+    for (let i = 0; i < leagueHistory.length; i += 1) {
+      const season = leagueHistory[i];
+      const seasonId = season?.id ?? season?.seasonId ?? `${season?.year ?? 'unknown'}:${i}`;
+      if (seenSeasonIds.has(String(seasonId))) {
+        fail('season_archive_duplicate', `Duplicate completed-season archive id ${seasonId}`);
+        bumpSummary(summary, 'archiveHealth', 'fail');
+      }
+      seenSeasonIds.add(String(seasonId));
+      if (!season?.champion && (season?.standings?.length ?? 0) > 0) {
+        fail('champion_missing', `Completed season archive ${seasonId} has standings but no champion`, { seasonId });
+        bumpSummary(summary, 'historyHealth', 'fail');
+      }
+      if (season?.champion && !season?.playoffBracketSnapshot) {
+        warn('playoff_bracket_snapshot_missing', `Completed season archive ${seasonId} has a champion but no playoffBracketSnapshot`, { seasonId });
+        bumpSummary(summary, 'archiveHealth', 'warn');
+      }
+      if (!season?.playerSeasonStatsV1) {
+        warn('player_season_stats_archive_missing', `Completed season archive ${seasonId} missing playerSeasonStatsV1`, { seasonId });
+        bumpSummary(summary, 'archiveHealth', 'warn');
+      }
+      if (!season?.transactionTimelineV1) {
+        warn('transaction_timeline_archive_missing', `Completed season archive ${seasonId} missing transactionTimelineV1`, { seasonId });
+        bumpSummary(summary, 'transactionHealth', 'warn');
+      }
+    }
+    if (seasonIndex > 0 && leagueHistory.length < seasonIndex) {
+      warn('season_archive_missing_count', `Completed season archive count ${leagueHistory.length} < seasonIndex ${seasonIndex}`);
+      bumpSummary(summary, 'archiveHealth', 'warn');
+    }
+  }
+
   const latest = latestCompletedSeasonSummary(leagueHistory);
   if (latest && seasonIndex > 0) {
-    if (!latest.champion && (latest.standings?.length ?? 0) > 0) {
-      fail('champion_missing', 'Latest leagueHistory entry has standings but no champion', { seasonId: latest.seasonId });
-      bumpSummary(summary, 'historyHealth', 'fail');
-    }
     const v1 = validatePlayerSeasonStatsV1Shape(latest.playerSeasonStatsV1);
     if (!v1.ok) {
       for (const e of v1.errors) fail('player_season_stats_shape', e);
@@ -703,6 +747,30 @@ export function runDynastySoakAudit(input = {}) {
         if (String(pos).toUpperCase() === 'QB' && qbInt > 40 && defInt > 40) {
           warn('qb_int_def_int_sanity', 'Unusually high QB pass INT and defensive INT columns on same row', { playerId: row.playerId });
           bumpSummary(summary, 'statHealth', 'warn');
+        }
+      }
+    }
+    if (Array.isArray(latest.games)) {
+      const seenGameIds = new Set();
+      for (const game of latest.games.slice(0, 400)) {
+        const gameId = game?.id ?? game?.gameId ?? null;
+        if (gameId != null) {
+          const key = String(gameId);
+          if (seenGameIds.has(key)) {
+            fail('game_archive_duplicate', `Duplicate game archive row ${key}`);
+            bumpSummary(summary, 'archiveHealth', 'fail');
+          }
+          seenGameIds.add(key);
+        }
+        const homeScore = num(game?.homeScore ?? game?.home?.score);
+        const awayScore = num(game?.awayScore ?? game?.away?.score);
+        if ((game?.homeScore != null || game?.awayScore != null) && (isBadNum(homeScore) || isBadNum(awayScore) || homeScore < 0 || awayScore < 0)) {
+          fail('game_archive_score_malformed', `Game archive row ${gameId ?? '(no id)'} has invalid score`, { homeScore, awayScore });
+          bumpSummary(summary, 'archiveHealth', 'fail');
+        }
+        if (game?.boxScore != null && (typeof game.boxScore !== 'object' || Array.isArray(game.boxScore))) {
+          fail('box_score_archive_malformed', `Game archive row ${gameId ?? '(no id)'} has malformed boxScore`);
+          bumpSummary(summary, 'archiveHealth', 'fail');
         }
       }
     }

@@ -353,4 +353,68 @@ describe('runDynastySoakOnce', () => {
     expect(result.failures.some((f) => f.code === 'audit_checkpoint_failed')).toBe(true);
   });
 
+
+  it('aggregates multi-seed pass/fail results and groups warnings by seed', async () => {
+    const { runDynastySoakMultiSeed } = await import('../../src/testSupport/dynastySoakRunner.js');
+    const result = await runDynastySoakMultiSeed({
+      auditProfile: 'multi-seed-ci',
+      runnerProfile: 'ci',
+      seeds: [1383, 1408, 1426],
+      seasons: 1,
+      phaseTimeoutMs: 10000,
+      runOne: vi.fn(async ({ seed }) => ({
+        seed,
+        passed: seed !== 1408,
+        severity: seed === 1408 ? 'error' : seed === 1426 ? 'warn' : 'ok',
+        runtimeMs: seed - 1300,
+        seasonsSimmed: 0,
+        finalPhase: 'regular',
+        finalYear: 2026,
+        failures: seed === 1408 ? [{ code: 'runner_fatal', message: 'boom' }] : [],
+        warnings: seed === 1426 ? [{ code: 'hof_empty_young', message: 'young league warning' }] : [],
+        persistenceAssertions: seed === 1408 ? [{ id: 'get_records', ok: false, detail: 'failed' }] : [],
+        reportSummary: {
+          economyRegressionSnapshot: seed === 1383
+            ? { teamsOverCap: 1, teamsWithPendingOfferOvercommit: 0, pendingOfferOvercommitCount: 0, duplicateExpensiveSameGroupOffers: 0, oldVeteranOffersByRebuildTeams: 0, contenderVeteranOfferCount: 0, severeQbNeedOfferCount: 0, premiumYoungPlayerTradeDiscountFlags: 0, expensiveVeteranSwapFlags: 0, cpuOfferCount: 3, unknownOfferValueCount: 0, skippedReasons: [], warnings: [] }
+            : null,
+        },
+      })),
+    });
+
+    expect(result.multiSeed).toBe(true);
+    expect(result.passed).toBe(false);
+    expect(result.seedCount).toBe(3);
+    expect(result.passCount).toBe(2);
+    expect(result.failCount).toBe(1);
+    expect(result.failuresBySeed).toHaveLength(1);
+    expect(result.failuresBySeed[0].seed).toBe(1408);
+    expect(result.warningsBySeed).toHaveLength(1);
+    expect(result.warningsBySeed[0].warningsByCode.hof_empty_young).toBe(1);
+    expect(result.economyAggregate.snapshotsPresent).toBe(1);
+    expect(result.economyAggregate.totals.teamsOverCap).toBe(1);
+    expect(result.economyAggregate.skippedReasonsBySeed.some((row) => row.code === 'economy_snapshot_missing')).toBe(true);
+    expect(result.persistenceWarningsBySeed[0].seed).toBe(1408);
+  });
+
+  it('can fail multi-seed on warnings only when strict mode is requested', async () => {
+    const { runDynastySoakMultiSeed } = await import('../../src/testSupport/dynastySoakRunner.js');
+    const base = {
+      auditProfile: 'multi-seed-ci',
+      runnerProfile: 'ci',
+      seeds: [1383],
+      runOne: vi.fn(async ({ seed }) => ({
+        seed,
+        passed: true,
+        severity: 'warn',
+        runtimeMs: 1,
+        failures: [],
+        warnings: [{ code: 'hof_empty_young', message: 'young league warning' }],
+        persistenceAssertions: [],
+        reportSummary: { economyRegressionSnapshot: null },
+      })),
+    };
+    expect((await runDynastySoakMultiSeed(base)).passed).toBe(true);
+    expect((await runDynastySoakMultiSeed({ ...base, failOnWarnings: true })).passed).toBe(false);
+  });
+
 });

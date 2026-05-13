@@ -10,9 +10,12 @@ export const DYNASTY_SOAK_USAGE = `Usage: npm run audit:dynasty -- [options]
 
 Options:
   --ci                    Alias for --audit-profile=ci (fast real-worker smoke audit)
-  --audit-profile=ci|full Profile to run: ci=short partial phase path, full=legacy full-season manual audit
-  --seasons=N             Number of seasons to simulate with --audit-profile=full (default: 5; CI uses a short path)
-  --seed=N                RNG seed (default: 1383)
+  --audit-profile=ci|full|multi-seed-ci|long-ci|stability
+                          Profile to run: ci=short partial phase path, full=legacy manual audit, multi-seed-ci=3 short deterministic seeds, long-ci/stability=bounded 3-season manual audit
+  --seasons=N             Number of seasons to simulate with --audit-profile=full/long-ci/stability (default: full=5, long-ci=3; CI uses a short path)
+  --seed=N                RNG seed for single-seed profiles (default: 1383)
+  --seeds=A,B,C           Comma-separated seeds for multi-seed profiles (default: 1383,1408,1426)
+  --fail-on-warnings      Treat warnings as a failing audit exit for manual strict mode (default: false)
   --outDir=PATH           Report output directory (default: artifacts/dynasty-soak)
   --deep                  Full final-season probes plus larger transaction/draft/archive samples
   --deep-each-season      Full GET_* probes every season (slowest; matches legacy harness)
@@ -38,6 +41,27 @@ function parseRequiredNumber(flag, value, errors) {
   return { ok: true, value: numberValue };
 }
 
+export const DEFAULT_MULTI_SEED_CI_SEEDS = [1383, 1408, 1426];
+
+export function parseSeedList(value, errors = []) {
+  const rawValue = value == null ? '' : String(value);
+  const parts = rawValue.split(',').map((part) => part.trim()).filter(Boolean);
+  if (!parts.length) {
+    errors.push('--seeds requires at least one finite numeric seed');
+    return [];
+  }
+  const seeds = [];
+  for (const part of parts) {
+    const n = Number(part);
+    if (!Number.isFinite(n)) {
+      errors.push(`--seeds contains a non-finite seed: ${part}`);
+      continue;
+    }
+    seeds.push(n);
+  }
+  return [...new Set(seeds)];
+}
+
 /**
  * @param {string[]} argv - process.argv
  * @returns {{ raw: object, errors: string[] }}
@@ -50,11 +74,13 @@ export function parseDynastySoakArgv(argv) {
     deepEachSeason: false,
     seasons: null,
     seed: null,
+    seeds: null,
     outDir: null,
     phaseTimeoutMs: null,
     maxRuntimeMs: null,
     skipReportOpen: false,
     teams: null,
+    failOnWarnings: false,
     unknown: [],
   };
   const errors = [];
@@ -74,12 +100,15 @@ export function parseDynastySoakArgv(argv) {
     else if (a === '--deep') raw.deep = true;
     else if (a === '--deep-each-season') raw.deepEachSeason = true;
     else if (a === '--skip-report-open') raw.skipReportOpen = true;
+    else if (a === '--fail-on-warnings') raw.failOnWarnings = true;
     else if (a.startsWith('--seasons=')) {
       const parsed = parseRequiredNumber('--seasons', a.slice('--seasons='.length), errors);
       if (parsed.ok) raw.seasons = parsed.value;
     } else if (a.startsWith('--seed=')) {
       const parsed = parseRequiredNumber('--seed', a.slice('--seed='.length), errors);
       if (parsed.ok) raw.seed = parsed.value;
+    } else if (a.startsWith('--seeds=')) {
+      raw.seeds = parseSeedList(a.slice('--seeds='.length), errors);
     } else if (a.startsWith('--outDir=')) raw.outDir = a.split('=').slice(1).join('=');
     else if (a.startsWith('--phase-timeout-ms=')) {
       const parsed = parseRequiredNumber('--phase-timeout-ms', a.slice('--phase-timeout-ms='.length), errors);
@@ -104,6 +133,9 @@ export function parseDynastySoakArgv(argv) {
         raw.seed = parsed.value;
         i += 1;
       }
+    } else if (a === '--seeds') {
+      raw.seeds = parseSeedList(argv[i + 1], errors);
+      i += 1;
     } else if (a === '--phase-timeout-ms') {
       const v = argv[i + 1];
       const parsed = parseRequiredNumber('--phase-timeout-ms', v, errors);
@@ -144,17 +176,22 @@ export function resolveDynastySoakConfig(raw) {
   }
   const requestedProfile = raw.auditProfile ?? (raw.ci ? 'ci' : 'full');
   const auditProfile = String(requestedProfile || '').toLowerCase();
-  if (!['ci', 'full'].includes(auditProfile)) {
-    errors.push(`Unknown audit profile: ${requestedProfile}. Expected --audit-profile=ci or --audit-profile=full.`);
+  const supportedProfiles = ['ci', 'full', 'multi-seed-ci', 'long-ci', 'stability'];
+  if (!supportedProfiles.includes(auditProfile)) {
+    errors.push(`Unknown audit profile: ${requestedProfile}. Expected one of: ${supportedProfiles.join(', ')}.`);
   }
+  const isMultiSeed = auditProfile === 'multi-seed-ci';
+  const isLongProfile = auditProfile === 'long-ci' || auditProfile === 'stability';
+  const runnerProfile = isMultiSeed ? 'ci' : isLongProfile ? 'full' : auditProfile;
   const requestedSeasons =
     raw.seasons != null && Number.isFinite(Number(raw.seasons))
       ? Math.max(1, Math.min(50, Number(raw.seasons)))
       : null;
-  const seasons = auditProfile === 'ci'
+  const seasons = runnerProfile === 'ci'
     ? 1
-    : requestedSeasons ?? 5;
+    : requestedSeasons ?? (isLongProfile ? 3 : 5);
   const seed = raw.seed != null && Number.isFinite(Number(raw.seed)) ? Number(raw.seed) : 1383;
+  const seeds = isMultiSeed ? (Array.isArray(raw.seeds) && raw.seeds.length ? raw.seeds : DEFAULT_MULTI_SEED_CI_SEEDS) : [seed];
 
   if (raw.teams != null && Number.isFinite(raw.teams) && Number(raw.teams) !== 32) {
     errors.push(
@@ -184,18 +221,32 @@ export function resolveDynastySoakConfig(raw) {
     resolved: {
       seasons,
       seed,
-      ci: auditProfile === 'ci',
+      seeds,
+      ci: runnerProfile === 'ci',
       auditProfile,
-      phasePath: auditProfile === 'ci' ? 'short' : 'full-season',
+      runnerProfile,
+      isMultiSeed,
+      isLongProfile,
+      phasePath: runnerProfile === 'ci' ? 'short' : 'full-season',
       requestedSeasons,
       effectiveSeasons: seasons,
-      ciWeeks: auditProfile === 'ci' ? 2 : null,
-      profileNotes: auditProfile === 'ci'
+      ciWeeks: runnerProfile === 'ci' ? 2 : null,
+      profileNotes: isMultiSeed
         ? [
-            'CI profile runs a short real-worker phase path and does not complete a season.',
-            'Use --audit-profile=full --seasons=1 for the full manual season audit.',
+            'Multi-seed CI profile runs the existing short real-worker CI path once per deterministic seed.',
+            'It intentionally does not complete seasons; use --audit-profile=long-ci for bounded completed-season coverage.',
           ]
-        : ['Full profile preserves the legacy full-season SIM_TO_PHASE audit and may be slow.'],
+        : runnerProfile === 'ci'
+          ? [
+              'CI profile runs a short real-worker phase path and does not complete a season.',
+              'Use --audit-profile=full --seasons=1 for the full manual season audit.',
+            ]
+          : isLongProfile
+            ? [
+                'Long CI/stability profile is optional/manual and runs a bounded 3-season full-season audit by default.',
+                'It is not part of the default push/parity profile because SIM_TO_PHASE can be slow.',
+              ]
+            : ['Full profile preserves the legacy full-season SIM_TO_PHASE audit and may be slow.'],
       deep,
       deepEachSeason,
       phaseTimeoutMs,
@@ -203,6 +254,7 @@ export function resolveDynastySoakConfig(raw) {
       simTimeoutMs: phaseTimeoutMs,
       outDir: raw.outDir || null,
       skipReportOpen: !!raw.skipReportOpen,
+      failOnWarnings: !!raw.failOnWarnings,
       teams: 32,
       smallerLeagueNote:
         'Only 32-team safe starter leagues are enabled; parameterized default league counts require playoff seeding and conference balance work — deferred.',
@@ -279,10 +331,97 @@ function exerciseDetail(entry) {
   return parts.join('; ');
 }
 
+
+export function buildMultiSeedMarkdownReport(result) {
+  const lines = [];
+  lines.push('# Dynasty multi-seed soak report');
+  lines.push('');
+  lines.push(`- **Profile:** ${mdEscape(result.auditProfile ?? 'multi-seed-ci')}`);
+  lines.push(`- **Runner profile:** ${mdEscape(result.runnerProfile ?? 'ci')}`);
+  lines.push(`- **Seeds:** ${(result.seeds ?? []).join(', ')}`);
+  lines.push(`- **Seed count:** ${result.seedCount ?? 0}`);
+  lines.push(`- **Pass / fail:** ${result.passCount ?? 0} / ${result.failCount ?? 0}`);
+  lines.push(`- **Warning seeds:** ${result.warningSeedCount ?? 0}`);
+  lines.push(`- **Runtime total ms:** ${result.runtimeTotalMs ?? result.runtimeMs ?? 0}`);
+  lines.push(`- **Passed:** ${result.passed ? 'yes' : 'no'}`);
+  lines.push(`- **Severity:** ${mdEscape(result.severity ?? 'unknown')}`);
+  lines.push(`- **Fail on warnings:** ${result.failOnWarnings ? 'yes' : 'no'}`);
+  lines.push('');
+
+  lines.push('## Profile notes');
+  lines.push('');
+  for (const note of result.profileNotes ?? []) lines.push(`- ${mdEscape(note)}`);
+  lines.push('- Default seeds are `1383`, `1408`, and `1426` to exercise three deterministic starter-league RNG paths without changing the existing single-seed CI audit runtime.');
+  lines.push('- Full 20–50 season soaks and always-on long-run CI remain intentionally manual/deferred.');
+  lines.push('');
+
+  lines.push('## Per-seed summary');
+  lines.push('');
+  lines.push('| Seed | Passed | Severity | Runtime ms | Seasons | Final phase | Final year | Failures | Warnings | First failure |');
+  lines.push('| --- | --- | --- | ---: | ---: | --- | --- | ---: | ---: | --- |');
+  for (const row of result.seedSummaries ?? []) {
+    const firstFailure = row.firstFailure ? `${row.firstFailure.code}: ${row.firstFailure.message}` : '';
+    lines.push(`| ${row.seed} | ${row.passed ? 'yes' : 'no'} | ${mdEscape(row.severity)} | ${row.runtimeMs} | ${row.seasonsSimmed} | ${mdEscape(row.finalPhase ?? 'n/a')} | ${row.finalYear ?? 'n/a'} | ${row.failureCount} | ${row.warningCount} | ${mdEscape(firstFailure)} |`);
+  }
+  lines.push('');
+
+  lines.push('## Warnings by seed');
+  lines.push('');
+  if (!result.warningsBySeed?.length) lines.push('_None_');
+  else {
+    for (const row of result.warningsBySeed) {
+      lines.push(`- **Seed ${row.seed}:** ${mdEscape(JSON.stringify(row.warningsByCode ?? {}))}`);
+    }
+  }
+  lines.push('');
+
+  lines.push('## Failures by seed');
+  lines.push('');
+  if (!result.failuresBySeed?.length) lines.push('_None_');
+  else {
+    for (const row of result.failuresBySeed) {
+      lines.push(`- **Seed ${row.seed}:** ${mdEscape((row.failures ?? []).map((f) => `${f.code}: ${f.message}`).join('; '))}`);
+    }
+  }
+  lines.push('');
+
+  lines.push('## Economy warning aggregate');
+  lines.push('');
+  const eco = result.economyAggregate ?? {};
+  lines.push(`- **Snapshots present:** ${eco.snapshotsPresent ?? 0} / ${result.seedCount ?? 0}`);
+  const totals = eco.totals ?? {};
+  lines.push(`- **Cap / pending offers:** teams over cap=${totals.teamsOverCap ?? 0}, teams pending-overcommitted=${totals.teamsWithPendingOfferOvercommit ?? 0}, overcommitted offers=${totals.pendingOfferOvercommitCount ?? 0}, unknown offer values=${totals.unknownOfferValueCount ?? 0}`);
+  lines.push(`- **CPU offer sanity:** CPU offers=${totals.cpuOfferCount ?? 0}, duplicate expensive same-group buckets=${totals.duplicateExpensiveSameGroupOffers ?? 0}, rebuild old-vet offers=${totals.oldVeteranOffersByRebuildTeams ?? 0}, contender veteran offers=${totals.contenderVeteranOfferCount ?? 0}, severe QB exceptions=${totals.severeQbNeedOfferCount ?? 0}`);
+  lines.push(`- **Trade realism flags:** young premium discount flags=${totals.premiumYoungPlayerTradeDiscountFlags ?? 0}, expensive veteran swap flags=${totals.expensiveVeteranSwapFlags ?? 0}`);
+  if (Array.isArray(eco.skippedReasonsBySeed) && eco.skippedReasonsBySeed.length) {
+    lines.push(`- **Unknown/skipped:** ${mdEscape(eco.skippedReasonsBySeed.map((row) => `seed ${row.seed} ${row.code}: ${row.reason}`).join('; '))}`);
+  }
+  if (Array.isArray(eco.warningsBySeed) && eco.warningsBySeed.length) {
+    lines.push(`- **Economy warnings:** ${mdEscape(eco.warningsBySeed.map((row) => `seed ${row.seed}: ${row.warnings.join('; ')}`).join(' | '))}`);
+  }
+  lines.push('');
+
+  lines.push('## Persistence/archive warnings by seed');
+  lines.push('');
+  if (!result.persistenceWarningsBySeed?.length) lines.push('_None_');
+  else {
+    for (const row of result.persistenceWarningsBySeed) {
+      lines.push(`- **Seed ${row.seed}:** ${mdEscape((row.assertionFailures ?? []).map((a) => `${a.id}: ${a.detail}`).join('; '))}`);
+    }
+  }
+  lines.push('');
+  lines.push('## Notes');
+  lines.push('');
+  lines.push('- Failures block CI; warnings are informational unless `--fail-on-warnings` is set.');
+  lines.push('- Per-seed raw results are stored in `latest.json` under `results`.');
+  return lines.join('\n');
+}
+
 /**
  * @param {object} result - runDynastySoakOnce output (JSON-serializable)
  */
 export function buildMarkdownReport(result) {
+  if (result?.multiSeed) return buildMultiSeedMarkdownReport(result);
   const lines = [];
   lines.push('# Dynasty soak report');
   lines.push('');
@@ -521,11 +660,13 @@ export async function writeDynastySoakReports(result, outDir = 'artifacts/dynast
   const jsonPath = resolve(resolvedOutDir, 'latest.json');
   const markdownPath = resolve(resolvedOutDir, 'latest.md');
   await mkdir(resolvedOutDir, { recursive: true });
-  await writeFile(
-    jsonPath,
-    JSON.stringify(slimDynastySoakResultForJson(result), null, 2),
-    'utf8',
-  );
-  await writeFile(markdownPath, buildMarkdownReport(result), 'utf8');
+  const jsonText = JSON.stringify(slimDynastySoakResultForJson(result), null, 2);
+  const markdownText = buildMarkdownReport(result);
+  await writeFile(jsonPath, jsonText, 'utf8');
+  await writeFile(markdownPath, markdownText, 'utf8');
+  if (result?.multiSeed) {
+    await writeFile(resolve(resolvedOutDir, 'latest-multi-seed.json'), jsonText, 'utf8');
+    await writeFile(resolve(resolvedOutDir, 'latest-multi-seed.md'), markdownText, 'utf8');
+  }
   return { outDir: resolvedOutDir, jsonPath, markdownPath };
 }

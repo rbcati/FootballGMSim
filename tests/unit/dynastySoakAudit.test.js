@@ -179,4 +179,46 @@ describe('dynastySoakAudit', () => {
   it('exposes broad stat leader warn bounds', () => {
     expect(STAT_LEADER_WARN.passYds.max).toBeGreaterThan(STAT_LEADER_WARN.passYds.min);
   });
+
+  it('keeps empty young Hall of Fame as a warning, not a failure', () => {
+    const r = runDynastySoakAudit({
+      viewState: baseView({ hallOfFameClasses: [] }),
+      seasonIndex: 1,
+      hofPayload: { players: [], classes: [] },
+    });
+    expect(r.warnings.some((w) => w.code === 'hof_empty_young')).toBe(true);
+    expect(r.failures.some((f) => f.code === 'hof_empty_young')).toBe(false);
+  });
+
+  it('reports missing economy offer/trade inputs as skipped/unknown without failing', () => {
+    const r = runDynastySoakAudit({
+      viewState: baseView(),
+      seasonIndex: 0,
+    });
+    expect(r.passed).toBe(true);
+    expect(r.reportSummary.economyRegressionSnapshot.skippedReasons.some((row) => row.code === 'pending_offers_missing')).toBe(true);
+    expect(r.reportSummary.economyRegressionSnapshot.skippedReasons.some((row) => row.code === 'trades_missing')).toBe(true);
+  });
+
+  it('detects duplicate season archives and malformed game rows', () => {
+    const season = {
+      id: 's2',
+      year: 2027,
+      champion: { id: 0, abbr: 'AAA' },
+      standings: [{ id: 0, wins: 10, losses: 6 }],
+      playoffBracketSnapshot: { rounds: [] },
+      playerSeasonStatsV1: { schemaVersion: 1, rows: [{ playerId: 'p1', pos: 'QB', totals: {} }] },
+      transactionTimelineV1: { schemaVersion: 1, rows: [] },
+      games: [{ id: 'g1', homeScore: -1, awayScore: 20, boxScore: [] }],
+    };
+    const r = runDynastySoakAudit({
+      viewState: baseView({ leagueHistory: [season, { ...season }] }),
+      seasonIndex: 2,
+    });
+    expect(r.passed).toBe(false);
+    expect(r.failures.some((f) => f.code === 'season_archive_duplicate')).toBe(true);
+    expect(r.failures.some((f) => f.code === 'game_archive_score_malformed')).toBe(true);
+    expect(r.failures.some((f) => f.code === 'box_score_archive_malformed')).toBe(true);
+  });
+
 });
