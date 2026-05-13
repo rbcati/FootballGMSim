@@ -7559,6 +7559,25 @@ details[open] .nav-summary::after {
 }
 
 .bs-scoreline { font-size: 1.8rem; font-weight: 900; letter-spacing: -0.02em; }
+
+.bs-header-subtitle { margin: 2px 0 0; color: var(--text-muted); font-size: 12px; }
+.bs-header-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.bs-final-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: stretch; gap: 10px; margin-bottom: 10px; }
+.bs-final-team { display: grid; gap: 4px; justify-items: center; border: 1px solid var(--hairline); border-radius: 12px; padding: 10px; background: var(--surface-strong); }
+.bs-final-team.is-winner { border-color: color-mix(in srgb, var(--accent) 62%, var(--hairline)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent); }
+.bs-team-kicker { font-size: 10px; text-transform: uppercase; color: var(--text-subtle); letter-spacing: .08em; }
+.bs-final-score-number { font-size: clamp(2rem, 9vw, 3.25rem); line-height: .95; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.bs-final-center { display: grid; gap: 6px; align-content: center; justify-items: center; min-width: 72px; color: var(--text-muted); }
+.bs-final-margin { font-size: 11px; text-align: center; }
+.bs-data-chip-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 8px; }
+.bs-data-chip { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; border: 1px solid var(--hairline); color: var(--text-subtle); border-radius: 999px; padding: 3px 8px; }
+.bs-data-chip.is-available { color: var(--text-primary); border-color: color-mix(in srgb, var(--accent) 45%, var(--hairline)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.bs-section-count { color: var(--text-subtle); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.bs-table-wrap--compact .box-score-table th:first-child,
+.bs-table-wrap--compact .box-score-table td:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+.app-game-center-context-strip { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.app-game-center-context-strip span { border: 1px solid var(--hairline); border-radius: 999px; padding: 4px 8px; color: var(--text-muted); background: var(--surface-strong); font-size: 11px; font-weight: 700; }
+
 .bs-scoreline-wrap { display: grid; gap: 4px; justify-items: center; }
 .bs-final-pill { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--hairline); }
 .bs-team-col { display: grid; gap: 3px; justify-items: center; }
@@ -7648,6 +7667,12 @@ details[open] .nav-summary::after {
     grid-template-columns: 1fr;
     gap: 6px;
   }
+
+  .bs-final-hero { grid-template-columns: 1fr; }
+  .bs-final-center { min-width: 0; }
+  .bs-header-actions { justify-content: stretch; }
+  .bs-header-actions .btn { flex: 1; }
+
   .bs-quick-nav { top: 58px; }
   .bs-facts-grid { grid-template-columns: 1fr 1fr; }
 

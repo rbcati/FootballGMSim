@@ -29,6 +29,12 @@ function formatPeriodLabel(game) {
 
 function ResultRow({ row, seasonId, onGameSelect, source = 'weekly_results_center' }) {
   const presentation = buildCompletedGamePresentation(row.game, { seasonId, week: row.week, teamById: row.teamById, source });
+  const vm = buildBoxScoreViewModel({ game: row.game, gameId: presentation.resolvedGameId, league: { teams: Object.values(row.teamById ?? {}) }, context: { season: seasonId, week: row.week } });
+  const performers = getTopPerformers(vm);
+  const margin = Number(vm?.margin);
+  const contextLabel = Number.isFinite(margin)
+    ? (margin <= 3 ? 'Close game' : margin >= 17 ? 'Blowout' : `${margin}-point margin`)
+    : 'Final';
   const clickable = Boolean(presentation.canOpen && onGameSelect);
 
   return (
@@ -38,7 +44,11 @@ function ResultRow({ row, seasonId, onGameSelect, source = 'weekly_results_cente
         <StatusChip label={formatPeriodLabel(row.game)} tone="ok" />
       </div>
       <div className="app-game-center-card__scoreline">
-        {row.away.abbr} {row.game?.awayScore ?? '—'} @ {row.home.abbr} {row.game?.homeScore ?? '—'}
+        {vm?.finalScoreLine ?? `${row.away.abbr} ${row.game?.awayScore ?? '—'} @ ${row.home.abbr} ${row.game?.homeScore ?? '—'}`}
+      </div>
+      <div className="app-game-center-context-strip" aria-label="Game quick context">
+        <span>{contextLabel}</span>
+        <span>{performers.hasOffense ? performers.offense : 'Top player unavailable'}</span>
       </div>
       <p className="app-game-center-card__summary">{row.recap}</p>
       <div className="app-game-center-card__footer">
