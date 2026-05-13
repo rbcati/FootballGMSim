@@ -366,6 +366,54 @@ describe('dynastySoakCli', () => {
     expect(longResolved.seasons).toBe(3);
   });
 
+
+
+  it('resolves stability-v1 as manual multi-seed completed-season profile', () => {
+    const parsed = parseDynastySoakArgv([
+      'node',
+      'x.mjs',
+      '--audit-profile=stability-v1',
+      '--seasons=7',
+      '--seeds=1,2,2,3',
+      '--fail-on-warnings',
+      '--max-runtime-ms=90000',
+      '--deep',
+      '--deep-each-season',
+    ]);
+    expect(parsed.errors).toEqual([]);
+
+    const { errors, resolved } = resolveDynastySoakConfig(parsed.raw);
+    expect(errors).toEqual([]);
+    expect(resolved.auditProfile).toBe('stability-v1');
+    expect(resolved.runnerProfile).toBe('full');
+    expect(resolved.phasePath).toBe('full-season');
+    expect(resolved.isMultiSeed).toBe(true);
+    expect(resolved.isStabilityV1).toBe(true);
+    expect(resolved.seasons).toBe(7);
+    expect(resolved.seeds).toEqual([1, 2, 3]);
+    expect(resolved.failOnWarnings).toBe(true);
+    expect(resolved.maxRuntimeMs).toBe(90000);
+    expect(resolved.deep).toBe(true);
+    expect(resolved.deepEachSeason).toBe(true);
+  });
+
+  it('keeps default CI behavior short and does not accidentally select stability-v1', () => {
+    const defaultResolved = resolveDynastySoakConfig(parseDynastySoakArgv(['node', 'x.mjs', '--ci']).raw).resolved;
+    expect(defaultResolved.auditProfile).toBe('ci');
+    expect(defaultResolved.runnerProfile).toBe('ci');
+    expect(defaultResolved.seasons).toBe(1);
+    expect(defaultResolved.seeds).toEqual([1383]);
+    expect(defaultResolved.isStabilityV1).toBe(false);
+  });
+
+  it('uses stability-v1 manual defaults of five seasons and three deterministic seeds', () => {
+    const { raw } = parseDynastySoakArgv(['node', 'x.mjs', '--audit-profile=stability-v1']);
+    const { resolved } = resolveDynastySoakConfig(raw);
+    expect(resolved.seasons).toBe(5);
+    expect(resolved.seeds).toEqual([1383, 1408, 1426]);
+    expect(resolved.ci).toBe(false);
+  });
+
   it('buildMarkdownReport includes multi-seed summary and grouped warnings', () => {
     const md = buildMarkdownReport({
       multiSeed: true,
@@ -395,6 +443,10 @@ describe('dynastySoakCli', () => {
     expect(md).toContain('Seed 1383');
     expect(md).toContain('runner_fatal');
     expect(md).toContain('Economy warning aggregate');
+    expect(md).toContain('Persistence/reload summary');
+    expect(md).toContain('What this proves');
+    expect(md).toContain('What this does not prove yet');
+    expect(md).toContain('Suggested next audit depth command');
     expect(md).toContain('economy_snapshot_missing');
   });
 

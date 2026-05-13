@@ -417,4 +417,42 @@ describe('runDynastySoakOnce', () => {
     expect((await runDynastySoakMultiSeed({ ...base, failOnWarnings: true })).passed).toBe(false);
   });
 
+
+  it('keeps stability-v1 aggregation on the full-season runner profile', async () => {
+    const { runDynastySoakMultiSeed } = await import('../../src/testSupport/dynastySoakRunner.js');
+    const runOne = vi.fn(async ({ seed, auditProfile, runnerProfile, ci, seasons }) => ({
+      seed,
+      auditProfile,
+      runnerProfile,
+      passed: true,
+      severity: 'ok',
+      runtimeMs: 5,
+      seasonsSimmed: seasons,
+      finalPhase: 'preseason',
+      finalYear: 2031,
+      failures: [],
+      warnings: [],
+      persistenceAssertions: [{ id: 'reload_same_persistence_path', ok: true, detail: 'ok' }],
+      reloadSummary: { ok: true, before: { year: 2031 }, after: { year: 2031, phase: 'preseason', teamCount: 32, currentSeasonId: 's2031', completedSeasonCount: 5, transactionCountSample: 20, userTeamId: 0 }, mismatches: [] },
+      reportSummary: { economyRegressionSnapshot: { teamsOverCap: 0, teamsWithPendingOfferOvercommit: 0, pendingOfferOvercommitCount: 0, duplicateExpensiveSameGroupOffers: 0, oldVeteranOffersByRebuildTeams: 0, contenderVeteranOfferCount: 0, severeQbNeedOfferCount: 0, premiumYoungPlayerTradeDiscountFlags: 0, expensiveVeteranSwapFlags: 0, cpuOfferCount: 0, unknownOfferValueCount: 0, skippedReasons: [], warnings: [] } },
+      finalView: { seasonId: 's2031', userTeamId: 0, leagueHistory: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }, { id: 'e' }] },
+      harnessConfig: { ci },
+    }));
+
+    const result = await runDynastySoakMultiSeed({
+      auditProfile: 'stability-v1',
+      runnerProfile: 'full',
+      phasePath: 'full-season',
+      seeds: [1383, 1408],
+      seasons: 5,
+      runOne,
+    });
+
+    expect(runOne).toHaveBeenCalledWith(expect.objectContaining({ auditProfile: 'stability-v1', runnerProfile: 'full', ci: false, seasons: 5 }));
+    expect(result.auditProfile).toBe('stability-v1');
+    expect(result.runnerProfile).toBe('full');
+    expect(result.seedSummaries[0].completedSeasonCount).toBe(5);
+    expect(result.persistenceReloadSummary[0].ok).toBe(true);
+  });
+
 });

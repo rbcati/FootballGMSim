@@ -20,7 +20,9 @@
     "check:netlify-rules": "node scripts/validate-netlify-rules.mjs",
     "check:deploy": "npm run check:netlify-parity && npm run check:netlify-rules && npm run check:netlify-cli-build && npm run check:netlify-cli-build:preview",
     "check:netlify-cli-build:preview": "npx --yes netlify-cli@latest build --context deploy-preview --offline",
-    "audit:dynasty:multi": "npm run audit:dynasty -- --audit-profile=multi-seed-ci"
+    "audit:dynasty:multi": "npm run audit:dynasty -- --audit-profile=multi-seed-ci",
+    "audit:dynasty:stability": "npm run audit:dynasty -- --audit-profile=stability-v1",
+    "audit:dynasty:stability:deep": "npm run audit:dynasty -- --audit-profile=stability-v1 --seasons=10 --seeds=1383,1408,1426,1451,1499 --deep"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
