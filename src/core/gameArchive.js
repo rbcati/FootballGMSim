@@ -13,6 +13,13 @@ const asNumberOrNull = (value) => {
 
 const hasValues = (obj) => Boolean(obj && typeof obj === 'object' && Object.keys(obj).length > 0);
 
+const hasFinalScore = (game) => Number.isFinite(Number(game?.homeScore ?? game?.scoreHome ?? game?.score?.home))
+  && Number.isFinite(Number(game?.awayScore ?? game?.scoreAway ?? game?.score?.away));
+
+function teamLabel(rawGame, side, key) {
+  return rawGame?.[`${side}${key}`] ?? rawGame?.[side]?.[key.toLowerCase()] ?? rawGame?.[side]?.[key] ?? null;
+}
+
 function normalizeQuarterScores(input) {
   if (!input || typeof input !== 'object') return null;
   const home = Array.isArray(input.home) ? input.home : Array.isArray(input.h) ? input.h : null;
@@ -168,6 +175,10 @@ export function normalizeArchivedGamePayload(rawGame) {
     phase: rawGame?.phase ?? null,
     homeId,
     awayId,
+    homeAbbr: teamLabel(rawGame, 'home', 'Abbr'),
+    awayAbbr: teamLabel(rawGame, 'away', 'Abbr'),
+    homeName: teamLabel(rawGame, 'home', 'Name'),
+    awayName: teamLabel(rawGame, 'away', 'Name'),
     homeScore: asNumberOrNull(rawGame?.homeScore ?? rawGame?.scoreHome ?? rawGame?.score?.home),
     awayScore: asNumberOrNull(rawGame?.awayScore ?? rawGame?.scoreAway ?? rawGame?.score?.away),
     quarterScores: normalizeQuarterScores(rawGame?.quarterScores ?? rawGame?.linescore),
@@ -233,6 +244,43 @@ function buildSyntheticPlayerRows(game) {
   addLeader(categories.receive, ['targets', 'receptions', 'recYd', 'recTD']);
   addLeader(categories.defense, ['tackles', 'sacks', 'interceptions', 'passesDefended', 'forcedFumbles']);
   return template;
+}
+
+export function mergeArchivedGameWithScheduleResult(archivedGame, scheduleGame) {
+  const archived = normalizeArchivedGamePayload(archivedGame);
+  const schedule = normalizeArchivedGamePayload(scheduleGame);
+  if (!archived && !schedule) return null;
+  if (!schedule || !hasFinalScore(schedule)) return archived;
+  if (!archived) return schedule;
+
+  const sameId = Boolean(schedule.id && archived.id && String(schedule.id) === String(archived.id));
+  const sameMatchup = Number(schedule.homeId) === Number(archived.homeId)
+    && Number(schedule.awayId) === Number(archived.awayId)
+    && (schedule.week == null || archived.week == null || Number(schedule.week) === Number(archived.week));
+  if (!sameId && !sameMatchup) return archived;
+
+  return normalizeArchivedGamePayload({
+    ...archived,
+    id: archived.id ?? schedule.id,
+    gameId: archived.gameId ?? schedule.gameId ?? schedule.id,
+    seasonId: archived.seasonId ?? schedule.seasonId,
+    week: archived.week ?? schedule.week,
+    phase: archived.phase ?? schedule.phase,
+    played: true,
+    homeId: schedule.homeId ?? archived.homeId,
+    awayId: schedule.awayId ?? archived.awayId,
+    homeAbbr: archived.homeAbbr ?? schedule.homeAbbr,
+    awayAbbr: archived.awayAbbr ?? schedule.awayAbbr,
+    homeName: archived.homeName ?? schedule.homeName,
+    awayName: archived.awayName ?? schedule.awayName,
+    homeScore: schedule.homeScore,
+    awayScore: schedule.awayScore,
+    quarterScores: archived.quarterScores ?? schedule.quarterScores,
+    recap: archived.recap ?? schedule.recap,
+    recapText: archived.recapText ?? schedule.recapText,
+    summary: archived.summary ?? schedule.summary,
+    archiveQuality: archived.archiveQuality,
+  });
 }
 
 export function enrichArchivedGamePayload(rawGame) {
@@ -308,6 +356,10 @@ export function recoverArchivedGameFromSchedule(gameId, leagueState) {
         awayId: rowAway,
         homeScore: row?.homeScore,
         awayScore: row?.awayScore,
+        homeAbbr: row?.homeAbbr ?? row?.home?.abbr ?? null,
+        awayAbbr: row?.awayAbbr ?? row?.away?.abbr ?? null,
+        homeName: row?.homeName ?? row?.home?.name ?? null,
+        awayName: row?.awayName ?? row?.away?.name ?? null,
         quarterScores: row?.quarterScores ?? null,
         recap: row?.recap ?? 'Legacy result restored from schedule final score.',
         summary: row?.summary ?? null,

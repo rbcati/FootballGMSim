@@ -143,7 +143,7 @@ import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.j
 import { archiveCompletedSeasonIfNeeded, ensureLeagueHistoryContainer } from '../core/leagueHistory.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonalityModifier } from '../core/development/personalitySystem.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
-import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule, enrichArchivedGamePayload } from '../core/gameArchive.js';
+import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule, enrichArchivedGamePayload, mergeArchivedGameWithScheduleResult } from '../core/gameArchive.js';
 import {
   DEFAULT_LEAGUE_ECONOMY,
   normalizeLeagueEconomy,
@@ -3498,6 +3498,9 @@ function applyGameResultToCache(result, week, seasonId) {
       recapThreeSentence,
       leaders: playerLeaders?.categories ?? null,
       playerOfGame: playerLeaders?.playerOfGame ?? null,
+      result: tie ? 'tie' : (homeWin ? 'home_win' : 'away_win'),
+      winnerId: tie ? null : winnerId,
+      loserId: tie ? null : (winnerId === hId ? aId : hId),
       standoutPerformances: playerLeaders?.standouts ?? [],
       storyline,
       developmentFlash: Array.isArray(result?.developmentFlash) ? result.developmentFlash.slice(0, 2) : [],
@@ -4837,7 +4840,8 @@ async function handleGetBoxScore({ gameId }, id) {
       }
     }
 
-    if (!game) game = buildScheduleFallback();
+    const scheduleFallback = buildScheduleFallback();
+    game = game ? mergeArchivedGameWithScheduleResult(game, scheduleFallback) : scheduleFallback;
 
     game = enrichArchivedGamePayload(game);
 

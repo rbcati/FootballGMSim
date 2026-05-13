@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { EmptyState } from "./ScreenSystem.jsx";
-import { buildBoxScoreViewModel, buildPlayerStatSections } from "../utils/boxScoreViewModel.js";
+import { buildBoxScoreViewModel, buildPlayerStatSections, unwrapBoxScoreResponse } from "../utils/boxScoreViewModel.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { buildGameBookStory } from "../utils/gameBookStory.js";
 import { getPlayerProfileId, hasValidPlayerProfileId, openPlayerProfile } from "../utils/playerProfileNavigation.js";
@@ -47,7 +47,7 @@ function leaderProfileRole(card) {
   return `${card?.label ?? "Box score"} leader`;
 }
 
-function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, onTeamSelect, embedded = false }) {
+function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, onTeamSelect, embedded = false, scheduleGame = null }) {
   const canLoadArchive = Boolean(gameId && typeof actions?.getBoxScore === "function");
   const { data: archiveGame } = useStableRouteRequest({
     requestKey: canLoadArchive ? `boxscore:${gameId}` : null,
@@ -56,9 +56,9 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
     fetcher: () => actions.getBoxScore(gameId),
   });
 
-  const fallbackGame = league?.gameById?.[gameId] ?? null;
-  const game = archiveGame ?? fallbackGame;
-  const vm = useMemo(() => buildBoxScoreViewModel({ league, game, gameId, context: { season: league?.seasonId, week: league?.week } }), [league, game, gameId]);
+  const fallbackGame = scheduleGame ?? league?.gameById?.[gameId] ?? null;
+  const game = unwrapBoxScoreResponse(archiveGame) ?? fallbackGame;
+  const vm = useMemo(() => buildBoxScoreViewModel({ league, game, gameId, scheduleGame: fallbackGame, context: { season: league?.seasonId, week: league?.week } }), [league, game, gameId, fallbackGame]);
   const [sortState, setSortState] = useState({});
 
   if (!vm || vm.status === "unavailable") {
@@ -187,8 +187,9 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
       </section>
       <section className="bs-section" data-testid="game-book-decision-summary">
         <h4>Why this game was decided</h4>
-        {storyBullets.length ? <ul>{storyBullets.map((b) => <li key={b}>{b}</li>)}</ul> : <p>No detailed team/player stats were recorded for this game.</p>}
+        {storyBullets.length ? <ul>{storyBullets.map((b) => <li key={b}>{b}</li>)}</ul> : <p>{vm.missingDetailReason ?? "Limited game detail is available for this archived result."}</p>}
       </section>
+      {statLeaderCards.some((card) => card.available) ? (
       <section className="bs-section" data-testid="game-book-top-performers">
         <div className="bs-section-header">
           <h4>Top performers</h4>
@@ -201,15 +202,16 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
               {card.player && onPlayerSelect ? (
                 <button type="button" className="btn-link bs-leader-name" data-testid="game-book-top-performer-link" onClick={() => openGameBookPlayer(card.player, leaderProfileRole(card))}>{card.line}</button>
               ) : <p className="bs-leader-name">{card.line}</p>}
-              {card.teamSide ? <span className="bs-leader-team">{card.teamSide === "away" ? vm.awayTeam.abbr : vm.homeTeam.abbr}</span> : <span className="bs-leader-team">Stat group missing</span>}
+              {card.teamSide ? <span className="bs-leader-team">{card.teamSide === "away" ? vm.awayTeam.abbr : vm.homeTeam.abbr}</span> : null}
             </article>
           ))}
         </div>
       </section>
+      ) : null}
+      {hasQuarter ? (
       <section className="bs-section" data-testid="game-book-quarter-scores">
         <h4>Score by quarter</h4>
-        {hasQuarter ? (
-          <div className="bs-table-wrap">
+        <div className="bs-table-wrap">
             <table className="box-score-table">
               <thead>
                 <tr><th>Team</th>{headers.map((h) => <th key={h}>{h}</th>)}<th>Final</th></tr>
@@ -228,24 +230,24 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
               </tbody>
             </table>
           </div>
-        ) : <p>Quarter-by-quarter scoring was not recorded for this game.</p>}
       </section>
+      ) : null}
 
+      {teamRows.length ? (
       <section className="bs-section" data-testid="game-book-team-comparison">
         <h4>Team comparison</h4>
-        {teamRows.length ? (
           <div className="bs-table-wrap">
             <table className="box-score-table">
               <thead><tr><th>Stat</th><th>{vm.awayTeam.abbr}</th><th>{vm.homeTeam.abbr}</th></tr></thead>
               <tbody>{teamRows.map((row) => <tr key={row.key ?? row.label}><td>{row.label}</td><td className={row.winner === "away" ? "bs-compare-value--winner" : undefined}>{row.away ?? mdash}</td><td className={row.winner === "home" ? "bs-compare-value--winner" : undefined}>{row.home ?? mdash}</td></tr>)}</tbody>
             </table>
           </div>
-        ) : <p>Team totals were not recorded for this game.</p>}
       </section>
+      ) : null}
 
+      {vm.scoringSummary?.length ? (
       <section className="bs-section" data-testid="game-book-scoring-summary">
         <h4>Scoring summary</h4>
-        {vm.scoringSummary?.length ? (
           <div className="bs-table-wrap">
             <table className="box-score-table">
               <thead><tr><th>Qtr</th><th>Time</th><th>Team</th><th>Type</th><th>Description</th><th>Score</th></tr></thead>
@@ -263,17 +265,12 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
               </tbody>
             </table>
           </div>
-        ) : <p>Scoring summary was not recorded for this game.</p>}
       </section>
+      ) : null}
       {vm.prepImpact?.length ? (
         <section className="bs-section"><h4>Game-plan impact</h4><ul>{vm.prepImpact.map((item, i) => <li key={`${i}-${item}`}>{item}</li>)}</ul></section>
       ) : null}
-      {tableSections.length ? tableSections.map(renderTable) : (
-        <section className="bs-section" data-testid="game-book-player-stats-empty">
-          <h4>Player stat tables</h4>
-          <p>Player box score rows were not recorded for this game.</p>
-        </section>
-      )}
+      {tableSections.length ? tableSections.map(renderTable) : null}
     </div>
   );
 }

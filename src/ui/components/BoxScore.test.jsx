@@ -36,9 +36,26 @@ describe('BoxScore game book rendering', () => {
 
   it('uses placeholders for score-only games and omits stat tables', () => {
     const html = renderToString(<BoxScore gameId="g4" league={{ ...baseLeague, gameById: { g4: { homeId: 1, awayId: 2, homeScore: 6, awayScore: 3 } } }} embedded />);
-    expect(html).toContain('Detailed box score data was not recorded for this game.');
-    expect(html).toContain('Scoring summary was not recorded for this game.');
+    expect(html).toContain('Limited game detail is available for this archived result.');
+    expect(html).not.toContain('Scoring summary was not recorded for this game.');
     expect(html).not.toContain('Special Teams');
+  });
+
+  it('keeps Game Book final score aligned with completed weekly card data when archive score is stale', () => {
+    vi.mocked(useStableRouteRequest).mockReturnValue({ data: { payload: { game: { gameId: '2031_w4_1_2', homeId: 1, awayId: 2, homeScore: 0, awayScore: 0 } } } });
+    const scheduleGame = { gameId: '2031_w4_1_2', home: { id: 1, abbr: 'KC' }, away: { id: 2, abbr: 'BUF' }, homeScore: 13, awayScore: 24, played: true, week: 4 };
+    const { getByTestId, container } = render(<BoxScore gameId="2031_w4_1_2" league={baseLeague} actions={{ getBoxScore: vi.fn() }} scheduleGame={scheduleGame} embedded />);
+    expect(getByTestId('game-book-final-score').textContent).toBe('BUF 24 - 13 KC');
+    expect(container.textContent).not.toContain('BUF 0 - 0 KC');
+  });
+
+  it('uses polished limited-detail fallback copy and hides debug-style empty sections', () => {
+    const { container, queryByTestId } = render(<BoxScore gameId="g-limited" league={{ ...baseLeague, gameById: { 'g-limited': { homeId: 1, awayId: 2, homeScore: 6, awayScore: 3 } } }} embedded />);
+    expect(container.textContent).toContain('Limited game detail is available for this archived result.');
+    expect(container.textContent).not.toContain('Stat group missing');
+    expect(container.textContent).not.toContain('Player box score rows were not recorded');
+    expect(queryByTestId('game-book-top-performers')).toBeNull();
+    expect(queryByTestId('game-book-player-stats-empty')).toBeNull();
   });
 
   it('player buttons trigger selection handlers with Game Book return context when ids are present', () => {
@@ -112,7 +129,7 @@ describe('BoxScore game book rendering', () => {
       },
     };
     const { container, getByTestId, getByText, getAllByText } = render(<BoxScore gameId="g-density" league={{ ...baseLeague, gameById: { 'g-density': game } }} onBack={onBack} embedded />);
-    expect(getByText('KC defeated BUF by 3')).toBeTruthy();
+    expect(getAllByText('KC defeated BUF by 3').length).toBeGreaterThan(0);
     expect(getAllByText('Team stats').length).toBeGreaterThan(0);
     expect(getByText('Showing 2 passers')).toBeTruthy();
     const passingText = container.querySelector('[data-testid="game-book-table-passing"]').textContent;
