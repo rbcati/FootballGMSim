@@ -21,7 +21,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
   const scheduleGame = findScheduleGame(league, gameId);
   const userTeam = (league?.teams ?? []).find((team) => Number(team?.id) === Number(league?.userTeamId));
   const prepContext = buildWeeklyDecisionImpact({ league, userTeam, lastGame: scheduleGame });
-  const detailVm = buildBoxScoreViewModel({ league, game: scheduleGame ?? league?.gameById?.[gameId], gameId, context: { season: league?.seasonId, week: weekFromId ?? league?.week } });
+  const detailVm = buildBoxScoreViewModel({ league, game: scheduleGame ?? league?.gameById?.[gameId], gameId, scheduleGame, context: { season: league?.seasonId, week: weekFromId ?? league?.week } });
   const screenTitle = detailVm?.availableData?.finalScore ? detailVm.headlineSummary : 'Game Book';
   const screenSubtitle = detailVm?.availableData?.finalScore
     ? `${detailVm.finalScoreLine} · Game Book sections show only data recorded for this final.`
@@ -82,6 +82,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
           onBack={onBack}
           onPlayerSelect={onPlayerSelect}
           onTeamSelect={onTeamSelect}
+          scheduleGame={scheduleGame}
         />
       </SectionCard>
     </div>

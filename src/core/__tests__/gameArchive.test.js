@@ -3,11 +3,48 @@ import {
   classifyArchiveQuality,
   enrichArchivedGamePayload,
   normalizeArchivedGamePayload,
+  mergeArchivedGameWithScheduleResult,
   recoverArchivedGameFromSchedule,
   summarizeArchiveDefects,
 } from '../gameArchive.js';
 
 describe('gameArchive helpers', () => {
+
+  it('retains completed-game score and detail through JSON save/reload normalization', () => {
+    const archived = normalizeArchivedGamePayload({
+      id: '2031_w2_1_2',
+      seasonId: '2031',
+      week: 2,
+      homeId: 1,
+      awayId: 2,
+      homeScore: 31,
+      awayScore: 28,
+      quarterScores: { home: [7, 7, 7, 10], away: [7, 7, 7, 7] },
+      teamStats: { home: { totalYards: 410 }, away: { totalYards: 390 } },
+      playerStats: { home: { 10: { name: 'Home QB', stats: { passYd: 301 } } }, away: { 20: { name: 'Away QB', stats: { passYd: 288 } } } },
+      recap: 'Home team won late.',
+    });
+    const reloaded = normalizeArchivedGamePayload(JSON.parse(JSON.stringify(archived)));
+    expect(reloaded.homeScore).toBe(31);
+    expect(reloaded.awayScore).toBe(28);
+    expect(reloaded.quarterScores.home).toEqual([7, 7, 7, 10]);
+    expect(reloaded.teamStats.home.totalYards).toBe(410);
+    expect(reloaded.playerStats.home[10].stats.passYd).toBe(301);
+    expect(reloaded.recap).toBe('Home team won late.');
+  });
+
+  it('reconciles stale archive scores with the completed schedule source of truth', () => {
+    const merged = mergeArchivedGameWithScheduleResult(
+      { id: '2031_w4_1_2', seasonId: '2031', week: 4, homeId: 1, awayId: 2, homeScore: 0, awayScore: 0, playerStats: { home: { 10: { stats: { passYd: 200 } } }, away: {} } },
+      { gameId: '2031_w4_1_2', seasonId: '2031', week: 4, home: { id: 1, abbr: 'PIT' }, away: { id: 2, abbr: 'MIN' }, homeScore: 13, awayScore: 24, played: true },
+    );
+    expect(merged.homeScore).toBe(13);
+    expect(merged.awayScore).toBe(24);
+    expect(merged.playerStats.home[10].stats.passYd).toBe(200);
+    expect(merged.homeAbbr).toBe('PIT');
+    expect(merged.awayAbbr).toBe('MIN');
+  });
+
   it('classifies full archives only when core sections exist', () => {
     const game = normalizeArchivedGamePayload({
       id: '2030_w3_1_2',

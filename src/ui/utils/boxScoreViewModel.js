@@ -1,4 +1,4 @@
-import { normalizeArchivedGamePayload } from '../../core/gameArchive.js';
+import { mergeArchivedGameWithScheduleResult, normalizeArchivedGamePayload } from '../../core/gameArchive.js';
 
 const QUALITY = { full: 'Full detail', partial: 'Partial detail', score: 'Score only', missing: 'Missing detail' };
 
@@ -13,8 +13,8 @@ function teamInfo(league, id, side, game) {
   const team = (league?.teams ?? []).find((t) => Number(t?.id) === Number(id)) ?? league?.teamById?.[id] ?? null;
   return {
     id: id ?? null,
-    abbr: team?.abbr ?? game?.[`${side}Abbr`] ?? (side === 'home' ? 'HOME' : 'AWAY'),
-    name: team?.name ?? game?.[`${side}Name`] ?? team?.abbr ?? 'Unknown',
+    abbr: team?.abbr ?? game?.[`${side}Abbr`] ?? game?.[side]?.abbr ?? (side === 'home' ? 'HOME' : 'AWAY'),
+    name: team?.name ?? game?.[`${side}Name`] ?? game?.[side]?.name ?? team?.abbr ?? 'Unknown',
     logo: team?.logo ?? team?.logoUrl ?? null,
   };
 }
@@ -214,8 +214,13 @@ function normalizeScoringSummary(rows) {
   }));
 }
 
-export function buildBoxScoreViewModel({ league, game, gameId, context = {} } = {}) {
-  const payload = normalizeArchivedGamePayload(game ?? null) ?? game ?? null;
+export function unwrapBoxScoreResponse(response) {
+  return response?.payload?.game ?? response?.game ?? response ?? null;
+}
+
+export function buildBoxScoreViewModel({ league, game, gameId, context = {}, scheduleGame = null } = {}) {
+  const rawGame = unwrapBoxScoreResponse(game);
+  const payload = mergeArchivedGameWithScheduleResult(rawGame, scheduleGame) ?? normalizeArchivedGamePayload(rawGame ?? null) ?? rawGame ?? null;
   if (!payload) {
     return { gameId: gameId ?? null, status: 'unavailable', archiveQuality: QUALITY.missing, hasDetailedStats: false, missingDetailReason: 'Game data missing' };
   }
@@ -278,8 +283,8 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {} } = 
       drives: Array.isArray(payload?.driveSummary) && payload.driveSummary.length > 0,
     },
     prepImpact: Array.isArray(payload?.prepImpact) ? payload.prepImpact : (payload?.prepImpact ? [String(payload.prepImpact)] : []),
-    detailWarning: archiveQuality === QUALITY.partial ? 'Partial archive: some Game Book sections were not recorded.' : archiveQuality === QUALITY.score ? 'Detailed box score data was not recorded for this game.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
-    missingDetailReason: archiveQuality === QUALITY.partial ? 'Partial archive: some Game Book sections were not recorded.' : archiveQuality === QUALITY.score ? 'Detailed box score data was not recorded for this game.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
+    detailWarning: archiveQuality === QUALITY.partial || archiveQuality === QUALITY.score ? 'Limited game detail is available for this archived result.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
+    missingDetailReason: archiveQuality === QUALITY.partial || archiveQuality === QUALITY.score ? 'Limited game detail is available for this archived result.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
     hasDetailedStats: archiveQuality === QUALITY.full || archiveQuality === QUALITY.partial,
   };
 }

@@ -12,13 +12,13 @@ describe('buildBoxScoreViewModel', () => {
   it('classifies partial detail warning copy', () => {
     const vm = buildBoxScoreViewModel({ game: { played: true, homeScore: 10, awayScore: 7, teamStats: { home: { passYards: 100 }, away: {} } } });
     expect(vm.archiveQuality).toBe('Partial detail');
-    expect(vm.detailWarning).toContain('Partial archive');
+    expect(vm.detailWarning).toBe('Limited game detail is available for this archived result.');
   });
 
   it('classifies score only data warning copy', () => {
     const vm = buildBoxScoreViewModel({ game: { played: true, homeScore: 3, awayScore: 0 } });
     expect(vm.archiveQuality).toBe('Score only');
-    expect(vm.detailWarning).toContain('Detailed box score data');
+    expect(vm.detailWarning).toBe('Limited game detail is available for this archived result.');
   });
 
   it('classifies missing detail when score unavailable', () => {
@@ -51,6 +51,25 @@ describe('buildBoxScoreViewModel', () => {
     expect(vm.teamComparisonRows.find((row) => row.key === 'turnovers')?.winner).toBe('away');
   });
 
+  it('uses the completed schedule result as score source of truth over stale archive scores', () => {
+    const vm = buildBoxScoreViewModel({
+      league: { teams: [{ id: 1, abbr: 'PIT' }, { id: 2, abbr: 'MIN' }] },
+      game: { gameId: '2031_w4_1_2', homeId: 1, awayId: 2, homeScore: 0, awayScore: 0, playerStats: { home: {}, away: {} } },
+      scheduleGame: { gameId: '2031_w4_1_2', home: { id: 1, abbr: 'PIT' }, away: { id: 2, abbr: 'MIN' }, homeScore: 13, awayScore: 24, played: true, week: 4 },
+    });
+    expect(vm.finalScore).toEqual({ home: 13, away: 24 });
+    expect(vm.finalScoreLine).toBe('MIN 24 - 13 PIT');
+    expect(vm.headlineSummary).toBe('MIN defeated PIT by 11');
+  });
+
+  it('unwraps worker BOX_SCORE response envelopes before building the game book', () => {
+    const vm = buildBoxScoreViewModel({
+      league: { teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] },
+      game: { type: 'BOX_SCORE', payload: { game: { homeId: 1, awayId: 2, homeScore: 20, awayScore: 23 } } },
+    });
+    expect(vm.finalScoreLine).toBe('BUF 23 - 20 KC');
+  });
+
   it('builds sorted player stat sections with stable defaults', () => {
     const vm = buildBoxScoreViewModel({
       game: {
@@ -74,7 +93,6 @@ describe('buildBoxScoreViewModel', () => {
     expect(passing?.teams.home.map((player) => player.name)).toEqual(['Higher QB', 'Lower QB']);
     expect(vm.playerStatSections.find((section) => section.key === 'rushing')?.teams.away[0].name).toBe('Away RB');
   });
-
 
   it('builds deterministic top performer cards for passing/rushing/receiving/defense/kicking only from recorded stats', () => {
     const vm = buildBoxScoreViewModel({
