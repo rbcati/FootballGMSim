@@ -215,7 +215,14 @@ function normalizeScoringSummary(rows) {
 }
 
 export function unwrapBoxScoreResponse(response) {
-  return response?.payload?.game ?? response?.game ?? response ?? null;
+  if (response == null) return null;
+  if (response?.payload && typeof response.payload === 'object' && Object.prototype.hasOwnProperty.call(response.payload, 'game')) {
+    return response.payload.game;
+  }
+  if (typeof response === 'object' && Object.prototype.hasOwnProperty.call(response, 'game')) {
+    return response.game;
+  }
+  return response;
 }
 
 export function buildBoxScoreViewModel({ league, game, gameId, context = {}, scheduleGame = null } = {}) {
@@ -283,8 +290,8 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
       drives: Array.isArray(payload?.driveSummary) && payload.driveSummary.length > 0,
     },
     prepImpact: Array.isArray(payload?.prepImpact) ? payload.prepImpact : (payload?.prepImpact ? [String(payload.prepImpact)] : []),
-    detailWarning: archiveQuality === QUALITY.partial || archiveQuality === QUALITY.score ? 'Limited game detail is available for this archived result.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
-    missingDetailReason: archiveQuality === QUALITY.partial || archiveQuality === QUALITY.score ? 'Limited game detail is available for this archived result.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
+    detailWarning: archiveQuality === QUALITY.partial ? 'Partial archive: some Game Book sections were not recorded.' : archiveQuality === QUALITY.score ? 'Detailed box score data was not recorded for this game.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
+    missingDetailReason: archiveQuality === QUALITY.partial ? 'Partial archive: some Game Book sections were not recorded.' : archiveQuality === QUALITY.score ? 'Detailed box score data was not recorded for this game.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
     hasDetailedStats: archiveQuality === QUALITY.full || archiveQuality === QUALITY.partial,
   };
 }
