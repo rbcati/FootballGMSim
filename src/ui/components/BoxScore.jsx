@@ -187,9 +187,8 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
       </section>
       <section className="bs-section" data-testid="game-book-decision-summary">
         <h4>Why this game was decided</h4>
-        {storyBullets.length ? <ul>{storyBullets.map((b) => <li key={b}>{b}</li>)}</ul> : <p>{vm.missingDetailReason ?? "Limited game detail is available for this archived result."}</p>}
+        {storyBullets.length ? <ul>{storyBullets.map((b) => <li key={b}>{b}</li>)}</ul> : <p>No detailed team/player stats were recorded for this game.</p>}
       </section>
-      {statLeaderCards.some((card) => card.available) ? (
       <section className="bs-section" data-testid="game-book-top-performers">
         <div className="bs-section-header">
           <h4>Top performers</h4>
@@ -202,16 +201,15 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
               {card.player && onPlayerSelect ? (
                 <button type="button" className="btn-link bs-leader-name" data-testid="game-book-top-performer-link" onClick={() => openGameBookPlayer(card.player, leaderProfileRole(card))}>{card.line}</button>
               ) : <p className="bs-leader-name">{card.line}</p>}
-              {card.teamSide ? <span className="bs-leader-team">{card.teamSide === "away" ? vm.awayTeam.abbr : vm.homeTeam.abbr}</span> : null}
+              {card.teamSide ? <span className="bs-leader-team">{card.teamSide === "away" ? vm.awayTeam.abbr : vm.homeTeam.abbr}</span> : <span className="bs-leader-team">Stat group missing</span>}
             </article>
           ))}
         </div>
       </section>
-      ) : null}
-      {hasQuarter ? (
       <section className="bs-section" data-testid="game-book-quarter-scores">
         <h4>Score by quarter</h4>
-        <div className="bs-table-wrap">
+        {hasQuarter ? (
+          <div className="bs-table-wrap">
             <table className="box-score-table">
               <thead>
                 <tr><th>Team</th>{headers.map((h) => <th key={h}>{h}</th>)}<th>Final</th></tr>
@@ -230,24 +228,24 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
               </tbody>
             </table>
           </div>
+        ) : <p>Quarter-by-quarter scoring was not recorded for this game.</p>}
       </section>
-      ) : null}
 
-      {teamRows.length ? (
       <section className="bs-section" data-testid="game-book-team-comparison">
         <h4>Team comparison</h4>
+        {teamRows.length ? (
           <div className="bs-table-wrap">
             <table className="box-score-table">
               <thead><tr><th>Stat</th><th>{vm.awayTeam.abbr}</th><th>{vm.homeTeam.abbr}</th></tr></thead>
               <tbody>{teamRows.map((row) => <tr key={row.key ?? row.label}><td>{row.label}</td><td className={row.winner === "away" ? "bs-compare-value--winner" : undefined}>{row.away ?? mdash}</td><td className={row.winner === "home" ? "bs-compare-value--winner" : undefined}>{row.home ?? mdash}</td></tr>)}</tbody>
             </table>
           </div>
+        ) : <p>Team totals were not recorded for this game.</p>}
       </section>
-      ) : null}
 
-      {vm.scoringSummary?.length ? (
       <section className="bs-section" data-testid="game-book-scoring-summary">
         <h4>Scoring summary</h4>
+        {vm.scoringSummary?.length ? (
           <div className="bs-table-wrap">
             <table className="box-score-table">
               <thead><tr><th>Qtr</th><th>Time</th><th>Team</th><th>Type</th><th>Description</th><th>Score</th></tr></thead>
@@ -265,12 +263,17 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
               </tbody>
             </table>
           </div>
+        ) : <p>Scoring summary was not recorded for this game.</p>}
       </section>
-      ) : null}
       {vm.prepImpact?.length ? (
         <section className="bs-section"><h4>Game-plan impact</h4><ul>{vm.prepImpact.map((item, i) => <li key={`${i}-${item}`}>{item}</li>)}</ul></section>
       ) : null}
-      {tableSections.length ? tableSections.map(renderTable) : null}
+      {tableSections.length ? tableSections.map(renderTable) : (
+        <section className="bs-section" data-testid="game-book-player-stats-empty">
+          <h4>Player stat tables</h4>
+          <p>Player box score rows were not recorded for this game.</p>
+        </section>
+      )}
     </div>
   );
 }
