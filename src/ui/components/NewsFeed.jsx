@@ -149,6 +149,7 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all', onTea
             ['all', 'ALL'],
             ['team', 'TEAM'],
             ['league', 'LEAGUE'],
+            ['pulse', 'PULSE'],
             ['transactions', 'TRANSACTIONS'],
           ].map(([value, label]) => (
             <button
@@ -199,7 +200,7 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all', onTea
       {filter === 'all' ? (
         <div className="app-news-aux-grid">
           <NewsSection title="Team Desk" subtitle="Your-team relevant stories" stories={desk.teamStories.slice(0, 3)} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
-          <NewsSection title="League Pulse" subtitle="Race and result context" stories={desk.recap.slice(0, 3)} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+          <NewsSection title="League Pulse" subtitle="Race, result, and pressure context" stories={(desk.pulseStories.length ? desk.pulseStories : desk.recap).slice(0, 3)} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
         </div>
       ) : null}
 
