@@ -11,6 +11,7 @@ import { buildWeeklyIntelligence, buildActionableWeeklyPriorities } from './week
 import { buildGamePlanImpact, buildPostGameReview } from './gamePlanImpact.js';
 import { buildWeeklyDecisionImpact } from './weeklyDecisionImpact.js';
 import { formatRegularUnitLabel } from '../constants/navigationCopy.js';
+import { selectLeaguePulseHighlights } from '../../core/leaguePulse.js';
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -408,6 +409,16 @@ export function selectFranchiseHQViewModel(league) {
 
   const cap = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
   const rosterCount = Array.isArray(team?.roster) ? team.roster.length : safeNum(team?.rosterCount, 0);
+  const leaguePulse = selectLeaguePulseHighlights(vm.league, { limit: 5 })
+    .map((item, index) => ({
+      id: item.id ?? `pulse-${index}`,
+      headline: item.headline ?? 'League pulse update',
+      detail: item.body ?? item.summary ?? null,
+      priority: item.priority ?? 'medium',
+      teamId: item.relatedTeamId ?? item.teamId ?? null,
+      playerId: item.relatedPlayerId ?? item.playerId ?? null,
+      gameId: item.gameId ?? null,
+    }));
   const leagueNews = (Array.isArray(vm.league?.newsItems) ? vm.league.newsItems : [])
     .slice(0, 4)
     .map((item, index) => ({ id: item.id ?? `news-${index}`, headline: item.headline ?? item.title ?? 'League update', detail: item.summary ?? item.body ?? null }));
@@ -561,6 +572,7 @@ export function selectFranchiseHQViewModel(league) {
         returnWeek: safeNum(vm.league?.week, 1) + safeNum(injuredSpotlight?.injuryWeeksRemaining ?? injuredSpotlight?.injuredWeeks ?? injuredSpotlight?.injury?.gamesRemaining, 0),
       }
       : null,
+    leaguePulse,
     leagueNews,
     story,
     weeklyEvent: queuedEvent,
