@@ -100,6 +100,30 @@ describe('FranchiseHQ', () => {
     expect(onNavigate).toHaveBeenCalled();
   });
 
+  it('renders League Pulse preview and opens the full News timeline', () => {
+    const onNavigate = vi.fn();
+    render(
+      <FranchiseHQ
+        league={{
+          ...baseLeague,
+          newsItems: [
+            { id: 'pulse-1', source: 'league_pulse_v1', category: 'league_pulse', headline: 'Rookie hype is building', body: 'A young runner just forced more weekly attention.', priority: 'medium', importance: 75, week: 9, relatedTeamId: 10, teamId: 10 },
+          ],
+        }}
+        onNavigate={onNavigate}
+        onAdvanceWeek={() => {}}
+        busy={false}
+        simulating={false}
+      />,
+    );
+
+    const pulseSection = screen.getByRole('heading', { name: /league pulse/i }).closest('section');
+    expect(pulseSection).toBeTruthy();
+    expect(within(pulseSection).getByText(/rookie hype is building/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /open full pulse/i }));
+    expect(onNavigate).toHaveBeenCalledWith('News');
+  });
+
   it('renders Review Game Book as the postgame next action and emits a Game Book route', () => {
     const onNavigate = vi.fn();
     render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
