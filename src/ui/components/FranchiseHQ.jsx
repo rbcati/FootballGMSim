@@ -103,12 +103,16 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       nextAction: review?.nextAction ?? "Tune this week's prep before advancing again.",
       recordDelta,
       nextOpponent: `${nextOpponentDisplay.isHome ? 'vs' : '@'} ${nextOpponentDisplay.opponentAbbr}`,
-      note: review?.newsNote ?? (command.leagueNews ?? [])[0]?.headline ?? 'No new league bulletin yet.',
+      note: review?.newsNote ?? (command.leaguePulse ?? [])[0]?.headline ?? (command.leagueNews ?? [])[0]?.headline ?? 'No new league bulletin yet.',
       actions: Array.isArray(review?.actions) ? review.actions : [],
     };
-  }, [command.leagueNews, command.postGameReview, command.teamRecord, lastGame, lastGameDisplay.overviewLine, nextOpponentDisplay.isHome, nextOpponentDisplay.opponentAbbr]);
+  }, [command.leagueNews, command.leaguePulse, command.postGameReview, command.teamRecord, lastGame, lastGameDisplay.overviewLine, nextOpponentDisplay.isHome, nextOpponentDisplay.opponentAbbr]);
 
   const decisionReview = useMemo(() => command.weeklyDecisionImpact ?? null, [command.weeklyDecisionImpact]);
+  const leaguePulseItems = useMemo(
+    () => ((command.leaguePulse?.length ? command.leaguePulse : command.leagueNews) ?? []).slice(0, 5),
+    [command.leagueNews, command.leaguePulse],
+  );
 
   const hqTeamBuilder = useMemo(() => {
     const roster = Array.isArray(userTeam?.roster) ? userTeam.roster : [];
@@ -474,12 +478,17 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         </div>
       </SectionCard>
 
-      <SectionCard title="League News" subtitle="Around the league this week." variant="compact">
+      <SectionCard
+        title="League Pulse"
+        subtitle="Around the league this week."
+        variant="compact"
+        actions={<button type="button" className="btn btn-sm" onClick={() => onNavigate?.('News')}>Open full pulse</button>}
+      >
         <div className="app-news-compact-list">
-          {(command.leagueNews ?? []).slice(0, 2).map((item) => (
+          {leaguePulseItems.map((item) => (
             <CompactNewsCard key={item.id} title={item.headline} subtitle={item.detail} />
           ))}
-          {!command.leagueNews?.length ? <EmptyState title="No league headlines yet." body="Advance to generate weekly stories." /> : null}
+          {!leaguePulseItems.length ? <EmptyState title="No league pulse yet." body="Advance to generate weekly stories." /> : null}
         </div>
       </SectionCard>
 
