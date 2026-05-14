@@ -177,6 +177,7 @@ import { deriveGamePlanMultipliers } from '../core/sim/gamePlanMultipliers.ts';
 import { buildGamePlanNarrative } from '../core/narrative.js';
 import { buildRosterBuildingAnalysis } from '../core/rosterBuildingAnalysis.js';
 import { buildAiTeamStrategy, mapPlayerPosToNeedGroup } from '../core/aiTeamStrategy.js';
+import { buildLeaguePulseItems, mergeLeaguePulseItems } from '../core/leaguePulse.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -2935,6 +2936,31 @@ async function handleAdvanceWeek(payload, id) {
     }
   }
 
+  if (results.length > 0 && ['regular', 'playoffs', 'preseason'].includes(meta.phase)) {
+    const pulseMeta = ensureDynastyMeta(cache.getMeta());
+    const pulseItems = buildLeaguePulseItems({
+      league: {
+        ...pulseMeta,
+        seasonId: pulseMeta?.currentSeasonId ?? seasonId,
+        week,
+        teams: cache.getAllTeams(),
+        schedule: pulseMeta?.schedule,
+        userTeamId: pulseMeta?.userTeamId,
+        phase: meta.phase,
+      },
+      results,
+      developmentEvents: evolutionOutcome.developmentEvents,
+      players: cache.getAllPlayers(),
+      week,
+      phase: meta.phase,
+    });
+    if (pulseItems.length > 0) {
+      cache.setMeta({
+        newsItems: mergeLeaguePulseItems(pulseMeta.newsItems, pulseItems, { currentWeek: week }),
+      });
+    }
+  }
+
   // AUTO-SAVE: phase transition — persist all game results and the new week/phase to IDB.
   await flushDirty();
 
@@ -3498,9 +3524,6 @@ function applyGameResultToCache(result, week, seasonId) {
       recapThreeSentence,
       leaders: playerLeaders?.categories ?? null,
       playerOfGame: playerLeaders?.playerOfGame ?? null,
-      result: tie ? 'tie' : (homeWin ? 'home_win' : 'away_win'),
-      winnerId: tie ? null : winnerId,
-      loserId: tie ? null : (winnerId === hId ? aId : hId),
       standoutPerformances: playerLeaders?.standouts ?? [],
       storyline,
       developmentFlash: Array.isArray(result?.developmentFlash) ? result.developmentFlash.slice(0, 2) : [],
