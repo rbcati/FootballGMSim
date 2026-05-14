@@ -88,3 +88,4 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
     </div>
   );
 }
+
