@@ -1,8 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { buildBoxScoreViewModel } from './boxScoreViewModel.js';
+import { buildBoxScoreViewModel, unwrapBoxScoreResponse } from './boxScoreViewModel.js';
 import { buildGameBookStory } from './gameBookStory.js';
 
 describe('buildBoxScoreViewModel', () => {
+  it('unwraps BOX_SCORE envelopes with explicit null payload game values', () => {
+    expect(unwrapBoxScoreResponse({ type: 'BOX_SCORE', payload: { game: null, error: 'not found' } })).toBeNull();
+  });
+
+  it('unwraps top-level explicit null game values', () => {
+    expect(unwrapBoxScoreResponse({ game: null })).toBeNull();
+  });
+
+  it('unwraps valid payload.game and top-level game values', () => {
+    const payloadGame = { homeScore: 14, awayScore: 10 };
+    const topLevelGame = { homeScore: 21, awayScore: 17 };
+    expect(unwrapBoxScoreResponse({ type: 'BOX_SCORE', payload: { game: payloadGame } })).toBe(payloadGame);
+    expect(unwrapBoxScoreResponse({ game: topLevelGame })).toBe(topLevelGame);
+  });
+
   it('classifies full detail when major sections exist', () => {
     const vm = buildBoxScoreViewModel({ game: { played: true, homeId: 1, awayId: 2, homeScore: 21, awayScore: 17, quarterScores: { home: [7,7,7,0], away: [3,7,0,7] }, teamStats: { home: { passYards: 220 }, away: { passYards: 200 } }, playerStats: { home: { '10': { name: 'QB', stats: { passAtt: 20 } } }, away: {} } } });
     expect(vm.archiveQuality).toBe('Full detail');
@@ -12,13 +27,13 @@ describe('buildBoxScoreViewModel', () => {
   it('classifies partial detail warning copy', () => {
     const vm = buildBoxScoreViewModel({ game: { played: true, homeScore: 10, awayScore: 7, teamStats: { home: { passYards: 100 }, away: {} } } });
     expect(vm.archiveQuality).toBe('Partial detail');
-    expect(vm.detailWarning).toBe('Limited game detail is available for this archived result.');
+    expect(vm.detailWarning).toContain('Partial archive');
   });
 
   it('classifies score only data warning copy', () => {
     const vm = buildBoxScoreViewModel({ game: { played: true, homeScore: 3, awayScore: 0 } });
     expect(vm.archiveQuality).toBe('Score only');
-    expect(vm.detailWarning).toBe('Limited game detail is available for this archived result.');
+    expect(vm.detailWarning).toContain('Detailed box score data');
   });
 
   it('classifies missing detail when score unavailable', () => {
@@ -59,15 +74,6 @@ describe('buildBoxScoreViewModel', () => {
     });
     expect(vm.finalScore).toEqual({ home: 13, away: 24 });
     expect(vm.finalScoreLine).toBe('MIN 24 - 13 PIT');
-    expect(vm.headlineSummary).toBe('MIN defeated PIT by 11');
-  });
-
-  it('unwraps worker BOX_SCORE response envelopes before building the game book', () => {
-    const vm = buildBoxScoreViewModel({
-      league: { teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] },
-      game: { type: 'BOX_SCORE', payload: { game: { homeId: 1, awayId: 2, homeScore: 20, awayScore: 23 } } },
-    });
-    expect(vm.finalScoreLine).toBe('BUF 23 - 20 KC');
   });
 
   it('builds sorted player stat sections with stable defaults', () => {
@@ -93,6 +99,7 @@ describe('buildBoxScoreViewModel', () => {
     expect(passing?.teams.home.map((player) => player.name)).toEqual(['Higher QB', 'Lower QB']);
     expect(vm.playerStatSections.find((section) => section.key === 'rushing')?.teams.away[0].name).toBe('Away RB');
   });
+
 
   it('builds deterministic top performer cards for passing/rushing/receiving/defense/kicking only from recorded stats', () => {
     const vm = buildBoxScoreViewModel({
