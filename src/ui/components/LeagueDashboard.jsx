@@ -967,7 +967,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "News" && (
           <TabErrorBoundary label="News" onNavigate={setActiveTab}>
-            <SectionSubnav items={["All", "Team", "League", "Transactions"]} activeItem={newsSubtab} onChange={setNewsSubtab} />
+            <SectionSubnav items={["All", "Team", "League", "Pulse", "Transactions"]} activeItem={newsSubtab} onChange={setNewsSubtab} />
             <NewsFeed
               league={league}
               mode="full"
