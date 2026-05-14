@@ -30,4 +30,19 @@ describe('buildNewsDeskModel', () => {
     expect(model.filtered).toHaveLength(1);
     expect(model.filtered[0].headline).toBe('Trade complete');
   });
+
+  it('classifies deterministic league pulse stories into the pulse segment', () => {
+    const league = {
+      userTeamId: 1,
+      teams: [{ id: 1 }, { id: 2 }],
+      newsItems: [
+        { id: 'p1', source: 'league_pulse_v1', category: 'league_pulse', headline: 'Pulse story', body: 'Context', priority: 'medium', relatedTeamId: 1, teamId: 1, importance: 75 },
+        { id: 'n1', headline: 'Other story', priority: 'medium', category: 'standings' },
+      ],
+    };
+    const model = buildNewsDeskModel(league, { segment: 'pulse' });
+    expect(model.filtered).toHaveLength(1);
+    expect(model.filtered[0].headline).toBe('Pulse story');
+    expect(model.filtered[0]._categoryLabel).toBe('League Pulse');
+  });
 });
