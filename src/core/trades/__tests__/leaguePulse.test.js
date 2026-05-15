@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildLeaguePulseItems, mergeLeaguePulseItems, selectLeaguePulseHighlights } from '../leaguePulse.js';
+import { buildLeaguePulseItems, mergeLeaguePulseItems, selectLeaguePulseHighlights } from '../../leaguePulse.js';
 
 function makeLeague(overrides = {}) {
   return {
