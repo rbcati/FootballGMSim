@@ -1,0 +1,1 @@
+6f5668b chore: clarify guard comment for league finalization
