@@ -118,8 +118,3 @@ export function buildNewsDeskModel(league, { segment = 'all', limit = 60 } = {})
 }
 
 export function buildStorylineCards(league) { return []; }
-export function buildNarrativeNewsItems(league) { return []; }
-
-export function buildStorylineCards(league) {
-  return [{ id: 'mock', importance: 100, teamId: Number(league?.userTeamId) || 1, title: 'Mock Storyline Title' }];
-}

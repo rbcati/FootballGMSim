@@ -727,7 +727,7 @@ export default function LeagueDashboard({
               {league.week && <span> · Week {league.week}</span>}
               {" · "}
               <span style={{ color: ownerApproval == null ? "var(--text-muted)" : ownerApproval >= 70 ? "var(--success)" : ownerApproval >= 50 ? "var(--warning)" : "var(--danger)" }}>
-                Owner {pressure?.owner?.state ?? "Stable"} {ownerApprovalText} {(ownerApproval != null && ownerApproval < 50) ? "(Seat Hot) ⚠️" : ""}
+                Owner {pressure?.owner?.state ?? "Stable"} {ownerApprovalText}
               </span>
               {pressure?.fans?.state ? <span>{` · Fans ${pressure.fans.state}`}</span> : null}
               {pressure?.media?.state ? <span>{` · Media ${pressure.media.state}`}</span> : null}
