@@ -575,6 +575,8 @@ export default function LiveGame({
       setOverlayEvent({ type: "save safety", text: "SAFETY" });
     } else if (lowerText.includes("deep pass complete")) {
       setOverlayEvent({ type: "big-play", text: "BIG PLAY" });
+    } else if (lowerText.includes("punt") || lowerText.includes("kick")) {
+      setOverlayEvent({ type: "kick punt", text: "KICK" });
     } else {
       setOverlayEvent(null);
     }

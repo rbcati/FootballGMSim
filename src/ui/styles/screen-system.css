@@ -251,7 +251,7 @@
   .standings-center-row > :nth-child(n + 5) { display: none; }
 }
 
-.franchise-command-center { gap: var(--space-4); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.franchise-command-center { gap: var(--space-4); font-family: var(--font-sans); }
 
 .app-hq-topbar {
   padding: 10px 12px;
