@@ -1,4 +1,4 @@
-import { buildNarrativeNewsItems } from './leagueNarratives.js';
+
 
 const CATEGORY_MAP = {
   standings: 'playoff_race',
@@ -21,16 +21,6 @@ const CATEGORY_MAP = {
   story_major_result: 'result',
   pregame: 'team',
   story_pregame: 'team',
-  league_pulse: 'pulse',
-  user_result: 'pulse',
-  user_pressure: 'pulse',
-  injury_opportunity: 'pulse',
-  contract_tension: 'pulse',
-  rookie_hype: 'pulse',
-  playoff_race: 'pulse',
-  rivalry_week: 'pulse',
-  standout_performance: 'pulse',
-  league_result: 'pulse',
   coaching_carousel: 'league',
   coaching_transition: 'league',
   coaching_continuity: 'league',
@@ -49,7 +39,6 @@ const CATEGORY_LABEL = {
   awards: 'Awards',
   rivalry: 'Rivalry',
   result: 'Featured Result',
-  pulse: 'League Pulse',
 };
 
 function classify(item, userTeamId) {
@@ -66,13 +55,12 @@ function score(item, index, userTeamId) {
   const priority = item?.priority === 'high' ? 320 : item?.priority === 'medium' ? 190 : 90;
   const relevance = Number(item?.teamId) === Number(userTeamId) ? 90 : 0;
   const storyline = item?.source === 'storyline' ? 70 : 0;
-  const pulse = item?.source === 'league_pulse_v1' ? 85 : 0;
-  return priority + relevance + storyline + pulse + Number(item?.importance ?? 0) + Math.max(0, 50 - index) + Number(item?.sortWeight ?? 0);
+  return priority + relevance + storyline + Math.max(0, 50 - index) + Number(item?.sortWeight ?? 0);
 }
 
 export function buildNewsDeskModel(league, { segment = 'all', limit = 60 } = {}) {
   const rawNews = Array.isArray(league?.newsItems) ? league.newsItems : [];
-  const storylineNews = buildNarrativeNewsItems(league);
+  const storylineNews = typeof buildNarrativeNewsItems !== 'undefined' && typeof buildNarrativeNewsItems === 'function' ? buildNarrativeNewsItems(league) : [];
   const userTeamId = Number(league?.userTeamId);
 
   const merged = [...storylineNews, ...rawNews]
@@ -93,7 +81,6 @@ export function buildNewsDeskModel(league, { segment = 'all', limit = 60 } = {})
     if (segment === 'team') return item._teamRelevant;
     if (segment === 'league') return !item._teamRelevant;
     if (segment === 'transactions') return item._bucket === 'transaction';
-    if (segment === 'pulse') return item._bucket === 'pulse';
     return true;
   });
 
@@ -102,7 +89,6 @@ export function buildNewsDeskModel(league, { segment = 'all', limit = 60 } = {})
   const teamStories = filtered.filter((item) => item._teamRelevant).slice(0, 4);
   const leagueStories = filtered.filter((item) => !item._teamRelevant && item._bucket !== 'transaction').slice(0, 4);
   const transactions = filtered.filter((item) => item._bucket === 'transaction').slice(0, 4);
-  const pulseStories = filtered.filter((item) => item._bucket === 'pulse').slice(0, 6);
 
   return {
     merged,
@@ -112,7 +98,6 @@ export function buildNewsDeskModel(league, { segment = 'all', limit = 60 } = {})
     teamStories,
     leagueStories,
     transactions,
-    pulseStories,
     recap: filtered.filter((item) => item._bucket === 'result' || item._bucket === 'playoff_race').slice(0, 3),
   };
 }

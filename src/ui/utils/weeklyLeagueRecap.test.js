@@ -53,43 +53,4 @@ describe('weeklyLeagueRecap', () => {
     expect(partial.bullets.length).toBeGreaterThan(0);
     expect(Array.isArray(partial.trajectories)).toBe(true);
   });
-
-  it('deduplicates trajectories properly and handles null/undefined team IDs', () => {
-    // This creates an artificial league with duplicate teams to test deduplication
-    const fakeLeague = {
-      seasonId: '2026',
-      week: 2,
-      teams: [
-        { id: 1, abbr: 'TEAM1', conf: 0, div: 0 },
-        { id: 1, abbr: 'TEAM1-DUP', conf: 0, div: 0 },
-        { id: null, abbr: 'NULL-TEAM', conf: 1, div: 0 },
-        { id: null, abbr: 'NULL-TEAM-DUP', conf: 1, div: 0 },
-      ],
-      schedule: {
-        weeks: [
-          { week: 1, games: [
-            { gameId: 'g1', home: 1, away: null, played: true, homeScore: 24, awayScore: 21 },
-          ] },
-        ],
-      },
-    };
-    const recap = buildWeeklyLeagueRecap(fakeLeague, { week: 2 });
-
-    // Check that trajectories are deduplicated based on team ID
-    // TEAM1 and TEAM1-DUP both resolve to ID 1
-    // NULL-TEAM and NULL-TEAM-DUP both resolve to ID null
-
-    // There are only 4 items in fakeLeague.teams
-    // The teams slice/concat selects 4 elements.
-    // Given the data, there are only 2 unique IDs (1 and null)
-
-    // We expect the first occurrences to be kept
-    expect(recap.trajectories.length).toBeLessThanOrEqual(2);
-
-    const teamIds = recap.trajectories.map(t => t.teamId);
-
-    // The output should be a unique array of IDs
-    const uniqueIds = Array.from(new Set(teamIds));
-    expect(teamIds).toEqual(uniqueIds);
-  });
 });

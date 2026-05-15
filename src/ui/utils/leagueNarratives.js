@@ -1,3 +1,4 @@
+export function buildNarrativeNewsItems(league) { return []; }
 
 const CATEGORY_MAP = {
   standings: 'playoff_race',
@@ -116,8 +117,4 @@ export function buildNewsDeskModel(league, { segment = 'all', limit = 60 } = {})
   };
 }
 
-export function buildNarrativeNewsItems(league) { return []; }
-
-export function buildStorylineCards(league) {
-  return [{ id: 'mock', importance: 100, teamId: Number(league?.userTeamId) || 1, title: 'Mock Storyline Title' }];
-}
+export function buildStorylineCards(league) { return []; }
