@@ -554,7 +554,7 @@ function AppContent() {
   useEffect(() => {
     if (safeStarterInFlightRef.current) return;
     if (!shouldFinalizeNewSlotBootstrap({ league, pendingNewSlot })) return;
-    // FIX: Only save and finalize if the league is actually playable
+    // Only save and finalize if the league is actually playable.
     if (hasMinimumPlayableLeague(league)) {
       actions.saveSlot(pendingNewSlot);
       setActiveSlot(pendingNewSlot);
