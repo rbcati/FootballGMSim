@@ -252,8 +252,14 @@ export function buildWeeklyLeagueRecap(league, { week, maxBullets = 6 } = {}) {
     .sort((a, b) => (b.score - a.score) || a.key.localeCompare(b.key))
     .slice(0, 3);
 
+  const seenTeams = new Set();
   const trajectories = ranked.slice(0, 2).concat(ranked.slice(-2))
-    .filter((entry, idx, arr) => arr.findIndex((r) => safeNumber(r.team?.id) === safeNumber(entry.team?.id)) === idx)
+    .filter((entry) => {
+      const id = safeNumber(entry.team?.id);
+      if (seenTeams.has(id)) return false;
+      seenTeams.add(id);
+      return true;
+    })
     .slice(0, 4)
     .map(({ team, stat }) => ({
       teamId: safeNumber(team?.id),

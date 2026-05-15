@@ -1,0 +1,5 @@
+💡 **What:** Replaced the nested `findIndex` inside `filter` deduplication logic with an O(n) `Set`-based approach for `trajectories` in `src/ui/utils/weeklyLeagueRecap.js`. Also added unit test coverage to ensure duplicates and missing/null IDs are handled exactly the same.
+
+🎯 **Why:** The previous logic had an O(n^2) time complexity because `findIndex` loops through the entire array for every single element processed by `filter`. While the array is currently tiny (4 items max), the new Set-based dedupe provides clearer, scaleable code that avoids potential future bottlenecks and enhances readability.
+
+📊 **Measured Improvement:** No specialized benchmark was created because the targeted array currently has a maximum of 4 elements. The algorithmic complexity improves from O(n^2) to O(n), but the real-world micro-performance impact right now is negligible. Correctness, simplicity, and preserving edge-case behavior (e.g. keeping the first occurrence and handling nulls) were prioritized over an artificial benchmark.
