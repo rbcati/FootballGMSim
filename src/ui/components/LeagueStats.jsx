@@ -77,7 +77,7 @@ export default function LeagueStats({ league, onPlayerSelect, onTeamSelect }) {
         </div>
       </div>
       <div style={{ overflowX:'auto' }}><table aria-label="Player stat table" style={{ minWidth: 980, width:'100%' }}><thead><tr>{columns[tab].map(([label,key])=><th key={key}><button aria-label={`Sort by ${label}`} onClick={()=>clickSort(key)}>{label}{sort.key===key?(sort.dir==='asc'?' ↑':' ↓'):''}</button></th>)}</tr></thead><tbody>
-          {rows.length ? rows.map((r)=><tr key={`${r.playerId}-${tab}`}><td><button onClick={()=>onPlayerSelect?.(r.playerId)}>{r.name}</button></td>{columns[tab].slice(1).map(([,k])=><td key={k} data-label={columns[tab].find(([, key]) => key === k)?.[0]}>{fmt(k, r[k])}</td>)}</tr>) : <tr><td colSpan={columns[tab].length}>{hasActiveFilters ? 'No player stats match those filters.' : tab==='passing'?'No passing stats recorded yet.':tab==='rushing'?'No rushing stats recorded yet.':'No data for this category yet.'}</td></tr>}
+          {rows.length ? rows.map((r)=><tr key={`${r.playerId}-${tab}`}><td><button onClick={()=>onPlayerSelect?.(r.playerId)}>{r.name}</button></td>{columns[tab].slice(1).map(([label, k])=><td key={k} data-label={label}>{fmt(k, r[k])}</td>)}</tr>) : <tr><td colSpan={columns[tab].length}>{hasActiveFilters ? 'No player stats match those filters.' : tab==='passing'?'No passing stats recorded yet.':tab==='rushing'?'No rushing stats recorded yet.':'No data for this category yet.'}</td></tr>}
       </tbody></table></div>
     </div>
     <div className="card" style={{ padding: 10 }}>
