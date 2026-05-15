@@ -60,6 +60,7 @@ import {
   queueDirtySnapshot,
 } from './dirtyFlushAccumulator.js';
 import { cache }          from '../db/cache.js';
+import { generateLeaguePulseItems, mergeLeaguePulseItems } from '../core/leaguePulse.js';
 import {
   Meta, Teams, Players, Rosters, Games,
   Seasons, PlayerStats, Transactions, DraftPicks,
@@ -177,7 +178,7 @@ import { deriveGamePlanMultipliers } from '../core/sim/gamePlanMultipliers.ts';
 import { buildGamePlanNarrative } from '../core/narrative.js';
 import { buildRosterBuildingAnalysis } from '../core/rosterBuildingAnalysis.js';
 import { buildAiTeamStrategy, mapPlayerPosToNeedGroup } from '../core/aiTeamStrategy.js';
-import { buildLeaguePulseItems, mergeLeaguePulseItems } from '../core/leaguePulse.js';
+
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -2938,25 +2939,23 @@ async function handleAdvanceWeek(payload, id) {
 
   if (results.length > 0 && ['regular', 'playoffs', 'preseason'].includes(meta.phase)) {
     const pulseMeta = ensureDynastyMeta(cache.getMeta());
-    const pulseItems = buildLeaguePulseItems({
-      league: {
-        ...pulseMeta,
-        seasonId: pulseMeta?.currentSeasonId ?? seasonId,
-        week,
-        teams: cache.getAllTeams(),
-        schedule: pulseMeta?.schedule,
-        userTeamId: pulseMeta?.userTeamId,
-        phase: meta.phase,
-      },
-      results,
-      developmentEvents: evolutionOutcome.developmentEvents,
-      players: cache.getAllPlayers(),
+    const metaForPulse = {
+      season: pulseMeta.year || 1,
       week,
       phase: meta.phase,
-    });
+      userTeamId: pulseMeta.userTeamId
+    };
+    const dataForPulse = {
+      games: results,
+      standings: pulseMeta.standings || [],
+      transactions: pulseMeta.recentTransactions || [],
+      players: cache.getAllPlayers(),
+      teamCapData: pulseMeta.teamCapData || {}
+    };
+    const pulseItems = generateLeaguePulseItems(metaForPulse, dataForPulse);
     if (pulseItems.length > 0) {
       cache.setMeta({
-        newsItems: mergeLeaguePulseItems(pulseMeta.newsItems, pulseItems, { currentWeek: week }),
+        leaguePulse: mergeLeaguePulseItems(pulseMeta.leaguePulse || [], pulseItems, { maxTimelineLength: 200 }),
       });
     }
   }

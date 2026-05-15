@@ -45,6 +45,7 @@ import GamePlanScreen from "./GamePlanScreen.jsx";
 import WeeklyPrepScreen from "./WeeklyPrepScreen.jsx";
 import WeeklyResultsCenter from "./WeeklyResultsCenter.jsx";
 import NewsFeed from "./NewsFeed.jsx";
+import { LeaguePulseTimeline } from "./LeaguePulseTimeline.jsx";
 import RecordBook from "./RecordBook.jsx";
 import StatLeadersWidget from "./StatLeadersWidget.jsx";
 import FinancialsView from "./FinancialsView.jsx";
@@ -220,7 +221,7 @@ const NAV_GROUPS = [
   { id: SHELL_SECTIONS.hq, title: "HQ", tabs: ["HQ"] },
   { id: SHELL_SECTIONS.team, title: "Team Management", tabs: ["Team", "Roster Hub", "Roster", "Depth Chart", "Weekly Prep", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center", "💰 Cap"] },
   { id: SHELL_SECTIONS.league, title: "League Office", tabs: ["League", "Weekly Results", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "Free Agency", "Draft", "History Hub", "Draft History", "History", "Awards & Records", "Season Recap"] },
-  { id: SHELL_SECTIONS.news, title: "News", tabs: ["News", "Story"] },
+  { id: SHELL_SECTIONS.news, title: "News", tabs: ["News", "Story", "League Pulse"] },
 ];
 
 const NAV_TEST_IDS = {
@@ -964,6 +965,13 @@ export default function LeagueDashboard({
               )}
             />
           </TabErrorBoundary>
+        )}
+                {activeTab === "League Pulse" && (
+          <LeaguePulseTimeline
+            league={league}
+            currentTeamId={league?.userTeamId}
+            onNavigate={handleNavigate}
+          />
         )}
         {activeTab === "News" && (
           <TabErrorBoundary label="News" onNavigate={setActiveTab}>

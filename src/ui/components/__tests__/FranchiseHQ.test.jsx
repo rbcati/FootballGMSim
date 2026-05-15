@@ -43,7 +43,10 @@ const baseLeague = {
     'g-9': { id: 'g-9', home: 11, away: 10, homeId: 11, awayId: 10, week: 9, played: true, homeScore: 20, awayScore: 23 },
   },
   incomingTradeOffers: [],
-  newsItems: [{ id: 'n1', teamId: 10, headline: 'Starter upgraded to probable status.' }],
+  leaguePulse: [
+            { id: 'pulse-1', source: 'league_pulse_v1', type: 'pulse', headline: 'Rookie hype is building', body: 'A young runner just forced more weekly attention.', priority: 'medium', importance: 75, week: 9, relatedTeamId: 10, teamId: 10 }
+          ],
+          newsItems: [{ id: 'n1', teamId: 10, headline: 'Starter upgraded to probable status.' }],
 };
 
 describe('FranchiseHQ', () => {
@@ -121,7 +124,7 @@ describe('FranchiseHQ', () => {
     expect(pulseSection).toBeTruthy();
     expect(within(pulseSection).getByText(/rookie hype is building/i)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /open full pulse/i }));
-    expect(onNavigate).toHaveBeenCalledWith('News');
+    expect(onNavigate).toHaveBeenCalledWith('League Pulse');
   });
 
   it('renders Review Game Book as the postgame next action and emits a Game Book route', () => {
