@@ -1,0 +1,15 @@
+diff --git a/src/worker/worker.js b/src/worker/worker.js
+index c8b231c..dc414bb 100644
+--- a/src/worker/worker.js
++++ b/src/worker/worker.js
+@@ -3457,8 +3457,8 @@ function applyGameResultToCache(result, week, seasonId) {
+   // ── 3. Aggregate per-player game stats into seasonal totals ───────────────
+   // result.boxScore shape: { home: {[pid]: {name, pos, stats:{...}}}, away: {...} }
+   //
+-  // AWARD RACES FIX: Always inject `gamesPlayed: 1` for every player who
+-  // appears in a box score.  calculateAwardRaces() filters on
++  // Count a game played for each player represented in the box score
++  // so award eligibility can use season totals. calculateAwardRaces() filters on
+   // `totals.gamesPlayed >= MIN_GAMES_AWARD` — if the simulator never emits
+   // this field the accumulator stays 0 and ALL players are excluded.
+   const aggregateSide = (teamId, boxSide) => {
