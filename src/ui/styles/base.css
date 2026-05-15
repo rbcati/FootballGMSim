@@ -69,6 +69,10 @@
 
   /* Typography Scale */
   --text-xs: 0.75rem; --text-sm: 0.875rem; --text-base: 0.9375rem;
+
+  /* Font Families */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --text-lg: 1.0625rem; --text-xl: 1.375rem; --text-2xl: 1.625rem;
   --text-3xl: 2rem; --text-4xl: 2.25rem;
 
@@ -229,7 +233,7 @@ html, body {
     radial-gradient(800px 800px at 50% 100%, rgba(255, 255, 255, 0.02), transparent 50%),
     var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  font-family: var(--font-sans);
   line-height: 1.5;
   font-size: var(--text-md);
   min-height: 100vh;
