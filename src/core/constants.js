@@ -461,7 +461,7 @@
     LEAGUE_GEN_CONFIG,
     ROSTER_LIMITS,
 
-    // Names/Generation - Replaced hard-coded names with getters to prevent "Race Condition" bugs
+    // Names/Generation - Preserve generation order so names are available before dependent league data is finalized
     // Using dynamic getters ensures that even if window.EXPANDED_*_NAMES are loaded
     // after this module initializes, we still return the correct full lists.
     get FIRST_NAMES() { return getFirstNames(); },
