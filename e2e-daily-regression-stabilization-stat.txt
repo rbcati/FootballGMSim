@@ -1,0 +1,3 @@
+ tests/{ => e2e}/daily_regression.spec.js | 117 ++++---------------------------
+ tests/e2e/helpers/franchise.js           |  62 +++++++++++++++-
+ 2 files changed, 74 insertions(+), 105 deletions(-)

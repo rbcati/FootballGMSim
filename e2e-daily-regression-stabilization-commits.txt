@@ -1,0 +1,1 @@
+4b897ef test(e2e): Stabilize daily regression franchise boot flow
