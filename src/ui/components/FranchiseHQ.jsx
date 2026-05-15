@@ -4,6 +4,7 @@ import { autoBuildDepthChart, depthWarnings } from '../../core/depthChart.js';
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
 import { selectFranchiseHQViewModel } from '../utils/franchiseCommandCenter.js';
 import { buildWeeklyCommandHub } from '../utils/weeklyCommandHub.js';
+import { rankLeaguePulseItems } from '../../core/leaguePulse.js';
 import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda, CompactNewsCard } from './ScreenSystem.jsx';
 import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
@@ -110,7 +111,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
 
   const decisionReview = useMemo(() => command.weeklyDecisionImpact ?? null, [command.weeklyDecisionImpact]);
   const leaguePulseItems = useMemo(
-    () => ((command.leaguePulse?.length ? command.leaguePulse : command.leagueNews) ?? []).slice(0, 5),
+    () => rankLeaguePulseItems(league?.leaguePulse || command.leaguePulse || [], league?.userTeamId).slice(0, 5),
     [command.leagueNews, command.leaguePulse],
   );
 
@@ -482,7 +483,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         title="League Pulse"
         subtitle="Around the league this week."
         variant="compact"
-        actions={<button type="button" className="btn btn-sm" onClick={() => onNavigate?.('News')}>Open full pulse</button>}
+        actions={<button type="button" className="btn btn-sm" onClick={() => onNavigate?.('League Pulse')}>Open full pulse</button>}
       >
         <div className="app-news-compact-list">
           {leaguePulseItems.map((item) => (

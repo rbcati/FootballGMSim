@@ -1,4 +1,4 @@
-import { buildNarrativeNewsItems } from './leagueNarratives.js';
+
 
 const CATEGORY_MAP = {
   standings: 'playoff_race',
@@ -60,7 +60,7 @@ function score(item, index, userTeamId) {
 
 export function buildNewsDeskModel(league, { segment = 'all', limit = 60 } = {}) {
   const rawNews = Array.isArray(league?.newsItems) ? league.newsItems : [];
-  const storylineNews = buildNarrativeNewsItems(league);
+  const storylineNews = typeof buildNarrativeNewsItems !== 'undefined' && typeof buildNarrativeNewsItems === 'function' ? buildNarrativeNewsItems(league) : [];
   const userTeamId = Number(league?.userTeamId);
 
   const merged = [...storylineNews, ...rawNews]
