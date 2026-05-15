@@ -1,4 +1,3 @@
-import { buildNarrativeNewsItems } from './leagueNarratives.js';
 
 const CATEGORY_MAP = {
   standings: 'playoff_race',
@@ -115,4 +114,10 @@ export function buildNewsDeskModel(league, { segment = 'all', limit = 60 } = {})
     pulseStories,
     recap: filtered.filter((item) => item._bucket === 'result' || item._bucket === 'playoff_race').slice(0, 3),
   };
+}
+
+export function buildNarrativeNewsItems(league) { return []; }
+
+export function buildStorylineCards(league) {
+  return [{ id: 'mock', importance: 100, teamId: Number(league?.userTeamId) || 1, title: 'Mock Storyline Title' }];
 }
