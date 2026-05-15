@@ -6,7 +6,7 @@ import {
   normalizeArchivedGamePayload,
   recoverArchivedGameFromSchedule,
   summarizeArchiveDefects,
-} from '../gameArchive.js';
+} from '../../gameArchive.js';
 
 describe('gameArchive helpers', () => {
   it('reconciles stale archive scores with the completed schedule source of truth', () => {
