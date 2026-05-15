@@ -1,0 +1,12 @@
+diff --git a/legacy/main.js b/legacy/main.js
+index 0b18f91..67b4527 100644
+--- a/legacy/main.js
++++ b/legacy/main.js
+@@ -2417,6 +2417,7 @@ class GameController {
+         }
+
+         // FIX: Dashboard Button
++        // HISTORICAL: Dashboard routing is now handled by the React app shell (`src/ui/App.jsx`). No runtime changes needed.
+         const btnDashboard = document.getElementById('btnDashboard');
+         if (btnDashboard) {
+             this.addEventListener(btnDashboard, 'click', () => {

@@ -2417,6 +2417,7 @@ class GameController {
         }
 
         // FIX: Dashboard Button
+        // HISTORICAL: Dashboard routing is now handled by the React app shell (`src/ui/App.jsx`). No runtime changes needed.
         const btnDashboard = document.getElementById('btnDashboard');
         if (btnDashboard) {
             this.addEventListener(btnDashboard, 'click', () => {
