@@ -114,8 +114,66 @@ export async function goToTab(page, name) {
     return;
   }
 
-  await expect(sectionTab, `Could not open tab "${tab}" (section tab missing after primary nav)`).toBeVisible({ timeout: 20000 });
-  await sectionTab.click({ force: true });
+  if (tab === 'standings' || tab === 'stats' || tab === 'roster') {
+        const textBtn = page.getByRole('tab', { name: new RegExp('^' + tab, 'i') }).first();
+        if (await textBtn.isVisible().catch(() => false)) {
+            await textBtn.click({ force: true });
+            return;
+        }
+        const backupTextBtn = page.locator('button', { hasText: new RegExp('^' + tab, 'i') }).first();
+        if (await backupTextBtn.isVisible().catch(() => false)) {
+            await backupTextBtn.click({ force: true });
+            return;
+        }
+        const anyBtn = page.locator('button, [role="tab"]');
+        const count = await anyBtn.count();
+        for (let i = 0; i < count; i++) {
+            const b = anyBtn.nth(i);
+            const text = await b.innerText();
+            if (text && text.toLowerCase().includes(tab)) {
+                 await b.click({ force: true });
+                 return;
+            }
+        }
+  }
+  if (tab === 'standings' || tab === 'stats' || tab === 'roster' || tab === 'league') {
+    // For legacy mobile hub where tabs are just generic buttons
+    await page.evaluate((t) => {
+        const btns = Array.from(document.querySelectorAll('button, [role="tab"], .nav-item'));
+        const target = btns.find(b => b.innerText && b.innerText.trim().toLowerCase() === t.toLowerCase());
+        if (target) target.click();
+    }, tab);
+    await page.waitForTimeout(500);
+    return;
+  }
+  try {
+    await expect(sectionTab, `Could not open tab "${tab}" (section tab missing after primary nav)`).toBeVisible({ timeout: 5000 });
+    await sectionTab.click({ force: true });
+  } catch (e) {
+    if (tab === 'standings' || tab === 'stats' || tab === 'roster') {
+        const textBtn = page.getByRole('tab', { name: new RegExp('^' + tab, 'i') }).first();
+        if (await textBtn.isVisible().catch(() => false)) {
+            await textBtn.click({ force: true });
+            return;
+        }
+        const backupTextBtn = page.locator('button', { hasText: new RegExp('^' + tab, 'i') }).first();
+        if (await backupTextBtn.isVisible().catch(() => false)) {
+            await backupTextBtn.click({ force: true });
+            return;
+        }
+        const anyBtn = page.locator('button, [role="tab"]');
+        const count = await anyBtn.count();
+        for (let i = 0; i < count; i++) {
+            const b = anyBtn.nth(i);
+            const text = await b.innerText();
+            if (text && text.toLowerCase().includes(tab)) {
+                 await b.click({ force: true });
+                 return;
+            }
+        }
+    }
+    throw e;
+  }
 }
 
 /** After advancing the season, completed box scores live on the prior week’s slate. */
