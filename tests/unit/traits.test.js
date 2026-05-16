@@ -24,7 +24,7 @@ describe('traits unit coverage', () => {
 
     let normalInjuries = 0;
     let ironInjuries = 0;
-    const samples = 5000;
+    const samples = 50000;
 
     for (let i = 0; i < samples; i += 1) {
       if (generateInjury(pNormal)) normalInjuries += 1;
