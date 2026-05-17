@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildTradeFinderAnalysis } from '../tradeFinderAnalysis.js';
+import { buildTradeFinderAnalysis, __internal } from '../tradeFinderAnalysis.js';
 
 const makePlayer = (id:number, teamId:number, pos:string, ovr:number, extras:any={}) => ({ id, teamId, pos, ovr, potential: ovr+2, age: 26, name:`P${id}`, contract:{ baseAnnual:6, yearsRemaining:2 }, ...extras });
 const makeBase = () => {
@@ -20,6 +20,18 @@ describe('tradeFinderAnalysis v2 hardening', () => {
     expect(out).toHaveProperty('tradeIdeas');
     expect(out).toHaveProperty('filters');
     expect(Array.isArray(out.summary ? [out.summary] : [])).toBe(true);
+  });
+  it('exported shape remains stable with empty or missing arrays', () => {
+    expect(() => buildTradeFinderAnalysis({ userTeam: { id: 1 } })).not.toThrow();
+    const out = buildTradeFinderAnalysis({ userTeam: { id: 1 } });
+    expect(Object.keys(out).sort()).toEqual(['filters', 'summary', 'targetNeeds', 'tradeIdeas', 'userAssets', 'userPickChips', 'userSurplus', 'userTradeChips'].sort());
+    expect(out.targetNeeds).toHaveLength(6);
+    expect(out.tradeIdeas).toEqual([]);
+    expect(out.userSurplus).toEqual([]);
+    expect(out.userTradeChips).toEqual([]);
+    expect(out.userPickChips).toEqual([]);
+    expect(out.userAssets).toEqual([]);
+    expect(out.summary).toEqual(expect.objectContaining({ biggestNeed: expect.any(Object), strongestSurplus: null, bestTradeChip: null, topTarget: null }));
   });
   it('missing draft pick data keeps player-only ideas', () => {
     const out = buildTradeFinderAnalysis({ ...makeBase(), league: {} });
@@ -81,5 +93,59 @@ describe('tradeFinderAnalysis v2 hardening', () => {
     expect(out.tradeIdeas.every((i:any)=>i.targetTeamId !== 1 && i.targetTeamId >= 0)).toBe(true);
     expect(out.tradeIdeas.length).toBeLessThanOrEqual(15);
     expect(out.tradeIdeas.every((v:any,idx:number,arr:any[])=> idx===0 || arr[idx-1].fitScore>=v.fitScore)).toBe(true);
+  });
+});
+
+describe('tradeFinderAnalysis target indexing', () => {
+  it('excludes user-team and invalid-team targets before indexing', () => {
+    const players = [
+      makePlayer(1, 1, 'WR', 99),
+      makePlayer(2, -1, 'WR', 98),
+      makePlayer(3, null as any, 'WR', 97),
+      makePlayer(4, 2, 'WR', 88),
+      makePlayer(5, 3, 'QB', 90),
+    ];
+    const index = __internal.buildExternalTargetIndex({ leaguePlayers: players, userTeamId: 1, getValue: (p:any) => p.ovr });
+
+    expect(__internal.getTargetsFromIndex({ need: { pos: 'WR' }, targetIndex: index }).map((p:any) => p.id)).toEqual([4]);
+    expect(__internal.getTargetsFromIndex({ need: { pos: 'QB' }, targetIndex: index }).map((p:any) => p.id)).toEqual([5]);
+  });
+
+  it('sorts top position candidates by value, uses deterministic ties, and caps results', () => {
+    const players = [
+      makePlayer(11, 2, 'WR', 70, { tradeValue: 80, name: 'Tie B' }),
+      makePlayer(10, 2, 'WR', 70, { tradeValue: 80, name: 'Tie A' }),
+      makePlayer(12, 2, 'WR', 70, { tradeValue: 110 }),
+      makePlayer(13, 2, 'WR', 70, { tradeValue: 50 }),
+      makePlayer(14, 2, 'WR', 70, { tradeValue: 90 }),
+      makePlayer(15, 2, 'WR', 70, { tradeValue: 70 }),
+      makePlayer(16, 2, 'WR', 70, { tradeValue: 60 }),
+    ];
+    const index = __internal.buildExternalTargetIndex({ leaguePlayers: players, userTeamId: 1, getValue: (p:any) => p.tradeValue });
+
+    expect(__internal.getTargetsFromIndex({ need: { pos: 'WR' }, targetIndex: index }).map((p:any) => p.id)).toEqual([12, 14, 10, 11, 15]);
+  });
+
+  it('values each eligible target once while building a larger position index', () => {
+    const players = Array.from({ length: 180 }, (_, idx) => {
+      const pos = idx % 3 === 0 ? 'WR' : idx % 3 === 1 ? 'CB' : 'OL';
+      const teamId = idx % 20 === 0 ? 1 : idx % 17 === 0 ? -1 : 2 + (idx % 30);
+      return makePlayer(1000 + idx, teamId, pos, 60 + (idx % 35), { tradeValue: 1000 - idx });
+    });
+    let valueCalls = 0;
+    const index = __internal.buildExternalTargetIndex({
+      leaguePlayers: players,
+      userTeamId: 1,
+      getValue: (p:any) => {
+        valueCalls += 1;
+        return p.tradeValue;
+      },
+    });
+    const eligibleCount = players.filter((p:any) => Number(p.teamId) !== 1 && Number(p.teamId) >= 0).length;
+
+    expect(valueCalls).toBe(eligibleCount);
+    expect(__internal.getTargetsFromIndex({ need: { pos: 'WR' }, targetIndex: index })).toHaveLength(5);
+    expect(__internal.getTargetsFromIndex({ need: { pos: 'CB' }, targetIndex: index })).toHaveLength(5);
+    expect(__internal.getTargetsFromIndex({ need: { pos: 'OL' }, targetIndex: index })).toHaveLength(5);
   });
 });

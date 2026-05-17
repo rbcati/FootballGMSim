@@ -1,6 +1,6 @@
-#!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const allowedRedirectStatus = new Set([200, 301, 302, 303, 307, 308, 404, 410, 451]);
 
@@ -275,6 +275,6 @@ function runCli() {
   console.log('[netlify-rules] OK: Netlify publish artifacts passed validation.');
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   runCli();
 }
