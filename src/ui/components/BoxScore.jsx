@@ -60,6 +60,7 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
   const game = unwrapBoxScoreResponse(archiveGame) ?? fallbackGame;
   const vm = useMemo(() => buildBoxScoreViewModel({ league, game, gameId, scheduleGame: fallbackGame, context: { season: league?.seasonId, week: league?.week } }), [league, game, gameId, fallbackGame]);
   const [sortState, setSortState] = useState({});
+  const [showAllPlays, setShowAllPlays] = useState(false);
 
   if (!vm || vm.status === "unavailable") {
     return <EmptyState title="Game Book unavailable" body="Game data missing." />;
@@ -101,9 +102,31 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
     ["Team stats", vm.availableData?.teamStats],
     ["Player stats", vm.availableData?.playerStats],
     ["Scoring", vm.availableData?.scoringSummary],
+    ["Drives", vm.availableData?.drives],
+    ["Plays", vm.availableData?.playByPlay],
   ];
 
   const tableSections = buildPlayerStatSections(vm.playerTables, sortState);
+  const driveRows = vm.driveSummaryRows ?? [];
+  const turningPointRows = vm.turningPointRows ?? [];
+  const notablePerformanceRows = vm.notablePerformanceRows ?? [];
+  const injuryRows = vm.injuryRows ?? [];
+  const playRows = vm.playByPlayRows ?? [];
+  const keyPlayRows = playRows.filter((row) => row.isKey);
+  const defaultPlayRows = keyPlayRows.slice(0, 12);
+  const visiblePlayRows = showAllPlays ? playRows : defaultPlayRows;
+  const canTogglePlays = playRows.length > 0 && (showAllPlays || visiblePlayRows.length < playRows.length || keyPlayRows.length === 0);
+  const playCountLabel = showAllPlays
+    ? `Showing all ${playRows.length} recorded plays`
+    : keyPlayRows.length
+      ? `Showing ${visiblePlayRows.length} key plays`
+      : "No key plays detected";
+
+  const renderPlayTags = (tags = []) => tags.length ? (
+    <span className="bs-data-chip-row">
+      {tags.map((tag) => <span key={tag} className="bs-data-chip is-available">{tag}</span>)}
+    </span>
+  ) : null;
 
   const renderTable = (spec) => {
     const sort = spec.sort ?? { key: spec.defaultSort, dir: desc };
@@ -189,6 +212,23 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
         <h4>Why this game was decided</h4>
         {storyBullets.length ? <ul>{storyBullets.map((b) => <li key={b}>{b}</li>)}</ul> : <p>No detailed team/player stats were recorded for this game.</p>}
       </section>
+      <section className="bs-section" data-testid="game-book-turning-points">
+        <div className="bs-section-header">
+          <h4>Turning points</h4>
+          <span className="bs-section-count">{turningPointRows.length ? `${turningPointRows.length} moments` : "Not recorded"}</span>
+        </div>
+        {turningPointRows.length ? (
+          <ul className="bs-list">
+            {turningPointRows.map((row) => (
+              <li key={row.id} className="bs-list-item" data-testid="game-book-turning-point-row">
+                <strong>{row.teamAbbr ?? "Game"} {row.inferred ? "(inferred)" : ""}</strong>
+                <span>{row.quarter != null ? `Q${row.quarter}` : mdash} {row.clock ?? mdash}</span>
+                <span>{row.text}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p>Turning points were not recorded or safely inferable for this game.</p>}
+      </section>
       <section className="bs-section" data-testid="game-book-top-performers">
         <div className="bs-section-header">
           <h4>Top performers</h4>
@@ -205,6 +245,93 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
             </article>
           ))}
         </div>
+      </section>
+      {notablePerformanceRows.length ? (
+        <section className="bs-section" data-testid="game-book-notable-performances">
+          <div className="bs-section-header">
+            <h4>Notable performances</h4>
+            <span className="bs-section-count">{notablePerformanceRows.length} recorded</span>
+          </div>
+          <ul className="bs-list">
+            {notablePerformanceRows.map((row) => (
+              <li key={row.id} className="bs-list-item" data-testid="game-book-notable-performance-row">
+                <strong>{row.name}{row.teamAbbr ? ` · ${row.teamAbbr}` : ""}</strong>
+                <span>{row.label}</span>
+                {row.text ? <span>{row.text}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {injuryRows.length ? (
+        <section className="bs-section" data-testid="game-book-injuries">
+          <div className="bs-section-header">
+            <h4>Injuries</h4>
+            <span className="bs-section-count">{injuryRows.length} recorded</span>
+          </div>
+          <ul className="bs-list">
+            {injuryRows.map((row) => (
+              <li key={row.id} className="bs-list-item" data-testid="game-book-injury-row">
+                <strong>{row.name}{row.teamAbbr ? ` · ${row.teamAbbr}` : ""}</strong>
+                <span>{row.detail}{row.duration != null ? ` · ${row.duration}` : ""}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      <section className="bs-section" data-testid="game-book-drive-summary">
+        <div className="bs-section-header">
+          <h4>Drive Summary</h4>
+          <span className="bs-section-count">{driveRows.length ? `${driveRows.length} drives` : "Not recorded"}</span>
+        </div>
+        {driveRows.length ? (
+          <div className="bs-table-wrap">
+            <table className="box-score-table">
+              <thead><tr><th>Qtr</th><th>Team</th><th>Start</th><th>End</th><th>Result</th><th>Plays</th><th>Yards</th><th>Pts</th></tr></thead>
+              <tbody>
+                {driveRows.map((row) => (
+                  <tr key={row.id} data-testid="game-book-drive-row">
+                    <td>{row.quarter ?? mdash}</td>
+                    <td>{row.teamAbbr ?? mdash}</td>
+                    <td>{row.startClock ?? mdash}</td>
+                    <td>{row.endClock ?? mdash}</td>
+                    <td>{row.result ?? row.summary ?? mdash}</td>
+                    <td>{row.plays ?? mdash}</td>
+                    <td>{row.yards ?? mdash}</td>
+                    <td>{row.points ?? mdash}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p>Drive summary was not recorded for this game.</p>}
+      </section>
+      <section className="bs-section" data-testid="game-book-play-by-play">
+        <div className="bs-section-header">
+          <div>
+            <h4>Key Plays / Play-by-Play</h4>
+            <span className="bs-section-count">{playCountLabel}</span>
+          </div>
+          {canTogglePlays ? (
+            <button type="button" className="btn btn-sm btn-secondary" data-testid="game-book-play-toggle" onClick={() => setShowAllPlays((prev) => !prev)}>
+              {showAllPlays ? "Show key plays" : "Show all plays"}
+            </button>
+          ) : null}
+        </div>
+        {!playRows.length ? <p>Play-by-play was not recorded for this game.</p> : null}
+        {playRows.length && !visiblePlayRows.length ? <p>No key plays were detected in the recorded play log.</p> : null}
+        {visiblePlayRows.length ? (
+          <ul className="bs-list">
+            {visiblePlayRows.map((row) => (
+              <li key={row.id} className="bs-list-item" data-testid="game-book-play-row">
+                <strong>{row.teamAbbr ?? "Game"} {row.playType ?? "play"}</strong>
+                <span>{row.quarter != null ? `Q${row.quarter}` : mdash} {row.clock ?? mdash}{row.scoreAfter ? ` · ${formatScoreAfter(row.scoreAfter)}` : ""}</span>
+                <span>{row.text}</span>
+                {renderPlayTags(row.tags)}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
       <section className="bs-section" data-testid="game-book-quarter-scores">
         <h4>Score by quarter</h4>

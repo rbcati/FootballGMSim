@@ -142,4 +142,103 @@ describe('buildBoxScoreViewModel', () => {
     expect(vm.availableData.scoringSummary).toBe(false);
     expect(vm.playerStatSections).toEqual([]);
   });
+
+  it('normalizes drive, play, turning point, notable performance, and injury rows from rich archives', () => {
+    const vm = buildBoxScoreViewModel({
+      league: { teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] },
+      game: {
+        gameId: 'rich-game',
+        homeId: 1,
+        awayId: 2,
+        homeScore: 27,
+        awayScore: 24,
+        driveSummary: [
+          { driveId: 'd1', teamId: 1, quarter: 4, startClock: '5:12', endClock: '1:02', result: 'TD', plays: 8, yards: 75, points: 7 },
+        ],
+        playLog: [
+          { id: 'p1', quarter: 4, clock: '5:12', teamId: 1, text: 'Pass complete for 22 yards', yards: 22, scoreHomeAfter: 20, scoreAwayAfter: 24 },
+          { id: 'p2', quarter: 4, clock: '1:02', teamId: 1, text: 'Touchdown pass gives KC the lead', isTouchdown: true, scoreHomeAfter: 27, scoreAwayAfter: 24 },
+        ],
+        turningPoints: [
+          { id: 't1', quarter: 4, clock: '1:02', teamId: 1, text: 'Go-ahead touchdown capped the final scoring drive.' },
+        ],
+        notablePerformances: [
+          { playerId: 11, name: 'Home QB', teamId: 1, label: 'QB', text: 'Three touchdown passes' },
+        ],
+        injuries: [
+          { playerId: 22, name: 'Away RB', teamId: 2, injury: 'Ankle', duration: '2 weeks' },
+        ],
+      },
+    });
+    expect(vm.driveSummaryRows[0]).toMatchObject({ teamAbbr: 'KC', result: 'TD', plays: 8, yards: 75, points: 7 });
+    expect(vm.playByPlayRows.map((row) => row.teamAbbr)).toEqual(['KC', 'KC']);
+    expect(vm.playByPlayRows[0].tags).toContain('explosive');
+    expect(vm.playByPlayRows[1].tags).toContain('scoring');
+    expect(vm.turningPointRows[0]).toMatchObject({ source: 'recorded', inferred: false, teamAbbr: 'KC' });
+    expect(vm.notablePerformanceRows[0]).toMatchObject({ name: 'Home QB', teamAbbr: 'KC' });
+    expect(vm.injuryRows[0]).toMatchObject({ name: 'Away RB', teamAbbr: 'BUF', detail: 'Ankle' });
+    expect(vm.availableData).toMatchObject({ drives: true, playByPlay: true, turningPoints: true, notablePerformances: true, injuries: true });
+  });
+
+  it('does not throw on malformed story-layer arrays and keeps score-only fallback arrays empty', () => {
+    expect(() => buildBoxScoreViewModel({
+      game: {
+        homeId: 1,
+        awayId: 2,
+        homeScore: 3,
+        awayScore: 0,
+        driveSummary: 'bad',
+        playLog: { bad: true },
+        turningPoints: null,
+        notablePerformances: 'bad',
+        injuries: 42,
+      },
+    })).not.toThrow();
+    const vm = buildBoxScoreViewModel({
+      game: { homeId: 1, awayId: 2, homeScore: 3, awayScore: 0, driveSummary: 'bad', playLog: { bad: true } },
+    });
+    expect(vm.archiveQuality).toBe('Score only');
+    expect(vm.driveSummaryRows).toEqual([]);
+    expect(vm.playByPlayRows).toEqual([]);
+    expect(vm.turningPointRows).toEqual([]);
+    expect(vm.notablePerformanceRows).toEqual([]);
+    expect(vm.injuryRows).toEqual([]);
+  });
+
+  it('conservatively infers turning points from recorded scoring and key play rows', () => {
+    const vm = buildBoxScoreViewModel({
+      league: { teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] },
+      game: {
+        homeId: 1,
+        awayId: 2,
+        homeScore: 20,
+        awayScore: 17,
+        scoringSummary: [
+          { quarter: 4, time: '0:44', teamAbbr: 'KC', type: 'FG', scoreAfter: { home: 20, away: 17 } },
+        ],
+        playLog: [
+          { id: 'late-sack', quarter: 4, clock: '1:10', teamId: 1, text: 'Sack forces third and long', yards: -8 },
+        ],
+      },
+    });
+    expect(vm.turningPointRows.length).toBeGreaterThan(0);
+    expect(vm.turningPointRows[0].source).toBe('inferred');
+  });
+
+  it('uses eventDigest as a play-by-play fallback with side and clock normalization', () => {
+    const vm = buildBoxScoreViewModel({
+      league: { teams: [{ id: 1, abbr: 'HME' }, { id: 2, abbr: 'AWY' }] },
+      game: {
+        homeId: 1,
+        awayId: 2,
+        homeScore: 20,
+        awayScore: 24,
+        eventDigest: [
+          { quarter: 4, clockSec: 89, team: 'away', type: 'turnover', text: 'Late interception seals it', awayScore: 24, homeScore: 20, turnover: true },
+        ],
+      },
+    });
+    expect(vm.playByPlayRows[0]).toMatchObject({ teamAbbr: 'AWY', clock: '1:29', text: 'Late interception seals it' });
+    expect(vm.playByPlayRows[0].tags).toContain('turnover');
+  });
 });

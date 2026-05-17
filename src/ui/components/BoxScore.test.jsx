@@ -2,7 +2,7 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
-import { fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import BoxScore, { PlayerButton } from './BoxScore.jsx';
 
 vi.mock('../hooks/useStableRouteRequest.js', () => ({ default: vi.fn(() => ({ data: null })) }));
@@ -10,7 +10,10 @@ import useStableRouteRequest from '../hooks/useStableRouteRequest.js';
 
 describe('BoxScore game book rendering', () => {
   const baseLeague = { seasonId: 2031, week: 2, teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] };
-  beforeEach(() => vi.mocked(useStableRouteRequest).mockReturnValue({ data: null }));
+  beforeEach(() => {
+    cleanup();
+    vi.mocked(useStableRouteRequest).mockReturnValue({ data: null });
+  });
 
   it('renders from actions.getBoxScore archive payload', () => {
     vi.mocked(useStableRouteRequest).mockReturnValue({ data: { homeId: 1, awayId: 2, homeScore: 14, awayScore: 10, teamStats: { home: { passYards: 100 }, away: { passYards: 80 } } } });
@@ -45,6 +48,8 @@ describe('BoxScore game book rendering', () => {
   it('uses placeholders for score-only games and omits stat tables', () => {
     const html = renderToString(<BoxScore gameId="g4" league={{ ...baseLeague, gameById: { g4: { homeId: 1, awayId: 2, homeScore: 6, awayScore: 3 } } }} embedded />);
     expect(html).toContain('Detailed box score data was not recorded for this game.');
+    expect(html).toContain('Drive summary was not recorded for this game.');
+    expect(html).toContain('Play-by-play was not recorded for this game.');
     expect(html).toContain('Scoring summary was not recorded for this game.');
     expect(html).not.toContain('Special Teams');
   });
@@ -101,6 +106,70 @@ describe('BoxScore game book rendering', () => {
     const scoringBlock = container.querySelector('[data-testid="game-book-scoring-summary"]');
     expect(scoringBlock?.textContent).toContain('8:12');
     expect(scoringBlock?.textContent).toContain('7-0');
+  });
+
+  it('renders Drive Summary rows when archived drives exist', () => {
+    const game = {
+      homeId: 1,
+      awayId: 2,
+      homeScore: 28,
+      awayScore: 17,
+      driveSummary: [
+        { id: 'd1', teamId: 1, quarter: 2, startClock: '12:00', endClock: '7:42', result: 'TD', plays: 9, yards: 80, points: 7 },
+      ],
+    };
+    const { getByTestId, getAllByTestId } = render(<BoxScore gameId="g-drive" league={{ ...baseLeague, gameById: { 'g-drive': game } }} embedded />);
+    expect(getByTestId('game-book-drive-summary').textContent).toContain('Drive Summary');
+    expect(getAllByTestId('game-book-drive-row')).toHaveLength(1);
+    expect(getByTestId('game-book-drive-summary').textContent).toContain('TD');
+    expect(getByTestId('game-book-drive-summary').textContent).toContain('80');
+  });
+
+  it('renders Key Plays from playLog and defaults to a curated list', () => {
+    const game = {
+      homeId: 1,
+      awayId: 2,
+      homeScore: 35,
+      awayScore: 14,
+      playLog: [
+        { id: 'p1', quarter: 1, clock: '14:30', teamId: 1, text: 'Ordinary run for 3 yards', yards: 3 },
+        { id: 'p2', quarter: 1, clock: '12:11', teamId: 1, text: 'Touchdown pass to the corner', isTouchdown: true, yards: 14 },
+        { id: 'p3', quarter: 2, clock: '11:00', teamId: 2, text: 'Ordinary pass for 5 yards', yards: 5 },
+        { id: 'p4', quarter: 2, clock: '8:33', teamId: 1, text: 'Run up the middle for 4 yards', yards: 4 },
+        { id: 'p5', quarter: 3, clock: '13:02', teamId: 2, text: 'Quarterback sack for a loss', yards: -7 },
+        { id: 'p6', quarter: 3, clock: '6:22', teamId: 1, text: 'Screen pass for 6 yards', yards: 6 },
+        { id: 'p7', quarter: 4, clock: '9:41', teamId: 2, text: 'Draw play for 2 yards', yards: 2 },
+        { id: 'p8', quarter: 4, clock: '2:05', teamId: 1, text: 'Kneel down', yards: -1 },
+      ],
+    };
+    const { getAllByTestId, getByTestId, queryByText } = render(<BoxScore gameId="g-plays" league={{ ...baseLeague, gameById: { 'g-plays': game } }} embedded />);
+    expect(getByTestId('game-book-play-by-play').textContent).toContain('Key Plays / Play-by-Play');
+    expect(getAllByTestId('game-book-play-row')).toHaveLength(2);
+    expect(getByTestId('game-book-play-by-play').textContent).toContain('Touchdown pass');
+    expect(getByTestId('game-book-play-by-play').textContent).toContain('Quarterback sack');
+    expect(queryByText('Ordinary run for 3 yards')).toBeNull();
+  });
+
+  it('toggles from key plays to the full play log', () => {
+    const game = {
+      homeId: 1,
+      awayId: 2,
+      homeScore: 35,
+      awayScore: 14,
+      playLog: [
+        { id: 'p1', quarter: 1, clock: '14:30', teamId: 1, text: 'Ordinary run for 3 yards', yards: 3 },
+        { id: 'p2', quarter: 1, clock: '12:11', teamId: 1, text: 'Touchdown pass to the corner', isTouchdown: true, yards: 14 },
+        { id: 'p3', quarter: 2, clock: '11:00', teamId: 2, text: 'Ordinary pass for 5 yards', yards: 5 },
+        { id: 'p4', quarter: 2, clock: '8:33', teamId: 1, text: 'Run up the middle for 4 yards', yards: 4 },
+        { id: 'p5', quarter: 3, clock: '13:02', teamId: 2, text: 'Quarterback sack for a loss', yards: -7 },
+      ],
+    };
+    const { getAllByTestId, getByTestId, getByText } = render(<BoxScore gameId="g-toggle" league={{ ...baseLeague, gameById: { 'g-toggle': game } }} embedded />);
+    expect(getAllByTestId('game-book-play-row')).toHaveLength(2);
+    fireEvent.click(getByTestId('game-book-play-toggle'));
+    expect(getAllByTestId('game-book-play-row')).toHaveLength(5);
+    expect(getByText('Ordinary run for 3 yards')).toBeTruthy();
+    expect(getByTestId('game-book-play-toggle').textContent).toBe('Show key plays');
   });
 
   it('renders final score density, data availability chips, sorted player rows, and embedded back action', () => {

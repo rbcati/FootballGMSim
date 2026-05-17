@@ -1,4 +1,5 @@
 import { mergeArchivedGameWithScheduleResult, normalizeArchivedGamePayload } from '../../core/gameArchive.js';
+import { isScoringLikeLog, normalizePlayLogEntry } from '../../core/gameEvents.js';
 
 const QUALITY = { full: 'Full detail', partial: 'Partial detail', score: 'Score only', missing: 'Missing detail' };
 
@@ -8,6 +9,14 @@ const toNum = (v) => {
 };
 
 const mdash = '—';
+
+function pickFirst(row = {}, keys = []) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value != null && value !== '') return value;
+  }
+  return null;
+}
 
 function teamInfo(league, id, side, game) {
   const team = (league?.teams ?? []).find((t) => Number(t?.id) === Number(id)) ?? league?.teamById?.[id] ?? null;
@@ -214,6 +223,229 @@ function normalizeScoringSummary(rows) {
   }));
 }
 
+function teamAbbrForId(teamId, teams = {}) {
+  const id = Number(teamId);
+  if (Number.isFinite(id)) {
+    if (id === Number(teams.home?.id)) return teams.home?.abbr ?? null;
+    if (id === Number(teams.away?.id)) return teams.away?.abbr ?? null;
+  }
+  return null;
+}
+
+function teamAbbrForSide(value, teams = {}) {
+  const side = String(value ?? '').toLowerCase();
+  if (side === 'home') return teams.home?.abbr ?? null;
+  if (side === 'away') return teams.away?.abbr ?? null;
+  return null;
+}
+
+function formatClockValue(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'string') return value;
+  const seconds = toNum(value);
+  if (seconds == null) return value;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function normalizeScoreAfter(row = {}) {
+  const scoreAfter = row?.scoreAfter ?? row?.runningScore ?? row?.score ?? null;
+  if (typeof scoreAfter === 'string') return scoreAfter;
+  if (scoreAfter && typeof scoreAfter === 'object') return scoreAfter;
+  const home = toNum(row?.scoreHomeAfter ?? row?.homeScore ?? row?.scoreHome);
+  const away = toNum(row?.scoreAwayAfter ?? row?.awayScore ?? row?.scoreAway);
+  return home != null && away != null ? { home, away } : null;
+}
+
+function normalizeDriveSummaryRows(payload = {}, teams = {}) {
+  const rows = Array.isArray(payload?.driveSummary)
+    ? payload.driveSummary
+    : Array.isArray(payload?.drives)
+      ? payload.drives
+      : Array.isArray(payload?.teamDriveStats?.drives)
+        ? payload.teamDriveStats.drives
+        : [];
+  return rows
+    .filter((row) => row && typeof row === 'object')
+    .map((row, idx) => {
+      const teamId = pickFirst(row, ['teamId', 'offenseTeamId', 'possessionTeamId']);
+      return {
+        id: row?.id ?? row?.driveId ?? `drive-${idx}`,
+        quarter: pickFirst(row, ['quarter', 'qtr', 'period']),
+        teamId: teamId ?? null,
+        teamAbbr: row?.teamAbbr ?? row?.abbr ?? teamAbbrForSide(row?.team ?? row?.possession, teams) ?? row?.team ?? teamAbbrForId(teamId, teams),
+        startClock: formatClockValue(pickFirst(row, ['startClock', 'startTime', 'start', 'startClockSec'])),
+        endClock: formatClockValue(pickFirst(row, ['endClock', 'endTime', 'end', 'endClockSec'])),
+        result: pickFirst(row, ['result', 'endState', 'outcome']) ?? 'Drive',
+        yards: pickFirst(row, ['yards', 'driveYards', 'netYards']),
+        plays: pickFirst(row, ['plays', 'playCount', 'numPlays']),
+        points: pickFirst(row, ['points', 'pointsScored']),
+        summary: pickFirst(row, ['summary', 'description', 'text']),
+        keyPlay: pickFirst(row, ['keyPlay', 'lastPlay']),
+      };
+    });
+}
+
+function classifyPlayRow(normalized = {}) {
+  const text = String(normalized?.text ?? normalized?.result ?? '').toLowerCase();
+  const tags = [];
+  const scoring = isScoringLikeLog(normalized);
+  const turnover = Boolean(normalized?.turnover) || /interception|fumble|turnover/.test(text);
+  const sack = normalized?.playType === 'sack' || text.includes('sack');
+  const explosive = Math.abs(Number(normalized?.yards ?? 0)) >= 20;
+  const fourthDown = Boolean(normalized?.fourthDown) || /4th|fourth|turnover on downs/.test(text);
+  const redZone = Boolean(normalized?.redZone) || (Number(normalized?.fieldPosition ?? normalized?.yardLine) >= 80);
+  if (scoring) tags.push('scoring');
+  if (turnover) tags.push('turnover');
+  if (sack) tags.push('sack');
+  if (explosive) tags.push('explosive');
+  if (fourthDown) tags.push('fourth-down');
+  if (redZone) tags.push('red-zone');
+  return { tags, isKey: tags.length > 0 };
+}
+
+function normalizePlayByPlayRows(payload = {}, teams = {}) {
+  const source = Array.isArray(payload?.playLog) && payload.playLog.length
+    ? payload.playLog
+    : Array.isArray(payload?.eventLog) && payload.eventLog.length
+      ? payload.eventLog
+      : Array.isArray(payload?.eventDigest)
+        ? payload.eventDigest
+        : [];
+  return source
+    .filter((row) => row && typeof row === 'object')
+    .map((row, idx) => {
+      const normalized = normalizePlayLogEntry(row, idx, { homeId: teams.home?.id, awayId: teams.away?.id });
+      const text = normalized.text && normalized.text !== 'Play'
+        ? normalized.text
+        : (row?.playText ?? row?.description ?? row?.summary ?? row?.result ?? 'Play');
+      const tagData = classifyPlayRow({ ...normalized, text });
+      const teamId = normalized.teamId ?? normalized.offenseTeamId ?? row?.teamId ?? row?.scoringTeamId ?? null;
+      const rawClock = normalized.clock || row?.clockSec || row?.timeSec || row?.timeLeftSec || row?.time || row?.timeLeft;
+      const clock = formatClockValue(rawClock);
+      return {
+        id: normalized.id ?? row?.id ?? `play-${idx}`,
+        sortIndex: idx,
+        quarter: normalized.quarter ?? row?.qtr ?? row?.period ?? null,
+        clock,
+        teamId,
+        teamAbbr: row?.teamAbbr ?? row?.abbr ?? teamAbbrForSide(row?.team ?? row?.possession, teams) ?? row?.team ?? teamAbbrForId(teamId, teams),
+        playType: normalized.playType ?? row?.type ?? 'play',
+        text,
+        yards: normalized.yards ?? toNum(row?.yards),
+        scoreAfter: normalizeScoreAfter(row),
+        tags: tagData.tags,
+        isKey: tagData.isKey,
+      };
+    });
+}
+
+function applyCloseGameLastPlays(playRows = [], finalScore = {}) {
+  const home = toNum(finalScore.home);
+  const away = toNum(finalScore.away);
+  if (home == null || away == null || Math.abs(home - away) > 8 || playRows.length <= 5) return playRows;
+  const lastFiveIds = new Set(playRows.slice(-5).map((row) => row.id));
+  return playRows.map((row) => lastFiveIds.has(row.id)
+    ? { ...row, isKey: true, tags: Array.from(new Set([...(row.tags ?? []), 'late-close'])) }
+    : row);
+}
+
+function normalizeTurningPointRows({ payload = {}, scoringSummary = [], playByPlayRows = [], teams = {}, finalScore = {} } = {}) {
+  const explicit = Array.isArray(payload?.turningPoints) ? payload.turningPoints : [];
+  if (explicit.length) {
+    return explicit
+      .filter((row) => row && typeof row === 'object')
+      .map((row, idx) => {
+        const teamId = pickFirst(row, ['teamId', 'scoringTeamId', 'offenseTeamId']);
+        return {
+          id: row?.id ?? `turning-${idx}`,
+          quarter: pickFirst(row, ['quarter', 'qtr', 'period']),
+          clock: pickFirst(row, ['clock', 'time', 'timeLeft']),
+          teamId,
+          teamAbbr: row?.teamAbbr ?? row?.abbr ?? row?.team ?? teamAbbrForId(teamId, teams),
+          text: pickFirst(row, ['text', 'description', 'summary']) ?? 'Turning point',
+          source: 'recorded',
+          inferred: false,
+        };
+      }).slice(0, 6);
+  }
+
+  const inferred = [];
+  const seen = new Set();
+  const add = (row) => {
+    const key = `${row.quarter}-${row.clock}-${row.teamAbbr}-${row.text}`;
+    if (seen.has(key) || inferred.length >= 6) return;
+    seen.add(key);
+    inferred.push({ ...row, source: 'inferred', inferred: true });
+  };
+
+  scoringSummary.forEach((row, idx) => {
+    const score = normalizeScoreAfter(row);
+    if (!score || typeof score === 'string') return;
+    const home = toNum(score.home);
+    const away = toNum(score.away);
+    if (home == null || away == null || home === away) return;
+    const q = Number(row?.quarter ?? 0);
+    const margin = Math.abs(home - away);
+    const teamAbbr = row?.teamAbbr ?? row?.team ?? null;
+    if (q >= 4 && margin <= 8) {
+      add({ id: `turning-score-${idx}`, quarter: row?.quarter, clock: row?.time ?? row?.clock, teamAbbr, text: `Late ${row?.type ?? 'score'} kept this a one-score game.` });
+    } else if (margin <= 7) {
+      add({ id: `turning-go-ahead-${idx}`, quarter: row?.quarter, clock: row?.time ?? row?.clock, teamAbbr, text: `${row?.type ?? 'Score'} created a one-score swing.` });
+    }
+  });
+
+  playByPlayRows.forEach((row) => {
+    if (row.tags?.includes('turnover')) add({ id: `turning-${row.id}`, quarter: row.quarter, clock: row.clock, teamAbbr: row.teamAbbr, text: row.text });
+    if (Number(row.quarter) >= 4 && row.tags?.includes('explosive')) add({ id: `turning-${row.id}`, quarter: row.quarter, clock: row.clock, teamAbbr: row.teamAbbr, text: row.text });
+  });
+
+  const home = toNum(finalScore.home);
+  const away = toNum(finalScore.away);
+  if (inferred.length === 0 && home != null && away != null && Math.abs(home - away) <= 8) {
+    playByPlayRows.filter((row) => row.isKey).slice(-2).forEach((row) => add({ id: `turning-close-${row.id}`, quarter: row.quarter, clock: row.clock, teamAbbr: row.teamAbbr, text: row.text }));
+  }
+
+  return inferred.slice(0, 6);
+}
+
+function normalizeNotablePerformanceRows(payload = {}, teams = {}) {
+  const rows = Array.isArray(payload?.notablePerformances) ? payload.notablePerformances : [];
+  return rows
+    .filter((row) => row && typeof row === 'object')
+    .map((row, idx) => {
+      const teamId = pickFirst(row, ['teamId', 'team']);
+      return {
+        id: row?.id ?? row?.playerId ?? `notable-${idx}`,
+        playerId: row?.playerId ?? row?.id ?? null,
+        teamId,
+        teamAbbr: row?.teamAbbr ?? row?.abbr ?? teamAbbrForId(teamId, teams),
+        name: row?.name ?? row?.playerName ?? 'Impact player',
+        label: row?.label ?? row?.pos ?? row?.role ?? 'Notable',
+        text: row?.text ?? row?.summary ?? row?.description ?? null,
+        stats: row?.stats ?? {},
+      };
+    });
+}
+
+function normalizeInjuryRows(payload = {}, teams = {}) {
+  const rows = Array.isArray(payload?.injuries) ? payload.injuries : [];
+  return rows
+    .filter((row) => row && typeof row === 'object')
+    .map((row, idx) => {
+      const teamId = pickFirst(row, ['teamId', 'team']);
+      return {
+        id: row?.id ?? row?.playerId ?? `injury-${idx}`,
+        playerId: row?.playerId ?? row?.id ?? null,
+        teamId,
+        teamAbbr: row?.teamAbbr ?? row?.abbr ?? teamAbbrForId(teamId, teams),
+        name: row?.name ?? row?.playerName ?? 'Player',
+        detail: row?.detail ?? row?.injury ?? row?.type ?? row?.description ?? 'Injury recorded',
+        duration: row?.duration ?? row?.weeks ?? row?.gamesRemaining ?? row?.weeksRemaining ?? null,
+      };
+    });
+}
+
 export function unwrapBoxScoreResponse(response) {
   if (response == null) return null;
   if (response?.payload && typeof response.payload === 'object' && Object.prototype.hasOwnProperty.call(response.payload, 'game')) {
@@ -259,6 +491,12 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
   const teamTotals = { home: teamStats?.home ?? {}, away: teamStats?.away ?? {} };
   const playerTables = { home: homePlayers, away: awayPlayers };
   const winnerSide = hasScore && awayScore !== homeScore ? (awayScore > homeScore ? 'away' : 'home') : null;
+  const teamContext = { home: homeTeam, away: awayTeam };
+  const driveSummaryRows = normalizeDriveSummaryRows(payload, teamContext);
+  const playByPlayRows = applyCloseGameLastPlays(normalizePlayByPlayRows(payload, teamContext), finalScore);
+  const turningPointRows = normalizeTurningPointRows({ payload, scoringSummary, playByPlayRows, teams: teamContext, finalScore });
+  const notablePerformanceRows = normalizeNotablePerformanceRows(payload, teamContext);
+  const injuryRows = normalizeInjuryRows(payload, teamContext);
 
   return {
     gameId: payload?.gameId ?? payload?.id ?? gameId ?? null,
@@ -277,6 +515,11 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
     teamTotals,
     teamComparisonRows: buildTeamComparisonRows(teamTotals),
     scoringSummary,
+    driveSummaryRows,
+    playByPlayRows,
+    turningPointRows,
+    notablePerformanceRows,
+    injuryRows,
     playerTables,
     playerStatSections: buildPlayerStatSections(playerTables),
     statLeaderCards: buildStatLeaderCards(playerTables),
@@ -286,8 +529,11 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
       teamStats: hasTeamTotals,
       playerStats: hasPlayerStats,
       scoringSummary: hasScoringSummary,
-      playByPlay: Array.isArray(payload?.playLog) && payload.playLog.length > 0,
-      drives: Array.isArray(payload?.driveSummary) && payload.driveSummary.length > 0,
+      playByPlay: playByPlayRows.length > 0,
+      drives: driveSummaryRows.length > 0,
+      turningPoints: turningPointRows.length > 0,
+      notablePerformances: notablePerformanceRows.length > 0,
+      injuries: injuryRows.length > 0,
     },
     prepImpact: Array.isArray(payload?.prepImpact) ? payload.prepImpact : (payload?.prepImpact ? [String(payload.prepImpact)] : []),
     detailWarning: archiveQuality === QUALITY.partial ? 'Partial archive: some Game Book sections were not recorded.' : archiveQuality === QUALITY.score ? 'Detailed box score data was not recorded for this game.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
