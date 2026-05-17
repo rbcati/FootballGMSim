@@ -8748,11 +8748,22 @@ async function handleAdvanceOffseason(payload, id) {
     const envScale = 0.75 + (progressionEnv / 100) * 0.5;
     const staffScale = 0.7 + (staffImpact / 100) * 0.6;
     const teamEnvironments = {};
+    const playersByTeamId = new Map();
+    for (const player of legacyPlayers) {
+      const teamId = Number(player?.teamId);
+      let players = playersByTeamId.get(teamId);
+      if (!players) {
+        players = [];
+        playersByTeamId.set(teamId, players);
+      }
+      players.push(player);
+    }
+
     for (const team of allTeams) {
       const inv = team?.franchiseInvestments ?? {};
       const trainingLevel = Math.max(1, Math.min(5, Math.round(Number(inv?.trainingLevel ?? 1) || 1)));
       const trainingFocus = String(inv?.trainingFocus ?? 'balanced');
-      const roster = Array.isArray(team?.roster) ? team.roster : legacyPlayers.filter((p) => Number(p?.teamId) === Number(team?.id));
+      const roster = Array.isArray(team?.roster) ? team.roster : (playersByTeamId.get(Number(team?.id)) || []);
       const moraleAvg = roster.length ? roster.reduce((sum, p) => sum + (Number(p?.morale ?? 70) || 70), 0) / roster.length : 70;
       const stableMorale = moraleAvg >= 74 ? 1 : moraleAvg <= 60 ? -1 : 0;
       const staff = ensureTeamStaff(team, { year: Number(meta?.year ?? 2025) });
@@ -8771,16 +8782,9 @@ async function handleAdvanceOffseason(payload, id) {
       teamEnvironments[team.id] = { youngGrowthBonus, volatilityDampener, rookieAdaptation, trainingFocus, staffDevelopmentModifier: staffBonuses.developmentDelta ?? 0 };
     }
     const teamRosters = {};
-    const playersByTeamId = new Map();
-    for (const player of legacyPlayers) {
-      const teamId = Number(player?.teamId);
-      const players = playersByTeamId.get(teamId) ?? [];
-      players.push(player);
-      playersByTeamId.set(teamId, players);
-    }
     for (const team of allTeams) {
       const teamId = Number(team.id);
-      teamRosters[team.id] = playersByTeamId.get(teamId) ?? [];
+      teamRosters[teamId] = playersByTeamId.get(teamId) || [];
     }
     for (const player of legacyPlayers) player.season = Number(meta?.year ?? 2025);
     legacyProgression = processPlayerProgression(legacyPlayers, { teamEnvironments, teamRosters });
