@@ -1,5 +1,22 @@
 const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 
+function formatMoment(row = {}) {
+  const parts = [];
+  if (row.quarter != null) parts.push(`Q${row.quarter}`);
+  if (row.clock) parts.push(row.clock);
+  if (row.teamAbbr) parts.push(row.teamAbbr);
+  return parts.length ? `${parts.join(" ")}: ` : "";
+}
+
+function formatDriveLine(drive = {}) {
+  const details = [];
+  if (drive.plays != null) details.push(`${drive.plays} plays`);
+  if (drive.yards != null) details.push(`${drive.yards} yards`);
+  if (drive.points != null) details.push(`${drive.points} points`);
+  const detailText = details.length ? ` (${details.join(", ")})` : "";
+  return `${drive.teamAbbr ?? "A team"} finished a drive with ${drive.result ?? "a result"}${detailText}.`;
+}
+
 export function buildGameBookStory(vm) {
   const bullets = [];
   const away = vm?.awayTeam?.abbr ?? "Away";
@@ -32,6 +49,19 @@ export function buildGameBookStory(vm) {
 
   const lastScore = vm?.scoringSummary?.[vm.scoringSummary.length - 1];
   if (lastScore?.teamAbbr || lastScore?.team) bullets.push(`Last scoring play: ${(lastScore.teamAbbr ?? lastScore.team)} ${lastScore.type ?? "score"} (${lastScore.time ?? lastScore.clock ?? "time unknown"}).`);
+
+  const turningPoint = vm?.turningPointRows?.[0];
+  if (turningPoint?.text) {
+    const sourceLabel = turningPoint.inferred ? "Inferred turning point" : "Turning point";
+    bullets.push(`${sourceLabel}: ${formatMoment(turningPoint)}${turningPoint.text}`);
+  }
+
+  const keyDrive = (vm?.driveSummaryRows ?? []).find((drive) => {
+    const points = n(drive?.points);
+    const result = String(drive?.result ?? "").toLowerCase();
+    return (points != null && points > 0) || /td|touchdown|fg|field goal|safety/.test(result);
+  });
+  if (keyDrive) bullets.push(formatDriveLine(keyDrive));
 
   const awayScore = n(vm?.finalScore?.away);
   const homeScore = n(vm?.finalScore?.home);
