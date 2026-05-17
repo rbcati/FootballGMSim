@@ -10,6 +10,10 @@ const PICK_INFO_WARNING = 'Pick asset is informational if Trade Center cannot su
 const num = (v, fb = 0) => Number.isFinite(Number(v)) ? Number(v) : fb;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const tierForValue = (v) => (v >= 190 ? 'premium' : v >= 145 ? 'starter' : v >= 110 ? 'rotation' : v >= 80 ? 'depth' : 'low');
+const compareText = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'en', { numeric: true, sensitivity: 'base' });
+const comparePlayerIdentity = (a = {}, b = {}) => compareText(a.id, b.id) || compareText(a.name, b.name) || compareText(a.pos, b.pos);
+const comparePlayersByOvr = (a = {}, b = {}) => (num(b.ovr) - num(a.ovr)) || comparePlayerIdentity(a, b);
+const compareTargetIndexRows = (a = {}, b = {}) => (num(b.valueScore) - num(a.valueScore)) || comparePlayerIdentity(a.player, b.player);
 
 function getPlayerSalary(player = {}) { return num(player?.contract?.baseAnnual, null); }
 function getYearsRemaining(player = {}) { return num(player?.contract?.yearsRemaining ?? player?.contract?.years, 0); }
@@ -75,11 +79,24 @@ function normalizeDraftPickAsset(pick = {}, ownerTeamId) {
 }
 function buildDraftPickChip(pick = {}, ownerTeamId) { return normalizeDraftPickAsset(pick, ownerTeamId); }
 
-function buildNeedMap(roster = [], cfg = FOOTBALL_ROSTER_CONFIG) {
+function groupPlayersByPosition(roster = []) {
+  const map = {};
+  for (const player of Array.isArray(roster) ? roster : []) {
+    if (!player?.pos) continue;
+    if (!map[player.pos]) map[player.pos] = [];
+    map[player.pos].push(player);
+  }
+  for (const players of Object.values(map)) {
+    players.sort(comparePlayersByOvr);
+  }
+  return map;
+}
+
+function buildNeedMap(roster = [], cfg = FOOTBALL_ROSTER_CONFIG, playersByPosition = groupPlayersByPosition(roster)) {
   const map = {};
   for (const pos of cfg.positionGroups) {
     const expectedStarters = cfg.groupConfig?.[pos]?.starterCountExpected ?? 1;
-    const players = roster.filter((p) => p.pos === pos).sort((a, b) => num(b.ovr) - num(a.ovr));
+    const players = playersByPosition[pos] ?? [];
     const starters = players.slice(0, expectedStarters);
     const avgStarterOvr = starters.length ? starters.reduce((sum, p) => sum + num(p.ovr), 0) / starters.length : 0;
     const missingStarters = Math.max(0, expectedStarters - starters.length);
@@ -88,22 +105,38 @@ function buildNeedMap(roster = [], cfg = FOOTBALL_ROSTER_CONFIG) {
   }
   return map;
 }
-function buildUserSurplus(userRoster = [], footballConfig = FOOTBALL_ROSTER_CONFIG) {
+function buildUserSurplus(userRoster = [], footballConfig = FOOTBALL_ROSTER_CONFIG, playersByPosition = groupPlayersByPosition(userRoster)) {
   const userSurplus = []; const chips = []; const nonStarterIds = new Set();
   for (const pos of footballConfig.positionGroups) {
     const expectedStarters = footballConfig.groupConfig?.[pos]?.starterCountExpected ?? 1;
-    const players = userRoster.filter((p) => p.pos === pos).sort((a, b) => num(b.ovr) - num(a.ovr));
+    const players = playersByPosition[pos] ?? [];
     const depth = players.slice(expectedStarters);
     depth.forEach((p) => nonStarterIds.add(p.id));
     const posChips = depth.filter((p) => num(p.ovr) >= 66).map((p) => buildTradeChip(p));
     if (!posChips.length) continue;
-    userSurplus.push({ pos, players: players.map((p) => p.id), bestTradeChip: [...posChips].sort((a, b) => b.valueScore - a.valueScore)[0] ?? null, surplusScore: clamp((depth.length * 22) + (num(depth[0]?.ovr) - 68), 0, 100) });
+    userSurplus.push({ pos, players: players.map((p) => p.id), bestTradeChip: [...posChips].sort((a, b) => (b.valueScore - a.valueScore) || compareText(a.playerId, b.playerId))[0] ?? null, surplusScore: clamp((depth.length * 22) + (num(depth[0]?.ovr) - 68), 0, 100) });
     chips.push(...posChips);
   }
-  return { userSurplus, chipPool: chips.sort((a, b) => b.valueScore - a.valueScore), nonStarterIds };
+  return { userSurplus, chipPool: chips.sort((a, b) => (b.valueScore - a.valueScore) || compareText(a.playerId, b.playerId)), nonStarterIds };
+}
+function buildExternalTargetIndex({ leaguePlayers = [], userTeamId, getValue = getPlayerValueSafe }) {
+  const index = {};
+  for (const player of Array.isArray(leaguePlayers) ? leaguePlayers : []) {
+    const teamId = player?.teamId == null ? -1 : num(player.teamId, -1);
+    if (teamId === userTeamId || teamId < 0 || !player?.pos) continue;
+    if (!index[player.pos]) index[player.pos] = [];
+    index[player.pos].push({ player, valueScore: getValue(player) });
+  }
+  for (const rows of Object.values(index)) {
+    rows.sort(compareTargetIndexRows);
+  }
+  return index;
+}
+function getTargetsFromIndex({ need, targetIndex, limit = 5 }) {
+  return (targetIndex?.[need?.pos] ?? []).slice(0, limit).map((row) => row.player);
 }
 function getTargetCandidatesForNeed({ need, leaguePlayers, userTeamId }) {
-  return leaguePlayers.filter((p) => num(p.teamId) !== userTeamId && num(p.teamId, -1) >= 0 && p.pos === need.pos).sort((a, b) => getPlayerValueSafe(b) - getPlayerValueSafe(a)).slice(0, 5);
+  return getTargetsFromIndex({ need, targetIndex: buildExternalTargetIndex({ leaguePlayers, userTeamId }) });
 }
 const classifyValueMatch = (delta) => (delta <= -35 ? 'favorable' : delta <= 25 ? 'fair' : delta <= 75 ? 'expensive' : 'unrealistic');
 const buildValueDeltaLabel = (d) => d <= -35 ? 'package may overpay' : d <= 25 ? 'near fair value' : d <= 75 ? 'slightly short on value' : 'far short on value';
@@ -221,23 +254,31 @@ function generatePackageVariants({ need, target, chipPool, picks, nonStarterIds,
   const extra = chipPool.find((c) => c.playerId !== base.playerId && nonStarterIds.has(c.playerId));
   if (extra && oneForOne.valueMatch === 'unrealistic') ideas.push(buildIdea({ need, target, outgoingAssets: [base, extra], teams, cap, packageType: 'two_players' }));
   if (Number(base.salary) > Number(getPlayerSalary(target))) ideas.push(buildIdea({ need, target, outgoingAssets: [base], teams, cap, packageType: 'cap_relief' }));
-  return ideas.filter((i) => i.packageAssetCount <= 3 && !(target.pos === 'K' || target.pos === 'P') || i.outgoingAssets.every((a)=>a.assetType!=='pick'||a.valueTier!=='premium'));
+  return ideas.filter((i) => i.packageAssetCount <= 3 && (!(target.pos === 'K' || target.pos === 'P') || i.outgoingAssets.every((a)=>a.assetType!=='pick'||a.valueTier!=='premium')));
 }
 
 function sortAndCapTradeIdeas(ideas = [], userTeamId) { return ideas.filter((i) => num(i.targetTeamId) !== userTeamId).sort((a, b) => b.fitScore - a.fitScore).slice(0, 15); }
 
 export function buildTradeFinderAnalysis({ userTeam, league = {}, teams = [], userRoster = [], leaguePlayers = [], cap = {}, footballConfig = FOOTBALL_ROSTER_CONFIG }) {
   const userTeamId = num(userTeam?.id, -1);
-  const targetNeeds = Object.values(buildNeedMap(userRoster, footballConfig)).sort((a, b) => b.needScore - a.needScore).slice(0, 6);
-  const { userSurplus, chipPool, nonStarterIds } = buildUserSurplus(userRoster, footballConfig);
+  const userRosterByPosition = groupPlayersByPosition(userRoster);
+  const targetIndex = buildExternalTargetIndex({ leaguePlayers, userTeamId });
+  const targetNeeds = Object.values(buildNeedMap(userRoster, footballConfig, userRosterByPosition)).sort((a, b) => b.needScore - a.needScore).slice(0, 6);
+  const { userSurplus, chipPool, nonStarterIds } = buildUserSurplus(userRoster, footballConfig, userRosterByPosition);
   const userPickChips = getTeamDraftPicks(userTeam, league).map((p) => buildDraftPickChip(p, userTeamId)).filter((p) => p?.pickId).sort((a,b)=>b.valueScore-a.valueScore);
   const userAssets = [...chipPool, ...userPickChips];
   const ideas = [];
   for (const need of targetNeeds.slice(0, 4)) {
-    for (const target of getTargetCandidatesForNeed({ need, leaguePlayers, userTeamId })) {
+    for (const target of getTargetsFromIndex({ need, targetIndex })) {
       ideas.push(...generatePackageVariants({ need, target, chipPool, picks: userPickChips, nonStarterIds, teams, cap }));
     }
   }
   const tradeIdeas = sortAndCapTradeIdeas(ideas, userTeamId);
   return { summary: { biggestNeed: targetNeeds[0] ?? null, strongestSurplus: userSurplus.sort((a, b) => b.surplusScore - a.surplusScore)[0] ?? null, bestTradeChip: chipPool[0] ?? null, topTarget: tradeIdeas[0] ?? null, capWarning: cap?.capRoom != null && num(cap.capRoom) < 0 ? 'Over cap: prioritize cap-neutral frameworks.' : null }, userSurplus, userTradeChips: chipPool.slice(0, 10), userPickChips: userPickChips.slice(0, 10), userAssets: userAssets.slice(0, 20), targetNeeds, tradeIdeas, filters: ['all', 'team_need', 'starter_upgrade', 'youth_upside', 'fair_value', 'high_confidence', 'needs_more_value', 'cap_safe', 'long_shot', 'selected', 'cap_relief', 'avoid_risks', 'player_plus_pick', 'pick_included', 'multi_asset', 'overpay_risk', 'premium_pick'] };
 }
+
+export const __internal = Object.freeze({
+  buildExternalTargetIndex,
+  getTargetsFromIndex,
+  groupPlayersByPosition,
+});
