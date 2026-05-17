@@ -48,6 +48,7 @@ function ResultRow({ row, seasonId, onGameSelect, source = 'weekly_results_cente
       </div>
       <div className="app-game-center-context-strip" aria-label="Game quick context">
         <span>{contextLabel}</span>
+        <span>{presentation.statusLabel}</span>
         <span>{performers.hasOffense ? performers.offense : 'Top player unavailable'}</span>
       </div>
       <p className="app-game-center-card__summary">{row.recap}</p>
@@ -61,6 +62,7 @@ function ResultRow({ row, seasonId, onGameSelect, source = 'weekly_results_cente
         >
           {clickable ? 'Open Game Book' : (presentation?.statusLabel ?? 'Archive unavailable')}
         </button>
+        <StatusChip label={presentation.statusLabel} tone={presentation.archiveQuality === 'full' ? 'ok' : presentation.archiveQuality === 'partial' ? 'info' : 'neutral'} />
       </div>
     </article>
   );
@@ -262,7 +264,10 @@ export default function WeeklyResultsCenter({ league, initialWeek = null, onGame
           <article className="app-game-center-card app-game-center-user card" data-testid="user-game-result-card">
             <div className="app-game-center-card__top">
               <strong>Week {userTeamResult.week} • {userTeamResult.outcome === 'W' ? 'Win' : userTeamResult.outcome === 'L' ? 'Loss' : 'Tie'} • {userTeamResult.isHome ? 'vs' : '@'} {userTeamResult.opponent?.abbr ?? 'TBD'}</strong>
-              <StatusChip label={`${userTeamResult.userScore}-${userTeamResult.oppScore}`} tone={userTeamResult.outcome === 'W' ? 'ok' : userTeamResult.outcome === 'L' ? 'warning' : 'info'} />
+              <div className="app-game-center-card__chips">
+                <StatusChip label={`${userTeamResult.userScore}-${userTeamResult.oppScore}`} tone={userTeamResult.outcome === 'W' ? 'ok' : userTeamResult.outcome === 'L' ? 'warning' : 'info'} />
+                <StatusChip label={userResultPresentation?.statusLabel ?? 'Archive unavailable'} tone={userResultPresentation?.archiveQuality === 'full' ? 'ok' : userResultPresentation?.archiveQuality === 'partial' ? 'info' : 'neutral'} />
+              </div>
             </div>
             <div className="app-game-center-result-score" aria-label="Final score">
               <span>{userResultPresentation?.displayScoreLine ?? `${userTeamResult.userScore}-${userTeamResult.oppScore}`}</span>

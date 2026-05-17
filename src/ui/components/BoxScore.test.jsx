@@ -47,7 +47,7 @@ describe('BoxScore game book rendering', () => {
 
   it('uses placeholders for score-only games and omits stat tables', () => {
     const html = renderToString(<BoxScore gameId="g4" league={{ ...baseLeague, gameById: { g4: { homeId: 1, awayId: 2, homeScore: 6, awayScore: 3 } } }} embedded />);
-    expect(html).toContain('Detailed box score data was not recorded for this game.');
+    expect(html).toContain('Score-only archive: no detailed Game Book sections were recorded.');
     expect(html).toContain('Drive summary was not recorded for this game.');
     expect(html).toContain('Play-by-play was not recorded for this game.');
     expect(html).toContain('Scoring summary was not recorded for this game.');

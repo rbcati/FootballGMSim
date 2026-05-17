@@ -51,6 +51,7 @@ describe('WeeklyResultsCenter', () => {
     expect(screen.getByText('Weekly Spotlight')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /open game book/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/close game|point margin|blowout/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/partial detail/i).length).toBeGreaterThan(0);
   });
 
   it('shows game-plan recap and reasons when prep impact exists', () => {
@@ -112,6 +113,7 @@ describe('WeeklyResultsCenter', () => {
     const html = renderToString(<WeeklyResultsCenter league={legacyLeague} initialWeek={3} onGameSelect={() => {}} onNavigate={() => {}} />);
     expect(html).toContain('DAL won by 4 (3-7).');
     expect(html).toContain('Open Game Book');
+    expect(html).toContain('Score only');
     expect(html).not.toContain('Game-plan impact recap');
   });
 

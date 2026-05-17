@@ -1,14 +1,19 @@
 import { buildCanonicalGameId, toTeamId } from "../../core/gameIdentity.js";
-import { classifyArchiveQuality, normalizeArchivedGamePayload, recoverArchivedGameFromSchedule } from "../../core/gameArchive.js";
+import { normalizeArchivedGamePayload, recoverArchivedGameFromSchedule } from "../../core/gameArchive.js";
+import { buildBoxScoreViewModel } from "./boxScoreViewModel.js";
 
 const ARCHIVE_QUALITY_LABELS = {
-  full: "Full box score",
-  partial: "Partial archive",
-  missing: "Archive unavailable",
+  full: "Full detail",
+  partial: "Partial detail",
+  score: "Score only",
+  missing: "Missing detail",
 };
 
-function detectArchiveQuality(game) {
-  return classifyArchiveQuality(game);
+function archiveQualityKey(label) {
+  if (label === "Full detail") return "full";
+  if (label === "Partial detail") return "partial";
+  if (label === "Score only") return "score";
+  return "missing";
 }
 
 function hasFinalScore(game) {
@@ -51,23 +56,20 @@ export function resolveBoxScoreGameId(game, context = {}) {
 export function getBoxScoreAvailability(game, context = {}) {
   const normalized = normalizeArchivedGamePayload(normalizeCompletedGameRecord(game, context) ?? game);
   const resolvedGameId = resolveBoxScoreGameId(normalized, context);
-  const archiveQuality = detectArchiveQuality(normalized);
   const isCompleted = hasFinalScore(normalized);
-  const hasAnyDetail = Boolean(
-    normalized?.recap
-    || normalized?.summary
-    || normalized?.quarterScores
-    || (normalized?.playLog?.length ?? 0) > 0
-    || (normalized?.eventDigest?.length ?? 0) > 0
-    || normalized?.teamDriveStats?.home
-    || normalized?.teamDriveStats?.away,
-  );
+  const vm = buildBoxScoreViewModel({
+    league: { teams: Object.values(context?.teamById ?? {}) },
+    game: normalized,
+    gameId: resolvedGameId,
+    context,
+  });
+  const archiveQuality = archiveQualityKey(vm?.archiveQuality);
   const canOpen = Boolean(isCompleted && resolvedGameId);
   let fallbackReason = null;
   if (!isCompleted) fallbackReason = "Game not completed";
   else if (!resolvedGameId) fallbackReason = "Missing game identity";
   else if (!canOpen) fallbackReason = "Archive unavailable";
-  return { resolvedGameId, archiveQuality, canOpen, fallbackReason, isCompleted };
+  return { resolvedGameId, archiveQuality, archiveQualityLabel: vm?.archiveQuality ?? ARCHIVE_QUALITY_LABELS.missing, canOpen, fallbackReason, isCompleted };
 }
 
 export function getArchiveQualityLabel(archiveQuality) {
@@ -76,23 +78,17 @@ export function getArchiveQualityLabel(archiveQuality) {
 
 export function buildCompletedGamePresentation(game, context = {}) {
   const availability = getBoxScoreAvailability(game, context);
-  const hasTacticalData = Boolean(
-    (Array.isArray(game?.eventDigest) && game.eventDigest.length > 0)
-    || (Array.isArray(game?.summary?.headlineMoments) && game.summary.headlineMoments.length > 0)
-    || game?.topReason1
-    || game?.topReason2
-    || game?.teamDriveStats?.home
-    || game?.teamDriveStats?.away,
-  );
   const away = context?.teamById?.[toTeamId(game?.awayId ?? game?.away)] ?? null;
   const home = context?.teamById?.[toTeamId(game?.homeId ?? game?.home)] ?? null;
   const displayScoreLine = `${away?.abbr ?? "AWY"} ${game?.awayScore ?? "—"} - ${game?.homeScore ?? "—"} ${home?.abbr ?? "HME"}`;
   return {
     ...availability,
     ctaLabel: availability.canOpen
-      ? (hasTacticalData
-        ? "Tactical breakdown"
-        : "View Game Book")
+      ? (availability.archiveQuality === "full"
+        ? "Open full Game Book"
+        : availability.archiveQuality === "partial"
+          ? "Open partial Game Book"
+          : "Open score-only Game Book")
       : "View result",
     statusLabel: getArchiveQualityLabel(availability.archiveQuality),
     displayScoreLine,
