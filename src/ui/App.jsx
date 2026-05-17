@@ -804,7 +804,7 @@ function AppContent() {
     if (shouldShowNewLeagueSetup) {
       return (
         <ErrorBoundary contextHint="new-franchise-setup">
-          <div className="view fade-in" key="new_league" data-testid="app-new-league-setup">
+          <div className="view view-enter" key="new_league" data-testid="app-new-league-setup">
             {initTimeoutPanel}
             <NewLeagueSetup
               actions={actions}
@@ -842,7 +842,7 @@ function AppContent() {
   }
   return (
       <ErrorBoundary contextHint="save-slot-manager">
-        <div className="view fade-in" key="save_slot_manager" data-testid="app-save-slots">
+        <div className="view view-enter" key="save_slot_manager" data-testid="app-save-slots">
           {initTimeoutPanel}
           <SaveSlotManager
             activeSlot={activeSlot}
@@ -892,7 +892,7 @@ function AppContent() {
 
   if (isNewFranchiseBootstrapping) {
     return (
-      <div className="app-loading" data-testid="app-bootstrap-loading">
+      <div className="app-loading view-enter" data-testid="app-bootstrap-loading">
         <div className="app-loading-spinner" />
         <p className="app-loading-text">
           Still setting up your franchise… {bootstrapSummary.reasons[0] ?? 'Preparing franchise data.'}
@@ -1639,7 +1639,7 @@ export default function App() {
 
 function Loading({ message }) {
   return (
-    <div className="app-loading">
+    <div className="app-loading view-enter">
       <div className="app-loading-spinner" />
       <p className="app-loading-text">{message}</p>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

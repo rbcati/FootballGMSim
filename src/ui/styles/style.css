@@ -502,8 +502,11 @@ html, body {
   opacity: 1;
 }
 
-.btn:active {
-  transform: translateY(0);
+.btn:active, button:active {
+  transform: scale(0.96) translateY(1px) !important;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.2) !important;
+  filter: brightness(0.95);
+  transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .btn.primary { 
@@ -1460,13 +1463,13 @@ select:disabled {
 .backup-size {
   color: var(--text-subtle);
   font-size: var(--text-xs);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans); font-variant-numeric: tabular-nums;
 }
 
 .backup-version {
   color: var(--text-subtle);
   font-size: var(--text-xs);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans); font-variant-numeric: tabular-nums;
 }
 
 .backup-actions {
@@ -1515,7 +1518,7 @@ select:disabled {
   gap: var(--space-2);
   font-size: var(--text-sm);
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans); font-variant-numeric: tabular-nums;
 }
 
 /* Responsive Design */
@@ -3759,7 +3762,7 @@ select:disabled {
   white-space: pre-wrap;
   max-height: 260px;
   overflow: auto;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans); font-variant-numeric: tabular-nums;
   font-size: var(--text-sm);
 }
 
@@ -7011,7 +7014,7 @@ input:focus, select:focus, textarea:focus {
   padding: var(--space-4);
   overflow-y: auto;
   flex: 1;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans); font-variant-numeric: tabular-nums;
 }
 
 .play-item {
