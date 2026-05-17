@@ -10,6 +10,10 @@ const toNum = (v) => {
 
 const mdash = '—';
 
+function hasValues(obj) {
+  return Boolean(obj && typeof obj === 'object' && Object.keys(obj).length > 0);
+}
+
 function pickFirst(row = {}, keys = []) {
   for (const key of keys) {
     const value = row?.[key];
@@ -476,14 +480,9 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
 
   const hasScore = homeScore != null && awayScore != null;
   const hasQuarter = Array.isArray(quarterScores?.home) || Array.isArray(quarterScores?.away);
-  const hasTeamTotals = Boolean(teamStats?.home || teamStats?.away);
+  const hasTeamTotals = hasValues(teamStats?.home) || hasValues(teamStats?.away);
   const hasPlayerStats = homePlayers.length > 0 || awayPlayers.length > 0;
   const hasScoringSummary = scoringSummary.length > 0;
-
-  let archiveQuality = QUALITY.missing;
-  if (hasScore && hasQuarter && hasTeamTotals && hasPlayerStats) archiveQuality = QUALITY.full;
-  else if (hasScore && (hasQuarter || hasTeamTotals || hasPlayerStats || hasScoringSummary)) archiveQuality = QUALITY.partial;
-  else if (hasScore) archiveQuality = QUALITY.score;
 
   const awayTeam = teamInfo(league, awayId, 'away', payload);
   const homeTeam = teamInfo(league, homeId, 'home', payload);
@@ -497,6 +496,28 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
   const turningPointRows = normalizeTurningPointRows({ payload, scoringSummary, playByPlayRows, teams: teamContext, finalScore });
   const notablePerformanceRows = normalizeNotablePerformanceRows(payload, teamContext);
   const injuryRows = normalizeInjuryRows(payload, teamContext);
+  const hasDriveRows = driveSummaryRows.length > 0;
+  const hasPlayRows = playByPlayRows.length > 0;
+  const hasTurningPoints = turningPointRows.length > 0;
+  const hasNotablePerformances = notablePerformanceRows.length > 0;
+  const hasInjuries = injuryRows.length > 0;
+  const hasStoryLayerDetail = hasScoringSummary || hasDriveRows || hasPlayRows || hasTurningPoints || hasNotablePerformances || hasInjuries;
+  const hasAnyMeaningfulDetail = hasQuarter || hasTeamTotals || hasPlayerStats || hasStoryLayerDetail;
+
+  let archiveQuality = QUALITY.missing;
+  if (hasScore && hasQuarter && hasTeamTotals && hasPlayerStats && hasStoryLayerDetail) archiveQuality = QUALITY.full;
+  else if (hasScore && hasAnyMeaningfulDetail) archiveQuality = QUALITY.partial;
+  else if (hasScore) archiveQuality = QUALITY.score;
+
+  const detailWarning = (() => {
+    if (archiveQuality === QUALITY.full) return null;
+    if (archiveQuality === QUALITY.partial) {
+      if (!hasTeamTotals || !hasPlayerStats) return 'Partial archive: some Game Book sections were recorded, but team/player stat detail is incomplete.';
+      return 'Partial archive: some Game Book sections were recorded, but full detail is incomplete.';
+    }
+    if (archiveQuality === QUALITY.score) return 'Score-only archive: no detailed Game Book sections were recorded.';
+    return 'Game data missing.';
+  })();
 
   return {
     gameId: payload?.gameId ?? payload?.id ?? gameId ?? null,
@@ -529,15 +550,15 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
       teamStats: hasTeamTotals,
       playerStats: hasPlayerStats,
       scoringSummary: hasScoringSummary,
-      playByPlay: playByPlayRows.length > 0,
-      drives: driveSummaryRows.length > 0,
-      turningPoints: turningPointRows.length > 0,
-      notablePerformances: notablePerformanceRows.length > 0,
-      injuries: injuryRows.length > 0,
+      playByPlay: hasPlayRows,
+      drives: hasDriveRows,
+      turningPoints: hasTurningPoints,
+      notablePerformances: hasNotablePerformances,
+      injuries: hasInjuries,
     },
     prepImpact: Array.isArray(payload?.prepImpact) ? payload.prepImpact : (payload?.prepImpact ? [String(payload.prepImpact)] : []),
-    detailWarning: archiveQuality === QUALITY.partial ? 'Partial archive: some Game Book sections were not recorded.' : archiveQuality === QUALITY.score ? 'Detailed box score data was not recorded for this game.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
-    missingDetailReason: archiveQuality === QUALITY.partial ? 'Partial archive: some Game Book sections were not recorded.' : archiveQuality === QUALITY.score ? 'Detailed box score data was not recorded for this game.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
+    detailWarning,
+    missingDetailReason: detailWarning,
     hasDetailedStats: archiveQuality === QUALITY.full || archiveQuality === QUALITY.partial,
   };
 }

@@ -18,8 +18,8 @@ describe('buildBoxScoreViewModel', () => {
     expect(unwrapBoxScoreResponse({ game: topLevelGame })).toBe(topLevelGame);
   });
 
-  it('classifies full detail when major sections exist', () => {
-    const vm = buildBoxScoreViewModel({ game: { played: true, homeId: 1, awayId: 2, homeScore: 21, awayScore: 17, quarterScores: { home: [7,7,7,0], away: [3,7,0,7] }, teamStats: { home: { passYards: 220 }, away: { passYards: 200 } }, playerStats: { home: { '10': { name: 'QB', stats: { passAtt: 20 } } }, away: {} } } });
+  it('classifies full detail when major stat sections and recorded detail exist', () => {
+    const vm = buildBoxScoreViewModel({ game: { played: true, homeId: 1, awayId: 2, homeScore: 21, awayScore: 17, quarterScores: { home: [7,7,7,0], away: [3,7,0,7] }, teamStats: { home: { passYards: 220 }, away: { passYards: 200 } }, playerStats: { home: { '10': { name: 'QB', stats: { passAtt: 20 } } }, away: {} }, scoringSummary: [{ quarter: 1, time: '8:00', teamAbbr: 'HOME', type: 'TD', scoreAfter: { home: 7, away: 0 } }] } });
     expect(vm.archiveQuality).toBe('Full detail');
     expect(vm.detailWarning).toBeNull();
   });
@@ -33,7 +33,23 @@ describe('buildBoxScoreViewModel', () => {
   it('classifies score only data warning copy', () => {
     const vm = buildBoxScoreViewModel({ game: { played: true, homeScore: 3, awayScore: 0 } });
     expect(vm.archiveQuality).toBe('Score only');
-    expect(vm.detailWarning).toContain('Detailed box score data');
+    expect(vm.detailWarning).toBe('Score-only archive: no detailed Game Book sections were recorded.');
+  });
+
+  it('classifies final score plus drive summary as partial detail', () => {
+    const vm = buildBoxScoreViewModel({
+      game: { played: true, homeId: 1, awayId: 2, homeScore: 10, awayScore: 7, driveSummary: [{ teamId: 1, quarter: 4, result: 'FG', plays: 6, yards: 42, points: 3 }] },
+    });
+    expect(vm.archiveQuality).toBe('Partial detail');
+    expect(vm.detailWarning).toBe('Partial archive: some Game Book sections were recorded, but team/player stat detail is incomplete.');
+  });
+
+  it('classifies final score plus play log as partial detail without overclaiming full detail', () => {
+    const vm = buildBoxScoreViewModel({
+      game: { played: true, homeId: 1, awayId: 2, homeScore: 10, awayScore: 7, playLog: [{ quarter: 4, clock: '1:00', teamId: 1, text: 'Touchdown run', isTouchdown: true }] },
+    });
+    expect(vm.archiveQuality).toBe('Partial detail');
+    expect(vm.detailWarning).toContain('team/player stat detail is incomplete');
   });
 
   it('classifies missing detail when score unavailable', () => {

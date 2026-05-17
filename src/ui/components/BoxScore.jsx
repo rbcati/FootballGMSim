@@ -98,12 +98,13 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
   const teamRows = vm.teamComparisonRows ?? [];
   const dataChips = [
     ["Score", vm.availableData?.finalScore],
-    ["Quarter", vm.availableData?.quarterScores],
+    ["Linescore", vm.availableData?.quarterScores],
     ["Team stats", vm.availableData?.teamStats],
     ["Player stats", vm.availableData?.playerStats],
     ["Scoring", vm.availableData?.scoringSummary],
     ["Drives", vm.availableData?.drives],
     ["Plays", vm.availableData?.playByPlay],
+    ["Turning points", vm.availableData?.turningPoints],
   ];
 
   const tableSections = buildPlayerStatSections(vm.playerTables, sortState);
