@@ -1341,7 +1341,7 @@ function DraftBoard({
                   fontSize: 10,
                   fontWeight: 700,
                   border: `1px solid ${color}44`,
-                  fontFamily: "monospace",
+                  fontFamily: "var(--font-mono)",
                 }}
               >
                 {pos}
@@ -1990,7 +1990,7 @@ function DraftBoard({
                             fontWeight: 700,
                             color: POS_COLORS[p.pos] ?? "var(--text-muted)",
                             border: `1px solid ${POS_COLORS[p.pos] ?? "#666"}55`,
-                            fontFamily: "monospace",
+                            fontFamily: "var(--font-mono)",
                           }}
                         >
                           {p.pos}
