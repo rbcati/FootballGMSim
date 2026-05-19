@@ -116,7 +116,7 @@ function MiniCard({ player, style }) {
             fontSize: 10,
             fontWeight: 700,
             color: "var(--text-muted)",
-            fontFamily: "monospace",
+            fontFamily: "var(--font-mono)",
           }}
         >
           {player.pos}

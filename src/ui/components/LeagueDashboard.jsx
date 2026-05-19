@@ -139,7 +139,7 @@ class TabErrorBoundary extends Component {
             fontSize: "var(--text-xs)",
             color: "var(--text-muted)",
             marginBottom: "var(--space-4)",
-            fontFamily: "monospace",
+            fontFamily: "var(--font-mono)",
             maxWidth: 480,
             margin: "0 auto var(--space-4)",
           }}
