@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState, SectionCard, StatusChip } from './ScreenSystem.jsx';
-import { CHRONICLE_EVENT_LABELS, resolveChronicleEventType, syncFranchiseChronicle } from '../utils/franchiseChronicle.js';
+import { CHRONICLE_EVENT_LABELS, persistFranchiseChronicle, resolveChronicleEventType, syncFranchiseChronicle } from '../utils/franchiseChronicle.js';
 
 const EVENT_STYLE = {
   game: { color: 'var(--text-subtle)', tone: 'neutral' },
@@ -56,7 +56,17 @@ function metadataLines(entry) {
   const meta = entry?.meta ?? {};
   const lines = [];
 
-  if (type === 'trade') {
+  if (type === 'game') {
+    const score = entry?.score ?? {};
+    const scoreLine = score.awayAbbr && score.homeAbbr && score.away != null && score.home != null
+      ? `${score.awayAbbr} ${score.away} - ${score.homeAbbr} ${score.home}`
+      : entry?.summary;
+    if (scoreLine) lines.push({ label: 'Final', value: scoreLine });
+    if (entry?.result) lines.push({ label: 'Result', value: String(entry.result).toUpperCase() });
+    if (entry?.standingsPosition != null) lines.push({ label: 'Conf standing', value: `#${entry.standingsPosition}` });
+    if (entry?.standout?.name) lines.push({ label: 'Standout', value: [entry.standout.name, entry.standout.detail].filter(Boolean).join(' - ') });
+    if (entry?.season != null) lines.push({ label: 'Season', value: entry.season });
+  } else if (type === 'trade') {
     const players = compactPlayers(meta.players);
     const incoming = compactPlayers(meta.incomingPlayers);
     const outgoing = compactPlayers(meta.outgoingPlayers);
@@ -104,10 +114,19 @@ function secondaryLine(entry) {
   return entry?.summary ?? CHRONICLE_EVENT_LABELS[type] ?? 'Franchise event';
 }
 
-export default function FranchiseStoryHub({ league }) {
+export default function FranchiseStoryHub({ league, actions = null }) {
   const [expandedId, setExpandedId] = useState(null);
+  const lastPersistedKeyRef = useRef('');
   const story = useMemo(() => syncFranchiseChronicle(league), [league]);
   const entries = [...(story.entries ?? [])].reverse();
+  const entryKey = (story.entries ?? []).map((entry) => entry?.id).filter(Boolean).join('|');
+
+  useEffect(() => {
+    if (!actions?.updateFranchiseChronicle || !Array.isArray(league?.franchiseChronicle)) return;
+    if (!entryKey || lastPersistedKeyRef.current === entryKey) return;
+    lastPersistedKeyRef.current = entryKey;
+    persistFranchiseChronicle(actions, league);
+  }, [actions, entryKey, league]);
 
   return (
     <div className="app-screen-stack franchise-story-hub">

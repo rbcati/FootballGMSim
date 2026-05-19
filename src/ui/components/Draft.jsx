@@ -36,6 +36,7 @@ import { usePlayerCompare } from "../utils/playerCompare.js";
 import EmptyState from "./EmptyState.jsx";
 import { POS_COLORS } from "../constants/positionColors.js";
 import { buildProspectScoutingReport } from "../../core/scoutingModel.js";
+import { logCompletedDraftAction, persistFranchiseChronicle } from "../utils/franchiseChronicle.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -2351,6 +2352,12 @@ export default function Draft({ league, actions, onNavigate = null }) {
               (pk) => pk.teamId === league?.userTeamId && pk.playerOvr != null,
             );
           if (lastUserPick) {
+            logCompletedDraftAction(league, {
+              id: `draft-${league?.seasonId ?? league?.year}-${lastUserPick.overall ?? lastUserPick.pickInRound}-${lastUserPick.playerId}`,
+              pick: lastUserPick,
+              source: 'draft_room',
+            });
+            await persistFranchiseChronicle(actions, league);
             const grade = calculatePickGrade(
               lastUserPick.playerOvr,
               lastUserPick.overall,
@@ -2363,7 +2370,7 @@ export default function Draft({ league, actions, onNavigate = null }) {
         setError(err.message);
       }
     },
-    [actions, league?.userTeamId, normalizeDraftState],
+    [actions, league, normalizeDraftState],
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────

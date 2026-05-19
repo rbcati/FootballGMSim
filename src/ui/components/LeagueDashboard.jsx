@@ -989,7 +989,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Story" && (
           <TabErrorBoundary label="Story" onNavigate={setActiveTab} fallbackTab="HQ">
-            <FranchiseStoryHub league={league} />
+            <FranchiseStoryHub league={league} actions={actions} />
           </TabErrorBoundary>
         )}
         {activeTab === "Standings" && (
