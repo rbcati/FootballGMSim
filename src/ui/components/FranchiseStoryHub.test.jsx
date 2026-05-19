@@ -121,4 +121,16 @@ describe('FranchiseStoryHub typed timeline', () => {
     expect(screen.getByText(/2027 Round 2 Pick 52/)).toBeTruthy();
     expect(screen.queryByText('undefined')).toBeNull();
   });
+
+  it('expands game entries with compact final score metadata', () => {
+    render(<FranchiseStoryHub league={buildLeague()} />);
+
+    fireEvent.click(screen.getByText('Legacy comeback win'));
+
+    expect(screen.getByText('Final:')).toBeTruthy();
+    expect(screen.getByText(/W BAL 17-24 PIT/)).toBeTruthy();
+    expect(screen.getByText('Result:')).toBeTruthy();
+    expect(screen.getAllByText('W').length).toBeGreaterThan(0);
+    expect(screen.queryByText('undefined')).toBeNull();
+  });
 });

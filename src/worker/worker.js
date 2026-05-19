@@ -849,6 +849,8 @@ function buildViewState() {
     records: meta?.records ?? null,
     recordBook: meta?.recordBook ?? null,
     leagueHistory: Array.isArray(meta?.leagueHistory) ? meta.leagueHistory.slice(-60) : [],
+    franchiseChronicle: Array.isArray(meta?.franchiseChronicle) ? meta.franchiseChronicle.slice(-340) : [],
+    franchiseSeasonReviews: Array.isArray(meta?.franchiseSeasonReviews) ? meta.franchiseSeasonReviews.slice(-40) : [],
     seasonStorylines: Array.isArray(meta?.seasonStorylines) ? meta.seasonStorylines : [],
     hallOfFameClasses: Array.isArray(meta?.hallOfFame?.classes) ? meta.hallOfFame.classes.slice(0, 20) : [],
     settings: normalizeLeagueSettings(meta?.settings ?? {}),
@@ -5324,6 +5326,23 @@ async function handleSaveNow(payload, id) {
 }
 
 // ── Handler: RESET_LEAGUE ─────────────────────────────────────────────────────
+
+function normalizeChronicleEntriesForMeta(entries) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry) => ({
+      ...entry,
+      meta: entry.meta && typeof entry.meta === 'object' ? { ...entry.meta } : entry.meta,
+    }))
+    .slice(-340);
+}
+
+async function handleUpdateFranchiseChronicle({ entries }, id) {
+  cache.setMeta({ franchiseChronicle: normalizeChronicleEntriesForMeta(entries) });
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
 
 async function handleResetLeague(payload, id) {
   _saveIsExplicitlyLoaded = false;
@@ -10286,6 +10305,7 @@ async function handleMessage(event) {
       case toWorker.SAVE_SLOT:          return await handleSaveSlot(payload, id);
       case toWorker.DELETE_SLOT:        return await handleDeleteSlot(payload, id);
       case toWorker.RESET_LEAGUE:       return await handleResetLeague(payload, id);
+      case toWorker.UPDATE_FRANCHISE_CHRONICLE: return await handleUpdateFranchiseChronicle(payload, id);
       case toWorker.EXPORT_SAVE:        return await handleExportSave(payload, id);
       case toWorker.IMPORT_SAVE:        return await handleImportSave(payload, id);
       case toWorker.EXPORT_LEAGUE_CONFIG: return await handleExportLeagueConfig(payload, id);

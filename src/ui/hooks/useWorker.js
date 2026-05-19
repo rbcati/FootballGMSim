@@ -563,6 +563,8 @@ export function useWorker() {
 
     /** Force an immediate DB flush. */
     save: ()                     => send(toWorker.SAVE_NOW),
+    updateFranchiseChronicle: (entries) =>
+      request(toWorker.UPDATE_FRANCHISE_CHRONICLE, { entries }, { silent: true }),
 
     loadSlot: (slotKey)          => request(toWorker.LOAD_SLOT, { slotKey }, { silent: false }),
     saveSlot: (slotKey)          => send(toWorker.SAVE_SLOT, { slotKey }),

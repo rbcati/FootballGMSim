@@ -59,7 +59,7 @@ export default function ExtensionNegotiationModal({
       const resp = await actions.extendContract(player.id, teamId, offer);
       const payload = resp?.payload || {};
       setResponse(payload);
-      if (payload.status === 'accepted') onComplete();
+      if (payload.status === 'accepted') await onComplete?.(payload, offer);
       if (payload.status === 'counter' && payload.counter) setOffer(payload.counter);
     } finally {
       setSubmitting(false);

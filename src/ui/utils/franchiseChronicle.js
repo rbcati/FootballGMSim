@@ -40,7 +40,11 @@ function normalizeEventType(value) {
   if (!raw) return null;
   const normalized = raw.replace(/\s+/g, '_').replaceAll('-', '_');
   const aliased = EVENT_TYPE_ALIASES[normalized] ?? normalized;
-  return CANONICAL_EVENT_TYPES.has(aliased) ? aliased : null;
+  if (CANONICAL_EVENT_TYPES.has(aliased)) return aliased;
+  if (import.meta.env?.DEV) {
+    console.warn(`[franchiseChronicle] Unknown event type "${raw}" normalized to Event.`);
+  }
+  return null;
 }
 
 export function resolveChronicleEventType(entry = {}) {
@@ -75,6 +79,18 @@ function compareChronicleEntries(a, b) {
     || String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
 }
 
+function hasChronicleId(league, id) {
+  return (league?.franchiseChronicle ?? []).some((entry) => String(entry?.id ?? '') === String(id ?? ''));
+}
+
+export function persistFranchiseChronicle(actions, league) {
+  if (actions?.updateFranchiseChronicle && Array.isArray(league?.franchiseChronicle)) {
+    return actions.updateFranchiseChronicle(league.franchiseChronicle);
+  }
+  actions?.save?.();
+  return Promise.resolve(null);
+}
+
 function ensureUniqueChronicleId(league, baseId) {
   const existing = new Set((league?.franchiseChronicle ?? []).map((entry) => String(entry?.id ?? '')).filter(Boolean));
   let id = String(baseId ?? 'chronicle-event');
@@ -87,7 +103,7 @@ function ensureUniqueChronicleId(league, baseId) {
 }
 
 function buildEventId({ league, payload, season, week, type }) {
-  if (payload?.id) return ensureUniqueChronicleId(league, payload.id);
+  if (payload?.id) return String(payload.id);
   const key = payload?.key
     ?? payload?.meta?.eventId
     ?? payload?.meta?.playerId
@@ -155,6 +171,20 @@ function normalizePickLabel(pick) {
 function normalizePickLabels(value) {
   const rows = Array.isArray(value) ? value : value ? [value] : [];
   return rows.map(normalizePickLabel).filter(Boolean);
+}
+
+function stableKeyPart(value) {
+  const rows = Array.isArray(value) ? value : value ? [value] : [];
+  return rows
+    .map((item) => {
+      if (item == null) return null;
+      if (typeof item === 'object') return item.id ?? item.playerId ?? item.pickId ?? item.label ?? item.name;
+      return item;
+    })
+    .filter((item) => item != null && item !== '')
+    .map((item) => String(item))
+    .sort()
+    .join('.');
 }
 
 function normalizeChronicleEntry(entry) {
@@ -281,7 +311,9 @@ function buildChronicleEntry({ league, team, week, game }) {
 
 function buildSeasonInReview(league, team) {
   const games = safeNum(team?.wins) + safeNum(team?.losses) + safeNum(team?.ties);
-  const regularSeasonComplete = games >= 17 || String(league?.phase ?? '').toLowerCase().includes('offseason');
+  const configuredSeasonLength = safeNum(league?.settings?.seasonLength ?? league?.seasonLength, 0);
+  const seasonLength = configuredSeasonLength > 0 ? configuredSeasonLength : 17; // NFL-style fallback for legacy saves.
+  const regularSeasonComplete = games >= seasonLength || String(league?.phase ?? '').toLowerCase().includes('offseason');
   if (!regularSeasonComplete) return null;
 
   const breakout = [...(team?.roster ?? [])]
@@ -305,6 +337,14 @@ export const CHRONICLE_BADGES = [
 function deriveBadgeState(league, team, chronicle) {
   const rookies = (team?.roster ?? []).filter((player) => safeNum(player?.yearsPro, 0) <= 1);
   const expiring = (team?.roster ?? []).filter((player) => safeNum(player?.contract?.yearsRemaining ?? player?.contract?.years, 0) <= 1 && safeNum(player?.ovr) >= 75);
+  const milestoneEntries = Array.isArray(chronicle)
+    ? chronicle.filter((entry) => resolveChronicleEventType(entry) === 'milestone')
+    : [];
+  const existingMilestones = new Map(
+    milestoneEntries
+      .map((entry) => [entry?.meta?.badgeId ?? entry?.meta?.milestoneId ?? entry?.id, entry])
+      .filter(([key]) => key),
+  );
 
   const unlocked = {
     first_playoff_berth: Boolean(team?.playoffAppearances ?? team?.playoffSeed ?? team?.madePlayoffs),
@@ -313,11 +353,33 @@ function deriveBadgeState(league, team, chronicle) {
     cap_wizard: safeNum(team?.capRoom, safeNum(team?.salaryCap, 0) - safeNum(team?.payroll, 0)) > 0 && expiring.length >= 3,
   };
 
-  return CHRONICLE_BADGES.map((badge) => ({
-    ...badge,
-    unlocked: Boolean(unlocked[badge.id]),
-    unlockedOn: unlocked[badge.id] ? `${safeNum(league?.year, 0)} Week ${safeNum(league?.week, 1)}` : null,
-  }));
+  return CHRONICLE_BADGES.map((badge) => {
+    const existing = existingMilestones.get(badge.id) ?? existingMilestones.get(`milestone-${badge.id}`);
+    const isUnlocked = Boolean(unlocked[badge.id]) || Boolean(existing);
+    return {
+      ...badge,
+      unlocked: isUnlocked,
+      unlockedOn: existing?.meta?.unlockedOn ?? (isUnlocked ? `${safeNum(league?.year, 0)} Week ${safeNum(league?.week, 1)}` : null),
+    };
+  });
+}
+
+function logNewBadgeMilestones(league, badges = []) {
+  if (!league || !Array.isArray(badges)) return;
+  for (const badge of badges) {
+    if (!badge?.unlocked) continue;
+    const id = `milestone-${badge.id}`;
+    if (hasChronicleId(league, id)) continue;
+    logMilestoneEvent(league, {
+      id,
+      week: safeNum(league?.week, 1),
+      season: safeNum(league?.year, safeNum(league?.seasonId, 0)),
+      label: badge.label,
+      description: badge.description,
+      unlockedOn: badge.unlockedOn,
+      meta: { badgeId: badge.id },
+    });
+  }
 }
 
 
@@ -328,9 +390,15 @@ export function logChronicleEvent(league, payload = {}) {
   const week = safeNum(payload?.week, safeNum(league?.week, 1));
   const season = safeNum(payload?.season, safeNum(league?.year, 0));
   const type = resolveChronicleEventType(payload);
+  const entryId = buildEventId({ league, payload, season, week, type });
+  const existing = league.franchiseChronicle.find((entry) => String(entry?.id ?? '') === String(entryId));
+  if (existing) {
+    Object.assign(existing, normalizeChronicleEntry(existing));
+    return existing;
+  }
   const entry = normalizeChronicleEntry({
     ...payload,
-    id: buildEventId({ league, payload, season, week, type }),
+    id: entryId,
     type,
     season,
     week,
@@ -381,6 +449,53 @@ export function logTradeOutcome(league, payload = {}) {
   });
 }
 
+export function logCompletedTradeAction(league, payload = {}) {
+  const season = safeNum(payload?.season, safeNum(league?.year, safeNum(league?.seasonId, 0)));
+  const week = safeNum(payload?.week, safeNum(league?.week, 1));
+  const fromTeamId = payload?.fromTeamId ?? league?.userTeamId;
+  const toTeamId = payload?.toTeamId ?? payload?.partnerTeamId;
+  const incomingPlayers = normalizePlayerList(payload?.incomingPlayers);
+  const outgoingPlayers = normalizePlayerList(payload?.outgoingPlayers);
+  const incomingPicks = normalizePickLabels(payload?.incomingPicks);
+  const outgoingPicks = normalizePickLabels(payload?.outgoingPicks);
+  const partner = payload?.partnerTeam ?? payload?.toTeam ?? null;
+  const partnerLabel = trimText(partner?.abbr ?? partner?.name ?? payload?.partnerTeamLabel) ?? 'trade partner';
+  const fallbackSummary = [incomingPlayers.length ? `Added ${incomingPlayers.map((p) => p.name).join(', ')}` : null, outgoingPlayers.length ? `Sent ${outgoingPlayers.map((p) => p.name).join(', ')}` : null]
+    .filter(Boolean)
+    .join(' - ') || 'Trade completed.';
+  const id = payload?.id ?? [
+    'trade',
+    season,
+    `wk${week}`,
+    payload?.source ?? 'completed',
+    fromTeamId,
+    toTeamId,
+    stableKeyPart(incomingPlayers),
+    stableKeyPart(outgoingPlayers),
+    stableKeyPart(incomingPicks),
+    stableKeyPart(outgoingPicks),
+  ].filter((part) => part != null && part !== '').join('-');
+
+  return logTradeOutcome(league, {
+    id,
+    season,
+    week,
+    headline: payload?.headline ?? `Trade completed with ${partnerLabel}`,
+    summary: payload?.summary ?? fallbackSummary,
+    incomingPlayers,
+    outgoingPlayers,
+    incomingPicks,
+    outgoingPicks,
+    teams: normalizeLabelList(payload?.teams ?? ([payload?.userTeam, partner].filter(Boolean))),
+    meta: {
+      ...(payload?.meta ?? {}),
+      source: payload?.source ?? 'completed_trade',
+      fromTeamId,
+      toTeamId,
+    },
+  });
+}
+
 export function logContractOutcome(league, payload = {}) {
   const player = normalizePlayerMeta(payload?.player ?? payload?.playerName);
   const years = payload?.years ?? payload?.contractYears ?? payload?.termYears ?? payload?.contract?.years ?? payload?.contract?.yearsRemaining ?? null;
@@ -399,6 +514,39 @@ export function logContractOutcome(league, payload = {}) {
       years,
       totalValue,
       aav,
+    },
+  });
+}
+
+export function logCompletedContractAction(league, payload = {}) {
+  const season = safeNum(payload?.season, safeNum(league?.year, safeNum(league?.seasonId, 0)));
+  const week = safeNum(payload?.week, safeNum(league?.week, 1));
+  const player = normalizePlayerMeta(payload?.player ?? payload?.playerName);
+  const contract = payload?.contract ?? {};
+  const years = payload?.years ?? contract?.yearsTotal ?? contract?.years ?? null;
+  const aav = payload?.aav ?? contract?.baseAnnual ?? contract?.salary ?? null;
+  const totalValue = payload?.totalValue ?? (aav != null && years != null ? Math.round((Number(aav) * Number(years) + safeNum(contract?.signingBonus, 0)) * 10) / 10 : null);
+  const teamId = payload?.teamId ?? league?.userTeamId;
+  const id = payload?.id ?? ['contract', season, `wk${week}`, payload?.source ?? 'signed', teamId, player?.id ?? slugify(player?.name, 'player')].join('-');
+  const fallbackSummary = [years ? `${years} years` : null, totalValue != null ? `$${totalValue}M total` : null, aav != null ? `$${Number(aav).toFixed(1)}M AAV` : null]
+    .filter(Boolean)
+    .join(' - ') || 'Contract completed.';
+
+  return logContractOutcome(league, {
+    id,
+    season,
+    week,
+    player,
+    years,
+    totalValue,
+    aav,
+    headline: payload?.headline ?? (player?.name ? `${player.name} signs with the franchise` : 'Contract signed'),
+    summary: payload?.summary ?? fallbackSummary,
+    meta: {
+      ...(payload?.meta ?? {}),
+      source: payload?.source ?? 'completed_contract',
+      teamId,
+      team: normalizeLabelList(payload?.team ? [payload.team] : []).at(0) ?? null,
     },
   });
 }
@@ -423,6 +571,39 @@ export function logDraftOutcome(league, payload = {}) {
       pick,
       pickLabel,
       potential: payload?.potential ?? payload?.pot ?? payload?.player?.potential ?? payload?.player?.pot ?? null,
+    },
+  });
+}
+
+export function logCompletedDraftAction(league, payload = {}) {
+  const pick = payload?.pick ?? payload;
+  const season = safeNum(payload?.season, safeNum(league?.year, safeNum(league?.seasonId, 0)));
+  const week = safeNum(payload?.week, safeNum(league?.week, 1));
+  const player = normalizePlayerMeta(payload?.player ?? {
+    id: pick?.playerId,
+    name: pick?.playerName,
+    pos: pick?.playerPos,
+    ovr: pick?.playerOvr,
+  });
+  const round = payload?.round ?? pick?.round ?? null;
+  const pickNumber = payload?.pickNumber ?? pick?.pickInRound ?? pick?.pick ?? null;
+  const overallPick = payload?.overallPick ?? pick?.overall ?? null;
+  const id = payload?.id ?? ['draft', season, overallPick ?? pickNumber ?? 'pick', player?.id ?? slugify(player?.name, 'player')].join('-');
+
+  return logDraftOutcome(league, {
+    id,
+    season,
+    week,
+    player,
+    round,
+    pickNumber,
+    overallPick,
+    potential: payload?.potential ?? pick?.playerPotential ?? pick?.potential ?? null,
+    headline: payload?.headline ?? (player?.name ? `${player.name} drafted by the franchise` : 'Draft pick made'),
+    meta: {
+      ...(payload?.meta ?? {}),
+      source: payload?.source ?? 'user_draft_pick',
+      teamId: payload?.teamId ?? pick?.teamId ?? league?.userTeamId,
     },
   });
 }
@@ -501,7 +682,16 @@ export function syncFranchiseChronicle(league) {
     if (!hasReview) league.franchiseSeasonReviews.push(seasonReview);
   }
 
-  const badges = deriveBadgeState(league, team, league.franchiseChronicle);
+  let badges = deriveBadgeState(league, team, league.franchiseChronicle);
+  logNewBadgeMilestones(league, badges);
+  if (league.franchiseChronicle.some((entry) => resolveChronicleEventType(entry) === 'milestone')) {
+    league.franchiseChronicle = [...league.franchiseChronicle]
+      .map(normalizeChronicleEntry)
+      .filter(Boolean)
+      .sort(compareChronicleEntries)
+      .slice(-CHRONICLE_CAP);
+    badges = deriveBadgeState(league, team, league.franchiseChronicle);
+  }
   return {
     entries: league.franchiseChronicle,
     seasonReview: seasonReview ?? [...(league.franchiseSeasonReviews ?? [])].slice(-1)[0] ?? null,

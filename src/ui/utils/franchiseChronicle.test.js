@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   logChronicleEvent,
+  logCompletedContractAction,
+  logCompletedDraftAction,
+  logCompletedTradeAction,
   logContractOutcome,
   logDraftOutcome,
   logInjuryEvent,
@@ -60,20 +63,22 @@ describe('syncFranchiseChronicle', () => {
   it('builds chronicle entries and keeps backward compatibility for missing saves', () => {
     const league = buildLeague({ franchiseChronicle: undefined });
     const story = syncFranchiseChronicle(league);
+    const gameEntries = story.entries.filter((entry) => entry.type === 'game');
     expect(Array.isArray(league.franchiseChronicle)).toBe(true);
-    expect(story.entries).toHaveLength(1);
-    expect(story.entries[0].week).toBe(1);
-    expect(story.entries[0].result).toBe('W');
-    expect(story.entries[0].type).toBe('game');
-    expect(story.entries[0].meta.type).toBe('game');
-    expect(story.entries[0].events[0]).toContain('extends veteran LT');
+    expect(gameEntries).toHaveLength(1);
+    expect(gameEntries[0].week).toBe(1);
+    expect(gameEntries[0].result).toBe('W');
+    expect(gameEntries[0].type).toBe('game');
+    expect(gameEntries[0].meta.type).toBe('game');
+    expect(gameEntries[0].events[0]).toContain('extends veteran LT');
   });
 
   it('does not duplicate entries when called repeatedly', () => {
     const league = buildLeague();
     syncFranchiseChronicle(league);
     const second = syncFranchiseChronicle(league);
-    expect(second.entries).toHaveLength(1);
+    expect(second.entries.filter((entry) => entry.type === 'game')).toHaveLength(1);
+    expect(second.entries.map((entry) => entry.id).filter((id) => id === '2026-wk1-g1')).toHaveLength(1);
   });
 
   it('generates season review once regular season is complete', () => {
@@ -116,6 +121,15 @@ describe('typed chronicle events', () => {
     expect(first.meta.type).toBe('custom');
     expect(second.id).not.toBe(first.id);
     expect(resolveChronicleEventType({ meta: { type: 'trade_completed' } })).toBe('trade');
+  });
+
+  it('dedupes repeated completed events that provide a deterministic id', () => {
+    const league = buildLeague({ franchiseChronicle: [] });
+    const first = logChronicleEvent(league, { id: 'event-once', week: 3, type: 'milestone', headline: 'One time' });
+    const second = logChronicleEvent(league, { id: 'event-once', week: 3, type: 'milestone', headline: 'One time again' });
+
+    expect(second.id).toBe(first.id);
+    expect(league.franchiseChronicle).toHaveLength(1);
   });
 
   it('logs trade outcomes with safe player, pick, and team metadata', () => {
@@ -188,5 +202,85 @@ describe('typed chronicle events', () => {
     expect(entry.meta.label).toBe('First playoff berth');
     expect(entry.meta.description).toBe('Clinched in Week 17');
     expect(entry.meta.unlockedOn).toBe('2026 Week 3');
+  });
+
+  it('logs completed trade actions with deterministic duplicate prevention', () => {
+    const league = buildLeague({ franchiseChronicle: [] });
+    const payload = {
+      id: 'trade-fixed',
+      fromTeamId: 1,
+      toTeamId: 2,
+      userTeam: { abbr: 'PIT' },
+      partnerTeam: { abbr: 'BAL' },
+      incomingPlayers: [{ id: 30, name: 'Rae Bell', pos: 'S', ovr: 81 }],
+      outgoingPicks: [{ year: 2027, round: 3, pick: 84 }],
+    };
+    const first = logCompletedTradeAction(league, payload);
+    const second = logCompletedTradeAction(league, payload);
+
+    expect(first.type).toBe('trade');
+    expect(second.id).toBe(first.id);
+    expect(first.meta.incomingPlayers[0].name).toBe('Rae Bell');
+    expect(first.meta.outgoingPicks[0]).toBe('2027 Round 3 Pick 84');
+    expect(league.franchiseChronicle).toHaveLength(1);
+  });
+
+  it('logs completed contract actions with deterministic duplicate prevention', () => {
+    const league = buildLeague({ franchiseChronicle: [] });
+    const first = logCompletedContractAction(league, {
+      id: 'contract-fixed',
+      player: { id: 10, name: 'Jay Stone', pos: 'WR', ovr: 84 },
+      contract: { yearsTotal: 4, baseAnnual: 12, signingBonus: 4 },
+      team: { abbr: 'PIT' },
+    });
+    const second = logCompletedContractAction(league, {
+      id: 'contract-fixed',
+      player: { id: 10, name: 'Jay Stone', pos: 'WR', ovr: 84 },
+      contract: { yearsTotal: 4, baseAnnual: 12, signingBonus: 4 },
+      team: { abbr: 'PIT' },
+    });
+
+    expect(first.type).toBe('contract');
+    expect(second.id).toBe(first.id);
+    expect(first.meta.totalValue).toBe(52);
+    expect(first.meta.aav).toBe(12);
+    expect(league.franchiseChronicle).toHaveLength(1);
+  });
+
+  it('logs completed draft actions with deterministic duplicate prevention', () => {
+    const league = buildLeague({ franchiseChronicle: [] });
+    const pick = { overall: 91, round: 3, pickInRound: 27, teamId: 1, playerId: 77, playerName: 'Rico Vale', playerPos: 'EDGE', playerOvr: 74 };
+    const first = logCompletedDraftAction(league, { pick });
+    const second = logCompletedDraftAction(league, { pick });
+
+    expect(first.type).toBe('draft');
+    expect(second.id).toBe(first.id);
+    expect(first.meta.player.name).toBe('Rico Vale');
+    expect(first.meta.pickLabel).toBe('2026 Round 3 Pick 27');
+    expect(league.franchiseChronicle).toHaveLength(1);
+  });
+
+  it('logs newly unlocked badge milestones once during sync', () => {
+    const league = buildLeague({
+      franchiseChronicle: [],
+      teams: [{ ...buildLeague().teams[0], wins: 10, losses: 0 }, buildLeague().teams[1]],
+    });
+    const first = syncFranchiseChronicle(league);
+    const second = syncFranchiseChronicle(league);
+    const milestones = second.entries.filter((entry) => entry.type === 'milestone' && entry.meta?.badgeId === 'ten_win_season');
+
+    expect(first.badges.find((badge) => badge.id === 'ten_win_season')?.unlocked).toBe(true);
+    expect(milestones).toHaveLength(1);
+  });
+
+  it('uses configured season length before generating season review', () => {
+    const league = buildLeague({
+      settings: { seasonLength: 18 },
+      teams: [{ ...buildLeague().teams[0], wins: 10, losses: 7 }, buildLeague().teams[1]],
+    });
+    expect(syncFranchiseChronicle(league).seasonReview).toBeNull();
+
+    league.teams[0].wins = 11;
+    expect(syncFranchiseChronicle(league).seasonReview?.text).toContain('2026 Season: 11-7');
   });
 });

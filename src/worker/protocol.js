@@ -97,6 +97,7 @@ export const toWorker = Object.freeze({
   SAVE_SLOT:          'SAVE_SLOT',            // { slotKey }
   DELETE_SLOT:        'DELETE_SLOT',          // { slotKey }
   RESET_LEAGUE:       'RESET_LEAGUE',         // wipe everything
+  UPDATE_FRANCHISE_CHRONICLE: 'UPDATE_FRANCHISE_CHRONICLE', // { entries }
   EXPORT_SAVE:        'EXPORT_SAVE',          // { leagueId? }
   IMPORT_SAVE:        'IMPORT_SAVE',          // { data, saveName? }
   EXPORT_LEAGUE_CONFIG: 'EXPORT_LEAGUE_CONFIG', // {}

@@ -13,6 +13,7 @@ import { derivePlayerContractFinancials } from '../utils/contractFormatting.js';
 import { deriveTeamCapSnapshot } from '../utils/numberFormatting.js';
 import { evaluateResignRecommendation } from '../utils/contractInsights.js';
 import { buildContractOfferInsight, toneToContractInsightColor } from '../utils/contractOfferInsights.js';
+import { logCompletedContractAction, persistFranchiseChronicle } from '../utils/franchiseChronicle.js';
 
 const PREMIUM_POSITIONS = new Set(['QB', 'LT', 'EDGE', 'CB']);
 const SORT_PRESETS = [
@@ -220,17 +221,27 @@ function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }
   const confirmExtension = async () => {
     if (!previewRow || !actions?.extendContract || !team?.id) return;
     setBusyPlayerId(previewRow.player.id);
+    const contract = {
+      years: previewRow.demand.yearsTotal,
+      yearsTotal: previewRow.demand.yearsTotal,
+      baseAnnual: previewRow.demand.baseAnnual,
+      signingBonus: previewRow.demand.signingBonus,
+      guaranteedPct: previewRow.demand.guaranteedPct,
+    };
     try {
-      const response = await actions.extendContract(previewRow.player.id, team.id, {
-        years: previewRow.demand.yearsTotal,
-        yearsTotal: previewRow.demand.yearsTotal,
-        baseAnnual: previewRow.demand.baseAnnual,
-        signingBonus: previewRow.demand.signingBonus,
-        guaranteedPct: previewRow.demand.guaranteedPct,
-      });
+      const response = await actions.extendContract(previewRow.player.id, team.id, contract);
       const status = response?.payload?.status;
       if (status === 'accepted') {
+        logCompletedContractAction(league, {
+          id: `contract-${league?.seasonId ?? league?.year}-wk${league?.week ?? 1}-resign-${team.id}-${previewRow.player.id}`,
+          player: previewRow.player,
+          contract,
+          team,
+          source: 'resigning_center',
+          headline: `${previewRow.player.name} signs extension`,
+        });
         await actions.updatePlayerManagement(previewRow.player.id, team.id, { extensionDecision: 'extended' });
+        await persistFranchiseChronicle(actions, league);
         setStatusMessage(`${previewRow.player.name} extension accepted.`);
       } else if (status === 'counter') {
         setStatusMessage(`${previewRow.player.name} countered. Ask increased to ${money(response?.payload?.counter?.baseAnnual)}.`);
@@ -378,7 +389,16 @@ export default function ContractCenter({ league, actions, compact = false, onNav
     }
     try {
       await actions.applyFranchiseTag(player.id, team.id);
+      logCompletedContractAction(league, {
+        id: `contract-${league?.seasonId ?? league?.year}-wk${league?.week ?? 1}-tag-${team.id}-${player.id}`,
+        player,
+        team,
+        source: 'franchise_tag',
+        headline: `${player.name} receives franchise tag`,
+        summary: 'Franchise tag applied.',
+      });
       await actions.updatePlayerManagement?.(player.id, team.id, { extensionDecision: 'tagged' });
+      await persistFranchiseChronicle(actions, league);
       setStatusMessage(`Tagged ${player.name}.`);
     } catch (err) {
       setStatusMessage(err?.message || 'Special retention tool not yet available.');
@@ -452,7 +472,16 @@ export default function ContractCenter({ league, actions, compact = false, onNav
           actions={actions}
           cacheScopeKey={buildLeagueCacheScopeKey(league)}
           onClose={() => setExtensionPlayer(null)}
-          onComplete={() => {
+          onComplete={async (_payload, signedContract) => {
+            logCompletedContractAction(league, {
+              id: `contract-${league?.seasonId ?? league?.year}-wk${league?.week ?? 1}-extension-${team?.id}-${extensionPlayer.id}`,
+              player: extensionPlayer,
+              contract: signedContract,
+              team,
+              source: 'extension_modal',
+              headline: `${extensionPlayer.name} signs extension`,
+            });
+            await persistFranchiseChronicle(actions, league);
             setStatusMessage(`${extensionPlayer.name} extension signed.`);
             setExtensionPlayer(null);
           }}

@@ -20,6 +20,7 @@ import { DeadlineBanner } from "./common/UiPrimitives.jsx";
 import { buildTradeAssetDisplay } from "../utils/tradeAssetDisplay.js";
 import { getTradeLockReason } from "../utils/tradeLockReason.js";
 import { getBudgetLabel, toneToCssColor } from "../utils/transactionMarket.js";
+import { logCompletedTradeAction, persistFranchiseChronicle } from "../utils/franchiseChronicle.js";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -123,6 +124,14 @@ function CapImpact({ myTeam, theirTeam, myCapAfter, theirCapAfter }) {
 function pickLabel(pk) {
   const display = buildTradeAssetDisplay(pk, { type: 'pick' });
   return `${display.title}${display.subtitle ? ` · ${display.subtitle}` : ''}`;
+}
+
+function findLeaguePlayer(league, playerId) {
+  for (const team of league?.teams ?? []) {
+    const found = (team?.roster ?? []).find((player) => String(player?.id) === String(playerId));
+    if (found) return found;
+  }
+  return null;
 }
 
 function PickSelector({ side, picks, onChange, availablePicks = [] }) {
@@ -511,21 +520,61 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     try {
       const outgoing = { playerIds: [...offering].map((id) => Number(id)), pickIds: myPicks.map(p => p.id) };
       const incoming = { playerIds: [...receiving].map((id) => Number(id)), pickIds: theirPicks.map(p => p.id) };
+      const outgoingPlayers = [...offering].map((id) => myRosterMap.get(toAssetId(id))).filter(Boolean);
+      const incomingPlayers = [...receiving].map((id) => theirRosterMap.get(toAssetId(id))).filter(Boolean);
       const resp = counterOfferId
         ? await actions.counterIncomingTrade(counterOfferId, outgoing, incoming)
         : await actions.submitTrade(myTeamId, targetId, outgoing, incoming);
       if (resp?.payload) setTradeResult(resp.payload);
       if (resp?.payload?.accepted) {
+        logCompletedTradeAction(league, {
+          id: `trade-${league?.seasonId ?? league?.year}-wk${league?.week ?? 1}-${counterOfferId ? `counter-${counterOfferId}` : `${myTeamId}-${targetId}`}-${outgoing.playerIds.join('.') || 'none'}-${incoming.playerIds.join('.') || 'none'}-${outgoing.pickIds.join('.') || 'none'}-${incoming.pickIds.join('.') || 'none'}`,
+          fromTeamId: myTeamId,
+          toTeamId: targetId,
+          userTeam: liveMyTeam,
+          partnerTeam: liveTheirTeam,
+          outgoingPlayers,
+          incomingPlayers,
+          outgoingPicks: myPicks,
+          incomingPicks: theirPicks,
+          source: counterOfferId ? 'counter_trade' : 'trade_builder',
+        });
         setOffering(new Set()); setReceiving(new Set()); setMyPicks([]); setTheirPicks([]);
         setCounterOfferId(null);
         await fetchRosters(targetId);
-        actions.save();
+        await persistFranchiseChronicle(actions, league);
         setShowSavedToast(true);
       }
     } catch (e) {
       console.error(e);
       setTradeResult({ accepted: false, reason: "Trade failed – engine error." });
     } finally { setSubmitting(false); }
+  };
+
+  const handleAcceptIncomingTrade = async (offer) => {
+    if (!offer?.id || tradeLocked || !actions?.acceptIncomingTrade) return;
+    const resp = await actions.acceptIncomingTrade(offer.id);
+    if (resp?.payload?.accepted) {
+      const partnerTeam = league?.teams?.find((team) => Number(team?.id) === Number(offer.offeringTeamId)) ?? { id: offer.offeringTeamId, abbr: offer.offeringTeamAbbr };
+      const incomingPlayerIds = offer?.offering?.playerIds ?? [offer?.offeringPlayerId].filter(Boolean);
+      const outgoingPlayerIds = offer?.receiving?.playerIds ?? [offer?.receivingPlayerId].filter(Boolean);
+      logCompletedTradeAction(league, {
+        id: `trade-${league?.seasonId ?? league?.year}-wk${league?.week ?? 1}-incoming-${offer.id}`,
+        fromTeamId: myTeamId,
+        toTeamId: offer.offeringTeamId,
+        userTeam: liveMyTeam,
+        partnerTeam,
+        incomingPlayers: incomingPlayerIds.map((playerId) => findLeaguePlayer(league, playerId)).filter(Boolean),
+        outgoingPlayers: outgoingPlayerIds.map((playerId) => findLeaguePlayer(league, playerId)).filter(Boolean),
+        incomingPicks: (offer?.offering?.pickIds ?? []).map((id) => theirAvailablePicksMap.get(String(id)) ?? { id }),
+        outgoingPicks: (offer?.receiving?.pickIds ?? []).map((id) => myAvailablePicksMap.get(String(id)) ?? { id }),
+        source: 'incoming_trade',
+      });
+      await persistFranchiseChronicle(actions, league);
+      await fetchRosters(Number(offer.offeringTeamId));
+      setShowSavedToast(true);
+    }
+    if (resp?.payload) setTradeResult(resp.payload);
   };
 
   const handleTradeBlockRemove = async (playerId) => {
@@ -652,7 +701,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
                       </div>
                     ) : null}
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Button size="sm" disabled={tradeLocked} onClick={() => actions?.acceptIncomingTrade?.(offer.id)}>Accept</Button>
+                      <Button size="sm" disabled={tradeLocked} onClick={() => handleAcceptIncomingTrade(offer)}>Accept</Button>
                       <Button size="sm" variant="secondary" disabled={tradeLocked} onClick={() => actions?.rejectIncomingTrade?.(offer.id)}>Reject</Button>
                       <Button size="sm" variant="outline" disabled={tradeLocked} onClick={() => startCounterOffer(offer)}>Counter</Button>
                       <Button size="sm" variant="outline" onClick={() => setTargetId(Number(offer.offeringTeamId))}>Open Team</Button>
