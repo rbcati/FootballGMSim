@@ -32,6 +32,7 @@ const actions = {
   getAllSeasons: vi.fn(async () => ({ payload: { seasons: [] } })),
   getPlayerDraftContext: vi.fn(async () => ({ payload: { context: { known: false } } })),
   getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+  getTransactions: vi.fn(async () => ({ payload: { transactions: [] } })),
 };
 
 describe('PlayerProfile', () => {
@@ -60,8 +61,38 @@ describe('PlayerProfile', () => {
     expect(screen.getByTestId('player-profile')).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Avery Fields'));
     expect(screen.getByTestId('player-profile-season-stats').textContent).toContain('Season stats will appear after this player records tracked stats.');
+    expect(screen.getByTestId('player-profile-career-timeline').textContent).toContain('No career timeline recorded yet.');
     await waitFor(() => expect(screen.getByText('Contract Read')).toBeTruthy());
     expect(screen.getByText('Market tier')).toBeTruthy();
+  });
+
+  it('renders player career timeline and acquisition context from transaction rows', async () => {
+    const timelineActions = {
+      ...actions,
+      getTransactions: vi.fn(async () => ({
+        payload: {
+          transactions: [{
+            id: 8,
+            type: 'signing',
+            typeLabel: 'Signing',
+            season: 2031,
+            seasonId: 's2031',
+            week: 4,
+            teamId: 1,
+            teamAbbr: 'DAL',
+            playerId: 11,
+            playerName: 'Avery Fields',
+            headline: 'DAL signed Avery Fields in free agency',
+            detail: '2y - $24M',
+          }],
+        },
+      })),
+    };
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={timelineActions} teams={league.teams} league={league} />);
+
+    await waitFor(() => expect(screen.getByTestId('player-profile-career-timeline').textContent).toContain('DAL signed Avery Fields in free agency'));
+    expect(screen.getByTestId('player-profile-acquisition-summary').textContent).toContain('Signed in free agency');
+    expect(screen.getAllByTestId('player-profile-career-timeline-row')[0].textContent).toContain('Signing');
   });
 
   it('shows career arc snapshot for active players', async () => {
