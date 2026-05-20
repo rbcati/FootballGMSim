@@ -1,17 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { buildShowingLabel, rowMatchesSearch, stableSortRows } from "../utils/dataBrowser.js";
-
-const TYPE_FILTERS = [
-  { value: "all", label: "All types" },
-  { value: "trade", label: "Trades" },
-  { value: "signing", label: "Signings" },
-  { value: "release", label: "Releases" },
-  { value: "draft", label: "Draft" },
-  { value: "retirement", label: "Retirements" },
-  { value: "extension", label: "Extensions" },
-];
+import { stableSortRows } from "../utils/dataBrowser.js";
+import { ACTIVITY_LOG_FILTERS, buildActivityLogViewModel } from "../utils/activityLogViewModel.js";
 
 const SORT_OPTIONS = [
   { value: "date", label: "Date / week" },
@@ -21,21 +12,22 @@ const SORT_OPTIONS = [
 ];
 
 function transactionStamp(tx) {
-  const seasonNumber = Number(String(tx?.seasonId ?? "").replace(/[^0-9]/g, "")) || Number(tx?.season ?? 0) || 0;
+  if (Number.isFinite(Number(tx?.sortDate))) return Number(tx.sortDate);
+  const seasonNumber = Number(String(tx?.seasonId ?? "").replace(/[^0-9]/g, "")) || Number(tx?.season ?? 0) || Number(tx?.year ?? 0) || 0;
   return seasonNumber * 1000 + Number(tx?.week ?? 0);
 }
 
 function sortValue(tx, key) {
-  if (key === "type") return tx?.typeLabel ?? tx?.type ?? "";
+  if (key === "type") return tx?.label ?? tx?.typeLabel ?? tx?.type ?? "";
   if (key === "player") return tx?.playerName ?? tx?.headline ?? "";
-  if (key === "team") return tx?.teamAbbr ?? tx?.fromTeamAbbr ?? tx?.toTeamAbbr ?? "";
+  if (key === "team") return tx?.teamAbbr ?? tx?.fromTeamAbbr ?? tx?.toTeamAbbr ?? tx?.team?.abbr ?? "";
   return transactionStamp(tx);
 }
 
-function matchesTeam(tx, teamId) {
-  if (teamId === "all") return true;
-  const selected = Number(teamId);
-  return [tx?.teamId, tx?.fromTeamId, tx?.toTeamId].some((value) => Number(value) === selected);
+function buildActivityShowingLabel(visible, total) {
+  const safeVisible = Number.isFinite(Number(visible)) ? Number(visible) : 0;
+  const safeTotal = Number.isFinite(Number(total)) ? Number(total) : 0;
+  return `Showing ${safeVisible} of ${safeTotal} ${safeTotal === 1 ? "activity" : "activities"}`;
 }
 
 /**
@@ -73,7 +65,7 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
     if (league?.seasonId != null) {
       map.set(String(league.seasonId), {
         id: String(league.seasonId),
-        label: `Current (${league?.year ?? "—"})`,
+        label: `Current (${league?.year ?? "-"})`,
       });
     }
     for (const season of archiveSeasons) {
@@ -81,7 +73,7 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
       if (!id || map.has(id)) continue;
       map.set(id, {
         id,
-        label: `${season?.year ?? id}${season?.champion?.abbr ? ` · ${season.champion.abbr}` : ""}`,
+        label: `${season?.year ?? id}${season?.champion?.abbr ? ` - ${season.champion.abbr}` : ""}`,
       });
     }
     return [...map.values()];
@@ -115,25 +107,19 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
     loadTransactions();
   }, [loadTransactions]);
 
-  const displayRows = useMemo(() => {
-    const filtered = (rows ?? []).filter((tx) => {
-      if (type !== "all" && tx?.type !== type && tx?.typeLabel !== type) return false;
-      if (!matchesTeam(tx, teamId)) return false;
-      return rowMatchesSearch(tx, search, [
-        "playerName",
-        "teamAbbr",
-        "fromTeamAbbr",
-        "toTeamAbbr",
-        "type",
-        "typeLabel",
-        "headline",
-        "detail",
-        "seasonId",
-        "week",
-      ]);
-    });
-    return stableSortRows(filtered, (tx) => sortValue(tx, sort.key), sort.dir, (tx) => Number(tx?.id ?? 0));
-  }, [rows, search, sort.dir, sort.key, teamId, type]);
+  const activityModel = useMemo(() => buildActivityLogViewModel({
+    league,
+    transactions: rows,
+  }, {
+    seasonId,
+    teamId,
+    type,
+    search,
+  }), [league, rows, search, seasonId, teamId, type]);
+
+  const displayRows = useMemo(() => (
+    stableSortRows(activityModel.rows, (tx) => sortValue(tx, sort.key), sort.dir, (tx) => String(tx?.id ?? ""))
+  ), [activityModel.rows, sort.dir, sort.key]);
 
   const filtersActive = seasonId !== "all" || teamId !== "all" || type !== "all" || Boolean(search.trim()) || sort.key !== "date" || sort.dir !== "desc";
 
@@ -184,7 +170,7 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
             onChange={(e) => setType(e.target.value)}
             aria-label="Type"
           >
-            {TYPE_FILTERS.map((option) => (
+            {ACTIVITY_LOG_FILTERS.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
@@ -235,15 +221,15 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
       </div>
 
       <div className="flex items-center justify-between text-xs text-[color:var(--text-muted)]" data-testid="league-activity-count">
-        <span data-testid="league-activity-showing">{buildShowingLabel(displayRows.length, rows.length, "transaction")}</span>
-        <span>Sort: {SORT_OPTIONS.find((option) => option.value === sort.key)?.label ?? sort.key} {sort.dir === "asc" ? "↑" : "↓"}</span>
+        <span data-testid="league-activity-showing">{buildActivityShowingLabel(displayRows.length, activityModel.counts.total)}</span>
+        <span>Sort: {SORT_OPTIONS.find((option) => option.value === sort.key)?.label ?? sort.key} {sort.dir === "asc" ? "up" : "down"}</span>
       </div>
 
       {loading ? (
-        <div className="py-8 text-center text-sm text-[color:var(--text-muted)]">Loading activity…</div>
+        <div className="py-8 text-center text-sm text-[color:var(--text-muted)]">Loading activity...</div>
       ) : !displayRows.length ? (
         <div className="rounded-lg border border-[color:var(--hairline)] bg-[color:var(--surface-strong)]/30 px-4 py-6 text-center text-sm text-[color:var(--text-muted)]">
-          {filtersActive ? "No transactions match these filters." : "Transactions will appear as your league signs, drafts, trades, releases, and retires players."}
+          {filtersActive ? "No activity matches these filters." : "Activity will appear as your league signs, drafts, trades, releases, and retires players."}
         </div>
       ) : (
         <ScrollArea className="h-[min(520px,65vh)] rounded-lg border border-[color:var(--hairline)]">
@@ -252,16 +238,16 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
               <li key={`${tx.id ?? idx}-${idx}`} className="px-3 py-3 text-sm" data-testid="league-activity-row">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
-                    {tx.typeLabel ?? tx.type ?? "—"}
+                    {tx.label ?? tx.typeLabel ?? tx.type ?? "Activity"}
                   </Badge>
                   <span className="text-[11px] text-[color:var(--text-muted)]">
                     {tx.dateLabel ?? (tx.week != null ? `Week ${tx.week}` : "")}
-                    {tx.teamAbbr ? ` · ${tx.teamAbbr}` : ""}
+                    {tx.teamAbbr ? ` - ${tx.teamAbbr}` : ""}
                   </span>
                 </div>
-                <div className="mt-1 font-semibold text-[color:var(--text)]">{tx.headline ?? tx.typeLabel ?? "League activity"}</div>
+                <div className="mt-1 font-semibold text-[color:var(--text)]">{tx.headline ?? tx.summary ?? tx.label ?? "League activity"}</div>
                 {tx.detail ? <div className="mt-0.5 text-xs text-[color:var(--text-muted)]">{tx.detail}</div> : null}
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   {tx.playerId != null ? (
                     <button type="button" className="text-xs font-semibold text-[color:var(--accent)]" onClick={() => onPlayerSelect?.(tx.playerId)}>
                       {tx.playerName ?? "Player profile"}
@@ -272,6 +258,9 @@ export default function LeagueActivityLog({ league, actions, onPlayerSelect, onT
                       {tx.teamAbbr ?? `Team ${tx.teamId}`}
                     </button>
                   ) : null}
+                  <span className="rounded-full border border-[color:var(--hairline)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[color:var(--text-muted)]">
+                    {tx.source}
+                  </span>
                 </div>
               </li>
             ))}
