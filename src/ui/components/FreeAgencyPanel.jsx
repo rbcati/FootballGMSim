@@ -17,6 +17,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { logFreeAgentSigningOutcome, persistFranchiseChronicle } from "../utils/franchiseChronicle.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -280,6 +281,7 @@ export default function FreeAgencyPanel({ league, actions }) {
   const [signing, setSigning] = useState(null); // playerId being signed
   const [signedIds, setSignedIds] = useState(new Set());
   const [msgId, setMsgId] = useState(null);
+  const [signError, setSignError] = useState("");
 
   const fetchFA = useCallback(async () => {
     if (!actions?.getFreeAgents) return;
@@ -333,11 +335,20 @@ export default function FreeAgencyPanel({ league, actions }) {
 
   const handleSign = async (player, contract) => {
     setSigning(null);
-    // Optimistic update
-    setSignedIds((prev) => new Set([...prev, player.id]));
-    actions.signPlayer(player.id, teamId, contract);
-    setMsgId(player.id);
-    setTimeout(() => setMsgId(null), 2500);
+    setSignError("");
+    try {
+      const response = await actions.signPlayer(player.id, teamId, contract);
+      const signingPayload = response?.payload?.freeAgentSigning;
+      if (signingPayload) {
+        logFreeAgentSigningOutcome(league, signingPayload);
+        await persistFranchiseChronicle(actions, league);
+      }
+      setSignedIds((prev) => new Set([...prev, player.id]));
+      setMsgId(player.id);
+      setTimeout(() => setMsgId(null), 2500);
+    } catch (err) {
+      setSignError(err?.message ?? "Signing failed.");
+    }
   };
 
   return (
@@ -429,6 +440,20 @@ export default function FreeAgencyPanel({ league, actions }) {
           />
         </div>
       </div>
+
+      {signError ? (
+        <div
+          className="card"
+          role="alert"
+          style={{
+            marginBottom: "var(--space-4)",
+            padding: "var(--space-3) var(--space-4)",
+            color: "var(--danger)",
+          }}
+        >
+          {signError}
+        </div>
+      ) : null}
 
       {/* Filters */}
       <div

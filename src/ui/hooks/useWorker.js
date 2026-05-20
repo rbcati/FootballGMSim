@@ -95,7 +95,7 @@ export function workerReducer(state, action) {
     case 'FULL_STATE':
       return { ...state, busy: false, simulating: false, batchSim: null, league: action.payload, lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType };
     case 'STATE_UPDATE':
-      // Also clear busy: send()-based actions (signPlayer, releasePlayer, setUserTeam)
+      // Also clear busy: send()-based actions (releasePlayer, setUserTeam)
       // respond with STATE_UPDATE and have no other mechanism to clear the flag.
       return {
         ...state,
@@ -593,7 +593,7 @@ export function useWorker() {
 
     /** Sign a free agent. */
     signPlayer: (playerId, teamId, contract) =>
-      send(toWorker.SIGN_PLAYER, { playerId, teamId, contract }),
+      request(toWorker.SIGN_PLAYER, { playerId, teamId, contract }),
 
     /** Submit an offer to a free agent. */
     submitOffer: (playerId, teamId, contract) =>
