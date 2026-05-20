@@ -5436,8 +5436,30 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   });
   await NewsEngine.logTransaction('SIGN', { teamId: resolvedTeamId, ...txDetails });
 
+  const signedPlayer = cache.getPlayer(player.id) ?? player;
+  const years = Number(contract?.yearsTotal ?? contract?.years ?? 0) || null;
+  const aav = Number(contract?.baseAnnual ?? contract?.salary ?? 0) || null;
+  const signingBonus = Number(contract?.signingBonus ?? 0) || 0;
+  const totalValue = years != null && aav != null
+    ? Math.round((aav * years + signingBonus) * 10) / 10
+    : null;
+  const playerName = signedPlayer.name ?? [signedPlayer.firstName, signedPlayer.lastName].filter(Boolean).join(' ');
+  const completedSigning = {
+    playerId: signedPlayer.id,
+    playerName: playerName || null,
+    pos: signedPlayer.pos ?? null,
+    ovr: signedPlayer.ovr ?? null,
+    teamId: resolvedTeamId,
+    teamLabel: team?.abbr ?? team?.name ?? null,
+    years,
+    totalValue,
+    aav,
+    season: meta.year ?? meta.currentSeasonId ?? null,
+    week: meta.currentWeek ?? 1,
+  };
+
   await flushDirty();
-  post(toUI.STATE_UPDATE, { roster: buildRosterView(resolvedTeamId), ...buildViewState() }, id);
+  post(toUI.STATE_UPDATE, { roster: buildRosterView(resolvedTeamId), ...buildViewState(), freeAgentSigning: completedSigning }, id);
 }
 
 // ── Handler: SUBMIT_OFFER ─────────────────────────────────────────────────────

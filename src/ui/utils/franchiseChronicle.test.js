@@ -6,6 +6,7 @@ import {
   logCompletedTradeAction,
   logContractOutcome,
   logDraftOutcome,
+  logFreeAgentSigningOutcome,
   logInjuryEvent,
   logMilestoneEvent,
   logTradeOutcome,
@@ -244,6 +245,34 @@ describe('typed chronicle events', () => {
     expect(second.id).toBe(first.id);
     expect(first.meta.totalValue).toBe(52);
     expect(first.meta.aav).toBe(12);
+    expect(league.franchiseChronicle).toHaveLength(1);
+  });
+
+  it('logs direct free-agent signings as contract events without duplicates', () => {
+    const league = buildLeague({ franchiseChronicle: [] });
+    const payload = {
+      playerId: 44,
+      playerName: 'Max Lane',
+      pos: 'WR',
+      ovr: 78,
+      teamId: 1,
+      teamLabel: 'PIT',
+      years: 2,
+      totalValue: 13,
+      aav: 6.5,
+      season: 2026,
+      week: 3,
+    };
+    const first = logFreeAgentSigningOutcome(league, payload);
+    const second = logFreeAgentSigningOutcome(league, payload);
+
+    expect(first.type).toBe('contract');
+    expect(first.id).toBe('free-agent-signing-2026-wk3-1-44');
+    expect(second.id).toBe(first.id);
+    expect(first.meta.source).toBe('free_agent_signing');
+    expect(first.meta.player).toMatchObject({ id: 44, name: 'Max Lane', pos: 'WR', ovr: 78 });
+    expect(first.meta.totalValue).toBe(13);
+    expect(first.meta.aav).toBe(6.5);
     expect(league.franchiseChronicle).toHaveLength(1);
   });
 

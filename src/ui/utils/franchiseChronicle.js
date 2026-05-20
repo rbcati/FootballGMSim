@@ -551,6 +551,47 @@ export function logCompletedContractAction(league, payload = {}) {
   });
 }
 
+export function logFreeAgentSigningOutcome(league, payload = {}) {
+  const season = safeNum(payload?.season, safeNum(league?.year, safeNum(league?.seasonId, 0)));
+  const week = safeNum(payload?.week, safeNum(league?.week, 1));
+  const player = normalizePlayerMeta(payload?.player ?? {
+    id: payload?.playerId,
+    name: payload?.playerName,
+    pos: payload?.pos,
+    ovr: payload?.ovr,
+  });
+  const teamId = payload?.teamId ?? league?.userTeamId;
+  const years = payload?.years ?? payload?.contract?.yearsTotal ?? payload?.contract?.years ?? null;
+  const aav = payload?.aav ?? payload?.annualValue ?? payload?.contract?.baseAnnual ?? payload?.contract?.salary ?? null;
+  const totalValue = payload?.totalValue ?? (years != null && aav != null
+    ? Math.round((Number(aav) * Number(years) + safeNum(payload?.contract?.signingBonus, 0)) * 10) / 10
+    : null);
+  const id = payload?.id ?? `free-agent-signing-${season}-wk${week}-${teamId}-${player?.id ?? payload?.playerId ?? slugify(player?.name, 'player')}`;
+  const summary = [
+    years ? `${years} years` : null,
+    totalValue != null ? `$${totalValue}M total` : null,
+    aav != null ? `$${Number(aav).toFixed(1)}M AAV` : null,
+  ].filter(Boolean).join(' - ') || 'Free-agent signing completed.';
+
+  return logContractOutcome(league, {
+    id,
+    season,
+    week,
+    player,
+    years,
+    totalValue,
+    aav,
+    headline: payload?.headline ?? (player?.name ? `${player.name} signs in free agency` : 'Free agent signed'),
+    summary: payload?.summary ?? summary,
+    meta: {
+      ...(payload?.meta ?? {}),
+      source: 'free_agent_signing',
+      teamId,
+      team: payload?.teamLabel ?? null,
+    },
+  });
+}
+
 export function logDraftOutcome(league, payload = {}) {
   const player = normalizePlayerMeta(payload?.player ?? payload?.playerName);
   const round = payload?.round ?? payload?.draftRound ?? payload?.pick?.round ?? null;
