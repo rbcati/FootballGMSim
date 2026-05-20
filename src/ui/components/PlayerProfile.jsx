@@ -35,8 +35,11 @@ import { buildPlayerRecordContext, mergePlayerProfileSeasonRows } from "../../co
 import { buildLegacyScoreReport, shouldShowLegacyProfileSection } from "../../core/legacyScore.js";
 import { buildPlayerDevelopmentModel } from "../../core/playerDevelopmentModel.js";
 import { buildProspectScoutingReport } from "../../core/scoutingModel.js";
+import { buildPlayerCareerTimeline } from "../utils/playerCareerTimeline.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
+
+const CAREER_TIMELINE_LIMIT = 8;
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
 
@@ -437,6 +440,8 @@ export default function PlayerProfile({
   const [seasonLogTeamFilter, setSeasonLogTeamFilter] = useState("all");
   const [seasonLogSortKey, setSeasonLogSortKey] = useState("season");
   const [seasonLogSortDirection, setSeasonLogSortDirection] = useState("desc");
+  const [careerTransactions, setCareerTransactions] = useState([]);
+  const [showAllCareerTimeline, setShowAllCareerTimeline] = useState(false);
   const requestKey = useMemo(() => buildRouteRequestKey("player", playerId), [playerId]);
   const cacheScopeKey = useMemo(() => buildLeagueCacheScopeKey(league), [league]);
   const fetchProfileData = React.useCallback(async () => {
@@ -527,50 +532,30 @@ export default function PlayerProfile({
     if (fetchedData) setData(fetchedData);
   }, [fetchedData]);
 
-  const [careerJourney, setCareerJourney] = useState([]);
   useEffect(() => {
     let cancelled = false;
     if (!actions?.getTransactions || playerId == null) {
-      setCareerJourney([]);
+      setCareerTransactions([]);
       return () => { cancelled = true; };
     }
-    const acc = data?.player?.accolades;
     actions
       .getTransactions({ playerId: Number(playerId), limit: 100 })
       .then((res) => {
         if (cancelled) return;
         const txs = res?.payload?.transactions ?? [];
-        const sorted = [...txs].sort((a, b) => {
-          const sa = String(b?.seasonId ?? "").localeCompare(String(a?.seasonId ?? ""));
-          if (sa !== 0) return sa;
-          const wa = Number(b?.week ?? 0) - Number(a?.week ?? 0);
-          if (wa !== 0) return wa;
-          return Number(b?.id ?? 0) - Number(a?.id ?? 0);
-        });
-        const hofExtras = (Array.isArray(acc) ? acc : [])
-          .filter((a) => a?.type === "HOF")
-          .map((a, i) => ({
-            id: `hof-${a.year ?? i}-${i}`,
-            typeLabel: "Hall of Fame",
-            headline: `Hall of Fame recognition${a.year != null ? ` (${a.year})` : ""}`,
-            detail: null,
-            seasonId: null,
-            week: null,
-          }));
-        const merged = [...sorted, ...hofExtras].sort((a, b) => {
-          const sa = String(b?.seasonId ?? "").localeCompare(String(a?.seasonId ?? ""));
-          if (sa !== 0) return sa;
-          return Number(b?.week ?? 0) - Number(a?.week ?? 0);
-        });
-        setCareerJourney(merged.slice(0, 12));
+        setCareerTransactions(Array.isArray(txs) ? txs : []);
       })
       .catch(() => {
-        if (!cancelled) setCareerJourney([]);
+        if (!cancelled) setCareerTransactions([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [actions, playerId, data?.player?.accolades]);
+  }, [actions, playerId]);
+
+  useEffect(() => {
+    setShowAllCareerTimeline(false);
+  }, [playerId]);
 
   const fetchedPlayer = data?.player;
   const resolvedProfile = useMemo(() => resolvePlayerForProfile({ playerId, league, context: profileContext ?? {} }), [playerId, league, profileContext]);
@@ -659,6 +644,20 @@ export default function PlayerProfile({
     () => buildPlayerAwardHeaderBadges(mergedAwardTimeline),
     [mergedAwardTimeline],
   );
+  const careerTimelineModel = useMemo(
+    () => buildPlayerCareerTimeline({
+      player: effectivePlayer,
+      league,
+      transactions: careerTransactions,
+      awardRows: mergedAwardTimeline.rows,
+      recordRows: recordBookLines,
+      assumeTransactionsRelevant: true,
+    }),
+    [careerTransactions, effectivePlayer, league, mergedAwardTimeline.rows, recordBookLines],
+  );
+  const careerTimelineRows = showAllCareerTimeline
+    ? careerTimelineModel.rows
+    : careerTimelineModel.rows.slice(0, CAREER_TIMELINE_LIMIT);
   const summaryChips = getPlayerSummaryChips(player, ringCount, nonRing);
   const accoladesByYear = [...accolades].sort((a, b) => (a.year ?? 0) - (b.year ?? 0));
   const mergedProfileSeasonRows = useMemo(
@@ -1357,30 +1356,60 @@ export default function PlayerProfile({
               <EmptyState icon="📊" title="No tracked season stats yet" subtitle="Season stats will appear after this player records tracked stats." />
             )}
           </section>
-          {!loading && careerJourney.length > 0 && (
-            <section className="card-enter" data-testid="player-profile-career-journey">
-              <h3 style={sectionLabelStyle}>Career journey</h3>
-              <div style={{ display: "grid", gap: 8 }}>
-                {careerJourney.map((row, idx) => (
-                  <div
-                    key={row.id ?? idx}
-                    style={{
-                      border: "1px solid var(--hairline)",
-                      borderRadius: 8,
-                      padding: "8px 10px",
-                      fontSize: 13,
-                    }}
-                  >
-                    <div style={{ fontWeight: 700 }}>{row.headline ?? row.typeLabel ?? "Move"}</div>
-                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                      {row.typeLabel ?? row.type}
-                      {row.week != null ? ` · Week ${row.week}` : ""}
-                      {row.teamAbbr ? ` · ${row.teamAbbr}` : ""}
-                    </div>
-                    {row.detail ? <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{row.detail}</div> : null}
-                  </div>
-                ))}
+          {!loading && playerView && (
+            <section className="card-enter" data-testid="player-profile-career-timeline">
+              <h3 style={sectionLabelStyle}>Career Timeline</h3>
+              <div
+                data-testid="player-profile-acquisition-summary"
+                style={{
+                  border: "1px solid var(--hairline)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "10px",
+                  background: "var(--surface-strong)",
+                  marginBottom: 10,
+                }}
+              >
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>How acquired</div>
+                <div style={{ fontSize: "var(--text-sm)", fontWeight: 800, marginTop: 2 }}>{careerTimelineModel.acquisition.summary}</div>
+                {careerTimelineModel.acquisition.detail ? (
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginTop: 2 }}>{careerTimelineModel.acquisition.detail}</div>
+                ) : null}
               </div>
+              {careerTimelineRows.length > 0 ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {careerTimelineRows.map((row, idx) => (
+                    <div
+                      key={row.id ?? idx}
+                      data-testid="player-profile-career-timeline-row"
+                      style={{
+                        border: "1px solid var(--hairline)",
+                        borderRadius: 8,
+                        padding: "8px 10px",
+                        fontSize: 13,
+                      }}
+                    >
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                        <span className="status-chip muted">{row.label ?? row.type ?? "Event"}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                          {row.season ? `Season ${row.season}` : ""}
+                          {row.week != null ? ` - Week ${row.week}` : ""}
+                          {row.teamAbbr ? ` - ${row.teamAbbr}` : ""}
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: 700, marginTop: 4 }}>{row.summary ?? "Player event"}</div>
+                      {row.detail ? <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{row.detail}</div> : null}
+                      {row.source ? <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 4, textTransform: "uppercase" }}>{row.source}</div> : null}
+                    </div>
+                  ))}
+                  {careerTimelineModel.rows.length > CAREER_TIMELINE_LIMIT ? (
+                    <Button size="sm" variant="outline" onClick={() => setShowAllCareerTimeline((value) => !value)}>
+                      {showAllCareerTimeline ? "Show less" : `Show all ${careerTimelineModel.rows.length}`}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : (
+                <EmptyState title="No career timeline recorded yet." subtitle="Legacy players may not have transaction history in older saves." />
+              )}
             </section>
           )}
           {!loading && hasGmContext && (
