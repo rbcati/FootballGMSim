@@ -321,4 +321,180 @@ describe('LeagueHistory', () => {
       expect(screen.getAllByTestId(/league-office-row-/)[0].textContent).toContain('2032');
     });
   });
+
+  it('renders V1 records view with player record data', async () => {
+    const recordBook = {
+      schemaVersion: 1,
+      singleSeasonV1: {
+        passingYards: {
+          recordKey: 'passingYards',
+          label: 'Passing yards',
+          value: 5100,
+          playerId: 'qb1',
+          playerName: 'Star QB',
+          position: 'QB',
+          teamAbbr: 'DAL',
+          year: 2030,
+          source: 'archivedSeason',
+        },
+      },
+      careerLeadersV1: {},
+      teamSeasonV1: {},
+    };
+
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null, recordBook } }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+        }}
+      />,
+    );
+
+    const recordsTab = await screen.findByRole('tab', { name: /Record Book/i });
+    fireEvent.mouseDown(recordsTab);
+    fireEvent.click(recordsTab);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('records-v1-view')).toBeTruthy();
+      expect(screen.getByTestId('records-v1-view').textContent).toMatch(/Star QB/);
+      expect(screen.getByTestId('records-v1-view').textContent).toMatch(/5,100/);
+    });
+  });
+
+  it('shows records empty state when no record book data exists', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null, recordBook: null } }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+        }}
+      />,
+    );
+
+    const recordsTab = await screen.findByRole('tab', { name: /Record Book/i });
+    fireEvent.mouseDown(recordsTab);
+    fireEvent.click(recordsTab);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('records-empty-state')).toBeTruthy();
+      expect(screen.getByTestId('records-empty-state').textContent).toMatch(
+        /Records will populate as seasons are archived/i,
+      );
+    });
+  });
+
+  it('calls onPlayerSelect when clicking a player name in the records view', async () => {
+    const onPlayerSelect = vi.fn();
+    const recordBook = {
+      schemaVersion: 1,
+      singleSeasonV1: {
+        rushingYards: {
+          recordKey: 'rushingYards',
+          label: 'Rushing yards',
+          value: 2200,
+          playerId: 'rb9',
+          playerName: 'Speed Back',
+          position: 'RB',
+          teamAbbr: 'PHI',
+          year: 2031,
+          source: 'archivedSeason',
+        },
+      },
+      careerLeadersV1: {},
+      teamSeasonV1: {},
+    };
+
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={onPlayerSelect}
+        onOpenBoxScore={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null, recordBook } }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+        }}
+      />,
+    );
+
+    const recordsTab = await screen.findByRole('tab', { name: /Record Book/i });
+    fireEvent.mouseDown(recordsTab);
+    fireEvent.click(recordsTab);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('records-v1-view')).toBeTruthy();
+    });
+
+    const playerBtn = screen.getByTestId('record-row-player-btn-ss-rushingYards');
+    fireEvent.click(playerBtn);
+    expect(onPlayerSelect).toHaveBeenCalledWith('rb9');
+  });
+
+  it('V1 records scope and category filters narrow down results', async () => {
+    const recordBook = {
+      schemaVersion: 1,
+      singleSeasonV1: {
+        passingYards: { value: 5000, playerId: 'qb1', playerName: 'Gunslinger', position: 'QB', label: 'Passing yards', teamAbbr: 'DAL', year: 2030, source: 'archivedSeason' },
+        rushingYards: { value: 1800, playerId: 'rb1', playerName: 'Speedster', position: 'RB', label: 'Rushing yards', teamAbbr: 'NYG', year: 2030, source: 'archivedSeason' },
+      },
+      careerLeadersV1: {
+        passingYards: [
+          { value: 40000, playerId: 'qb9', playerName: 'Veteran QB', position: 'QB', label: 'Passing yards', source: 'careerStats' },
+        ],
+      },
+      teamSeasonV1: {},
+    };
+
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null, recordBook } }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+        }}
+      />,
+    );
+
+    const recordsTab = await screen.findByRole('tab', { name: /Record Book/i });
+    fireEvent.mouseDown(recordsTab);
+    fireEvent.click(recordsTab);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('records-count').textContent).toMatch(/Showing 3 of 3 records/i);
+    });
+
+    // Filter to single-season scope
+    fireEvent.click(screen.getByRole('button', { name: /Single-season/i, pressed: false }));
+    await waitFor(() => {
+      expect(screen.getByTestId('records-count').textContent).toMatch(/Showing 2 of 3 records/i);
+    });
+
+    // Reset
+    fireEvent.click(screen.getByRole('button', { name: /Reset filters/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('records-count').textContent).toMatch(/Showing 3 of 3 records/i);
+    });
+
+    // Filter by category
+    fireEvent.change(screen.getByLabelText(/Filter records by category/i), { target: { value: 'rushing' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('records-count').textContent).toMatch(/Showing 1 of 3 records/i);
+    });
+  });
 });
