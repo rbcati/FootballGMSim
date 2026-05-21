@@ -330,12 +330,42 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         </SectionCard>
       ) : null}
 
-      <SectionCard title={command.weeklyIntelligence?.heading ?? 'Coordinator Brief'} subtitle="Matchup intel for this week’s decision loop." variant="compact">
+      <SectionCard title={command.weeklyIntelligence?.heading ?? 'Coordinator Brief'} subtitle="Matchup intel and priority actions for this week." variant="compact">
         <div className="app-hq-intel-list" role="list" aria-label="Weekly intelligence">
           {weeklyIntel.map((insight) => (
             <p key={insight.id} role="listitem" className={`app-hq-intel-item tone-${insight.tone ?? 'info'}`}>{insight.text}</p>
           ))}
         </div>
+        {(command.weeklyAgenda ?? []).length > 0 ? (
+          <div className="app-hq-weekly-priorities" role="list" aria-label="Weekly priorities" style={{ marginTop: 10 }}>
+            {(command.weeklyAgenda ?? []).map((item) => (
+              <article
+                key={item.id}
+                role="listitem"
+                className={`app-hq-impact-card tone-${item.severity === 'warning' ? 'warning' : 'info'}`}
+                style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}
+              >
+                {item.icon ? <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1.4 }}>{item.icon}</span> : null}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="app-hq-impact-card__head">
+                    <strong>{item.title}</strong>
+                    {item.severity === 'warning' ? <StatusChip label="Attention" tone="warning" /> : null}
+                  </div>
+                  <p style={{ margin: '2px 0 6px' }}>{item.description}</p>
+                  <button
+                    type="button"
+                    className="btn btn-sm app-hq-impact-card__cta"
+                    onClick={() => item.targetRoute && onNavigate?.(item.targetRoute)}
+                    disabled={!item.targetRoute}
+                    aria-label={`${item.title}: ${item.ctaLabel}`}
+                  >
+                    {item.ctaLabel}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : null}
       </SectionCard>
 
 
