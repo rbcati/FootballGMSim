@@ -239,12 +239,19 @@ describe('TeamHistoryScreen', () => {
     await waitFor(() => {
       expect(screen.getByTestId('team-history-season-2055')).toBeTruthy();
     });
+    expect(screen.getByText(/Tap View season/i)).toBeTruthy();
+    expect(screen.getByTestId('team-history-view-season-2055')).toBeTruthy();
+    expect(screen.getByText('Season detail')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /View 2055 season detail/i }));
 
     await waitFor(() => {
       expect(screen.getByTestId('team-history-season-detail')).toBeTruthy();
     });
+    expect(screen.getByRole('button', { name: /Season selected/i })).toBeTruthy();
+    expect(screen.getByText(/Postseason\/title finish/i)).toBeTruthy();
+    expect(screen.getAllByText(/Biggest games/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Front office moves/i)).toBeTruthy();
     expect(screen.getByTestId('team-history-season-detail-record').textContent).toContain('12-5');
     expect(screen.getByText(/455 \/ 310/i)).toBeTruthy();
     expect(screen.getByTestId('team-history-season-detail-diff').textContent).toContain('+145');
@@ -258,6 +265,10 @@ describe('TeamHistoryScreen', () => {
     await waitFor(() => {
       expect(onOpen).toHaveBeenCalled();
     });
+
+    fireEvent.click(screen.getByRole('button', { name: /Back to all seasons/i }));
+    expect(screen.queryByTestId('team-history-season-detail')).toBeNull();
+    expect(screen.getByTestId('team-history-season-2055')).toBeTruthy();
   });
 
   it('season detail handles legacy seasons without games or moves', async () => {
@@ -292,8 +303,102 @@ describe('TeamHistoryScreen', () => {
     await waitFor(() => {
       expect(screen.getByTestId('team-history-season-detail')).toBeTruthy();
     });
-    expect(screen.getByText(/No scored games are attached/i)).toBeTruthy();
-    expect(screen.getByText(/No transaction rows are logged/i)).toBeTruthy();
-    expect(screen.getByText(/does not include trustworthy team leader/i)).toBeTruthy();
+    expect(screen.getByText(/No scored game rows were saved/i)).toBeTruthy();
+    expect(screen.getByText(/No trades, signings, contracts/i)).toBeTruthy();
+    expect(screen.getByText(/No team-matched leader or award rows/i)).toBeTruthy();
+  });
+
+  it('keeps timeline filters after selecting and closing season detail', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 1, name: 'Dallas', abbr: 'DAL' }], userTeamId: 1 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                {
+                  year: 2030,
+                  standings: [{ id: 1, name: 'Dallas', abbr: 'DAL', wins: 12, losses: 5, ties: 0, pf: 420, pa: 310 }],
+                  awards: { mvp: { playerId: 7, name: 'Title QB' } },
+                },
+                {
+                  year: 2031,
+                  standings: [{ id: 1, name: 'Dallas', abbr: 'DAL', wins: 9, losses: 8, ties: 0, pf: 360, pa: 340 }],
+                  awards: { mvp: { playerId: 9, name: 'Ace Star' } },
+                },
+              ],
+            },
+          }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-timeline-count').textContent).toContain('Showing 2 of 2 seasons');
+    });
+
+    fireEvent.change(screen.getByLabelText(/Search team history seasons/i), { target: { value: 'Ace Star' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-timeline-count').textContent).toContain('Showing 1 of 2 seasons');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /View 2031 season detail/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-season-detail')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Back to all seasons/i }));
+    expect(screen.queryByTestId('team-history-season-detail')).toBeNull();
+    expect(screen.getByLabelText(/Search team history seasons/i).value).toBe('Ace Star');
+    expect(screen.getByTestId('team-history-timeline-count').textContent).toContain('Showing 1 of 2 seasons');
+  });
+
+  it('disables key game buttons when Game Book cannot be opened', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 7, name: 'Seattle', abbr: 'SEA' }], userTeamId: 7 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [{
+                year: 2056,
+                standings: [
+                  { id: 7, name: 'Seattle', abbr: 'SEA', wins: 10, losses: 7, ties: 0, pf: 390, pa: 320 },
+                  { id: 3, name: 'River', abbr: 'RIV', wins: 7, losses: 10, ties: 0, pf: 300, pa: 330 },
+                ],
+                gameIndex: [
+                  { id: 's2056_w3_3_7', week: 3, homeId: 7, awayId: 3, homeScore: 28, awayScore: 24 },
+                ],
+              }],
+            },
+          }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-season-2056')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /View 2056 season detail/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-season-detail')).toBeTruthy();
+    });
+
+    const gameButton = screen.getAllByTestId('team-history-season-detail-game')[0];
+    expect(gameButton.disabled).toBe(true);
+    expect(screen.getByText(/Game Book unavailable/i)).toBeTruthy();
   });
 });

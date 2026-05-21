@@ -73,7 +73,7 @@ function teamMatches(row, teamId, teamAbbr) {
 }
 
 function recordLabel(row) {
-  if (!row) return 'â€”';
+  if (!row) return '-';
   return `${row.wins ?? 0}-${row.losses ?? 0}${row.ties ? `-${row.ties}` : ''}`;
 }
 
@@ -721,7 +721,7 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
         )}
       </SectionCard>
 
-      <SectionCard title="Season-by-season timeline">
+      <SectionCard title="Season-by-season timeline" subtitle="Tap View season to open the archived season recap without changing your filters.">
         <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <input
@@ -821,6 +821,7 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
                   {s.champion ? <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 8px' }}>Title season</span> : null}
                   {s.eliteSeason ? <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 8px' }}>Elite year</span> : null}
                   {s.losingSeason ? <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 8px' }}>Losing season</span> : null}
+                  <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 8px', color: 'var(--text-muted)' }}>Season detail</span>
                 </div>
                 {s.mvp?.playerId != null ? (
                   <button type="button" className="btn-link" onClick={() => onPlayerSelect?.(s.mvp.playerId)}>
@@ -830,11 +831,13 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
                 <div style={{ marginTop: 8 }}>
                   <button
                     type="button"
-                    className="btn btn-sm"
+                    className={selectedSeasonKey === String(s.seasonId ?? s.year) ? 'btn btn-sm btn-secondary' : 'btn btn-sm'}
                     onClick={() => setSelectedSeasonKey(String(s.seasonId ?? s.year))}
-                    aria-label={`View ${s.year} season detail`}
+                    aria-label={selectedSeasonKey === String(s.seasonId ?? s.year) ? `${s.year} season selected` : `View ${s.year} season detail`}
+                    data-testid={`team-history-view-season-${s.year}`}
+                    style={{ minHeight: 36 }}
                   >
-                    View season detail
+                    {selectedSeasonKey === String(s.seasonId ?? s.year) ? 'Season selected' : 'View season'}
                   </button>
                 </div>
               </div>
@@ -846,14 +849,14 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
       {selectedSeasonDetail ? (
         <SectionCard
           title={`${selectedSeasonDetail.seasonRow.year} Season Detail`}
-          subtitle="Record, defining games, roster moves, and archive context for the selected season."
+          subtitle="Season summary, postseason finish, biggest games, and front office context from the archive."
         >
           <div data-testid="team-history-season-detail" style={{ display: 'grid', gap: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <div>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0 }}>Season archive</div>
                 <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>
-                  {selectedSeasonDetail.seasonRow.year} Â· {recordLabel(selectedSeasonDetail.seasonRow)}
+                  {selectedSeasonDetail.seasonRow.year} - {recordLabel(selectedSeasonDetail.seasonRow)}
                 </div>
               </div>
               <button type="button" className="btn btn-secondary" onClick={() => setSelectedSeasonKey(null)}>
@@ -869,7 +872,7 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
               <div className="stat-box">
                 <div className="stat-label">PF / PA</div>
                 <div className="stat-value-large" style={{ fontSize: 'clamp(1rem, 4vw, 1.25rem)' }}>
-                  {selectedSeasonDetail.seasonRow.pf ?? 'â€”'} / {selectedSeasonDetail.seasonRow.pa ?? 'â€”'}
+                  {selectedSeasonDetail.seasonRow.pf ?? '-'} / {selectedSeasonDetail.seasonRow.pa ?? '-'}
                 </div>
               </div>
               <div className="stat-box" data-testid="team-history-season-detail-diff">
@@ -877,7 +880,7 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
                 <div className="stat-value-large">{formatDiff(selectedSeasonDetail.seasonRow.pointDifferential)}</div>
               </div>
               <div className="stat-box">
-                <div className="stat-label">Finish</div>
+                <div className="stat-label">Postseason/title finish</div>
                 <div className="stat-value-large" style={{ fontSize: 'clamp(0.95rem, 4vw, 1.15rem)' }}>
                   {playoffResultLabel(selectedSeasonDetail.seasonRow)}
                 </div>
@@ -886,9 +889,9 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12 }}>
               <div style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
-                <div style={{ fontWeight: 800, marginBottom: 8 }}>Key games</div>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>Biggest games</div>
                 {selectedSeasonDetail.keyGames.length === 0 ? (
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>No scored games are attached to this archived season.</div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>No scored game rows were saved for this season.</div>
                 ) : (
                   <div style={{ display: 'grid', gap: 8 }}>
                     {selectedSeasonDetail.keyGames.map((row) => {
@@ -900,17 +903,18 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
                           type="button"
                           className="btn"
                           data-testid="team-history-season-detail-game"
-                          onClick={() => openResolvedBoxScore(row, { seasonId: row.year, week: row.week, source: 'team_history_season_detail' }, onOpenBoxScore)}
+                          disabled={!clickable}
+                          onClick={clickable ? () => openResolvedBoxScore(row, { seasonId: row.year, week: row.week, source: 'team_history_season_detail' }, onOpenBoxScore) : undefined}
                           style={{ textAlign: 'left', opacity: clickable ? 1 : 0.7, cursor: clickable ? 'pointer' : 'default' }}
                           title={clickable ? presentation.ctaLabel : presentation.statusLabel}
                         >
                           <strong>
-                            {row.reason} Â· Week {row.week ?? 'â€”'}
+                            {row.reason} - Week {row.week ?? '-'}
                           </strong>
                           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                            {row.away?.abbr ?? 'AWY'} {row.awayScore ?? 'â€”'}-{row.homeScore ?? 'â€”'} {row.home?.abbr ?? 'HME'}
+                            {row.away?.abbr ?? 'AWY'} {row.awayScore ?? '-'}-{row.homeScore ?? '-'} {row.home?.abbr ?? 'HME'}
                           </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{clickable ? presentation.ctaLabel : presentation.statusLabel}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{clickable ? presentation.ctaLabel : 'Game Book unavailable'}</div>
                         </button>
                       );
                     })}
@@ -919,9 +923,9 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
               </div>
 
               <div style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
-                <div style={{ fontWeight: 800, marginBottom: 8 }}>Major moves</div>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>Front office moves</div>
                 {selectedSeasonDetail.majorMoves.length === 0 ? (
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>No transaction rows are logged for this team season.</div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>No trades, signings, contracts, draft picks, or releases were logged for this team season.</div>
                 ) : (
                   <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}>
                     {selectedSeasonDetail.majorMoves.map((move) => (
@@ -936,17 +940,17 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
               </div>
 
               <div style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
-                <div style={{ fontWeight: 800, marginBottom: 8 }}>Draft flash</div>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>Draft snapshot</div>
                 {selectedSeasonDetail.draftFlash.length === 0 ? (
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>No draft class summary is attached to this season.</div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>No draft class snapshot is linked to this season yet.</div>
                 ) : (
                   <ul style={{ margin: 0, paddingLeft: 16, fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
                     {selectedSeasonDetail.draftFlash.map((row) => (
                       <li key={row.seasonId}>
                         <strong style={{ color: 'var(--text)' }}>Grade {row.grade}</strong>
-                        {` Â· ${row.pickCount} pick${row.pickCount === 1 ? '' : 's'}`}
-                        {row.bestName ? ` Â· Best: ${row.bestName}` : ''}
-                        {row.stealName ? ` Â· Value: ${row.stealName}` : ''}
+                        {` - ${row.pickCount} pick${row.pickCount === 1 ? '' : 's'}`}
+                        {row.bestName ? ` - Best: ${row.bestName}` : ''}
+                        {row.stealName ? ` - Value: ${row.stealName}` : ''}
                       </li>
                     ))}
                   </ul>
@@ -954,16 +958,16 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
               </div>
 
               <div style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
-                <div style={{ fontWeight: 800, marginBottom: 8 }}>Team leaders & honors</div>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>Leaders and honors</div>
                 {selectedSeasonDetail.leaders.length === 0 && selectedSeasonDetail.honors.length === 0 ? (
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>This archive does not include trustworthy team leader or award rows for the selected season.</div>
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>No team-matched leader or award rows were saved for this season.</div>
                 ) : (
                   <div style={{ display: 'grid', gap: 8 }}>
                     {selectedSeasonDetail.leaders.map((leader) => (
                       <div key={`leader-${leader.key}`} style={{ fontSize: 'var(--text-sm)' }}>
                         <strong>{leader.label}</strong>
                         <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                          {leader.name}{leader.value != null ? ` Â· ${leader.value}` : ''}
+                          {leader.name}{leader.value != null ? ` - ${leader.value}` : ''}
                         </div>
                       </div>
                     ))}
