@@ -10,6 +10,7 @@ import { buildLeagueHistoryTopPerformers } from '../../core/playerSeasonStatsArc
 import { normalizeArchivedMajorTransactions } from '../../core/transactionTimeline.js';
 import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from "../utils/dataBrowser.js";
 import { buildLeagueRecordsRows, filterRecordRows, SCOPE_OPTIONS, CATEGORY_OPTIONS } from '../utils/leagueRecordsViewModel.js';
+import { normalizeAwardsRows, normalizeHofRows } from '../utils/awardsHallOfFameViewModel.js';
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -144,6 +145,8 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
   const [recordBook, setRecordBook] = useState(null);
   const [allPlayers, setAllPlayers] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [hofPlayers, setHofPlayers] = useState([]);
+  const [hofClasses, setHofClasses] = useState([]);
   const [activeTab, setActiveTab] = useState("seasons");
   const [loading, setLoading] = useState(true);
 
@@ -154,18 +157,25 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
       ? api.getTransactions({ mode: "recent", limit: 300 }).catch(() => ({ payload: { transactions: [] } }))
       : Promise.resolve({ payload: { transactions: [] } });
 
+    const hofPromise = api.getHallOfFame
+      ? api.getHallOfFame().catch(() => ({ payload: { players: [], classes: [] } }))
+      : Promise.resolve({ payload: { players: [], classes: [] } });
+
     Promise.all([
       api.getAllSeasons ? api.getAllSeasons().catch(() => ({ payload: { seasons: [] } })) : Promise.resolve({ payload: { seasons: [] } }),
       api.getRecords ? api.getRecords().catch(() => ({ payload: { records: null } })) : Promise.resolve({ payload: { records: null } }),
       api.getAllPlayerStats ? api.getAllPlayerStats({}).catch(() => ({ payload: { stats: [] } })) : Promise.resolve({ payload: { stats: [] } }),
       txPromise,
-    ]).then(([seasonsRes, recordsRes, playersRes, txRes]) => {
+      hofPromise,
+    ]).then(([seasonsRes, recordsRes, playersRes, txRes, hofRes]) => {
       if (!mounted) return;
       setSeasons(seasonsRes?.payload?.seasons ?? seasonsRes?.seasons ?? []);
       setRecords(recordsRes?.payload?.records ?? null);
       setRecordBook(recordsRes?.payload?.recordBook ?? null);
       setAllPlayers(playersRes?.payload?.stats ?? []);
       setTransactions(txRes?.payload?.transactions ?? []);
+      setHofPlayers(hofRes?.payload?.players ?? []);
+      setHofClasses(hofRes?.payload?.classes ?? []);
       setLoading(false);
     });
 
@@ -191,6 +201,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
           <TabsTrigger value="seasons">Season Archive</TabsTrigger>
           <TabsTrigger value="records">Record Book</TabsTrigger>
           <TabsTrigger value="awards">Awards History</TabsTrigger>
+          <TabsTrigger value="hof">Hall of Fame</TabsTrigger>
           <TabsTrigger value="office">League Office</TabsTrigger>
           <TabsTrigger value="draft">Draft History</TabsTrigger>
           <TabsTrigger value="compare">Compare Players</TabsTrigger>
@@ -206,6 +217,10 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
 
         <TabsContent value="awards">
           <AwardsHistory seasons={seasons} onPlayerSelect={onPlayerSelect} />
+        </TabsContent>
+
+        <TabsContent value="hof">
+          <HallOfFameSection hofClasses={hofClasses} hofPlayers={hofPlayers} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
 
         <TabsContent value="office">
@@ -1094,41 +1109,269 @@ function RecordRow({ row, onPlayerSelect }) {
   );
 }
 
+const AWARD_FILTER_OPTIONS = [
+  { value: 'ALL', label: 'All' },
+  { value: 'mvp', label: 'MVP' },
+  { value: 'opoy', label: 'OPOY' },
+  { value: 'dpoy', label: 'DPOY' },
+  { value: 'roty', label: 'ROTY' },
+  { value: 'sbMvp', label: 'Finals MVP' },
+  { value: 'champion', label: 'Champion' },
+];
+
 function AwardsHistory({ seasons, onPlayerSelect }) {
-  if (!seasons?.length) return <div className="py-8 text-center text-[color:var(--text-muted)]">No award history yet.</div>;
+  const [filterKey, setFilterKey] = useState('ALL');
+  const [search, setSearch] = useState('');
+
+  const rows = useMemo(() => normalizeAwardsRows(seasons), [seasons]);
+
+  const filtered = useMemo(() => {
+    return rows.filter((row) => {
+      if (filterKey !== 'ALL' && row.awardKey !== filterKey) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        return (
+          String(row.year ?? '').includes(q) ||
+          (row.playerName ?? '').toLowerCase().includes(q) ||
+          (row.teamAbbr ?? '').toLowerCase().includes(q) ||
+          (row.awardLabel ?? '').toLowerCase().includes(q) ||
+          (row.position ?? '').toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [rows, filterKey, search]);
+
+  if (!seasons?.length) {
+    return (
+      <div data-testid="awards-empty-state" className="py-8 text-center text-[color:var(--text-muted)]">
+        Awards will populate as seasons are archived.
+      </div>
+    );
+  }
 
   return (
-    <Card className="card-premium">
-      <CardHeader><CardTitle>Awards by Season</CardTitle></CardHeader>
-      <CardContent className="p-0">
-        <ScrollArea className="h-[560px]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="pl-5">Year</TableHead>
-                <TableHead>Champion</TableHead>
-                <TableHead>MVP</TableHead>
-                <TableHead>{AWARD_DISPLAY_NAMES.opoy}</TableHead>
-                <TableHead>{AWARD_DISPLAY_NAMES.dpoy}</TableHead>
-                <TableHead>{AWARD_DISPLAY_NAMES.roty}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {seasons.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="pl-5 font-bold">{s.year}</TableCell>
-                  <TableCell>{s.champion?.abbr ?? "—"}</TableCell>
-                  <TableCell><AwardCell award={s.awards?.mvp} onPlayerSelect={onPlayerSelect} /></TableCell>
-                  <TableCell><AwardCell award={s.awards?.opoy} onPlayerSelect={onPlayerSelect} /></TableCell>
-                  <TableCell><AwardCell award={s.awards?.dpoy} onPlayerSelect={onPlayerSelect} /></TableCell>
-                  <TableCell><AwardCell award={s.awards?.roty} onPlayerSelect={onPlayerSelect} /></TableCell>
-                </TableRow>
+    <div className="space-y-3" data-testid="awards-history-section">
+      <Card className="card-premium">
+        <CardContent className="p-3 space-y-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search player, team, year…"
+              aria-label="Search awards"
+              className="h-9 w-full sm:w-64 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+            />
+            {search ? (
+              <button
+                onClick={() => setSearch('')}
+                className="text-xs text-[color:var(--text-muted)] border border-[color:var(--hairline)] rounded px-2 py-1"
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filter awards by type">
+            {AWARD_FILTER_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setFilterKey(opt.value)}
+                aria-pressed={filterKey === opt.value}
+                className={`rounded-full px-3 py-1 text-xs border transition-colors ${
+                  filterKey === opt.value
+                    ? 'bg-[color:var(--accent)] text-white border-[color:var(--accent)]'
+                    : 'border-[color:var(--hairline)] text-[color:var(--text-muted)]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="text-xs text-[color:var(--text-muted)]" data-testid="awards-count">
+            Showing {filtered.length} of {rows.length} awards
+          </div>
+        </CardContent>
+      </Card>
+
+      {filtered.length === 0 ? (
+        <div className="py-8 text-center text-[color:var(--text-muted)]">No awards match this filter.</div>
+      ) : (
+        <Card className="card-premium">
+          <CardContent className="p-0">
+            <ScrollArea className="h-[520px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-5">Year</TableHead>
+                    <TableHead>Award</TableHead>
+                    <TableHead>Recipient</TableHead>
+                    <TableHead className="hidden sm:table-cell">Pos</TableHead>
+                    <TableHead className="hidden sm:table-cell">Team</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((row) => (
+                    <TableRow key={row.id} data-testid={`award-row-${row.id}`}>
+                      <TableCell className="pl-5 font-bold tabular-nums">{row.year}</TableCell>
+                      <TableCell className="text-xs text-[color:var(--text-muted)]">{row.awardLabel}</TableCell>
+                      <TableCell>
+                        {row.playerId != null ? (
+                          <button
+                            className="text-left font-semibold text-[color:var(--accent)]"
+                            data-testid={`award-player-btn-${row.id}`}
+                            onClick={() => onPlayerSelect?.(row.playerId)}
+                          >
+                            {row.playerName ?? '—'}
+                          </button>
+                        ) : (
+                          <span className="font-semibold">{row.playerName ?? '—'}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-xs">{row.position ?? '—'}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-xs">{row.teamAbbr ?? '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function HallOfFameSection({ hofClasses, hofPlayers, onPlayerSelect }) {
+  const [search, setSearch] = useState('');
+  const [filterPos, setFilterPos] = useState('ALL');
+  const [filterYear, setFilterYear] = useState('ALL');
+
+  const rows = useMemo(() => normalizeHofRows(hofClasses ?? [], hofPlayers ?? []), [hofClasses, hofPlayers]);
+
+  const positions = useMemo(() => {
+    const posSet = new Set(rows.map((r) => r.position).filter(Boolean));
+    return ['ALL', ...[...posSet].sort()];
+  }, [rows]);
+
+  const years = useMemo(() => {
+    const yrSet = new Set(rows.map((r) => r.inductionYear).filter((y) => y != null));
+    return ['ALL', ...[...yrSet].sort((a, b) => b - a)];
+  }, [rows]);
+
+  const filtered = useMemo(() => {
+    return rows.filter((row) => {
+      if (filterPos !== 'ALL' && row.position !== filterPos) return false;
+      if (filterYear !== 'ALL' && String(row.inductionYear ?? '') !== String(filterYear)) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        return (
+          (row.playerName ?? '').toLowerCase().includes(q) ||
+          (row.position ?? '').toLowerCase().includes(q) ||
+          (row.teamAbbr ?? '').toLowerCase().includes(q) ||
+          String(row.inductionYear ?? '').includes(q)
+        );
+      }
+      return true;
+    });
+  }, [rows, filterPos, filterYear, search]);
+
+  if (!rows.length) {
+    return (
+      <div data-testid="hof-empty-state" className="py-8 text-center text-[color:var(--text-muted)]">
+        Hall of Fame classes will appear after long-term careers are archived.
+      </div>
+    );
+  }
+
+  const hasFilter = search || filterPos !== 'ALL' || filterYear !== 'ALL';
+
+  return (
+    <div className="space-y-3" data-testid="hof-section">
+      <Card className="card-premium">
+        <CardContent className="p-3 space-y-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search inductee, team, year…"
+              aria-label="Search Hall of Fame"
+              className="h-9 w-full sm:w-64 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+            />
+            <select
+              value={filterPos}
+              onChange={(e) => setFilterPos(e.target.value)}
+              aria-label="Filter Hall of Fame by position"
+              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-sm"
+            >
+              {positions.map((p) => (
+                <option key={p} value={p}>{p === 'ALL' ? 'All positions' : p}</option>
               ))}
-            </TableBody>
-          </Table>
-        </ScrollArea>
-      </CardContent>
-    </Card>
+            </select>
+            <select
+              value={filterYear}
+              onChange={(e) => setFilterYear(e.target.value)}
+              aria-label="Filter Hall of Fame by class year"
+              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-sm"
+            >
+              {years.map((y) => (
+                <option key={y} value={String(y)}>{y === 'ALL' ? 'All classes' : `Class of ${y}`}</option>
+              ))}
+            </select>
+            {hasFilter ? (
+              <button
+                onClick={() => { setSearch(''); setFilterPos('ALL'); setFilterYear('ALL'); }}
+                className="text-xs text-[color:var(--text-muted)] border border-[color:var(--hairline)] rounded px-2 py-1"
+              >
+                Reset filters
+              </button>
+            ) : null}
+          </div>
+          <div className="text-xs text-[color:var(--text-muted)]" data-testid="hof-count">
+            Showing {filtered.length} of {rows.length} inductees
+          </div>
+        </CardContent>
+      </Card>
+
+      {filtered.length === 0 ? (
+        <div className="py-6 text-center text-[color:var(--text-muted)]">No inductees match this filter.</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filtered.map((row) => (
+            <Card key={row.id} className="card-premium" data-testid={`hof-card-${row.playerId}`}>
+              <CardContent className="p-3 space-y-1">
+                <div className="flex justify-between items-start gap-2">
+                  <div>
+                    {row.playerId != null ? (
+                      <button
+                        className="font-bold text-sm text-[color:var(--accent)] text-left"
+                        data-testid={`hof-player-btn-${row.playerId}`}
+                        onClick={() => onPlayerSelect?.(row.playerId)}
+                      >
+                        {row.playerName ?? 'Unknown'}
+                      </button>
+                    ) : (
+                      <span className="font-bold text-sm">{row.playerName ?? 'Unknown'}</span>
+                    )}
+                    <div className="text-xs text-[color:var(--text-muted)]">
+                      {[row.position, row.teamAbbr].filter(Boolean).join(' · ')}
+                    </div>
+                  </div>
+                  <Badge variant="secondary" className="text-xs shrink-0">{row.classLabel}</Badge>
+                </div>
+                {row.careerSummary ? (
+                  <div className="text-xs text-[color:var(--text-muted)] line-clamp-2">{row.careerSummary}</div>
+                ) : null}
+                {row.tier ? (
+                  <div className="text-xs font-semibold capitalize text-[color:var(--text-muted)]">{row.tier}</div>
+                ) : null}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
