@@ -244,6 +244,10 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
               ))}
             </div>
           ) : null}
+          <div className="weekly-hub-prep-ctas" style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <Button size="sm" variant="outline" onClick={() => onNavigate?.('Weekly Prep')}>Open weekly prep</Button>
+            <Button size="sm" variant="outline" onClick={() => onNavigate?.('Game Plan')}>Review game plan</Button>
+          </div>
         </div>
       </details>
 

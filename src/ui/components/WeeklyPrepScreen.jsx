@@ -3,6 +3,9 @@ import { Button } from '@/components/ui/button';
 import { EmptyState, SectionCard } from './common/UiPrimitives.jsx';
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
 import { buildWeeklyPrepScreenModel } from '../utils/weeklyPrepScreenModel.js';
+import { buildWeeklyIntelligence } from '../utils/weeklyIntelligence.js';
+import { evaluateWeeklyContext } from '../utils/weeklyContext.js';
+import { buildWeeklyPrepActions } from '../utils/weeklyPrepActions.js';
 import { TeamIdentityBadge } from './HQVisuals.jsx';
 
 function TonePill({ tone = 'info', label }) {
@@ -20,9 +23,21 @@ function TonePill({ tone = 'info', label }) {
   );
 }
 
+const TONE_LABEL = { danger: 'Urgent', warning: 'Attention', info: 'Info', ok: 'Ready', success: 'Done' };
+
 export default function WeeklyPrepScreen({ league, onNavigate }) {
   const model = useMemo(() => buildWeeklyPrepScreenModel({ league }), [league]);
   const prep = model.prep;
+
+  const weeklyIntelligence = useMemo(
+    () => buildWeeklyIntelligence({ league, team: prep?.userTeam, nextGame: prep?.nextGame, prep }),
+    [league, prep],
+  );
+  const weeklyContext = useMemo(() => evaluateWeeklyContext(league), [league]);
+  const prepActions = useMemo(
+    () => buildWeeklyPrepActions({ league, weeklyIntelligence, weeklyContext, prep }),
+    [league, weeklyIntelligence, weeklyContext, prep],
+  );
 
   useEffect(() => {
     markWeeklyPrepStep(league, 'opponentScouted', true);
@@ -131,6 +146,38 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
           <TonePill tone={prep.completion.opponentScouted ? 'success' : 'warning'} label={`Opponent ${prep.completion.opponentScouted ? 'scouted' : 'pending'}`} />
           <TonePill tone={prep.completion.planReviewed ? 'success' : 'warning'} label={`Plan ${prep.completion.planReviewed ? 'reviewed' : 'pending'}`} />
         </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Recommended Prep Actions"
+        subtitle="Intelligence-driven actions for this week."
+        data-testid="recommended-prep-actions"
+      >
+        {prepActions.length > 0 ? (
+          <div className="weekly-prep-action-grid">
+            {prepActions.slice(0, 5).map((action) => (
+              <article key={action.id} className="weekly-prep-action-card" data-testid={`prep-action-card-${action.id}`}>
+                <div className="weekly-prep-action-head">
+                  <strong>{action.title}</strong>
+                  <TonePill tone={action.tone} label={TONE_LABEL[action.tone] ?? 'Info'} />
+                </div>
+                <p>{action.detail}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onNavigate?.(action.destination)}
+                  data-testid={`prep-action-cta-${action.id}`}
+                >
+                  {action.ctaLabel}
+                </Button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="weekly-prep-caption" data-testid="prep-actions-empty">
+            No urgent prep actions. You can advance or review your roster.
+          </p>
+        )}
       </SectionCard>
     </div>
   );
