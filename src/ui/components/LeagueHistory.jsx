@@ -6,11 +6,21 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
 import { AWARD_DISPLAY_NAMES } from '../../core/footballMeta';
-import { buildLeagueHistoryTopPerformers } from '../../core/playerSeasonStatsArchive.js';
+import { buildLeagueHistoryTopPerformers, getArchivedPlayerSeasonRows } from '../../core/playerSeasonStatsArchive.js';
 import { normalizeArchivedMajorTransactions } from '../../core/transactionTimeline.js';
 import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from "../utils/dataBrowser.js";
 import { buildLeagueRecordsRows, filterRecordRows, SCOPE_OPTIONS, CATEGORY_OPTIONS } from '../utils/leagueRecordsViewModel.js';
 import { normalizeAwardsRows, normalizeHofRows } from '../utils/awardsHallOfFameViewModel.js';
+import {
+  LEADER_CATEGORIES,
+  LEADER_STAT_DEFS,
+  DEFAULT_STAT_KEY,
+  normalizeCurrentSeasonRow,
+  normalizeArchivedLeaderRow,
+  buildLeagueLeadersRows,
+  filterLeaderRows,
+  getTopLeader,
+} from '../utils/leagueLeadersViewModel.js';
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -89,6 +99,7 @@ const TAB_GUIDE = [
   { value: "office", label: "League Office", cta: "Search league moves", desc: "Complete trade, signing, draft, and release transaction log." },
   { value: "draft", label: "Draft History", cta: "Draft history", desc: "Draft class archives and pick results by season." },
   { value: "compare", label: "Compare Players", cta: "Compare players", desc: "Side-by-side career stats and context across your player pool." },
+  { value: "leaders", label: "League Leaders", cta: "Browse leaders", desc: "Who leads the league in passing, rushing, receiving, defense, and kicking this season." },
 ];
 
 function buildSeasonArchiveSearchText(season) {
@@ -216,6 +227,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
           <TabsTrigger value="office">League Office</TabsTrigger>
           <TabsTrigger value="draft">Draft History</TabsTrigger>
           <TabsTrigger value="compare">Compare Players</TabsTrigger>
+          <TabsTrigger value="leaders">League Leaders</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -228,6 +240,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
             hofClasses={hofClasses}
             setActiveTab={setActiveTab}
             onPlayerSelect={onPlayerSelect}
+            allPlayers={allPlayers}
           />
         </TabsContent>
 
@@ -258,12 +271,16 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
         <TabsContent value="compare">
           <PlayerCompare actions={api} pool={allPlayers} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
+
+        <TabsContent value="leaders">
+          <LeagueLeadersBrowser allPlayers={allPlayers} seasons={seasons} onPlayerSelect={onPlayerSelect} />
+        </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function OverviewDashboard({ seasons, records, recordBook, transactions, hofPlayers, hofClasses, setActiveTab, onPlayerSelect }) {
+function OverviewDashboard({ seasons, records, recordBook, transactions, hofPlayers, hofClasses, setActiveTab, onPlayerSelect, allPlayers }) {
   const v1RecordRows = useMemo(() => buildLeagueRecordsRows(recordBook), [recordBook]);
   const awardRows = useMemo(() => normalizeAwardsRows(seasons), [seasons]);
   const hofRows = useMemo(() => normalizeHofRows(hofClasses ?? [], hofPlayers ?? []), [hofClasses, hofPlayers]);
@@ -288,6 +305,13 @@ function OverviewDashboard({ seasons, records, recordBook, transactions, hofPlay
     () => (seasons ?? []).some((s) => Array.isArray(s?.draftResults) || Array.isArray(s?.draftClass)),
     [seasons],
   );
+  const statsNormalizedRows = useMemo(
+    () => (allPlayers ?? []).map(normalizeCurrentSeasonRow).filter(Boolean),
+    [allPlayers],
+  );
+  const passLeader = useMemo(() => getTopLeader(statsNormalizedRows, 'passYds'), [statsNormalizedRows]);
+  const rushLeader = useMemo(() => getTopLeader(statsNormalizedRows, 'rushYds'), [statsNormalizedRows]);
+  const recLeader = useMemo(() => getTopLeader(statsNormalizedRows, 'recYds'), [statsNormalizedRows]);
 
   if (!seasons?.length) {
     return (
@@ -513,6 +537,33 @@ function OverviewDashboard({ seasons, records, recordBook, transactions, hofPlay
             <div className="text-[color:var(--text-muted)]">
               {(seasons ?? []).filter((s) => Array.isArray(s?.draftResults) || Array.isArray(s?.draftClass)).length} season(s) with archived draft data.
             </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Stats leaders teaser */}
+      {(passLeader || rushLeader || recLeader) ? (
+        <Card className="card-premium" data-testid="overview-stats-leaders-teaser">
+          <CardContent className="p-4">
+            <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-subtle)] mb-2">Current Season Leaders</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+              {[passLeader, rushLeader, recLeader].filter(Boolean).map((leader) => (
+                <div key={leader.statLabel}>
+                  <div className="text-xs text-[color:var(--text-muted)] uppercase tracking-wide mb-0.5">{leader.statLabel}</div>
+                  {leader.playerId != null ? (
+                    <button type="button" className="font-semibold text-[color:var(--accent)] text-left" onClick={() => onPlayerSelect?.(leader.playerId)}>
+                      {leader.playerName ?? '—'}
+                    </button>
+                  ) : (
+                    <span className="font-semibold">{leader.playerName ?? '—'}</span>
+                  )}
+                  <div className="text-xs text-[color:var(--text-muted)]">{leader.displayValue}{leader.teamAbbr ? ` · ${leader.teamAbbr}` : ''}</div>
+                </div>
+              ))}
+            </div>
+            <button type="button" className="mt-3 text-xs text-[color:var(--accent)]" onClick={() => setActiveTab('leaders')}>
+              See full leaders board →
+            </button>
           </CardContent>
         </Card>
       ) : null}
@@ -1997,4 +2048,153 @@ function formatNumber(v) {
   if (v == null) return "—";
   if (typeof v === "number") return Number.isInteger(v) ? v.toLocaleString() : v.toFixed(1);
   return String(v);
+}
+
+function LeagueLeadersBrowser({ allPlayers, seasons, onPlayerSelect }) {
+  const [category, setCategory] = useState('Passing');
+  const [statKey, setStatKey] = useState(DEFAULT_STAT_KEY.Passing);
+  const [search, setSearch] = useState('');
+  const [sortDir, setSortDir] = useState('desc');
+
+  const normalizedRows = useMemo(() => {
+    if (allPlayers?.length) {
+      return allPlayers.map(normalizeCurrentSeasonRow).filter(Boolean);
+    }
+    const latestSeason = [...(seasons ?? [])].sort((a, b) => (b?.year ?? 0) - (a?.year ?? 0))[0];
+    if (!latestSeason) return [];
+    return getArchivedPlayerSeasonRows(latestSeason).map(normalizeArchivedLeaderRow).filter(Boolean);
+  }, [allPlayers, seasons]);
+
+  const leadersByCategory = useMemo(() => buildLeagueLeadersRows(normalizedRows), [normalizedRows]);
+
+  const statDefs = useMemo(() => LEADER_STAT_DEFS.filter((d) => d.category === category), [category]);
+
+  useEffect(() => {
+    setStatKey(DEFAULT_STAT_KEY[category] ?? statDefs[0]?.statKey ?? '');
+    setSearch('');
+  }, [category, statDefs]);
+
+  const baseRows = leadersByCategory[category]?.[statKey] ?? [];
+  const filteredRows = useMemo(() => filterLeaderRows(baseRows, search), [baseRows, search]);
+  const rows = useMemo(
+    () => (sortDir === 'desc' ? filteredRows : [...filteredRows].reverse()),
+    [filteredRows, sortDir],
+  );
+
+  const currentStatLabel = statDefs.find((d) => d.statKey === statKey)?.statLabel ?? '—';
+
+  if (!normalizedRows.length) {
+    return (
+      <div data-testid="league-leaders-empty" className="py-10 text-center text-[color:var(--text-muted)]">
+        <div className="font-semibold text-[color:var(--text)]">League leaders will populate once games are played.</div>
+        <div className="mt-2 text-sm">Stats build as games complete each week.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3" data-testid="league-leaders-browser">
+      <div className="flex flex-wrap gap-2 items-center" role="group" aria-label="Stat category filter">
+        {LEADER_CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            aria-pressed={category === cat}
+            className={`rounded-full px-3 py-1 text-sm border transition-colors ${
+              category === cat
+                ? 'bg-[color:var(--accent)] text-white border-[color:var(--accent)]'
+                : 'border-[color:var(--hairline)] bg-[color:var(--surface)] text-[color:var(--text)]'
+            }`}
+            onClick={() => setCategory(cat)}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <select
+          aria-label="Select stat"
+          className="h-9 min-w-[160px] rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-sm"
+          value={statKey}
+          onChange={(e) => setStatKey(e.target.value)}
+        >
+          {statDefs.map((d) => (
+            <option key={d.statKey} value={d.statKey}>{d.statLabel}</option>
+          ))}
+        </select>
+        <input
+          aria-label="Search league leaders"
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search player, team, position…"
+          className="h-9 flex-1 min-w-[180px] rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+        />
+        {search ? (
+          <button type="button" className="btn btn-secondary h-9 text-sm" onClick={() => setSearch('')}>Clear</button>
+        ) : null}
+      </div>
+
+      <div data-testid="league-leaders-count" className="text-xs text-[color:var(--text-muted)]">
+        {buildShowingLabel(rows.length, baseRows.length, 'leader')}
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="rounded-md border border-[color:var(--hairline)] px-4 py-8 text-center text-sm text-[color:var(--text-muted)]">
+          No players match this filter.
+        </div>
+      ) : (
+        <Card className="card-premium">
+          <CardContent className="p-0">
+            <ScrollArea className="h-[560px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-4 w-12">Rank</TableHead>
+                    <TableHead>Player</TableHead>
+                    <TableHead className="hidden sm:table-cell">Pos</TableHead>
+                    <TableHead className="hidden sm:table-cell">Team</TableHead>
+                    <TableHead className="text-right pr-4">
+                      <button
+                        type="button"
+                        onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
+                        aria-label={`Sort by ${currentStatLabel}`}
+                      >
+                        {currentStatLabel}{sortDir === 'desc' ? ' ↓' : ' ↑'}
+                      </button>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow key={row.id} data-testid={`leader-row-${row.id}`}>
+                      <TableCell className="pl-4 font-semibold tabular-nums">{row.rank}</TableCell>
+                      <TableCell>
+                        {row.playerId != null ? (
+                          <button
+                            type="button"
+                            data-testid={`leader-player-btn-${row.id}`}
+                            className="text-left font-semibold text-[color:var(--accent)] hover:underline"
+                            onClick={() => onPlayerSelect?.(row.playerId)}
+                          >
+                            {row.playerName ?? '—'}
+                          </button>
+                        ) : (
+                          <span className="font-semibold">{row.playerName ?? '—'}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell text-xs">{row.pos ?? '—'}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-xs">{row.teamAbbr ?? '—'}</TableCell>
+                      <TableCell className="text-right pr-4 font-semibold tabular-nums">{row.displayValue}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
 }
