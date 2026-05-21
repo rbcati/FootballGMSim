@@ -498,3 +498,341 @@ describe('LeagueHistory', () => {
     });
   });
 });
+
+// ─── Awards History & Hall of Fame ───────────────────────────────────────────
+
+const MINIMAL_ACTIONS = {
+  getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
+  getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
+  getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+  getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+  getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+};
+
+function makeActions(overrides = {}) {
+  return { ...MINIMAL_ACTIONS, ...overrides };
+}
+
+describe('AwardsHistory tab', () => {
+  afterEach(cleanup);
+
+  async function openAwardsTab(actions) {
+    render(<LeagueHistory league={{ userTeamId: 1 }} onPlayerSelect={vi.fn()} onOpenBoxScore={vi.fn()} actions={actions} />);
+    const tab = await screen.findByRole('tab', { name: /Awards History/i });
+    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
+  }
+
+  it('shows awards empty state when no seasons are archived', async () => {
+    await openAwardsTab(makeActions());
+    await waitFor(() => {
+      expect(screen.getByTestId('awards-empty-state')).toBeTruthy();
+      expect(screen.getByTestId('awards-empty-state').textContent).toMatch(/Awards will populate as seasons are archived/i);
+    });
+  });
+
+  it('renders award rows for archived seasons', async () => {
+    const actions = makeActions({
+      getAllSeasons: vi.fn().mockResolvedValue({
+        payload: {
+          seasons: [{
+            id: 's1',
+            year: 2030,
+            champion: { name: 'Dallas', abbr: 'DAL' },
+            awards: {
+              mvp: { playerId: 1, name: 'Star QB', pos: 'QB', teamAbbr: 'DAL' },
+              opoy: { playerId: 2, name: 'Speedy WR', pos: 'WR', teamAbbr: 'DAL' },
+            },
+          }],
+        },
+      }),
+    });
+    await openAwardsTab(actions);
+    await waitFor(() => {
+      expect(screen.getByTestId('awards-history-section')).toBeTruthy();
+      const section = screen.getByTestId('awards-history-section');
+      expect(section.textContent).toMatch(/Star QB/);
+      expect(section.textContent).toMatch(/Speedy WR/);
+    });
+  });
+
+  it('filters awards by type when clicking a filter chip', async () => {
+    const actions = makeActions({
+      getAllSeasons: vi.fn().mockResolvedValue({
+        payload: {
+          seasons: [{
+            id: 's1',
+            year: 2031,
+            awards: {
+              mvp: { playerId: 1, name: 'MVP Man', pos: 'QB' },
+              dpoy: { playerId: 2, name: 'DPOY Man', pos: 'LB' },
+            },
+          }],
+        },
+      }),
+    });
+    await openAwardsTab(actions);
+    await waitFor(() => expect(screen.getByTestId('awards-history-section')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: /^DPOY$/i }));
+    await waitFor(() => {
+      const section = screen.getByTestId('awards-history-section');
+      expect(section.textContent).toMatch(/DPOY Man/);
+      expect(section.textContent).not.toMatch(/MVP Man/);
+    });
+  });
+
+  it('filters awards by search query', async () => {
+    const actions = makeActions({
+      getAllSeasons: vi.fn().mockResolvedValue({
+        payload: {
+          seasons: [{
+            id: 's1',
+            year: 2031,
+            awards: {
+              mvp: { playerId: 1, name: 'Alpha Back', pos: 'RB', teamAbbr: 'PHI' },
+              roty: { playerId: 2, name: 'Beta Rook', pos: 'WR', teamAbbr: 'NYG' },
+            },
+          }],
+        },
+      }),
+    });
+    await openAwardsTab(actions);
+    await waitFor(() => expect(screen.getByTestId('awards-history-section')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(/Search awards/i), { target: { value: 'Alpha' } });
+    await waitFor(() => {
+      const section = screen.getByTestId('awards-history-section');
+      expect(section.textContent).toMatch(/Alpha Back/);
+      expect(section.textContent).not.toMatch(/Beta Rook/);
+    });
+  });
+
+  it('calls onPlayerSelect when clicking an award player name', async () => {
+    const onPlayerSelect = vi.fn();
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={onPlayerSelect}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [{
+                id: 's1',
+                year: 2030,
+                awards: { mvp: { playerId: 42, name: 'Clickable MVP', pos: 'QB', teamAbbr: 'DAL' } },
+              }],
+            },
+          }),
+        })}
+      />,
+    );
+
+    const tab = await screen.findByRole('tab', { name: /Awards History/i });
+    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
+
+    await waitFor(() => expect(screen.getByTestId('award-player-btn-2030-mvp')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('award-player-btn-2030-mvp'));
+    expect(onPlayerSelect).toHaveBeenCalledWith(42);
+  });
+
+  it('shows count row with total and filtered awards', async () => {
+    const actions = makeActions({
+      getAllSeasons: vi.fn().mockResolvedValue({
+        payload: {
+          seasons: [{
+            id: 's1',
+            year: 2030,
+            awards: {
+              mvp: { playerId: 1, name: 'A', pos: 'QB' },
+              dpoy: { playerId: 2, name: 'B', pos: 'LB' },
+            },
+          }],
+        },
+      }),
+    });
+    await openAwardsTab(actions);
+    await waitFor(() => {
+      const count = screen.getByTestId('awards-count');
+      expect(count.textContent).toMatch(/Showing 2 of 2 awards/i);
+    });
+  });
+});
+
+describe('Hall of Fame tab', () => {
+  afterEach(cleanup);
+
+  async function openHofTab(actions) {
+    render(<LeagueHistory league={{ userTeamId: 1 }} onPlayerSelect={vi.fn()} onOpenBoxScore={vi.fn()} actions={actions} />);
+    const tab = await screen.findByRole('tab', { name: /Hall of Fame/i });
+    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
+  }
+
+  it('shows HOF empty state when no classes exist', async () => {
+    await openHofTab(makeActions());
+    await waitFor(() => {
+      expect(screen.getByTestId('hof-empty-state')).toBeTruthy();
+      expect(screen.getByTestId('hof-empty-state').textContent).toMatch(/Hall of Fame classes will appear/i);
+    });
+  });
+
+  it('renders HOF inductee cards from classes', async () => {
+    const actions = makeActions({
+      getHallOfFame: vi.fn().mockResolvedValue({
+        payload: {
+          players: [],
+          classes: [{
+            year: 2035,
+            classId: 'hof-2035',
+            inductees: [{
+              playerId: 'qb1',
+              name: 'Legend QB',
+              pos: 'QB',
+              primaryTeamAbbr: 'DAL',
+              legacyScore: 90,
+              tier: 'gold',
+              careerSummary: '3x MVP, 2 titles',
+            }],
+          }],
+        },
+      }),
+    });
+    await openHofTab(actions);
+    await waitFor(() => {
+      expect(screen.getByTestId('hof-section')).toBeTruthy();
+      expect(screen.getByTestId('hof-section').textContent).toMatch(/Legend QB/);
+      expect(screen.getByTestId('hof-section').textContent).toMatch(/Class of 2035/);
+      expect(screen.getByTestId('hof-section').textContent).toMatch(/3x MVP/);
+    });
+  });
+
+  it('calls onPlayerSelect when clicking an HOF inductee name', async () => {
+    const onPlayerSelect = vi.fn();
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={onPlayerSelect}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getHallOfFame: vi.fn().mockResolvedValue({
+            payload: {
+              players: [],
+              classes: [{
+                year: 2036,
+                classId: 'hof-2036',
+                inductees: [{ playerId: 'rb9', name: 'HOF Runner', pos: 'RB', primaryTeamAbbr: 'PHI', legacyScore: 82 }],
+              }],
+            },
+          }),
+        })}
+      />,
+    );
+    const tab = await screen.findByRole('tab', { name: /Hall of Fame/i });
+    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
+
+    await waitFor(() => expect(screen.getByTestId('hof-player-btn-rb9')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('hof-player-btn-rb9'));
+    expect(onPlayerSelect).toHaveBeenCalledWith('rb9');
+  });
+
+  it('filters HOF inductees by position', async () => {
+    const actions = makeActions({
+      getHallOfFame: vi.fn().mockResolvedValue({
+        payload: {
+          players: [],
+          classes: [{
+            year: 2040,
+            inductees: [
+              { playerId: 'p1', name: 'QB Legend', pos: 'QB', legacyScore: 90 },
+              { playerId: 'p2', name: 'RB Legend', pos: 'RB', legacyScore: 85 },
+            ],
+          }],
+        },
+      }),
+    });
+    await openHofTab(actions);
+    await waitFor(() => expect(screen.getByTestId('hof-section')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(/Filter Hall of Fame by position/i), { target: { value: 'RB' } });
+    await waitFor(() => {
+      const section = screen.getByTestId('hof-section');
+      expect(section.textContent).toMatch(/RB Legend/);
+      expect(section.textContent).not.toMatch(/QB Legend/);
+    });
+  });
+
+  it('filters HOF inductees by search query', async () => {
+    const actions = makeActions({
+      getHallOfFame: vi.fn().mockResolvedValue({
+        payload: {
+          players: [],
+          classes: [{
+            year: 2041,
+            inductees: [
+              { playerId: 'x1', name: 'Alpha WR', pos: 'WR', legacyScore: 80 },
+              { playerId: 'x2', name: 'Beta LB', pos: 'LB', legacyScore: 78 },
+            ],
+          }],
+        },
+      }),
+    });
+    await openHofTab(actions);
+    await waitFor(() => expect(screen.getByTestId('hof-section')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(/Search Hall of Fame/i), { target: { value: 'Beta' } });
+    await waitFor(() => {
+      const section = screen.getByTestId('hof-section');
+      expect(section.textContent).toMatch(/Beta LB/);
+      expect(section.textContent).not.toMatch(/Alpha WR/);
+    });
+  });
+
+  it('shows count row with total and filtered inductees', async () => {
+    const actions = makeActions({
+      getHallOfFame: vi.fn().mockResolvedValue({
+        payload: {
+          players: [],
+          classes: [{
+            year: 2042,
+            inductees: [
+              { playerId: 'a', name: 'A', pos: 'QB', legacyScore: 90 },
+              { playerId: 'b', name: 'B', pos: 'RB', legacyScore: 80 },
+            ],
+          }],
+        },
+      }),
+    });
+    await openHofTab(actions);
+    await waitFor(() => {
+      const count = screen.getByTestId('hof-count');
+      expect(count.textContent).toMatch(/Showing 2 of 2 inductees/i);
+    });
+  });
+
+  it('works gracefully when getHallOfFame is not present in actions', async () => {
+    const actionsWithoutHof = {
+      getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
+      getRecords: vi.fn().mockResolvedValue({ payload: { records: null } }),
+      getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+      getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+    };
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={actionsWithoutHof}
+      />,
+    );
+    const tab = await screen.findByRole('tab', { name: /Hall of Fame/i });
+    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
+    await waitFor(() => {
+      expect(screen.getByTestId('hof-empty-state')).toBeTruthy();
+    });
+  });
+});
