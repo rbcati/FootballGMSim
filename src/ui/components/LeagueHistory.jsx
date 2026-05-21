@@ -81,6 +81,16 @@ const SEASON_SORT_OPTIONS = [
   { value: "userWins", label: "Your wins" },
 ];
 
+const TAB_GUIDE = [
+  { value: "seasons", label: "Season Archive", cta: "View seasons", desc: "Browse archived seasons with standings, champions, and full award results." },
+  { value: "records", label: "Record Book", cta: "View records", desc: "All-time single-season and career statistical peaks for your league." },
+  { value: "awards", label: "Awards History", cta: "Browse awards", desc: "Every MVP, OPOY, DPOY, ROTY, and Finals MVP ever awarded." },
+  { value: "hof", label: "Hall of Fame", cta: "Open Hall of Fame", desc: "Players honored for exceptional long-term franchise careers." },
+  { value: "office", label: "League Office", cta: "Search league moves", desc: "Complete trade, signing, draft, and release transaction log." },
+  { value: "draft", label: "Draft History", cta: "Draft history", desc: "Draft class archives and pick results by season." },
+  { value: "compare", label: "Compare Players", cta: "Compare players", desc: "Side-by-side career stats and context across your player pool." },
+];
+
 function buildSeasonArchiveSearchText(season) {
   return [
     season?.year,
@@ -147,7 +157,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
   const [transactions, setTransactions] = useState([]);
   const [hofPlayers, setHofPlayers] = useState([]);
   const [hofClasses, setHofClasses] = useState([]);
-  const [activeTab, setActiveTab] = useState("seasons");
+  const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -198,6 +208,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="seasons">Season Archive</TabsTrigger>
           <TabsTrigger value="records">Record Book</TabsTrigger>
           <TabsTrigger value="awards">Awards History</TabsTrigger>
@@ -206,6 +217,19 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
           <TabsTrigger value="draft">Draft History</TabsTrigger>
           <TabsTrigger value="compare">Compare Players</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="overview">
+          <OverviewDashboard
+            seasons={seasons}
+            records={records}
+            recordBook={recordBook}
+            transactions={transactions}
+            hofPlayers={hofPlayers}
+            hofClasses={hofClasses}
+            setActiveTab={setActiveTab}
+            onPlayerSelect={onPlayerSelect}
+          />
+        </TabsContent>
 
         <TabsContent value="seasons">
           <SeasonExplorer seasons={seasons} actions={api} onPlayerSelect={onPlayerSelect} onOpenBoxScore={onOpenBoxScore} league={league} initialSelectedSeasonId={initialSelectedSeasonId} />
@@ -235,6 +259,282 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
           <PlayerCompare actions={api} pool={allPlayers} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function OverviewDashboard({ seasons, records, recordBook, transactions, hofPlayers, hofClasses, setActiveTab, onPlayerSelect }) {
+  const v1RecordRows = useMemo(() => buildLeagueRecordsRows(recordBook), [recordBook]);
+  const awardRows = useMemo(() => normalizeAwardsRows(seasons), [seasons]);
+  const hofRows = useMemo(() => normalizeHofRows(hofClasses ?? [], hofPlayers ?? []), [hofClasses, hofPlayers]);
+
+  const latestSeason = useMemo(
+    () => [...(seasons ?? [])].sort((a, b) => (b?.year ?? 0) - (a?.year ?? 0))[0] ?? null,
+    [seasons],
+  );
+  const championRanking = useMemo(() => buildChampionMap(seasons), [seasons]);
+  const topRecord = v1RecordRows[0] ?? null;
+  const latestMvp = useMemo(() => awardRows.find((r) => r.awardKey === "mvp") ?? null, [awardRows]);
+  const hofClassYear = useMemo(
+    () => hofRows.reduce((max, r) => Math.max(max, r.inductionYear ?? 0), 0),
+    [hofRows],
+  );
+  const latestHofClass = useMemo(
+    () => hofRows.filter((r) => r.inductionYear === hofClassYear && hofClassYear > 0),
+    [hofRows, hofClassYear],
+  );
+  const recentActivity = useMemo(() => [...(transactions ?? [])].reverse().slice(0, 5), [transactions]);
+  const hasDraftHistory = useMemo(
+    () => (seasons ?? []).some((s) => Array.isArray(s?.draftResults) || Array.isArray(s?.draftClass)),
+    [seasons],
+  );
+
+  if (!seasons?.length) {
+    return (
+      <div data-testid="overview-empty-state" className="py-10 text-center space-y-3">
+        <div className="text-2xl font-black text-[color:var(--text)]">Your dynasty is just getting started.</div>
+        <div className="text-sm text-[color:var(--text-muted)]">History will build as seasons are archived.</div>
+        <div className="text-sm text-[color:var(--text-muted)]">Records, awards, and Hall of Fame classes unlock over longer dynasties.</div>
+        <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-2 max-w-lg mx-auto text-left">
+          {TAB_GUIDE.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              data-testid={`overview-cta-${tab.value}`}
+              className="rounded-lg border border-[color:var(--hairline)] px-3 py-3 text-left hover:bg-[color:var(--surface-strong)] transition-colors"
+              onClick={() => setActiveTab(tab.value)}
+            >
+              <div className="text-xs font-bold text-[color:var(--text)]">{tab.label}</div>
+              <div className="text-[10px] text-[color:var(--text-muted)] mt-0.5 leading-tight">{tab.desc}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4" data-testid="overview-dashboard">
+      {/* Headline stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div
+          data-testid="overview-seasons-count"
+          className="rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface-strong)]/40 p-3 text-center"
+        >
+          <div className="text-2xl font-black text-[color:var(--accent)]">{seasons.length}</div>
+          <div className="text-xs text-[color:var(--text-muted)] mt-0.5">Seasons archived</div>
+        </div>
+        {championRanking[0] ? (
+          <div className="rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface-strong)]/40 p-3 text-center">
+            <div className="text-xl font-black text-[color:var(--text)] leading-tight">{championRanking[0][0]}</div>
+            <div className="text-xs text-[color:var(--text-muted)] mt-0.5">{championRanking[0][1]}× title leader</div>
+          </div>
+        ) : null}
+        {hofRows.length > 0 ? (
+          <div className="rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface-strong)]/40 p-3 text-center">
+            <div className="text-2xl font-black text-[color:var(--text)]">{hofRows.length}</div>
+            <div className="text-xs text-[color:var(--text-muted)] mt-0.5">HOF inductees</div>
+          </div>
+        ) : null}
+        {v1RecordRows.length > 0 ? (
+          <div className="rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface-strong)]/40 p-3 text-center">
+            <div className="text-2xl font-black text-[color:var(--text)]">{v1RecordRows.length}</div>
+            <div className="text-xs text-[color:var(--text-muted)] mt-0.5">Record entries</div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Latest champion */}
+      {latestSeason && (latestSeason.champion?.name || latestSeason.champion?.abbr) ? (
+        <Card className="card-premium" data-testid="overview-latest-champion">
+          <CardContent className="p-4">
+            <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-subtle)] mb-1">
+              Latest Champion · {latestSeason.year}
+            </div>
+            <div className="text-xl font-black text-[color:var(--text)]">
+              {latestSeason.champion.name ?? latestSeason.champion.abbr}
+            </div>
+            {latestSeason.runnerUp?.name || latestSeason.runnerUp?.abbr ? (
+              <div className="text-sm text-[color:var(--text-muted)] mt-0.5">
+                over {latestSeason.runnerUp.name ?? latestSeason.runnerUp.abbr}
+              </div>
+            ) : null}
+            {latestSeason.awards?.mvp?.name ? (
+              <div className="text-sm text-[color:var(--text-muted)] mt-1">
+                MVP:{" "}
+                {latestSeason.awards.mvp.playerId != null ? (
+                  <button
+                    type="button"
+                    className="font-semibold text-[color:var(--accent)]"
+                    onClick={() => onPlayerSelect?.(latestSeason.awards.mvp.playerId)}
+                  >
+                    {latestSeason.awards.mvp.name}
+                  </button>
+                ) : (
+                  <span className="font-semibold">{latestSeason.awards.mvp.name}</span>
+                )}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Records + Awards row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {topRecord ? (
+          <Card className="card-premium" data-testid="overview-record-teaser">
+            <CardContent className="p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-subtle)] mb-1">Record Book Headline</div>
+              <div className="text-xs text-[color:var(--text-muted)] uppercase tracking-wide">{topRecord.label}</div>
+              <div className="text-2xl font-black text-[color:var(--accent)] tabular-nums">{topRecord.displayValue}</div>
+              {topRecord.playerName ? (
+                <div className="text-sm text-[color:var(--text-muted)] mt-0.5">
+                  {topRecord.playerId != null ? (
+                    <button
+                      type="button"
+                      className="font-semibold text-[color:var(--accent)]"
+                      onClick={() => onPlayerSelect?.(topRecord.playerId)}
+                    >
+                      {topRecord.playerName}
+                    </button>
+                  ) : (
+                    <span className="font-semibold">{topRecord.playerName}</span>
+                  )}
+                  {topRecord.position ? ` · ${topRecord.position}` : ""}
+                  {topRecord.year ? ` · ${topRecord.year}` : ""}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="card-premium">
+            <CardContent className="p-4 text-sm">
+              <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-subtle)] mb-1">Record Book</div>
+              <div className="text-[color:var(--text-muted)]">Records will populate as seasons are archived.</div>
+            </CardContent>
+          </Card>
+        )}
+
+        {latestMvp ? (
+          <Card className="card-premium" data-testid="overview-latest-award">
+            <CardContent className="p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-subtle)] mb-1">
+                Most Recent MVP · {latestMvp.year}
+              </div>
+              {latestMvp.playerId != null ? (
+                <button
+                  type="button"
+                  className="text-xl font-black text-[color:var(--accent)] text-left"
+                  onClick={() => onPlayerSelect?.(latestMvp.playerId)}
+                >
+                  {latestMvp.playerName ?? "—"}
+                </button>
+              ) : (
+                <div className="text-xl font-black text-[color:var(--text)]">{latestMvp.playerName ?? "—"}</div>
+              )}
+              {latestMvp.teamAbbr ? (
+                <div className="text-sm text-[color:var(--text-muted)] mt-0.5">
+                  {latestMvp.teamAbbr}{latestMvp.position ? ` · ${latestMvp.position}` : ""}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="card-premium">
+            <CardContent className="p-4 text-sm">
+              <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-subtle)] mb-1">Awards</div>
+              <div className="text-[color:var(--text-muted)]">Award winners will appear after seasons are archived.</div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* HOF teaser */}
+      {latestHofClass.length > 0 ? (
+        <Card className="card-premium" data-testid="overview-hof-teaser">
+          <CardContent className="p-4">
+            <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-subtle)] mb-2">
+              Hall of Fame · Class of {hofClassYear}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {latestHofClass.slice(0, 4).map((inductee) => (
+                <div key={inductee.id} className="rounded-md border border-[color:var(--hairline)] px-3 py-2 text-sm">
+                  {inductee.playerId != null ? (
+                    <button
+                      type="button"
+                      className="font-semibold text-[color:var(--accent)]"
+                      onClick={() => onPlayerSelect?.(inductee.playerId)}
+                    >
+                      {inductee.playerName}
+                    </button>
+                  ) : (
+                    <span className="font-semibold">{inductee.playerName}</span>
+                  )}
+                  {inductee.position ? (
+                    <span className="text-[color:var(--text-muted)] text-xs"> · {inductee.position}</span>
+                  ) : null}
+                </div>
+              ))}
+              {latestHofClass.length > 4 ? (
+                <div className="rounded-md border border-[color:var(--hairline)] px-3 py-2 text-sm text-[color:var(--text-muted)]">
+                  +{latestHofClass.length - 4} more
+                </div>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Recent activity */}
+      {recentActivity.length > 0 ? (
+        <Card className="card-premium" data-testid="overview-activity-teaser">
+          <CardContent className="p-4">
+            <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-subtle)] mb-2">Recent League Activity</div>
+            <ul className="space-y-1.5">
+              {recentActivity.map((tx, idx) => (
+                <li key={tx.id ?? idx} className="text-sm flex gap-2 items-baseline">
+                  <span className="font-semibold text-[color:var(--text)] shrink-0 text-xs uppercase tracking-wide">
+                    {tx.typeLabel ?? tx.type ?? "Move"}
+                  </span>
+                  <span className="truncate text-[color:var(--text-muted)]">{tx.playerName ?? tx.headline ?? "—"}</span>
+                  {tx.teamAbbr ? <span className="shrink-0 text-xs text-[color:var(--text-muted)]">({tx.teamAbbr})</span> : null}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Draft teaser */}
+      {hasDraftHistory ? (
+        <Card className="card-premium">
+          <CardContent className="p-4 text-sm">
+            <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-subtle)] mb-1">Draft History</div>
+            <div className="text-[color:var(--text-muted)]">
+              {(seasons ?? []).filter((s) => Array.isArray(s?.draftResults) || Array.isArray(s?.draftClass)).length} season(s) with archived draft data.
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {/* Tab navigation guide */}
+      <div data-testid="overview-nav-guide">
+        <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--text-subtle)] mb-2">Explore history</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          {TAB_GUIDE.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              data-testid={`overview-cta-${tab.value}`}
+              className="rounded-lg border border-[color:var(--hairline)] px-3 py-3 text-left hover:bg-[color:var(--surface-strong)] transition-colors"
+              onClick={() => setActiveTab(tab.value)}
+            >
+              <div className="text-xs font-bold text-[color:var(--text)]">{tab.label}</div>
+              <div className="text-[10px] text-[color:var(--text-muted)] mt-0.5 leading-tight">{tab.desc}</div>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

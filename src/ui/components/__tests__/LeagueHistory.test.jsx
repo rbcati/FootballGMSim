@@ -32,6 +32,10 @@ describe('LeagueHistory', () => {
       />,
     );
 
+    const seasonTab = await screen.findByRole('tab', { name: /Season Archive/i });
+    fireEvent.mouseDown(seasonTab);
+    fireEvent.click(seasonTab);
+
     await waitFor(() => {
       expect(screen.getByText(/2031 League Snapshot/i)).toBeTruthy();
       expect(screen.getByText(/Championship result is unavailable in this archive/i)).toBeTruthy();
@@ -87,6 +91,10 @@ describe('LeagueHistory', () => {
       />,
     );
 
+    const seasonTab = await screen.findByRole('tab', { name: /Season Archive/i });
+    fireEvent.mouseDown(seasonTab);
+    fireEvent.click(seasonTab);
+
     await waitFor(() => {
       const playoffPanels = screen.queryAllByTestId('league-history-playoff-bracket-s2');
       const playoff = playoffPanels.find((el) => el.textContent.includes('Wild Card')) ?? playoffPanels[playoffPanels.length - 1];
@@ -119,6 +127,10 @@ describe('LeagueHistory', () => {
         }}
       />,
     );
+
+    const seasonTab = await screen.findByRole('tab', { name: /Season Archive/i });
+    fireEvent.mouseDown(seasonTab);
+    fireEvent.click(seasonTab);
 
     await waitFor(() => {
       expect(screen.getByTestId('league-season-button-s1')).toBeTruthy();
@@ -158,6 +170,10 @@ describe('LeagueHistory', () => {
       />,
     );
 
+    const seasonTab = await screen.findByRole('tab', { name: /Season Archive/i });
+    fireEvent.mouseDown(seasonTab);
+    fireEvent.click(seasonTab);
+
     await waitFor(() => {
       expect(screen.getByTestId('league-history-top-performers-s9')).toBeTruthy();
       expect(screen.getByTestId('league-history-top-performers-s9').textContent).toMatch(/Air/);
@@ -196,6 +212,10 @@ describe('LeagueHistory', () => {
         }}
       />,
     );
+
+    const seasonTab = await screen.findByRole('tab', { name: /Season Archive/i });
+    fireEvent.mouseDown(seasonTab);
+    fireEvent.click(seasonTab);
 
     await waitFor(() => {
       expect(screen.getByTestId('league-history-major-tx-sx')).toBeTruthy();
@@ -243,6 +263,10 @@ describe('LeagueHistory', () => {
         }}
       />,
     );
+
+    const seasonTab = await screen.findByRole('tab', { name: /Season Archive/i });
+    fireEvent.mouseDown(seasonTab);
+    fireEvent.click(seasonTab);
 
     await waitFor(() => {
       expect(screen.getByTestId('league-season-archive-count').textContent).toContain('Showing 3 of 3 seasons');
@@ -833,6 +857,304 @@ describe('Hall of Fame tab', () => {
     fireEvent.click(tab);
     await waitFor(() => {
       expect(screen.getByTestId('hof-empty-state')).toBeTruthy();
+    });
+  });
+});
+
+// ─── Overview Dashboard ───────────────────────────────────────────────────────
+
+describe('Overview Dashboard', () => {
+  afterEach(cleanup);
+
+  it('shows empty-state message with encouraging copy when no seasons are archived', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions()}
+      />,
+    );
+    await waitFor(() => {
+      const el = screen.getByTestId('overview-empty-state');
+      expect(el).toBeTruthy();
+      expect(el.textContent).toMatch(/History will build as seasons are archived/i);
+      expect(el.textContent).toMatch(/Records, awards, and Hall of Fame classes unlock over longer dynasties/i);
+    });
+  });
+
+  it('shows archived season count on the overview when seasons exist', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                { id: 's1', year: 2030, standings: [], awards: {} },
+                { id: 's2', year: 2031, standings: [], awards: {} },
+                { id: 's3', year: 2032, standings: [], awards: {} },
+              ],
+            },
+          }),
+        })}
+      />,
+    );
+    await waitFor(() => {
+      const el = screen.getByTestId('overview-seasons-count');
+      expect(el).toBeTruthy();
+      expect(el.textContent).toContain('3');
+    });
+  });
+
+  it('shows latest champion card when a season with champion data exists', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [
+                {
+                  id: 's1',
+                  year: 2031,
+                  champion: { id: 1, name: 'Dallas Cowboys', abbr: 'DAL' },
+                  runnerUp: { id: 2, name: 'New York Giants', abbr: 'NYG' },
+                  awards: { mvp: { playerId: 5, name: 'Star QB' } },
+                  standings: [],
+                },
+              ],
+            },
+          }),
+        })}
+      />,
+    );
+    await waitFor(() => {
+      const el = screen.getByTestId('overview-latest-champion');
+      expect(el).toBeTruthy();
+      expect(el.textContent).toMatch(/Dallas Cowboys/i);
+      expect(el.textContent).toMatch(/2031/);
+    });
+  });
+
+  it('does not show champion card when no season has champion data', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [{ id: 's1', year: 2030, standings: [], awards: {} }],
+            },
+          }),
+        })}
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('overview-dashboard')).toBeTruthy());
+    expect(screen.queryByTestId('overview-latest-champion')).toBeNull();
+  });
+
+  it('shows record-book teaser when V1 record data exists', async () => {
+    const recordBook = {
+      schemaVersion: 1,
+      singleSeasonV1: {
+        passingYards: {
+          recordKey: 'passingYards',
+          label: 'Passing yards',
+          value: 5200,
+          playerId: 'qb1',
+          playerName: 'Elite Arm',
+          position: 'QB',
+          teamAbbr: 'DAL',
+          year: 2031,
+          source: 'archivedSeason',
+        },
+      },
+      careerLeadersV1: {},
+      teamSeasonV1: {},
+    };
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: { seasons: [{ id: 's1', year: 2031, standings: [], awards: {} }] },
+          }),
+          getRecords: vi.fn().mockResolvedValue({ payload: { records: null, recordBook } }),
+        })}
+      />,
+    );
+    await waitFor(() => {
+      const el = screen.getByTestId('overview-record-teaser');
+      expect(el).toBeTruthy();
+      expect(el.textContent).toMatch(/Elite Arm/);
+      expect(el.textContent).toMatch(/5,200/);
+    });
+  });
+
+  it('shows latest MVP award teaser when seasons with awards exist', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [{
+                id: 's1',
+                year: 2032,
+                champion: { name: 'DAL', abbr: 'DAL' },
+                awards: { mvp: { playerId: 99, name: 'Top Passer', pos: 'QB', teamAbbr: 'DAL' } },
+                standings: [],
+              }],
+            },
+          }),
+        })}
+      />,
+    );
+    await waitFor(() => {
+      const el = screen.getByTestId('overview-latest-award');
+      expect(el).toBeTruthy();
+      expect(el.textContent).toMatch(/Top Passer/);
+      expect(el.textContent).toMatch(/2032/);
+    });
+  });
+
+  it('shows newest Hall of Fame class teaser when HOF data exists', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: { seasons: [{ id: 's1', year: 2031, standings: [], awards: {} }] },
+          }),
+          getHallOfFame: vi.fn().mockResolvedValue({
+            payload: {
+              players: [],
+              classes: [{
+                year: 2040,
+                inductees: [{ playerId: 'p1', name: 'Dynasty QB', pos: 'QB', legacyScore: 92 }],
+              }],
+            },
+          }),
+        })}
+      />,
+    );
+    await waitFor(() => {
+      const el = screen.getByTestId('overview-hof-teaser');
+      expect(el).toBeTruthy();
+      expect(el.textContent).toMatch(/Dynasty QB/);
+      expect(el.textContent).toMatch(/2040/);
+    });
+  });
+
+  it('shows recent activity teaser when transactions exist', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: { seasons: [{ id: 's1', year: 2031, standings: [], awards: {} }] },
+          }),
+          getTransactions: vi.fn().mockResolvedValue({
+            payload: {
+              transactions: [
+                { id: 1, type: 'signing', typeLabel: 'Signing', playerName: 'Fast WR', teamAbbr: 'DAL' },
+              ],
+            },
+          }),
+        })}
+      />,
+    );
+    await waitFor(() => {
+      const el = screen.getByTestId('overview-activity-teaser');
+      expect(el).toBeTruthy();
+      expect(el.textContent).toMatch(/Fast WR/);
+    });
+  });
+
+  it('CTA button in nav guide switches to the records tab', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: { seasons: [{ id: 's1', year: 2030, standings: [], awards: {} }] },
+          }),
+        })}
+      />,
+    );
+    const cta = await screen.findByTestId('overview-cta-records');
+    fireEvent.click(cta);
+    await waitFor(() => {
+      expect(screen.getByTestId('records-empty-state')).toBeTruthy();
+    });
+  });
+
+  it('CTA button in nav guide switches to the awards tab', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions()}
+      />,
+    );
+    const cta = await screen.findByTestId('overview-cta-awards');
+    fireEvent.click(cta);
+    await waitFor(() => {
+      expect(screen.getByTestId('awards-empty-state')).toBeTruthy();
+    });
+  });
+
+  it('CTA button in nav guide switches to the Hall of Fame tab', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions()}
+      />,
+    );
+    const cta = await screen.findByTestId('overview-cta-hof');
+    fireEvent.click(cta);
+    await waitFor(() => {
+      expect(screen.getByTestId('hof-empty-state')).toBeTruthy();
+    });
+  });
+
+  it('CTA button in nav guide switches to the Season Archive tab', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: { seasons: [{ id: 's1', year: 2030, standings: [], awards: {} }] },
+          }),
+        })}
+      />,
+    );
+    const cta = await screen.findByTestId('overview-cta-seasons');
+    fireEvent.click(cta);
+    await waitFor(() => {
+      expect(screen.getByTestId('league-season-button-s1')).toBeTruthy();
     });
   });
 });
