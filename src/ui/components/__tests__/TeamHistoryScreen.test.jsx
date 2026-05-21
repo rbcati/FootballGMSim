@@ -174,4 +174,126 @@ describe('TeamHistoryScreen', () => {
       expect(screen.getByTestId('team-history-timeline-count').textContent).toContain('Showing 3 of 3 seasons');
     });
   });
+
+  it('selecting a season shows detail summary, moves, draft flash, leaders, and opens key Game Book', async () => {
+    const onOpen = vi.fn();
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 7, name: 'Seattle', abbr: 'SEA' }], userTeamId: 7 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [{
+                year: 2055,
+                seasonId: 's2055',
+                id: 's2055',
+                standings: [
+                  { id: 7, name: 'Seattle', abbr: 'SEA', wins: 12, losses: 5, ties: 0, pf: 455, pa: 310 },
+                  { id: 3, name: 'River', abbr: 'RIV', wins: 9, losses: 8, ties: 0, pf: 350, pa: 340 },
+                ],
+                champion: { id: 7, abbr: 'SEA' },
+                gameIndex: [
+                  { id: 's2055_w4_3_7', week: 4, homeId: 7, awayId: 3, homeScore: 42, awayScore: 10 },
+                  { id: 's2055_w9_7_3', week: 9, homeId: 3, awayId: 7, homeScore: 24, awayScore: 23 },
+                ],
+                notableGames: [
+                  { id: 's2055_w22_3_7', type: 'championship', week: 22, homeId: 7, awayId: 3, homeScore: 30, awayScore: 27 },
+                ],
+                playerStatLeaders: {
+                  passingYards: { playerId: 10, playerName: 'Archive QB', value: 4300, teamId: 7, teamAbbr: 'SEA' },
+                },
+                awards: {
+                  mvp: { playerId: 10, name: 'Archive QB', teamId: 7, teamAbbr: 'SEA' },
+                },
+              }],
+            },
+          }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({
+            payload: {
+              transactions: [
+                { id: 1, type: 'trade', seasonId: 's2055', week: 3, teamId: 7, teamAbbr: 'SEA', headline: 'SEA acquired Edge Star', playerId: 44, playerName: 'Edge Star' },
+                { id: 2, type: 'signing', seasonId: 's2054', week: 4, teamId: 7, teamAbbr: 'SEA', headline: 'Older signing' },
+              ],
+            },
+          }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [{ seasonId: 's2055', year: 2055, teamIds: [7] }] } }),
+          getDraftClass: vi.fn().mockResolvedValue({
+            payload: {
+              model: {
+                year: 2055,
+                picks: [
+                  { playerName: 'Future LT', draftTeamId: 7, legacyScore: 88, redraftDelta: 52 },
+                ],
+                teamGrades: [{ teamId: 7, gradeLabel: 'A-' }],
+              },
+            },
+          }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={onOpen}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-season-2055')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /View 2055 season detail/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-season-detail')).toBeTruthy();
+    });
+    expect(screen.getByTestId('team-history-season-detail-record').textContent).toContain('12-5');
+    expect(screen.getByText(/455 \/ 310/i)).toBeTruthy();
+    expect(screen.getByTestId('team-history-season-detail-diff').textContent).toContain('+145');
+    const detailMoves = screen.getAllByTestId('team-history-season-detail-move').map((node) => node.textContent ?? '');
+    expect(detailMoves.join(' ')).toContain('SEA acquired Edge Star');
+    expect(detailMoves.join(' ')).not.toContain('Older signing');
+    expect(screen.getAllByText(/Grade A-/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Archive QB/i).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByTestId('team-history-season-detail-game')[0]);
+    await waitFor(() => {
+      expect(onOpen).toHaveBeenCalled();
+    });
+  });
+
+  it('season detail handles legacy seasons without games or moves', async () => {
+    render(
+      <TeamHistoryScreen
+        league={{ teams: [{ id: 2, name: 'Legacy', abbr: 'LEG' }], userTeamId: 2 }}
+        actions={{
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: {
+              seasons: [{
+                year: 2040,
+                standings: [{ id: 2, name: 'Legacy', abbr: 'LEG', wins: 6, losses: 11, ties: 0, pf: 270, pa: 390 }],
+              }],
+            },
+          }),
+          getHallOfFame: vi.fn().mockResolvedValue({ payload: { players: [], classes: [] } }),
+          getTransactions: vi.fn().mockResolvedValue({ payload: { transactions: [] } }),
+          getDraftClasses: vi.fn().mockResolvedValue({ payload: { classes: [] } }),
+          getDraftClass: vi.fn().mockResolvedValue({ payload: { model: null } }),
+        }}
+        onBack={vi.fn()}
+        onPlayerSelect={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-season-2040')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /View 2040 season detail/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('team-history-season-detail')).toBeTruthy();
+    });
+    expect(screen.getByText(/No scored games are attached/i)).toBeTruthy();
+    expect(screen.getByText(/No transaction rows are logged/i)).toBeTruthy();
+    expect(screen.getByText(/does not include trustworthy team leader/i)).toBeTruthy();
+  });
 });

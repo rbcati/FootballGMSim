@@ -4,6 +4,7 @@ import { buildCompletedGamePresentation, openResolvedBoxScore } from '../utils/b
 import { buildFranchiseHistoryModel, PLAYOFF_CALIBER_WINS } from '../../core/franchiseHistoryModel.js';
 import { RECORD_BOOK_PLAYER_KEYS, RECORD_LABELS } from '../../core/recordBookV1.js';
 import { buildShowingLabel, rowMatchesSearch, stableSortRows } from '../utils/dataBrowser.js';
+import { buildActivityLogRows } from '../utils/activityLogViewModel.js';
 
 function buildSeasonTeamMap(season) {
   const map = {};
@@ -16,6 +17,196 @@ function buildSeasonTeamMap(season) {
 function formatPct(p) {
   if (!Number.isFinite(p) || p <= 0) return '—';
   return `${(p * 100).toFixed(1)}%`;
+}
+
+function num(value, fallback = null) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function seasonToken(value) {
+  if (value == null || value === '') return null;
+  const raw = String(value);
+  const numeric = Number(raw.replace(/[^0-9]/g, ''));
+  return Number.isFinite(numeric) && numeric > 0 ? String(numeric) : raw;
+}
+
+function seasonMatches(row, seasonRow) {
+  const wanted = seasonToken(seasonRow?.seasonId ?? seasonRow?.year);
+  if (!wanted) return false;
+  const candidates = [
+    row?.seasonId,
+    row?.sourceSeasonId,
+    row?.year,
+    row?.season,
+    row?.meta?.seasonId,
+    row?.meta?.year,
+    row?.meta?.season,
+  ].map(seasonToken).filter(Boolean);
+  return candidates.includes(wanted);
+}
+
+function teamMatches(row, teamId, teamAbbr) {
+  const tid = num(teamId);
+  if (tid != null) {
+    const candidateIds = [
+      row?.teamId,
+      row?.id,
+      row?.draftTeamId,
+      row?.meta?.teamId,
+      row?.meta?.draftTeamId,
+      ...(Array.isArray(row?.participantTeamIds) ? row.participantTeamIds : []),
+    ];
+    if (candidateIds.some((id) => num(id) === tid)) return true;
+  }
+  const want = String(teamAbbr ?? '').trim().toUpperCase();
+  if (!want) return false;
+  const candidateAbbrs = [
+    row?.teamAbbr,
+    row?.abbr,
+    row?.draftTeamAbbr,
+    row?.meta?.team,
+    row?.meta?.teamAbbr,
+    row?.team?.abbr,
+  ];
+  return candidateAbbrs.some((abbr) => String(abbr ?? '').trim().toUpperCase() === want);
+}
+
+function recordLabel(row) {
+  if (!row) return 'â€”';
+  return `${row.wins ?? 0}-${row.losses ?? 0}${row.ties ? `-${row.ties}` : ''}`;
+}
+
+function playoffResultLabel(row) {
+  if (row?.champion) return 'Champion';
+  if (row?.runnerUp) return 'Runner-up';
+  if (row?.truePlayoff) return 'Postseason appearance';
+  if (row?.playoffCaliber) return 'Playoff-caliber season';
+  return 'No documented postseason';
+}
+
+function formatDiff(value) {
+  const n = num(value, 0);
+  return `${n > 0 ? '+' : ''}${n}`;
+}
+
+function normalizeSeasonGame(season, game, teamId, reason) {
+  const teamMap = buildSeasonTeamMap(season);
+  const homeId = num(game?.homeId);
+  const awayId = num(game?.awayId);
+  const homeScore = num(game?.homeScore);
+  const awayScore = num(game?.awayScore);
+  if (homeId == null || awayId == null || homeScore == null || awayScore == null) return null;
+  if (homeId !== num(teamId) && awayId !== num(teamId)) return null;
+  return {
+    gameId: game?.gameId ?? game?.id,
+    id: game?.id ?? game?.gameId,
+    year: season?.year,
+    seasonId: season?.seasonId ?? season?.id ?? null,
+    week: game?.week,
+    homeId,
+    awayId,
+    home: teamMap[homeId],
+    away: teamMap[awayId],
+    homeScore,
+    awayScore,
+    margin: Math.abs(homeScore - awayScore),
+    total: homeScore + awayScore,
+    reason,
+  };
+}
+
+function buildSeasonKeyGames(season, teamId) {
+  const candidates = [];
+  const add = (game) => {
+    if (!game?.gameId && !game?.id) return;
+    const key = `${game.year}-${game.week}-${game.gameId ?? game.id}`;
+    if (!candidates.some((row) => `${row.year}-${row.week}-${row.gameId ?? row.id}` === key)) {
+      candidates.push(game);
+    }
+  };
+
+  for (const game of season?.notableGames ?? []) {
+    const type = String(game?.type ?? '').toLowerCase();
+    const reason = type === 'championship'
+      ? 'Championship game'
+      : type.includes('playoff')
+        ? 'Postseason game'
+        : type.includes('highest')
+          ? 'High-scoring game'
+          : 'Notable game';
+    add(normalizeSeasonGame(season, game, teamId, reason));
+  }
+
+  const allGames = (season?.gameIndex ?? [])
+    .map((game) => normalizeSeasonGame(season, game, teamId, 'Archived game'))
+    .filter(Boolean);
+  const wins = allGames.filter((game) => {
+    const homeTeam = num(game.homeId) === num(teamId);
+    return homeTeam ? game.homeScore > game.awayScore : game.awayScore > game.homeScore;
+  });
+  const biggestWin = [...wins].sort((a, b) => b.margin - a.margin || num(a.week, 0) - num(b.week, 0))[0];
+  if (biggestWin) add({ ...biggestWin, reason: 'Biggest win' });
+  const closest = [...allGames]
+    .filter((game) => game.margin > 0)
+    .sort((a, b) => a.margin - b.margin || num(b.week, 0) - num(a.week, 0))[0];
+  if (closest) add({ ...closest, reason: 'Closest game' });
+
+  return candidates.slice(0, 5);
+}
+
+function buildSeasonLeaders(season, teamId, teamAbbr) {
+  const rows = [];
+  for (const [key, leader] of Object.entries(season?.playerStatLeaders ?? {})) {
+    if (!teamMatches(leader, teamId, teamAbbr)) continue;
+    rows.push({
+      key,
+      label: RECORD_LABELS[key] ?? String(key).replace(/([A-Z])/g, ' $1').trim(),
+      playerId: leader?.playerId ?? leader?.id ?? null,
+      name: leader?.playerName ?? leader?.name ?? 'Player',
+      value: leader?.value ?? leader?.stat ?? leader?.total ?? null,
+    });
+  }
+  return rows.slice(0, 5);
+}
+
+function buildSeasonHonors(season, teamId, teamAbbr) {
+  const rows = [];
+  for (const [key, award] of Object.entries(season?.awards ?? {})) {
+    if (!award || typeof award !== 'object' || Array.isArray(award)) continue;
+    if (!teamMatches(award, teamId, teamAbbr)) continue;
+    rows.push({
+      key,
+      label: String(key).replace(/([A-Z])/g, ' $1').trim().toUpperCase(),
+      playerId: award?.playerId ?? award?.id ?? null,
+      name: award?.name ?? award?.playerName ?? 'Player',
+    });
+  }
+  return rows.slice(0, 5);
+}
+
+function buildSeasonDetail({ seasonRow, seasons, teamId, teamAbbr, majorMoves, draftFlash, league }) {
+  if (!seasonRow) return null;
+  const archivedSeason = (seasons ?? []).find((season) => {
+    const sameYear = num(season?.year) === num(seasonRow?.year);
+    const sameId = seasonRow?.seasonId != null && String(season?.seasonId ?? season?.id ?? '') === String(seasonRow.seasonId);
+    return sameYear || sameId;
+  }) ?? null;
+  const moves = buildActivityLogRows({ league, transactions: majorMoves })
+    .filter((row) => seasonMatches(row, seasonRow) && teamMatches(row, teamId, teamAbbr))
+    .slice(0, 8);
+  const draft = (draftFlash ?? [])
+    .filter((row) => seasonMatches(row, seasonRow))
+    .slice(0, 3);
+  return {
+    season: archivedSeason,
+    seasonRow,
+    keyGames: buildSeasonKeyGames(archivedSeason, teamId),
+    majorMoves: moves,
+    draftFlash: draft,
+    leaders: buildSeasonLeaders(archivedSeason, teamId, teamAbbr),
+    honors: buildSeasonHonors(archivedSeason, teamId, teamAbbr),
+  };
 }
 
 function RecordRow({ label, value, detail }) {
@@ -73,11 +264,16 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
   const [scope, setScope] = useState('all');
   const [majorMoves, setMajorMoves] = useState([]);
   const [draftFlash, setDraftFlash] = useState([]);
+  const [selectedSeasonKey, setSelectedSeasonKey] = useState(null);
 
   const activeTeam = useMemo(
     () => (league?.teams ?? []).find((t) => Number(t.id) === Number(teamId ?? league?.userTeamId)),
     [league?.teams, league?.userTeamId, teamId],
   );
+
+  useEffect(() => {
+    setSelectedSeasonKey(null);
+  }, [activeTeam?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,7 +312,7 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
           if (wa !== 0) return wa;
           return Number(b?.id ?? 0) - Number(a?.id ?? 0);
         });
-        setMajorMoves(sorted.slice(0, 15));
+        setMajorMoves(sorted.slice(0, 120));
       })
       .catch(() => {
         if (!cancelled) setMajorMoves([]);
@@ -211,6 +407,21 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
   }, [filteredTimeline, timelineSortDir, timelineSortKey]);
 
   const hasTimelineFilters = Boolean(timelineSearch.trim()) || scope !== 'all' || timelineSortKey !== 'year' || timelineSortDir !== 'desc';
+
+  const selectedSeasonRow = useMemo(() => {
+    if (!selectedSeasonKey) return null;
+    return (model.seasons ?? []).find((row) => String(row?.seasonId ?? row?.year) === String(selectedSeasonKey)) ?? null;
+  }, [model.seasons, selectedSeasonKey]);
+
+  const selectedSeasonDetail = useMemo(() => buildSeasonDetail({
+    seasonRow: selectedSeasonRow,
+    seasons,
+    teamId: activeTeam?.id,
+    teamAbbr: activeTeam?.abbr,
+    majorMoves,
+    draftFlash,
+    league,
+  }), [activeTeam?.abbr, activeTeam?.id, draftFlash, league, majorMoves, seasons, selectedSeasonRow]);
 
   const completedGameRows = useMemo(() => {
     const rows = [];
@@ -361,7 +572,7 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
           </div>
         ) : (
           <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none', display: 'grid', gap: 10 }}>
-            {majorMoves.map((tx, idx) => (
+            {majorMoves.slice(0, 15).map((tx, idx) => (
               <li
                 key={`${tx.id ?? idx}-${idx}`}
                 style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: '8px 10px', fontSize: 'var(--text-sm)' }}
@@ -582,7 +793,16 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
             <EmptyState title="No team history for this filter" body="Adjust filters or archive more seasons." />
           ) : (
             timelineRows.map((s) => (
-              <div key={s.year} data-testid={`team-history-season-${s.year}`} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
+              <div
+                key={s.year}
+                data-testid={`team-history-season-${s.year}`}
+                style={{
+                  border: selectedSeasonKey === String(s.seasonId ?? s.year) ? '1px solid var(--accent)' : '1px solid var(--hairline)',
+                  borderRadius: 10,
+                  padding: 10,
+                  background: selectedSeasonKey === String(s.seasonId ?? s.year) ? 'var(--surface)' : 'transparent',
+                }}
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <strong>{s.year}</strong>
                   <span>
@@ -607,11 +827,159 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
                     League MVP: {s.mvp.name}
                   </button>
                 ) : null}
+                <div style={{ marginTop: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => setSelectedSeasonKey(String(s.seasonId ?? s.year))}
+                    aria-label={`View ${s.year} season detail`}
+                  >
+                    View season detail
+                  </button>
+                </div>
               </div>
             ))
           )}
         </div>
       </SectionCard>
+
+      {selectedSeasonDetail ? (
+        <SectionCard
+          title={`${selectedSeasonDetail.seasonRow.year} Season Detail`}
+          subtitle="Record, defining games, roster moves, and archive context for the selected season."
+        >
+          <div data-testid="team-history-season-detail" style={{ display: 'grid', gap: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0 }}>Season archive</div>
+                <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>
+                  {selectedSeasonDetail.seasonRow.year} Â· {recordLabel(selectedSeasonDetail.seasonRow)}
+                </div>
+              </div>
+              <button type="button" className="btn btn-secondary" onClick={() => setSelectedSeasonKey(null)}>
+                Back to all seasons
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 8 }}>
+              <div className="stat-box" data-testid="team-history-season-detail-record">
+                <div className="stat-label">Record</div>
+                <div className="stat-value-large">{recordLabel(selectedSeasonDetail.seasonRow)}</div>
+              </div>
+              <div className="stat-box">
+                <div className="stat-label">PF / PA</div>
+                <div className="stat-value-large" style={{ fontSize: 'clamp(1rem, 4vw, 1.25rem)' }}>
+                  {selectedSeasonDetail.seasonRow.pf ?? 'â€”'} / {selectedSeasonDetail.seasonRow.pa ?? 'â€”'}
+                </div>
+              </div>
+              <div className="stat-box" data-testid="team-history-season-detail-diff">
+                <div className="stat-label">Point diff</div>
+                <div className="stat-value-large">{formatDiff(selectedSeasonDetail.seasonRow.pointDifferential)}</div>
+              </div>
+              <div className="stat-box">
+                <div className="stat-label">Finish</div>
+                <div className="stat-value-large" style={{ fontSize: 'clamp(0.95rem, 4vw, 1.15rem)' }}>
+                  {playoffResultLabel(selectedSeasonDetail.seasonRow)}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12 }}>
+              <div style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>Key games</div>
+                {selectedSeasonDetail.keyGames.length === 0 ? (
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>No scored games are attached to this archived season.</div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {selectedSeasonDetail.keyGames.map((row) => {
+                      const presentation = buildCompletedGamePresentation(row, { seasonId: row.year, week: row.week, source: 'team_history_season_detail' });
+                      const clickable = Boolean(presentation.canOpen && onOpenBoxScore);
+                      return (
+                        <button
+                          key={`${row.reason}-${row.gameId ?? row.id}-${row.week}`}
+                          type="button"
+                          className="btn"
+                          data-testid="team-history-season-detail-game"
+                          onClick={() => openResolvedBoxScore(row, { seasonId: row.year, week: row.week, source: 'team_history_season_detail' }, onOpenBoxScore)}
+                          style={{ textAlign: 'left', opacity: clickable ? 1 : 0.7, cursor: clickable ? 'pointer' : 'default' }}
+                          title={clickable ? presentation.ctaLabel : presentation.statusLabel}
+                        >
+                          <strong>
+                            {row.reason} Â· Week {row.week ?? 'â€”'}
+                          </strong>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                            {row.away?.abbr ?? 'AWY'} {row.awayScore ?? 'â€”'}-{row.homeScore ?? 'â€”'} {row.home?.abbr ?? 'HME'}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{clickable ? presentation.ctaLabel : presentation.statusLabel}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>Major moves</div>
+                {selectedSeasonDetail.majorMoves.length === 0 ? (
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>No transaction rows are logged for this team season.</div>
+                ) : (
+                  <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}>
+                    {selectedSeasonDetail.majorMoves.map((move) => (
+                      <li key={move.id} data-testid="team-history-season-detail-move" style={{ fontSize: 'var(--text-sm)' }}>
+                        <strong>{move.label}</strong>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{move.summary}</div>
+                        {move.week != null ? <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>Week {move.week}</div> : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>Draft flash</div>
+                {selectedSeasonDetail.draftFlash.length === 0 ? (
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>No draft class summary is attached to this season.</div>
+                ) : (
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                    {selectedSeasonDetail.draftFlash.map((row) => (
+                      <li key={row.seasonId}>
+                        <strong style={{ color: 'var(--text)' }}>Grade {row.grade}</strong>
+                        {` Â· ${row.pickCount} pick${row.pickCount === 1 ? '' : 's'}`}
+                        {row.bestName ? ` Â· Best: ${row.bestName}` : ''}
+                        {row.stealName ? ` Â· Value: ${row.stealName}` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>Team leaders & honors</div>
+                {selectedSeasonDetail.leaders.length === 0 && selectedSeasonDetail.honors.length === 0 ? (
+                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>This archive does not include trustworthy team leader or award rows for the selected season.</div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {selectedSeasonDetail.leaders.map((leader) => (
+                      <div key={`leader-${leader.key}`} style={{ fontSize: 'var(--text-sm)' }}>
+                        <strong>{leader.label}</strong>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                          {leader.name}{leader.value != null ? ` Â· ${leader.value}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                    {selectedSeasonDetail.honors.map((honor) => (
+                      <div key={`honor-${honor.key}`} style={{ fontSize: 'var(--text-sm)' }}>
+                        <strong>{honor.label}</strong>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{honor.name}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
 
       <SectionCard title="Completed game history">
         <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto' }}>
