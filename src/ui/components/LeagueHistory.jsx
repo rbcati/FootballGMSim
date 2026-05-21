@@ -9,6 +9,7 @@ import { AWARD_DISPLAY_NAMES } from '../../core/footballMeta';
 import { buildLeagueHistoryTopPerformers } from '../../core/playerSeasonStatsArchive.js';
 import { normalizeArchivedMajorTransactions } from '../../core/transactionTimeline.js';
 import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from "../utils/dataBrowser.js";
+import { buildLeagueRecordsRows, filterRecordRows, SCOPE_OPTIONS, CATEGORY_OPTIONS } from '../utils/leagueRecordsViewModel.js';
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -862,22 +863,23 @@ function SeasonExplorer({ seasons, actions, onPlayerSelect, onOpenBoxScore, leag
 }
 
 function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
-  const [scope, setScope] = useState("singleSeason");
+  // V1 state — always declared before any conditional returns
+  const v1Rows = useMemo(() => buildLeagueRecordsRows(recordBook), [recordBook]);
+  const [v1Scope, setV1Scope] = useState('all');
+  const [v1Category, setV1Category] = useState('all');
+  const [v1Search, setV1Search] = useState('');
+  const filteredV1Rows = useMemo(
+    () => filterRecordRows(v1Rows, { scope: v1Scope, category: v1Category, search: v1Search }),
+    [v1Rows, v1Scope, v1Category, v1Search],
+  );
 
-  if (!records) return <div className="py-8 text-center text-[color:var(--text-muted)]">No records tracked yet.</div>;
-
-  const source = scope === "singleSeason"
-    ? (recordBook?.singleSeason ?? records.singleSeason)
-    : scope === "game"
-      ? (recordBook?.singleGame ?? records.singleGame)
-      : (recordBook?.career ?? records.allTime);
-
-  const teamSeasonRecords = useMemo(() => {
+  // Legacy state — always declared
+  const [legacyScope, setLegacyScope] = useState('singleSeason');
+  const legacyTeamSeasonRecords = useMemo(() => {
     const bestWins = { year: null, team: null, value: -1 };
     const worstWins = { year: null, team: null, value: 999 };
     const bestPF = { year: null, team: null, value: -1 };
     const worstPA = { year: null, team: null, value: -1 };
-
     (seasons ?? []).forEach((season) => {
       (season.standings ?? []).forEach((team) => {
         if ((team.wins ?? 0) > bestWins.value) Object.assign(bestWins, { year: season.year, team: team.abbr, value: team.wins ?? 0 });
@@ -886,13 +888,109 @@ function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
         if ((team.pa ?? 0) > worstPA.value) Object.assign(worstPA, { year: season.year, team: team.abbr, value: team.pa ?? 0 });
       });
     });
-
     return { bestWins, worstWins, bestPF, worstPA };
   }, [seasons]);
 
+  const hasV1Data = v1Rows.length > 0;
+  const hasV1Filters = v1Scope !== 'all' || v1Category !== 'all' || Boolean(v1Search.trim());
+
+  // ── V1 path ─────────────────────────────────────────────────────────────────
+  if (hasV1Data) {
+    return (
+      <div className="space-y-4" data-testid="records-v1-view">
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2 items-center" role="group" aria-label="Scope filter">
+            {SCOPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                aria-pressed={v1Scope === opt.value}
+                className={`rounded-full px-3 py-1 text-sm border transition-colors ${
+                  v1Scope === opt.value
+                    ? 'bg-[color:var(--accent)] text-white border-[color:var(--accent)]'
+                    : 'border-[color:var(--hairline)] bg-[color:var(--surface)] text-[color:var(--text)]'
+                }`}
+                onClick={() => setV1Scope(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <input
+              aria-label="Search records"
+              type="search"
+              value={v1Search}
+              onChange={(e) => setV1Search(e.target.value)}
+              placeholder="Search player, team, year…"
+              className="h-9 flex-1 min-w-[180px] rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+            />
+            <select
+              aria-label="Filter records by category"
+              className="h-9 min-w-[160px] rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-2 text-sm"
+              value={v1Category}
+              onChange={(e) => setV1Category(e.target.value)}
+            >
+              {CATEGORY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            {hasV1Filters ? (
+              <button
+                type="button"
+                className="btn btn-secondary h-9 text-sm"
+                onClick={() => { setV1Scope('all'); setV1Category('all'); setV1Search(''); }}
+              >
+                Reset filters
+              </button>
+            ) : null}
+          </div>
+          <div data-testid="records-count" className="text-xs text-[color:var(--text-muted)]">
+            {buildShowingLabel(filteredV1Rows.length, v1Rows.length, 'record')}
+          </div>
+        </div>
+
+        {filteredV1Rows.length === 0 ? (
+          <div className="rounded-md border border-[color:var(--hairline)] px-4 py-8 text-center text-sm text-[color:var(--text-muted)]">
+            No records match these filters.
+          </div>
+        ) : (
+          <Card className="card-premium">
+            <CardContent className="p-0">
+              <ScrollArea className="h-[560px]">
+                <div className="divide-y divide-[color:var(--hairline)]">
+                  {filteredV1Rows.map((row) => (
+                    <RecordRow key={row.id} row={row} onPlayerSelect={onPlayerSelect} />
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  // ── Empty state ──────────────────────────────────────────────────────────────
+  if (!records) {
+    return (
+      <div data-testid="records-empty-state" className="py-10 text-center text-[color:var(--text-muted)]">
+        <div className="font-semibold text-[color:var(--text)]">Records will populate as seasons are archived.</div>
+        <div className="mt-2 text-sm">Complete seasons to build your league's historical record book.</div>
+      </div>
+    );
+  }
+
+  // ── Legacy path (pre-V1 saves) ───────────────────────────────────────────────
+  const legacySource = legacyScope === 'singleSeason'
+    ? (recordBook?.singleSeason ?? records.singleSeason)
+    : legacyScope === 'game'
+      ? (recordBook?.singleGame ?? records.singleGame)
+      : (recordBook?.career ?? records.allTime);
+
   return (
     <div className="space-y-4">
-      <Tabs value={scope} onValueChange={setScope}>
+      <Tabs value={legacyScope} onValueChange={setLegacyScope}>
         <TabsList>
           <TabsTrigger value="game">Single-game</TabsTrigger>
           <TabsTrigger value="singleSeason">Single-season</TabsTrigger>
@@ -901,13 +999,13 @@ function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
       </Tabs>
 
       <div className="text-xs text-[color:var(--text-muted)]">
-        {scope === "game" ? "Highest one-game outputs in archive." : scope === "singleSeason" ? "Best one-season marks and team highs." : "All-time career records and long-run leaders."}
+        {legacyScope === 'game' ? 'Highest one-game outputs in archive.' : legacyScope === 'singleSeason' ? 'Best one-season marks and team highs.' : 'All-time career records and long-run leaders.'}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {Object.entries(scope === "singleSeason" ? (recordBook?.singleSeason ?? RECORD_LABELS) : (source ?? {})).map(([key, raw]) => {
-          const label = typeof raw === "string" ? raw : RECORD_LABELS[key] ?? key;
-          const rec = source?.[key];
+        {Object.entries(legacyScope === 'singleSeason' ? (recordBook?.singleSeason ?? RECORD_LABELS) : (legacySource ?? {})).map(([key, raw]) => {
+          const label = typeof raw === 'string' ? raw : RECORD_LABELS[key] ?? key;
+          const rec = legacySource?.[key];
           if (!rec?.playerId) return null;
           return (
             <Card key={key} className="card-premium cursor-pointer" onClick={() => onPlayerSelect?.(rec.playerId)}>
@@ -915,7 +1013,7 @@ function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
                 <div className="text-xs uppercase tracking-wide text-[color:var(--text-muted)]">{label}</div>
                 <div className="text-2xl font-black text-[color:var(--accent)]">{Number(rec.value ?? 0).toLocaleString()}</div>
                 <div className="text-sm font-semibold">{rec.name} ({rec.pos})</div>
-                <div className="text-xs text-[color:var(--text-muted)]">{rec.team} · {rec.year ?? rec.lastYear ?? "—"}</div>
+                <div className="text-xs text-[color:var(--text-muted)]">{rec.team} · {rec.year ?? rec.lastYear ?? '—'}</div>
               </CardContent>
             </Card>
           );
@@ -925,10 +1023,10 @@ function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
       <Card className="card-premium">
         <CardHeader><CardTitle>Team & Franchise Season Records</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-          <RecordLine label="Most wins" record={teamSeasonRecords.bestWins} />
-          <RecordLine label="Fewest wins" record={teamSeasonRecords.worstWins} />
-          <RecordLine label="Most points for" record={teamSeasonRecords.bestPF} />
-          <RecordLine label="Most points allowed" record={teamSeasonRecords.worstPA} />
+          <RecordLine label="Most wins" record={legacyTeamSeasonRecords.bestWins} />
+          <RecordLine label="Fewest wins" record={legacyTeamSeasonRecords.worstWins} />
+          <RecordLine label="Most points for" record={legacyTeamSeasonRecords.bestPF} />
+          <RecordLine label="Most points allowed" record={legacyTeamSeasonRecords.worstPA} />
         </CardContent>
       </Card>
 
@@ -947,6 +1045,51 @@ function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+function RecordRow({ row, onPlayerSelect }) {
+  const canOpenPlayer = row.playerId != null && onPlayerSelect != null;
+  const scopeLabel = row.scope === 'singleSeason'
+    ? 'Season record'
+    : row.scope === 'career'
+      ? `Career · #${row.rank}`
+      : 'Team record';
+  const categoryLabel = String(row.category ?? '').charAt(0).toUpperCase() + String(row.category ?? '').slice(1);
+
+  return (
+    <div className="px-4 py-3" data-testid={`record-row-${row.id}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 text-xs text-[color:var(--text-muted)] mb-0.5">
+            <span className="font-semibold">{scopeLabel}</span>
+            <span>·</span>
+            <span>{categoryLabel}</span>
+          </div>
+          <div className="text-sm font-semibold text-[color:var(--text)] truncate">{row.label}</div>
+          <div className="text-xs text-[color:var(--text-muted)] mt-0.5">
+            {canOpenPlayer ? (
+              <button
+                type="button"
+                className="text-[color:var(--accent)] font-semibold hover:underline"
+                onClick={() => onPlayerSelect(row.playerId)}
+                data-testid={`record-row-player-btn-${row.id}`}
+              >
+                {row.playerName ?? 'Player'}
+              </button>
+            ) : row.playerName ? (
+              <span className="font-semibold">{row.playerName}</span>
+            ) : null}
+            {row.position ? ` (${row.position})` : ''}
+            {(row.teamAbbr ?? row.teamName) ? ` · ${row.teamAbbr ?? row.teamName}` : ''}
+            {row.year ? ` · ${row.year}` : ''}
+          </div>
+        </div>
+        <div className="text-xl font-black text-[color:var(--accent)] tabular-nums shrink-0">
+          {row.displayValue}
+        </div>
+      </div>
     </div>
   );
 }
