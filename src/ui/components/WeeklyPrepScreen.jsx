@@ -1,7 +1,14 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { EmptyState, SectionCard } from './common/UiPrimitives.jsx';
-import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
+import {
+  markWeeklyPrepStep,
+  GAME_PLAN_PRESETS,
+  normalizeGamePlan,
+  saveStoredGamePlan,
+  recommendGamePlanPreset,
+} from '../utils/weeklyPrep.js';
+import { deriveGamePlanMultipliers, getGamePlanSynergySummary } from '../../core/sim/gamePlanMultipliers.ts';
 import { buildWeeklyPrepScreenModel } from '../utils/weeklyPrepScreenModel.js';
 import { buildWeeklyIntelligence } from '../utils/weeklyIntelligence.js';
 import { evaluateWeeklyContext } from '../utils/weeklyContext.js';
@@ -25,6 +32,224 @@ function TonePill({ tone = 'info', label }) {
 
 const TONE_LABEL = { danger: 'Urgent', warning: 'Attention', info: 'Info', ok: 'Ready', success: 'Done' };
 
+function runPassLabel(v) {
+  if (v <= 35) return 'Run heavy';
+  if (v <= 45) return 'Run lean';
+  if (v <= 55) return 'Balanced';
+  if (v <= 65) return 'Pass lean';
+  return 'Pass heavy';
+}
+
+function aggressionLabel(v) {
+  if (v <= 30) return 'Very conservative';
+  if (v <= 45) return 'Conservative';
+  if (v <= 55) return 'Balanced';
+  if (v <= 65) return 'Aggressive';
+  return 'Very aggressive';
+}
+
+function depthLabel(v) {
+  if (v <= 30) return 'Short / quick';
+  if (v <= 45) return 'Short lean';
+  if (v <= 55) return 'Balanced';
+  if (v <= 65) return 'Deep lean';
+  return 'Deep / explosive';
+}
+
+function matchupMismatchWarning(plan, insights) {
+  const { runPassBalance, deepShortBalance, aggressionLevel } = plan;
+  const passHeavy = runPassBalance >= 60;
+  const runHeavy = runPassBalance <= 40;
+  const quickGame = deepShortBalance <= 42;
+  const conservativeTempo = aggressionLevel <= 45;
+  const extremePlan = Math.abs(runPassBalance - 50) >= 30;
+
+  if (insights.weakSecondary && runHeavy) {
+    return 'Opponent secondary is weak — a run-heavy plan may leave points on the board.';
+  }
+  if (insights.weakRunDefense && passHeavy) {
+    return 'Opponent run defense is soft — consider exploiting it with a run-heavy script.';
+  }
+  if (insights.elitePassRush && !quickGame) {
+    return 'Elite pass rush detected — slower-developing routes risk sacks and turnovers.';
+  }
+  if (insights.explosiveOpponentOffense && !conservativeTempo) {
+    return 'Opponent offense is explosive — an aggressive tempo may fuel a shootout.';
+  }
+  if (insights.balancedMatchup && extremePlan) {
+    return 'No scouting edge supports an extreme plan in a balanced matchup.';
+  }
+  return null;
+}
+
+function GamePlanControlCenter({ prep, league, onPlanReviewed }) {
+  const [plan, setPlan] = useState(() => normalizeGamePlan(prep?.gamePlan ?? {}));
+
+  const insights = prep?.insights ?? {};
+  const recommendedKey = recommendGamePlanPreset({ prep });
+
+  const hasBlockingLineupIssue = useMemo(
+    () => (prep?.lineupIssues ?? []).some((i) => i.level === 'urgent' && String(i.label).toLowerCase().includes('depth chart blocker')),
+    [prep],
+  );
+  const majorInjuryStress = useMemo(
+    () => (prep?.lineupIssues ?? []).some((i) => String(i.label).toLowerCase().includes('injury stack')),
+    [prep],
+  );
+
+  const liveMultipliers = useMemo(() => deriveGamePlanMultipliers({
+    weeklyPrepState: {
+      insights,
+      completion: { ...(prep?.completion ?? {}), planReviewed: true },
+      hasTracking: true,
+    },
+    gamePlan: plan,
+    teamContext: { hasBlockingLineupIssue, majorInjuryStress },
+  }), [plan, insights, prep?.completion, hasBlockingLineupIssue, majorInjuryStress]);
+
+  const liveSummary = useMemo(() => getGamePlanSynergySummary(liveMultipliers), [liveMultipliers]);
+
+  const warning = useMemo(() => matchupMismatchWarning(plan, insights), [plan, insights]);
+
+  const applyPlan = useCallback((nextPlan) => {
+    const normalized = normalizeGamePlan(nextPlan);
+    setPlan(normalized);
+    saveStoredGamePlan(normalized);
+    markWeeklyPrepStep(league, 'planReviewed', true);
+    onPlanReviewed?.();
+  }, [league, onPlanReviewed]);
+
+  const handleSlider = useCallback((field, rawValue) => {
+    applyPlan({ ...plan, [field]: Number(rawValue) });
+  }, [plan, applyPlan]);
+
+  const handlePreset = useCallback((presetKey) => {
+    const preset = GAME_PLAN_PRESETS[presetKey];
+    if (!preset) return;
+    applyPlan({ runPassBalance: preset.runPassBalance, aggressionLevel: preset.aggressionLevel, deepShortBalance: preset.deepShortBalance });
+  }, [applyPlan]);
+
+  const summaryTone = liveSummary.severity === 'major_risk' ? 'danger' : liveSummary.severity === 'minor_risk' ? 'warning' : 'success';
+  const matchupNote = prep?.keyMatchupNote;
+
+  return (
+    <SectionCard title="Game Plan Control Center">
+      {matchupNote && (
+        <p className="weekly-prep-caption" style={{ marginBottom: 'var(--space-3)' }}>
+          Matchup key: {matchupNote}
+        </p>
+      )}
+
+      <div className="weekly-prep-caption" style={{ marginBottom: 'var(--space-2)' }}>Presets</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
+        {Object.entries(GAME_PLAN_PRESETS).map(([key, preset]) => (
+          <Button
+            key={key}
+            size="sm"
+            variant={key === recommendedKey ? 'default' : 'outline'}
+            onClick={() => handlePreset(key)}
+            data-testid={`preset-btn-${key}`}
+          >
+            {preset.label}{key === recommendedKey ? ' ★' : ''}
+          </Button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-1)' }}>
+            <span className="weekly-prep-intel-head">Run ↔ Pass</span>
+            <TonePill tone="info" label={runPassLabel(plan.runPassBalance)} />
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={plan.runPassBalance}
+            onChange={(e) => handleSlider('runPassBalance', e.target.value)}
+            style={{ width: '100%' }}
+            aria-label="Run Pass Balance"
+            data-testid="slider-runPassBalance"
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+            <span>Run</span>
+            <span>Pass</span>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-1)' }}>
+            <span className="weekly-prep-intel-head">Conservative ↔ Aggressive</span>
+            <TonePill tone="info" label={aggressionLabel(plan.aggressionLevel)} />
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={plan.aggressionLevel}
+            onChange={(e) => handleSlider('aggressionLevel', e.target.value)}
+            style={{ width: '100%' }}
+            aria-label="Aggression Level"
+            data-testid="slider-aggressionLevel"
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+            <span>Conservative</span>
+            <span>Aggressive</span>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-1)' }}>
+            <span className="weekly-prep-intel-head">Quick/Short ↔ Deep/Explosive</span>
+            <TonePill tone="info" label={depthLabel(plan.deepShortBalance)} />
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={plan.deepShortBalance}
+            onChange={(e) => handleSlider('deepShortBalance', e.target.value)}
+            style={{ width: '100%' }}
+            aria-label="Deep Short Balance"
+            data-testid="slider-deepShortBalance"
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+            <span>Short</span>
+            <span>Deep</span>
+          </div>
+        </div>
+      </div>
+
+      {warning && (
+        <div
+          className="weekly-prep-effect-row"
+          style={{ borderColor: 'var(--warning)', background: 'color-mix(in srgb, var(--warning) 10%, var(--surface))', marginBottom: 'var(--space-2)' }}
+          data-testid="plan-mismatch-warning"
+        >
+          <TonePill tone="warning" label="Plan vs. Matchup" />
+          {' '}{warning}
+        </div>
+      )}
+
+      <div className="weekly-prep-caption" style={{ marginBottom: 'var(--space-2)' }}>Projected prep impact</div>
+      <div className="weekly-prep-command-row" style={{ marginBottom: 'var(--space-2)' }}>
+        <TonePill tone={summaryTone} label={`Status: ${liveSummary.status}`} />
+        <TonePill
+          tone={liveSummary.netImpact >= 0 ? 'success' : 'warning'}
+          label={`Net ${liveSummary.netImpact >= 0 ? '+' : ''}${liveSummary.netImpact.toFixed(3)}`}
+        />
+        {liveSummary.positive > 0 && <TonePill tone="success" label={`+${liveSummary.positive.toFixed(3)} bonuses`} />}
+        {liveSummary.negative > 0 && <TonePill tone="danger" label={`-${liveSummary.negative.toFixed(3)} penalties`} />}
+      </div>
+      <div className="weekly-prep-effects-grid" data-testid="impact-reasons">
+        {liveSummary.reasons.length > 0
+          ? liveSummary.reasons.map((r) => <div key={r} className="weekly-prep-effect-row">{r}</div>)
+          : <div className="weekly-prep-effect-row">No active synergy or penalties with current plan.</div>}
+      </div>
+    </SectionCard>
+  );
+}
+
 export default function WeeklyPrepScreen({ league, onNavigate }) {
   const model = useMemo(() => buildWeeklyPrepScreenModel({ league }), [league]);
   const prep = model.prep;
@@ -39,9 +264,18 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
     [league, weeklyIntelligence, weeklyContext, prep],
   );
 
+  const [localPlanReviewed, setLocalPlanReviewed] = useState(false);
+
   useEffect(() => {
     markWeeklyPrepStep(league, 'opponentScouted', true);
+    setLocalPlanReviewed(false);
   }, [league?.seasonId, league?.week, league?.userTeamId]);
+
+  const effectivePlanReviewed = localPlanReviewed || Boolean(prep?.completion?.planReviewed);
+  const effectiveRemaining = effectivePlanReviewed && !prep?.completion?.planReviewed
+    ? Math.max(0, (prep?.remaining ?? 4) - 1)
+    : (prep?.remaining ?? 4);
+  const effectiveScore = Math.round(((4 - effectiveRemaining) / 4) * 100);
 
   if (!prep?.nextGame || !prep?.opponent) {
     return <EmptyState title="Weekly prep unavailable" body="No upcoming opponent found. Open Schedule for next matchup details." />;
@@ -79,12 +313,19 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
 
       <SectionCard title="Readiness Command" subtitle="Confirm prep quality before returning to HQ.">
         <div className="weekly-prep-command-row">
-          <TonePill tone={model.readinessTone} label={`${model.readinessScore}% ready`} />
-          <TonePill tone={prep.remaining === 0 ? 'success' : 'warning'} label={`${4 - prep.remaining}/4 complete`} />
-          <TonePill tone={model.readyToAdvance ? 'success' : 'warning'} label={model.readyToAdvance ? 'Ready to Advance' : 'Needs Attention'} />
+          <TonePill tone={model.readinessTone} label={`${effectiveScore}% ready`} />
+          <TonePill tone={effectiveRemaining === 0 ? 'success' : 'warning'} label={`${4 - effectiveRemaining}/4 complete`} />
+          <TonePill tone={effectiveRemaining === 0 ? 'success' : 'warning'} label={effectiveRemaining === 0 ? 'Ready to Advance' : 'Needs Attention'} />
         </div>
         <p className="weekly-prep-caption">{model.keyRiskLabel}</p>
       </SectionCard>
+
+      <GamePlanControlCenter
+        key={`${league?.seasonId}:${league?.week}`}
+        prep={prep}
+        league={league}
+        onPlanReviewed={() => setLocalPlanReviewed(true)}
+      />
 
       <SectionCard title="Priority Actions" subtitle="Complete these before sim day.">
         <div className="weekly-prep-action-grid">
@@ -144,7 +385,7 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
           <TonePill tone={prep.completion.lineupChecked ? 'success' : 'warning'} label={`Lineup ${prep.completion.lineupChecked ? 'checked' : 'pending'}`} />
           <TonePill tone={prep.completion.injuriesReviewed ? 'success' : 'warning'} label={`Injuries ${prep.completion.injuriesReviewed ? 'reviewed' : 'pending'}`} />
           <TonePill tone={prep.completion.opponentScouted ? 'success' : 'warning'} label={`Opponent ${prep.completion.opponentScouted ? 'scouted' : 'pending'}`} />
-          <TonePill tone={prep.completion.planReviewed ? 'success' : 'warning'} label={`Plan ${prep.completion.planReviewed ? 'reviewed' : 'pending'}`} />
+          <TonePill tone={effectivePlanReviewed ? 'success' : 'warning'} label={`Plan ${effectivePlanReviewed ? 'reviewed' : 'pending'}`} />
         </div>
       </SectionCard>
 

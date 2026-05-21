@@ -1,5 +1,17 @@
-import { describe, expect, it } from 'vitest';
-import { deriveWeeklyPrepState, getWeeklyPrepProgress, markWeeklyPrepStep, clearWeeklyPrepForWeek } from './weeklyPrep.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  deriveWeeklyPrepState,
+  getWeeklyPrepProgress,
+  markWeeklyPrepStep,
+  clearWeeklyPrepForWeek,
+  normalizeGamePlan,
+  getStoredGamePlan,
+  saveStoredGamePlan,
+  resetStoredGamePlan,
+  GAME_PLAN_DEFAULTS,
+  GAME_PLAN_PRESETS,
+  recommendGamePlanPreset,
+} from './weeklyPrep.js';
 
 const league = {
   year: 2028,
@@ -92,5 +104,103 @@ describe('weeklyPrep', () => {
     expect(Array.isArray(prep.lineupIssues)).toBe(true);
     expect(prep.readinessLabel).toContain('remaining');
     expect(prep.prepSummary).toBeTruthy();
+  });
+});
+
+describe('game plan write helpers', () => {
+  let bucket;
+
+  beforeEach(() => {
+    bucket = new Map();
+    global.window = {
+      localStorage: {
+        getItem: (key) => bucket.get(key) ?? null,
+        setItem: (key, value) => bucket.set(key, String(value)),
+        removeItem: (key) => bucket.delete(key),
+      },
+    };
+  });
+
+  afterEach(() => {
+    delete global.window;
+  });
+
+  it('normalizeGamePlan returns defaults for empty input', () => {
+    expect(normalizeGamePlan({})).toEqual({ runPassBalance: 50, aggressionLevel: 50, deepShortBalance: 50 });
+  });
+
+  it('normalizeGamePlan clamps out-of-range values', () => {
+    expect(normalizeGamePlan({ runPassBalance: 150, aggressionLevel: -10, deepShortBalance: 75 })).toEqual({
+      runPassBalance: 100,
+      aggressionLevel: 0,
+      deepShortBalance: 75,
+    });
+  });
+
+  it('normalizeGamePlan replaces non-numeric fields with defaults', () => {
+    expect(normalizeGamePlan({ runPassBalance: 'bad', aggressionLevel: undefined, deepShortBalance: NaN })).toEqual({
+      runPassBalance: GAME_PLAN_DEFAULTS.runPassBalance,
+      aggressionLevel: GAME_PLAN_DEFAULTS.aggressionLevel,
+      deepShortBalance: GAME_PLAN_DEFAULTS.deepShortBalance,
+    });
+  });
+
+  it('normalizeGamePlan is safe with null and undefined input', () => {
+    expect(normalizeGamePlan(null)).toEqual({ runPassBalance: 50, aggressionLevel: 50, deepShortBalance: 50 });
+    expect(normalizeGamePlan(undefined)).toEqual({ runPassBalance: 50, aggressionLevel: 50, deepShortBalance: 50 });
+  });
+
+  it('saveStoredGamePlan and getStoredGamePlan round-trip correctly', () => {
+    saveStoredGamePlan({ runPassBalance: 65, aggressionLevel: 60, deepShortBalance: 55 });
+    const plan = getStoredGamePlan();
+    expect(plan.runPassBalance).toBe(65);
+    expect(plan.aggressionLevel).toBe(60);
+    expect(plan.deepShortBalance).toBe(55);
+  });
+
+  it('resetStoredGamePlan restores defaults', () => {
+    saveStoredGamePlan({ runPassBalance: 80, aggressionLevel: 70, deepShortBalance: 65 });
+    resetStoredGamePlan();
+    const plan = getStoredGamePlan();
+    expect(plan.runPassBalance).toBe(50);
+    expect(plan.aggressionLevel).toBe(50);
+    expect(plan.deepShortBalance).toBe(50);
+  });
+
+  it('does not crash when window/localStorage is unavailable', () => {
+    delete global.window;
+    expect(() => saveStoredGamePlan({ runPassBalance: 60 })).not.toThrow();
+    expect(() => resetStoredGamePlan()).not.toThrow();
+    expect(() => getStoredGamePlan()).not.toThrow();
+    expect(getStoredGamePlan()).toEqual({});
+  });
+
+  it('each preset sets only the three supported fields (plus label)', () => {
+    for (const [key, preset] of Object.entries(GAME_PLAN_PRESETS)) {
+      const fields = Object.keys(preset).filter((k) => k !== 'label').sort();
+      expect(fields).toEqual(['aggressionLevel', 'deepShortBalance', 'runPassBalance'], `preset ${key} has unexpected fields`);
+    }
+  });
+
+  it('recommendGamePlanPreset maps weakSecondary to attackWeakSecondary', () => {
+    expect(recommendGamePlanPreset({ prep: { insights: { weakSecondary: true } } })).toBe('attackWeakSecondary');
+  });
+
+  it('recommendGamePlanPreset maps weakRunDefense to groundControl', () => {
+    expect(recommendGamePlanPreset({ prep: { insights: { weakRunDefense: true } } })).toBe('groundControl');
+  });
+
+  it('recommendGamePlanPreset maps elitePassRush to quickGame', () => {
+    expect(recommendGamePlanPreset({ prep: { insights: { elitePassRush: true } } })).toBe('quickGame');
+  });
+
+  it('recommendGamePlanPreset maps explosiveOpponentOffense to conservativeUnderdog', () => {
+    expect(recommendGamePlanPreset({ prep: { insights: { explosiveOpponentOffense: true } } })).toBe('conservativeUnderdog');
+  });
+
+  it('recommendGamePlanPreset defaults to balanced for balanced matchup or no insight', () => {
+    expect(recommendGamePlanPreset({ prep: { insights: { balancedMatchup: true } } })).toBe('balanced');
+    expect(recommendGamePlanPreset({ prep: { insights: {} } })).toBe('balanced');
+    expect(recommendGamePlanPreset({})).toBe('balanced');
   });
 });
