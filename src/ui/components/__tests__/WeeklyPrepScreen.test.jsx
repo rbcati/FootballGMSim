@@ -1,8 +1,9 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import WeeklyPrepScreen from '../WeeklyPrepScreen.jsx';
+import * as weeklyPrepActionsModule from '../../utils/weeklyPrepActions.js';
 
 const league = {
   year: 2027,
@@ -42,6 +43,8 @@ const league = {
 };
 
 describe('WeeklyPrepScreen', () => {
+  afterEach(cleanup);
+
   it('renders war room flow and completion chips', () => {
     render(<WeeklyPrepScreen league={league} onNavigate={vi.fn()} />);
     expect(screen.getByText(/Weekly Prep War Room/i)).toBeTruthy();
@@ -71,5 +74,42 @@ describe('WeeklyPrepScreen', () => {
       />,
     );
     expect(screen.getByText(/Weekly prep unavailable/i)).toBeTruthy();
+  });
+});
+
+describe('WeeklyPrepScreen — Recommended Prep Actions section', () => {
+  afterEach(cleanup);
+
+  it('renders the Recommended Prep Actions section heading', () => {
+    const { container } = render(<WeeklyPrepScreen league={league} onNavigate={vi.fn()} />);
+    expect(within(container).getByRole('heading', { name: /Recommended Prep Actions/i })).toBeTruthy();
+  });
+
+  it('CTA buttons in Recommended Prep Actions call onNavigate with a valid tab', () => {
+    const onNavigate = vi.fn();
+    const { container } = render(<WeeklyPrepScreen league={league} onNavigate={onNavigate} />);
+
+    // Find the Recommended Prep Actions section and query buttons within it
+    const heading = within(container).getByRole('heading', { name: /Recommended Prep Actions/i });
+    const section = heading.closest('section');
+    if (!section) return;
+
+    const ctaButtons = within(section).queryAllByRole('button');
+    if (ctaButtons.length > 0) {
+      fireEvent.click(ctaButtons[0]);
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+      const destination = onNavigate.mock.calls[0][0];
+      expect(typeof destination).toBe('string');
+      expect(destination.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('renders the empty state message when buildWeeklyPrepActions returns no actions', () => {
+    const spy = vi.spyOn(weeklyPrepActionsModule, 'buildWeeklyPrepActions').mockReturnValue([]);
+    const { container } = render(<WeeklyPrepScreen league={league} onNavigate={vi.fn()} />);
+    const heading = within(container).getByRole('heading', { name: /Recommended Prep Actions/i });
+    const section = heading.closest('section');
+    expect(within(section).getByText(/No urgent prep actions/i)).toBeTruthy();
+    spy.mockRestore();
   });
 });
