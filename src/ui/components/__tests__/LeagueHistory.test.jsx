@@ -1157,4 +1157,181 @@ describe('Overview Dashboard', () => {
       expect(screen.getByTestId('league-season-button-s1')).toBeTruthy();
     });
   });
+
+  it('League Leaders tab renders and shows leader rows from allPlayers stats', async () => {
+    const onPlayerSelect = vi.fn();
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={onPlayerSelect}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllPlayerStats: vi.fn().mockResolvedValue({
+            payload: {
+              stats: [
+                {
+                  id: 101,
+                  name: 'QB Leader',
+                  pos: 'QB',
+                  teamId: 1,
+                  teamAbbr: 'TST',
+                  totals: { passYd: 3200, passTD: 25, interceptions: 8, gamesPlayed: 12 },
+                },
+                {
+                  id: 102,
+                  name: 'RB Leader',
+                  pos: 'RB',
+                  teamId: 2,
+                  teamAbbr: 'RUN',
+                  totals: { rushYd: 1100, rushTD: 9, gamesPlayed: 12 },
+                },
+              ],
+            },
+          }),
+        })}
+      />,
+    );
+
+    const leadersTab = await screen.findByRole('tab', { name: /League Leaders/i });
+    fireEvent.mouseDown(leadersTab);
+    fireEvent.click(leadersTab);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('league-leaders-browser')).toBeTruthy();
+      expect(screen.getByText('QB Leader')).toBeTruthy();
+    });
+  });
+
+  it('League Leaders tab shows empty state when no player stats exist', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllPlayerStats: vi.fn().mockResolvedValue({ payload: { stats: [] } }),
+          getAllSeasons: vi.fn().mockResolvedValue({ payload: { seasons: [] } }),
+        })}
+      />,
+    );
+
+    const leadersTab = await screen.findByRole('tab', { name: /League Leaders/i });
+    fireEvent.mouseDown(leadersTab);
+    fireEvent.click(leadersTab);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('league-leaders-empty')).toBeTruthy();
+      expect(screen.getByTestId('league-leaders-empty').textContent).toMatch(
+        /League leaders will populate once games are played/i,
+      );
+    });
+  });
+
+  it('clicking a player name in the leaders table calls onPlayerSelect', async () => {
+    const onPlayerSelect = vi.fn();
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={onPlayerSelect}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllPlayerStats: vi.fn().mockResolvedValue({
+            payload: {
+              stats: [
+                {
+                  id: 55,
+                  name: 'Click Me',
+                  pos: 'QB',
+                  teamId: 1,
+                  teamAbbr: 'CLK',
+                  totals: { passYd: 4000, passTD: 30, gamesPlayed: 16 },
+                },
+              ],
+            },
+          }),
+        })}
+      />,
+    );
+
+    const leadersTab = await screen.findByRole('tab', { name: /League Leaders/i });
+    fireEvent.mouseDown(leadersTab);
+    fireEvent.click(leadersTab);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('league-leaders-browser')).toBeTruthy();
+    });
+
+    const playerBtn = screen.getByTestId('leader-player-btn-passYds-0');
+    fireEvent.click(playerBtn);
+    expect(onPlayerSelect).toHaveBeenCalledWith(55);
+  });
+
+  it('overview teaser shows current season leaders when allPlayers has stats', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: { seasons: [{ id: 's1', year: 2030, standings: [], awards: {} }] },
+          }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({
+            payload: {
+              stats: [
+                {
+                  id: 10,
+                  name: 'Pass Leader',
+                  pos: 'QB',
+                  teamId: 1,
+                  teamAbbr: 'PAS',
+                  totals: { passYd: 3500, gamesPlayed: 10 },
+                },
+              ],
+            },
+          }),
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('overview-stats-leaders-teaser')).toBeTruthy();
+      expect(screen.getByText('Pass Leader')).toBeTruthy();
+    });
+  });
+
+  it('overview CTA for leaders tab switches to leaders view', async () => {
+    render(
+      <LeagueHistory
+        league={{ userTeamId: 1 }}
+        onPlayerSelect={vi.fn()}
+        onOpenBoxScore={vi.fn()}
+        actions={makeActions({
+          getAllSeasons: vi.fn().mockResolvedValue({
+            payload: { seasons: [{ id: 's1', year: 2030, standings: [], awards: {} }] },
+          }),
+          getAllPlayerStats: vi.fn().mockResolvedValue({
+            payload: {
+              stats: [
+                {
+                  id: 20,
+                  name: 'Leaders Player',
+                  pos: 'QB',
+                  teamId: 1,
+                  teamAbbr: 'XYZ',
+                  totals: { passYd: 2800, gamesPlayed: 8 },
+                },
+              ],
+            },
+          }),
+        })}
+      />,
+    );
+
+    const cta = await screen.findByTestId('overview-cta-leaders');
+    fireEvent.click(cta);
+    await waitFor(() => {
+      expect(screen.getByTestId('league-leaders-browser')).toBeTruthy();
+    });
+  });
 });
