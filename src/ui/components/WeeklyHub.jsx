@@ -9,6 +9,8 @@ import { buildIncomingOfferPresentation } from "../utils/tradeOfferPresentation.
 import { buildNeedsAttentionItems, buildPrimaryAction } from "../utils/weeklyHubLayout.js";
 import { findLatestUserCompletedGame } from "../utils/completedGameSelectors.js";
 import { buildCompletedGamePresentation } from "../utils/boxScoreAccess.js";
+import { buildWeeklyIntelligence, buildActionableWeeklyPriorities } from "../utils/weeklyIntelligence.js";
+import { deriveWeeklyPrepState } from "../utils/weeklyPrep.js";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -53,6 +55,9 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
   const weeklyContext = useMemo(() => evaluateWeeklyContext(league), [league]);
   const latestCompletedGame = useMemo(() => findLatestUserCompletedGame(league), [league]);
   const latestResultPresentation = useMemo(() => buildCompletedGamePresentation(latestCompletedGame?.game ?? null, { seasonId: league?.seasonId, week: latestCompletedGame?.week, source: "weekly_hub_last_game" }), [league?.seasonId, latestCompletedGame]);
+  const prep = useMemo(() => deriveWeeklyPrepState(league), [league]);
+  const matchupIntel = useMemo(() => buildWeeklyIntelligence({ league, team: user, nextGame, prep }), [league, user, nextGame, prep]);
+  const matchupPriorities = useMemo(() => buildActionableWeeklyPriorities({ team: user, nextGame, prep }), [user, nextGame, prep]);
 
   if (!league || !user || !weeklyContext) return null;
 
@@ -206,6 +211,41 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
           </Card>
         </div>
       </section>
+
+      <details className="weekly-expandable" open>
+        <summary className="weekly-expandable__summary">
+          <div>
+            <h3 className="weekly-section__title">{matchupIntel.heading}</h3>
+            <p className="weekly-section__subtitle">Coordinator brief and priority actions for this week.</p>
+          </div>
+          <span className="weekly-expandable__chevron">▾</span>
+        </summary>
+        <div className="weekly-expandable__body">
+          <div className="weekly-intel-insights" role="list" aria-label="Matchup intelligence insights">
+            {matchupIntel.insights.map((insight) => (
+              <div key={insight.id} role="listitem" className={`weekly-intel-insight tone-${insight.tone ?? 'info'}`}>
+                <span>{insight.text}</span>
+              </div>
+            ))}
+          </div>
+          {matchupPriorities.length > 0 ? (
+            <div className="weekly-intel-priorities" aria-label="Weekly priorities" style={{ marginTop: 8 }}>
+              {matchupPriorities.map((item) => (
+                <div key={item.id} className={`weekly-urgent-item tone-${item.severity === 'warning' ? 'warning' : 'info'}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px' }}>
+                  {item.icon ? <span aria-hidden="true" style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span> : null}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <strong style={{ display: 'block' }}>{item.title}</strong>
+                    <span style={{ display: 'block', fontSize: '0.85em', opacity: 0.85, marginBottom: 6 }}>{item.description}</span>
+                    <Button size="sm" variant="outline" onClick={() => item.targetRoute && onNavigate?.(item.targetRoute)} disabled={!item.targetRoute}>
+                      {item.ctaLabel}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </details>
 
       <section className="weekly-section">
         <SectionHeader title="Results" subtitle="One direct path to the latest completed game." />
