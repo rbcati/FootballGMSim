@@ -13,6 +13,7 @@ import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda, CompactN
 import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildGameBookDestination } from '../utils/managementScreenRouting.js';
+import ChronicleHeadlineBanner from './ChronicleHeadlineBanner.tsx';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -272,6 +273,13 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
           <strong>{capSpace} cap</strong>
         </div>
       </section>
+
+      <ChronicleHeadlineBanner
+        headlines={Array.isArray(league?.weeklyHeadlines) ? league.weeklyHeadlines : []}
+        currentWeek={safeNum(league?.week, 1)}
+        currentYear={safeNum(league?.year, 0)}
+        onViewAll={() => onNavigate?.('News')}
+      />
 
       <section className="app-hq-matchup-hero card" aria-label="Weekly Hero" aria-live="polite">
         <div className="app-hq-matchup-main">

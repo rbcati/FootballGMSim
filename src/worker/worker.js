@@ -107,6 +107,7 @@ import {
 } from '../core/scheme-core.js';
 import AiLogic from '../core/ai-logic.js';
 import NewsEngine, { createNewsItem, addNewsItem } from '../core/news-engine.js';
+import { parseWeeklyHeadlines } from '../core/history/NewsEngine.ts';
 import { calculateAwardRaces } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
@@ -853,6 +854,7 @@ function buildViewState() {
     franchiseSeasonReviews: Array.isArray(meta?.franchiseSeasonReviews) ? meta.franchiseSeasonReviews.slice(-40) : [],
     seasonStorylines: Array.isArray(meta?.seasonStorylines) ? meta.seasonStorylines : [],
     hallOfFameClasses: Array.isArray(meta?.hallOfFame?.classes) ? meta.hallOfFame.classes.slice(0, 20) : [],
+    weeklyHeadlines: Array.isArray(meta?.weeklyHeadlines) ? meta.weeklyHeadlines.slice(-30) : [],
     settings: normalizeLeagueSettings(meta?.settings ?? {}),
     economy: normalizeLeagueEconomy(meta?.economy ?? {}, { year: meta?.year }),
     tradeDeadline,
@@ -2959,6 +2961,29 @@ async function handleAdvanceWeek(payload, id) {
       cache.setMeta({
         leaguePulse: mergeLeaguePulseItems(pulseMeta.leaguePulse || [], pulseItems, { maxTimelineLength: 200 }),
       });
+    }
+  }
+
+  // ── Franchise Chronicle: parse this week's results into ranked headlines ───
+  if (results.length > 0) {
+    try {
+      const newHeadlines = parseWeeklyHeadlines({
+        results,
+        week,
+        year: meta.year ?? 0,
+        getPlayer: (id) => cache.getPlayer(id) ?? null,
+      });
+      if (newHeadlines.length > 0) {
+        const existing = Array.isArray(cache.getMeta().weeklyHeadlines) ? cache.getMeta().weeklyHeadlines : [];
+        // Deduplicate by id and keep the most recent 30
+        const combined = [...existing, ...newHeadlines]
+          .filter((h, idx, arr) => arr.findIndex((x) => x.id === h.id) === idx)
+          .slice(-30);
+        cache.setMeta({ weeklyHeadlines: combined });
+      }
+    } catch (chronicleErr) {
+      // Headline parsing must never crash the week advance
+      console.warn('[Worker] Chronicle headline parse error (non-fatal):', chronicleErr?.message);
     }
   }
 

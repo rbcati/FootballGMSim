@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { ScreenHeader, SectionCard } from './ScreenSystem.jsx';
+import AlmanacView from './AlmanacView.tsx';
 
 const DESTINATIONS = [
+  { key: 'Almanac', title: 'League Almanac', body: 'Champions archive, Hall of Fame gallery, and award history all in one view.' },
   { key: 'History', title: 'League Archive', body: 'Champions, season snapshots, and year-to-year memory.' },
   { key: 'Draft History', title: 'Draft classes & redraft', body: 'Who panned out, steals vs reaches, and team draft grades by year.' },
   { key: 'Team History', title: 'Franchise Timeline', body: 'Highs/lows, droughts, and long-run identity by club.' },

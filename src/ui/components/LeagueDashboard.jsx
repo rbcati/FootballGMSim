@@ -31,6 +31,7 @@ import TeamHistoryScreen from "./TeamHistoryScreen.jsx";
 import AwardsRecordsScreen from "./AwardsRecordsScreen.jsx";
 import HallOfFame from "./HallOfFame.jsx";
 import HistoryHub from "./HistoryHub.jsx";
+import AlmanacView from "./AlmanacView.tsx";
 import DraftHistory from "./DraftHistory.jsx";
 import TradeWorkspace from "./TradeWorkspace.jsx";
 import PlayerProfile from "./PlayerProfile.jsx";
@@ -201,6 +202,7 @@ const BASE_TABS = [
   "Draft Room",
   "Mock Draft",
   "History Hub",
+  "Almanac",
   "Draft History",
   "History",
   "Team History",
@@ -1220,6 +1222,18 @@ export default function LeagueDashboard({
         {activeTab === "History Hub" && (
           <TabErrorBoundary label="History Hub">
             <HistoryHub onNavigate={handleHistoryHubNavigate} actions={actions} onSelectSeason={setHistorySelectedSeasonId} league={league} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Almanac" && (
+          <TabErrorBoundary label="Almanac">
+            <AlmanacView
+              league={league}
+              champions={league?.historyRecords ?? []}
+              awards={league?.awardHistory ?? []}
+              hallOfFame={league?.hallOfFame ?? []}
+              rawHofPlayers={league?.hallOfFamePlayers ?? []}
+              onNavigate={setActiveTab}
+            />
           </TabErrorBoundary>
         )}
         {activeTab === "Draft History" && (
