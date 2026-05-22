@@ -90,7 +90,6 @@ describe('WeeklyPrepScreen — Recommended Prep Actions section', () => {
     const onNavigate = vi.fn();
     const { container } = render(<WeeklyPrepScreen league={league} onNavigate={onNavigate} />);
 
-    // Find the Recommended Prep Actions section and query buttons within it
     const heading = within(container).getByRole('heading', { name: /Recommended Prep Actions/i });
     const section = heading.closest('section');
     if (!section) return;
@@ -191,5 +190,172 @@ describe('WeeklyPrepScreen — Game Plan Control Center', () => {
     const afterChip = screen.getByText(/\/4 complete/);
     const afterCount = Number(afterChip.textContent.split('/')[0]);
     expect(afterCount).toBeGreaterThanOrEqual(beforeCount);
+  });
+});
+
+describe('WeeklyPrepScreen — Active Effects live synchronization', () => {
+  beforeEach(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.clear();
+    }
+  });
+  afterEach(cleanup);
+
+  it('renders the Active Effects section', () => {
+    render(<WeeklyPrepScreen league={league} onNavigate={vi.fn()} />);
+    expect(screen.getByRole('heading', { name: /Active Effects/i })).toBeTruthy();
+    expect(screen.getByTestId('active-effects-reasons')).toBeTruthy();
+  });
+
+  it('Active Effects and Game Plan Control Center show the same reasons after preset change', () => {
+    render(<WeeklyPrepScreen league={league} onNavigate={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('preset-btn-attackWeakSecondary'));
+
+    const ccText = screen.getByTestId('impact-reasons').textContent;
+    const aeText = screen.getByTestId('active-effects-reasons').textContent;
+    expect(ccText).toBe(aeText);
+  });
+
+  it('Active Effects updates immediately after preset change without reload', () => {
+    render(<WeeklyPrepScreen league={league} onNavigate={vi.fn()} />);
+    const aeReasons = screen.getByTestId('active-effects-reasons');
+    // DET has defenseRating 76 (weakSecondary), default balanced plan doesn't trigger Pass Attack Edge
+    expect(aeReasons.textContent).not.toMatch(/Pass Attack Edge/i);
+
+    fireEvent.click(screen.getByTestId('preset-btn-attackWeakSecondary'));
+    expect(aeReasons.textContent).toMatch(/Pass Attack Edge/i);
+  });
+
+  it('Active Effects updates immediately after slider change without reload', () => {
+    render(<WeeklyPrepScreen league={league} onNavigate={vi.fn()} />);
+    const aeReasons = screen.getByTestId('active-effects-reasons');
+    expect(aeReasons.textContent).not.toMatch(/Pass Attack Edge/i);
+
+    // Move runPassBalance to 65 (pass-heavy) — DET weak secondary triggers Pass Attack Edge
+    const slider = screen.getByLabelText(/Run Pass Balance/i);
+    fireEvent.change(slider, { target: { value: '65' } });
+
+    expect(aeReasons.textContent).toMatch(/Pass Attack Edge/i);
+  });
+
+  it('Active Effects summary changes after a plan change', () => {
+    render(<WeeklyPrepScreen league={league} onNavigate={vi.fn()} />);
+    const summaryBefore = screen.getByTestId('active-effects-summary').textContent;
+
+    // attackWeakSecondary adds Pass Attack Edge bonus, changing net impact
+    fireEvent.click(screen.getByTestId('preset-btn-attackWeakSecondary'));
+    const summaryAfter = screen.getByTestId('active-effects-summary').textContent;
+
+    expect(summaryAfter).not.toBe(summaryBefore);
+  });
+
+  it('applying a preset marks planReviewed in Prep Checklist immediately', () => {
+    render(<WeeklyPrepScreen league={league} onNavigate={vi.fn()} />);
+    expect(screen.getByText(/Plan pending/i)).toBeTruthy();
+    fireEvent.click(screen.getByTestId('preset-btn-groundControl'));
+    expect(screen.getByText(/Plan reviewed/i)).toBeTruthy();
+  });
+});
+
+describe('WeeklyPrepScreen — Game Book action handling', () => {
+  beforeEach(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.clear();
+    }
+  });
+  afterEach(cleanup);
+
+  it('Game Book destination calls onOpenBoxScore with gameId when handler provided', () => {
+    const onOpenBoxScore = vi.fn();
+    const onNavigate = vi.fn();
+    const spy = vi.spyOn(weeklyPrepActionsModule, 'buildWeeklyPrepActions').mockReturnValue([{
+      id: 'prep-action-game-book',
+      title: 'Review Last Loss',
+      detail: 'Open the Game Book to identify what went wrong.',
+      tone: 'warning',
+      priority: 60,
+      destination: 'Game Book:g7prev',
+      ctaLabel: 'Open Game Book',
+      reason: 'Team is coming off a loss.',
+    }]);
+
+    render(<WeeklyPrepScreen league={league} onNavigate={onNavigate} onOpenBoxScore={onOpenBoxScore} />);
+    const gameBookBtn = screen.getByTestId('prep-action-cta-prep-action-game-book');
+    fireEvent.click(gameBookBtn);
+
+    expect(onOpenBoxScore).toHaveBeenCalledWith('g7prev');
+    expect(onNavigate).not.toHaveBeenCalledWith(expect.stringContaining('Game Book:'));
+    spy.mockRestore();
+  });
+
+  it('Game Book destination does not call onNavigate with broken route when no handler exists', () => {
+    const onNavigate = vi.fn();
+    const spy = vi.spyOn(weeklyPrepActionsModule, 'buildWeeklyPrepActions').mockReturnValue([{
+      id: 'prep-action-game-book',
+      title: 'Review Last Loss',
+      detail: 'Open the Game Book to identify what went wrong.',
+      tone: 'warning',
+      priority: 60,
+      destination: 'Game Book:g7prev',
+      ctaLabel: 'Open Game Book',
+      reason: 'Team is coming off a loss.',
+    }]);
+
+    render(<WeeklyPrepScreen league={league} onNavigate={onNavigate} />);
+    const gameBookBtn = screen.getByTestId('prep-action-cta-prep-action-game-book');
+    fireEvent.click(gameBookBtn);
+
+    // onNavigate must never receive a 'Game Book:' destination — that would be a broken route
+    const gamebookCalls = onNavigate.mock.calls.filter((args) => String(args[0] ?? '').startsWith('Game Book:'));
+    expect(gamebookCalls).toHaveLength(0);
+    spy.mockRestore();
+  });
+
+  it('non-Game-Book destinations still route through onNavigate normally', () => {
+    const onNavigate = vi.fn();
+    const spy = vi.spyOn(weeklyPrepActionsModule, 'buildWeeklyPrepActions').mockReturnValue([{
+      id: 'prep-action-injuries',
+      title: 'Review Injuries',
+      detail: 'Active injuries may affect depth.',
+      tone: 'warning',
+      priority: 70,
+      destination: 'Team:Injuries',
+      ctaLabel: 'Open Injuries',
+      reason: 'Injuries flagged.',
+    }]);
+
+    render(<WeeklyPrepScreen league={league} onNavigate={onNavigate} />);
+    const btn = screen.getByTestId('prep-action-cta-prep-action-injuries');
+    fireEvent.click(btn);
+
+    expect(onNavigate).toHaveBeenCalledWith('Team:Injuries');
+    spy.mockRestore();
+  });
+});
+
+describe('WeeklyPrepScreen — localStorage safety', () => {
+  afterEach(cleanup);
+
+  it('does not crash when localStorage throws on access', () => {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    Object.defineProperty(window, 'localStorage', {
+      get() { throw new Error('Storage disabled'); },
+      configurable: true,
+    });
+    try {
+      expect(() => render(
+        <WeeklyPrepScreen league={league} onNavigate={vi.fn()} />,
+      )).not.toThrow();
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(window, 'localStorage', originalDescriptor);
+      }
+    }
+  });
+
+  it('does not crash when league is undefined', () => {
+    expect(() => render(
+      <WeeklyPrepScreen league={undefined} onNavigate={vi.fn()} />,
+    )).not.toThrow();
   });
 });
