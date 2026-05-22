@@ -327,7 +327,11 @@ export function updateTeamStandings(league, teamId, stats) {
     let team = null;
 
     if (league && league.teams) {
-        team = league.teams.find(t => t.id === teamId);
+        if (league._teamsMap && league._teamsMap[teamId]) {
+            team = league._teamsMap[teamId];
+        } else {
+            team = league.teams.find(t => t.id === teamId);
+        }
     }
 
     // Return null if we can't find the team
@@ -2932,8 +2936,13 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         home = league._teamsMap[homeTeamId];
         away = league._teamsMap[awayTeamId];
     } else {
-        home = league.teams.find(t => t && t.id === homeTeamId);
-        away = league.teams.find(t => t && t.id === awayTeamId);
+        league._teamsMap = {};
+        for (let i = 0; i < league.teams.length; i++) {
+            const t = league.teams[i];
+            if (t && t.id !== undefined) league._teamsMap[t.id] = t;
+        }
+        home = league._teamsMap[homeTeamId];
+        away = league._teamsMap[awayTeamId];
     }
 
     if (!home || !away) {
