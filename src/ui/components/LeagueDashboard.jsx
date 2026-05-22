@@ -830,7 +830,7 @@ export default function LeagueDashboard({
       </div>}
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}
-      <div className="fade-in" key={activeTab}>
+      <div className="view-enter" key={activeTab}>
         {isWeeklyOperationsTab ? (
           <div className="week-operations-shell">
             <p className="week-operations-shell__title">

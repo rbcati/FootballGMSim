@@ -891,8 +891,8 @@ select:disabled {
 }
 
 .btn:hover, button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   filter: brightness(1.05);
 }
 
@@ -935,14 +935,15 @@ select:disabled {
 /* Game Event Overlays */
 .game-event-overlay {
   position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%) scale(0.5);
-  opacity: 0;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 50;
+  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   pointer-events: none;
-  z-index: 2000;
-  width: 100%;
-  text-align: center;
-  animation: overlayPopIn 1.5s ease-out forwards;
 }
 
 .game-event-overlay .event-text {
@@ -2803,5 +2804,20 @@ body {
 }
 
 .view-enter {
-  animation: view-enter 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: view-enter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes view-exit {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+.view-exit {
+  animation: view-exit 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
