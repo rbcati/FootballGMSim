@@ -96,10 +96,19 @@ export function buildSeasonStorylineSnapshot(memoryMeta, teams, userTeamId) {
   const history = memoryMeta.leagueHistory;
   const latest = history[history.length - 1] ?? null;
   if (!latest) return [];
+
+  // Create a fast lookup object for O(1) team resolution
+  const teamMap = {};
+  for (let i = 0, len = teams?.length || 0; i < len; i++) {
+    const t = teams[i];
+    if (t?.id != null) teamMap[t.id] = t;
+  }
+
   const champId = latest?.champion?.id;
   const teamHistory = memoryMeta.franchiseHistoryByTeam[String(champId)] || null;
-  const teamObj = teams.find((t) => Number(t.id) === Number(champId));
+  const teamObj = teamMap[champId];
   const championName = latest?.champion?.name || teamObj?.name || 'Unknown';
+
   const droughtRows = Object.entries(memoryMeta.franchiseHistoryByTeam)
     .map(([teamId, item]) => {
       const lastTitle = item?.lastChampionshipYear ?? null;
@@ -109,6 +118,7 @@ export function buildSeasonStorylineSnapshot(memoryMeta, teams, userTeamId) {
     .slice(0, 3);
 
   const userHistory = memoryMeta.franchiseHistoryByTeam[String(userTeamId)] || null;
+
   return [
     {
       id: `champ-${latest.year}`,
@@ -124,7 +134,7 @@ export function buildSeasonStorylineSnapshot(memoryMeta, teams, userTeamId) {
       id: `drought-${latest.year}`,
       title: 'Longest title droughts',
       detail: droughtRows.map((r) => {
-        const t = teams.find((x) => Number(x.id) === Number(r.teamId));
+        const t = teamMap[r.teamId];
         return `${t?.abbr ?? r.teamId}: ${r.years}y`;
       }).join(' · '),
       tone: 'info',
@@ -500,7 +510,6 @@ function buildTeamStatLeaders(standings = []) {
 
 export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [], teams = [], seasonStats = [], championshipGameId = null, playerSeasonStatsV1 = null, transactionTimelineV1 = null }) {
   const sorted = [...(standings || [])].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
-
   const targetId = Number(userTeamId);
   let userRow = null;
   for (let i = 0; i < sorted.length; i++) {
@@ -510,11 +519,12 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
     }
   }
 
+  const teamMap = new Map();
   let userTeam = null;
-  for (let i = 0; i < teams.length; i++) {
-    if (Number(teams[i]?.id) === targetId) {
-      userTeam = teams[i];
-      break;
+  for (const t of (teams || [])) {
+    if (t?.id != null) {
+      teamMap.set(Number(t.id), t);
+      if (Number(t.id) === targetId) userTeam = t;
     }
   }
 
