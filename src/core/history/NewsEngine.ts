@@ -2,9 +2,10 @@
  * NewsEngine — pure weekly headline parser for the Franchise Chronicle Engine.
  *
  * Accepts raw game results from the ADVANCE_WEEK pipeline and returns a ranked
- * list of WeeklyHeadline objects (max 3) with no side effects. The caller is
+ * list of WeeklyHeadline objects (max 6) with no side effects. The caller is
  * responsible for storing headlines in league state.
  *
+ * Priority order: Injuries → Blowouts/Comebacks/OT → Upsets → Streaks → Performance → Defensive
  * Budget: < 15 ms on mobile processors per week.
  */
 
@@ -30,6 +31,7 @@ interface TeamStats {
   rushYds?: number;
   totalYds?: number;
   turnovers?: number;
+  sacks?: number;
 }
 
 interface PlayerBoxStat {
@@ -40,6 +42,7 @@ interface PlayerBoxStat {
   passYds?: number;
   rushYds?: number;
   recYds?: number;
+  passTDs?: number;
 }
 
 interface GameResult {
@@ -57,8 +60,21 @@ interface GameResult {
   awayScore?: number;
   injuries?: InjuryInfo[];
   teamStats?: { home?: TeamStats; away?: TeamStats };
-  boxScore?: { players?: PlayerBoxStat[] };
+  boxScore?: { home?: PlayerBoxStat[]; away?: PlayerBoxStat[]; players?: PlayerBoxStat[] };
   quarterScores?: number[][];
+  ot?: number | boolean;
+  overtimePeriods?: number;
+}
+
+interface TeamRecord {
+  id?: string | number;
+  name?: string;
+  abbr?: string;
+  wins?: number;
+  losses?: number;
+  recentResults?: string[];
+  conf?: number | string;
+  div?: number | string;
 }
 
 interface PlayerLookup {
@@ -81,7 +97,10 @@ export interface NewsEngineInput {
   week: number;
   year: number;
   getPlayer?: (id: string | number) => PlayerLookup | null | undefined;
+  teams?: TeamRecord[];
 }
+
+const MAX_HEADLINES = 6;
 
 function num(v: unknown, fallback = 0): number {
   const n = Number(v ?? fallback);
@@ -105,6 +124,34 @@ function headlineId(week: number, year: number, suffix: string): string {
   return `headline-${year}-wk${week}-${suffix}`.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
 }
 
+function isOvertimeGame(res: GameResult): boolean {
+  if (num(res.ot, 0) > 0 || num(res.overtimePeriods, 0) > 0) return true;
+  if (Array.isArray(res.quarterScores)) {
+    const homeQ = res.quarterScores[0];
+    if (Array.isArray(homeQ) && homeQ.length > 4) return true;
+  }
+  return false;
+}
+
+function winStreak(recentResults: string[] | undefined): number {
+  if (!Array.isArray(recentResults) || recentResults.length === 0) return 0;
+  const rev = [...recentResults].reverse();
+  let streak = 0;
+  for (const r of rev) {
+    if (String(r).toUpperCase() === 'W') streak++;
+    else break;
+  }
+  return streak;
+}
+
+function allPlayersFromResult(res: GameResult): PlayerBoxStat[] {
+  if (!res.boxScore) return [];
+  if (Array.isArray(res.boxScore.players)) return res.boxScore.players;
+  const home = Array.isArray(res.boxScore.home) ? res.boxScore.home : [];
+  const away = Array.isArray(res.boxScore.away) ? res.boxScore.away : [];
+  return [...home, ...away];
+}
+
 // ── Priority 1: Severe Injuries ───────────────────────────────────────────────
 
 function extractInjuryHeadlines(
@@ -123,7 +170,7 @@ function extractInjuryHeadlines(
       const player = getPlayer(inj.playerId ?? '');
       if (!player) continue;
       const ovr = num(player.ovr, 0);
-      if (ovr < 80) continue;
+      if (ovr < 78) continue;
 
       const injType = inj.type ?? 'injury';
       const pos = player.pos ?? 'Player';
@@ -131,14 +178,17 @@ function extractInjuryHeadlines(
       const teamRef = num(player.teamId, NaN);
       const severity: WeeklyHeadline['severity'] = inj.seasonEnding ? 'CRITICAL' : duration >= 8 ? 'MAJOR' : 'MINOR';
 
+      const durationText = inj.seasonEnding ? 'for the season' : `${duration} weeks`;
       headlines.push({
         id: headlineId(week, year, `injury-${player.id}`),
         week,
         year,
         type: 'INJURY',
         severity,
-        headlineText: `${name} Out${inj.seasonEnding ? ' for Season' : ` ${duration} Weeks`} with ${injType.replace(/_/g, ' ')}!`,
-        detailText: `A devastating blow as star ${pos} ${name} suffers a ${injType.replace(/_/g, ' ')}, crippling their postseason aspirations.`,
+        headlineText: inj.seasonEnding
+          ? `Disaster: ${name} Out for Season with ${injType.replace(/_/g, ' ')}`
+          : `${name} (${pos}) to Miss ${duration} Weeks`,
+        detailText: `A significant blow — star ${pos} ${name} suffers a ${injType.replace(/_/g, ' ')}, sidelined ${durationText}.`,
         associatedPlayerId: String(player.id ?? ''),
         associatedTeamId: !isNaN(teamRef) ? String(teamRef) : undefined,
       });
@@ -151,14 +201,19 @@ function extractInjuryHeadlines(
   });
 }
 
-// ── Priority 2: Blowouts and Comebacks ────────────────────────────────────────
+// ── Priority 2: Game Drama — Blowouts, Comebacks, OT, Upsets ─────────────────
 
 function extractGameDramaHeadlines(
   results: GameResult[],
   week: number,
   year: number,
+  teams: TeamRecord[],
 ): WeeklyHeadline[] {
   const headlines: WeeklyHeadline[] = [];
+
+  function findTeam(id: number): TeamRecord | undefined {
+    return teams.find((t) => num(t.id, -1) === id);
+  }
 
   for (const res of results) {
     const homeScore = num(res.scoreHome ?? res.homeScore, 0);
@@ -167,18 +222,24 @@ function extractGameDramaHeadlines(
     const total = homeScore + awayScore;
     if (total === 0) continue;
 
-    const winnerId = homeScore >= awayScore ? teamId(res.home ?? res.homeTeamId) : teamId(res.away ?? res.awayTeamId);
-    const loserId = homeScore >= awayScore ? teamId(res.away ?? res.awayTeamId) : teamId(res.home ?? res.homeTeamId);
-    const winnerName = homeScore >= awayScore
+    const homeId = teamId(res.home ?? res.homeTeamId);
+    const awayId = teamId(res.away ?? res.awayTeamId);
+    const homeWon = homeScore >= awayScore;
+    const winnerId = homeWon ? homeId : awayId;
+    const loserId = homeWon ? awayId : homeId;
+    const winnerName = homeWon
       ? teamName(res.home, res.homeTeamName, res.homeTeamAbbr)
       : teamName(res.away, res.awayTeamName, res.awayTeamAbbr);
-    const loserName = homeScore >= awayScore
+    const loserName = homeWon
       ? teamName(res.away, res.awayTeamName, res.awayTeamAbbr)
       : teamName(res.home, res.homeTeamName, res.homeTeamAbbr);
     const winScore = Math.max(homeScore, awayScore);
     const loseScore = Math.min(homeScore, awayScore);
     const scoreStr = `${winScore}-${loseScore}`;
 
+    const isOT = isOvertimeGame(res);
+
+    // Blowout check first
     if (diff >= 28) {
       headlines.push({
         id: headlineId(week, year, `blowout-${winnerId}`),
@@ -186,48 +247,85 @@ function extractGameDramaHeadlines(
         year,
         type: 'BLOWOUT',
         severity: diff >= 35 ? 'MAJOR' : 'MINOR',
-        headlineText: `${winnerName} Crushes ${loserName} in ${scoreStr} Blowout!`,
-        detailText: `A dominant performance as ${winnerName} dismantles ${loserName} by ${diff} points.`,
+        headlineText: `${winnerName} Dominates ${loserName} ${scoreStr}`,
+        detailText: `A commanding ${diff}-point win — ${winnerName} leaves no doubt in a dominant performance.`,
         associatedTeamId: !isNaN(winnerId) ? String(winnerId) : undefined,
       });
       continue;
     }
 
-    // Comeback detection via quarter scores — team won despite trailing by 14+ in Q4
+    // OT thriller
+    if (isOT) {
+      headlines.push({
+        id: headlineId(week, year, `ot-${winnerId}`),
+        week,
+        year,
+        type: 'OVERTIME',
+        severity: 'MAJOR',
+        headlineText: `Overtime Thriller: ${winnerName} Outlasts ${loserName} ${scoreStr}`,
+        detailText: `An electric finish as ${winnerName} and ${loserName} go to extra time, with ${winnerName} claiming the dramatic ${scoreStr} victory.`,
+        associatedTeamId: !isNaN(winnerId) ? String(winnerId) : undefined,
+      });
+      continue;
+    }
+
+    // Comeback detection via quarter scores — won despite trailing by 14+ heading into Q4
     const quarters = res.quarterScores;
-    if (Array.isArray(quarters) && quarters.length >= 2 && diff <= 3) {
-      const homeQ4Cumulative = quarters[0]?.reduce((sum, q) => sum + num(q, 0), 0) ?? 0;
-      const awayQ4Cumulative = quarters[1]?.reduce((sum, q) => sum + num(q, 0), 0) ?? 0;
-
-      const homeLeadingAtSomePoint = homeQ4Cumulative - (quarters[0]?.[3] ?? 0);
-      const awayLeadingAtSomePoint = awayQ4Cumulative - (quarters[1]?.[3] ?? 0);
-      const trailDeficit = Math.abs(homeLeadingAtSomePoint - awayLeadingAtSomePoint);
-
-      if (trailDeficit >= 14) {
+    if (Array.isArray(quarters) && quarters.length >= 2 && diff <= 7) {
+      const homeThrough3 = (quarters[0] ?? []).slice(0, 3).reduce((s, q) => s + num(q, 0), 0);
+      const awayThrough3 = (quarters[1] ?? []).slice(0, 3).reduce((s, q) => s + num(q, 0), 0);
+      const q4Deficit = homeWon
+        ? awayThrough3 - homeThrough3
+        : homeThrough3 - awayThrough3;
+      if (q4Deficit >= 10) {
         headlines.push({
           id: headlineId(week, year, `comeback-${winnerId}`),
           week,
           year,
           type: 'COMEBACK',
           severity: 'MAJOR',
-          headlineText: `${winnerName} Pulls Off Stunning ${scoreStr} Comeback Win!`,
-          detailText: `Trailing deep into the fourth quarter, ${winnerName} refused to quit and edged ${loserName} ${scoreStr}.`,
+          headlineText: `${winnerName} Stuns ${loserName} with ${scoreStr} Fourth-Quarter Comeback`,
+          detailText: `Trailing by ${q4Deficit} entering the fourth, ${winnerName} rallied to complete a remarkable ${scoreStr} comeback victory.`,
           associatedTeamId: !isNaN(winnerId) ? String(winnerId) : undefined,
         });
         continue;
       }
     }
 
-    // Upset: margin <= 3
+    // Major upset: winner had ≥3 fewer wins than loser (and loser had winning record)
+    if (diff <= 14) {
+      const winnerTeam = findTeam(winnerId);
+      const loserTeam = findTeam(loserId);
+      if (winnerTeam && loserTeam) {
+        const winnerWins = num(winnerTeam.wins, 0);
+        const loserWins = num(loserTeam.wins, 0);
+        const winGap = loserWins - winnerWins;
+        if (winGap >= 3 && loserWins >= 4) {
+          headlines.push({
+            id: headlineId(week, year, `upset-${winnerId}`),
+            week,
+            year,
+            type: 'UPSET',
+            severity: winGap >= 5 ? 'MAJOR' : 'MINOR',
+            headlineText: `Upset Alert: ${winnerName} Shocks ${loserName} ${scoreStr}`,
+            detailText: `Nobody saw this coming — ${winnerName} (${winnerWins}-${num(winnerTeam.losses)}) topples ${loserName} (${loserWins}-${num(loserTeam.losses)}) in a major upset.`,
+            associatedTeamId: !isNaN(winnerId) ? String(winnerId) : undefined,
+          });
+          continue;
+        }
+      }
+    }
+
+    // Nail-biter: margin ≤ 3
     if (diff <= 3) {
       headlines.push({
-        id: headlineId(week, year, `upset-${winnerId}`),
+        id: headlineId(week, year, `nailbiter-${winnerId}`),
         week,
         year,
         type: 'UPSET',
         severity: 'MINOR',
-        headlineText: `${winnerName} Edges ${loserName} in Nail-Biter ${scoreStr}!`,
-        detailText: `A game decided by the finest of margins as ${winnerName} outlasts ${loserName} ${scoreStr}.`,
+        headlineText: `${winnerName} Edges ${loserName} in ${scoreStr} Nail-Biter`,
+        detailText: `A game decided by the finest of margins as ${winnerName} holds on for a tight ${scoreStr} victory over ${loserName}.`,
         associatedTeamId: !isNaN(winnerId) ? String(winnerId) : undefined,
       });
     }
@@ -236,7 +334,70 @@ function extractGameDramaHeadlines(
   return headlines;
 }
 
-// ── Priority 3: Statistical Milestones ───────────────────────────────────────
+// ── Priority 3: Win Streaks & Undefeated Watch ────────────────────────────────
+
+function extractStreakHeadlines(
+  results: GameResult[],
+  week: number,
+  year: number,
+  teams: TeamRecord[],
+): WeeklyHeadline[] {
+  const headlines: WeeklyHeadline[] = [];
+  const winnerIds = new Set<number>();
+
+  for (const res of results) {
+    const homeScore = num(res.scoreHome ?? res.homeScore, 0);
+    const awayScore = num(res.scoreAway ?? res.awayScore, 0);
+    const winnerId = homeScore > awayScore
+      ? teamId(res.home ?? res.homeTeamId)
+      : homeScore < awayScore
+        ? teamId(res.away ?? res.awayTeamId)
+        : NaN; // tie — no winner, no streak credit
+    if (!isNaN(winnerId)) winnerIds.add(winnerId);
+  }
+
+  for (const team of teams) {
+    const tid = num(team.id, NaN);
+    if (isNaN(tid) || !winnerIds.has(tid)) continue;
+    const wins = num(team.wins, 0);
+    const losses = num(team.losses, 0);
+    const streak = winStreak(team.recentResults);
+    const name = team.name ?? team.abbr ?? `Team ${tid}`;
+
+    // Undefeated watch: 5+ wins, 0 losses
+    if (losses === 0 && wins >= 5) {
+      headlines.push({
+        id: headlineId(week, year, `undefeated-${tid}`),
+        week,
+        year,
+        type: 'STREAK',
+        severity: wins >= 8 ? 'MAJOR' : 'MINOR',
+        headlineText: `${name} Stays Perfect at ${wins}-0`,
+        detailText: `${name} remains the league's last undefeated team, extending their flawless start to ${wins} wins.`,
+        associatedTeamId: String(tid),
+      });
+      continue;
+    }
+
+    // Win streak: 5+ consecutive
+    if (streak >= 5) {
+      headlines.push({
+        id: headlineId(week, year, `streak-${tid}`),
+        week,
+        year,
+        type: 'STREAK',
+        severity: streak >= 7 ? 'MAJOR' : 'MINOR',
+        headlineText: `${name} Extends Win Streak to ${streak}`,
+        detailText: `${name} keeps rolling — their ${streak}-game winning streak is the longest active run in the league.`,
+        associatedTeamId: String(tid),
+      });
+    }
+  }
+
+  return headlines;
+}
+
+// ── Priority 4: Statistical Milestones & Elite Performances ──────────────────
 
 const CAREER_MILESTONES: Array<{ key: 'rushYds' | 'passYds' | 'recYds'; threshold: number; label: string }> = [
   { key: 'rushYds', threshold: 10000, label: 'career rushing yards' },
@@ -244,7 +405,7 @@ const CAREER_MILESTONES: Array<{ key: 'rushYds' | 'passYds' | 'recYds'; threshol
   { key: 'recYds', threshold: 10000, label: 'career receiving yards' },
 ];
 
-function extractMilestoneHeadlines(
+function extractPerformanceHeadlines(
   results: GameResult[],
   week: number,
   year: number,
@@ -253,7 +414,7 @@ function extractMilestoneHeadlines(
   const headlines: WeeklyHeadline[] = [];
 
   for (const res of results) {
-    const players: PlayerBoxStat[] = res.boxScore?.players ?? [];
+    const players = allPlayersFromResult(res);
     for (const box of players) {
       const gamePassYds = num(box.passYds, 0);
       const gameRushYds = num(box.rushYds, 0);
@@ -261,46 +422,51 @@ function extractMilestoneHeadlines(
       const name = box.name ?? `Player ${box.id}`;
       const teamRef = num(box.teamId, NaN);
 
-      // Single-game performances
-      if (gamePassYds >= 450) {
+      // Elite passing: 400+ yards (was 450 for MILESTONE, lower for PERFORMANCE)
+      if (gamePassYds >= 400) {
+        const isMilestone = gamePassYds >= 450;
         headlines.push({
-          id: headlineId(week, year, `milestone-passyds-${box.id}`),
+          id: headlineId(week, year, `pass-perf-${box.id}`),
           week,
           year,
-          type: 'MILESTONE',
+          type: isMilestone ? 'MILESTONE' : 'PERFORMANCE',
           severity: gamePassYds >= 550 ? 'CRITICAL' : 'MAJOR',
-          headlineText: `${name} Torches Secondary for ${gamePassYds} Passing Yards!`,
-          detailText: `An historic aerial assault as ${name} shreds opposing coverage for ${gamePassYds} yards through the air.`,
+          headlineText: `${name} Throws for ${gamePassYds} Yards in Statement Performance`,
+          detailText: `An elite aerial display — ${name} carved up opposing coverage for ${gamePassYds} passing yards.`,
           associatedPlayerId: String(box.id ?? ''),
           associatedTeamId: !isNaN(teamRef) ? String(teamRef) : undefined,
         });
-      } else if (gameRushYds >= 200) {
+      } else if (gameRushYds >= 150) {
+        // Elite rushing: 150+ yards
+        const isMilestone = gameRushYds >= 200;
         headlines.push({
-          id: headlineId(week, year, `milestone-rushyds-${box.id}`),
+          id: headlineId(week, year, `rush-perf-${box.id}`),
           week,
           year,
-          type: 'MILESTONE',
-          severity: gameRushYds >= 250 ? 'CRITICAL' : 'MAJOR',
-          headlineText: `${name} Goes Off for ${gameRushYds} Rushing Yards!`,
-          detailText: `A dominant ground performance as ${name} bulldozes the opposition for ${gameRushYds} yards on the ground.`,
+          type: isMilestone ? 'MILESTONE' : 'PERFORMANCE',
+          severity: gameRushYds >= 200 ? 'MAJOR' : 'MINOR',
+          headlineText: `${name} Erupts for ${gameRushYds} Rushing Yards`,
+          detailText: `A dominant ground performance — ${name} shredded the defense for ${gameRushYds} rushing yards.`,
           associatedPlayerId: String(box.id ?? ''),
           associatedTeamId: !isNaN(teamRef) ? String(teamRef) : undefined,
         });
-      } else if (gameRecYds >= 200) {
+      } else if (gameRecYds >= 150) {
+        // Elite receiving: 150+ yards
+        const isMilestone = gameRecYds >= 200;
         headlines.push({
-          id: headlineId(week, year, `milestone-recyds-${box.id}`),
+          id: headlineId(week, year, `rec-perf-${box.id}`),
           week,
           year,
-          type: 'MILESTONE',
-          severity: gameRecYds >= 250 ? 'CRITICAL' : 'MAJOR',
-          headlineText: `${name} Erupts for ${gameRecYds} Receiving Yards!`,
-          detailText: `A spectacular receiving display as ${name} hauls in ${gameRecYds} yards through the air.`,
+          type: isMilestone ? 'MILESTONE' : 'PERFORMANCE',
+          severity: gameRecYds >= 200 ? 'MAJOR' : 'MINOR',
+          headlineText: `${name} Goes Off for ${gameRecYds} Receiving Yards`,
+          detailText: `An unstoppable day through the air — ${name} hauled in ${gameRecYds} receiving yards against the helpless secondary.`,
           associatedPlayerId: String(box.id ?? ''),
           associatedTeamId: !isNaN(teamRef) ? String(teamRef) : undefined,
         });
       }
 
-      // Career milestone crossing — only check when player has a notable game stat
+      // Career milestone crossing
       if (gameRushYds > 0 || gamePassYds > 0 || gameRecYds > 0) {
         const full = box.id != null ? getPlayer(box.id) : null;
         if (full?.stats?.career) {
@@ -316,8 +482,8 @@ function extractMilestoneHeadlines(
                 year,
                 type: 'MILESTONE',
                 severity: 'CRITICAL',
-                headlineText: `History Made: ${name} Crosses ${(m.threshold / 1000).toFixed(0)},000 ${m.label.replace(/career /, 'Career ')}!`,
-                detailText: `An immortal moment as ${name} surpasses the ${(m.threshold / 1000).toFixed(0)},000 ${m.label} threshold, cementing legendary status.`,
+                headlineText: `History: ${name} Crosses ${(m.threshold / 1000).toFixed(0)},000 ${m.label.replace(/career /, 'Career ')}`,
+                detailText: `A legendary milestone — ${name} surpasses ${(m.threshold / 1000).toFixed(0)},000 ${m.label}, cementing Hall of Fame credentials.`,
                 associatedPlayerId: String(box.id ?? ''),
                 associatedTeamId: !isNaN(teamRef) ? String(teamRef) : undefined,
               });
@@ -331,19 +497,66 @@ function extractMilestoneHeadlines(
   return headlines;
 }
 
+// ── Priority 5: Defensive Domination ─────────────────────────────────────────
+
+function extractDefensiveHeadlines(
+  results: GameResult[],
+  week: number,
+  year: number,
+): WeeklyHeadline[] {
+  const headlines: WeeklyHeadline[] = [];
+
+  for (const res of results) {
+    const homeScore = num(res.scoreHome ?? res.homeScore, 0);
+    const awayScore = num(res.scoreAway ?? res.awayScore, 0);
+    const total = homeScore + awayScore;
+    if (total === 0) continue;
+
+    // Check turnovers forced by winning defense — read from the LOSER's stats
+    // because teamStats.turnovers = giveaways committed (losing offense's giveaways = winning defense's takeaways)
+    const homeWon = homeScore > awayScore;
+    const defStats = homeWon ? res.teamStats?.away : res.teamStats?.home;
+    const turnoversForced = num(defStats?.turnovers, 0);
+    if (turnoversForced < 4) continue;
+
+    const winnerId = homeWon ? teamId(res.home ?? res.homeTeamId) : teamId(res.away ?? res.awayTeamId);
+    const loserName = homeWon
+      ? teamName(res.away, res.awayTeamName, res.awayTeamAbbr)
+      : teamName(res.home, res.homeTeamName, res.homeTeamAbbr);
+    const winnerName = homeWon
+      ? teamName(res.home, res.homeTeamName, res.homeTeamAbbr)
+      : teamName(res.away, res.awayTeamName, res.awayTeamAbbr);
+
+    headlines.push({
+      id: headlineId(week, year, `def-dom-${winnerId}`),
+      week,
+      year,
+      type: 'DEFENSIVE',
+      severity: turnoversForced >= 5 ? 'MAJOR' : 'MINOR',
+      headlineText: `${winnerName} Defense Suffocates ${loserName} with ${turnoversForced} Takeaways`,
+      detailText: `A suffocating defensive performance — ${winnerName} forced ${turnoversForced} turnovers, turning the game into a rout.`,
+      associatedTeamId: !isNaN(winnerId) ? String(winnerId) : undefined,
+    });
+  }
+
+  return headlines;
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 /**
- * Parse a week's game results into up to 3 ranked WeeklyHeadline objects.
- * Priority order: Injuries → Blowouts/Comebacks → Milestones.
+ * Parse a week's game results into up to 6 ranked WeeklyHeadline objects.
+ * Priority: Injuries → Drama (blowout/OT/comeback/upset) → Streaks → Performance → Defense
  */
 export function parseWeeklyHeadlines(input: NewsEngineInput): WeeklyHeadline[] {
-  const { results, week, year, getPlayer = () => null } = input;
+  const { results, week, year, getPlayer = () => null, teams = [] } = input;
   if (!Array.isArray(results) || results.length === 0) return [];
 
   const injuries = extractInjuryHeadlines(results, week, year, getPlayer);
-  const drama = extractGameDramaHeadlines(results, week, year);
-  const milestones = extractMilestoneHeadlines(results, week, year, getPlayer);
+  const drama = extractGameDramaHeadlines(results, week, year, teams);
+  const streaks = extractStreakHeadlines(results, week, year, teams);
+  const performances = extractPerformanceHeadlines(results, week, year, getPlayer);
+  const defensive = extractDefensiveHeadlines(results, week, year);
 
   const ranked: WeeklyHeadline[] = [];
   const seen = new Set<string>();
@@ -357,7 +570,9 @@ export function parseWeeklyHeadlines(input: NewsEngineInput): WeeklyHeadline[] {
 
   for (const hl of injuries) add(hl);
   for (const hl of drama) add(hl);
-  for (const hl of milestones) add(hl);
+  for (const hl of streaks) add(hl);
+  for (const hl of performances) add(hl);
+  for (const hl of defensive) add(hl);
 
-  return ranked.slice(0, 3);
+  return ranked.slice(0, MAX_HEADLINES);
 }
