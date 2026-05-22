@@ -103,3 +103,69 @@ export function getDefaultExpandedSections() {
     insights: false,
   };
 }
+
+/**
+ * Builds a unified command center summary for the weekly decision surface.
+ * Merges gate risk items and context urgent items into a capped action list.
+ * Pure view-model, no side effects.
+ *
+ * @param {{ gate: object, weeklyContext: object }} input
+ * @returns {{ primaryActions, secondaryActions, readinessLabel, readinessTone, criticalCount, canAdvanceSafely }}
+ */
+export function buildCommandCenterSummary({ gate, weeklyContext } = {}) {
+  const gateItems = Array.isArray(gate?.riskItems) ? gate.riskItems : [];
+  const urgentItems = Array.isArray(weeklyContext?.urgentItems) ? weeklyContext.urgentItems : [];
+
+  // Gate danger items → critical actions
+  const gateDangerItems = gateItems
+    .filter((i) => i.severity === 'danger' || i.severity === 'warning')
+    .map((i) => ({
+      label: i.label,
+      detail: i.detail,
+      tone: i.severity === 'danger' ? 'danger' : 'warning',
+      level: i.severity === 'danger' ? 'blocker' : 'recommendation',
+      tab: i.fixDestination ?? 'Weekly Prep',
+    }));
+
+  // Context urgent items
+  const contextCritical = urgentItems.filter(
+    (i) => i.level === 'blocker' || i.tone === 'danger',
+  );
+  const contextSecondary = urgentItems.filter(
+    (i) => i.level !== 'blocker' && i.tone !== 'danger' && i.tone !== 'ok',
+  );
+
+  // Merge and deduplicate by label
+  const seen = new Set();
+  const merged = [];
+  for (const item of [...gateDangerItems, ...contextCritical]) {
+    const key = String(item.label ?? '').toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+
+  const primaryActions = merged.slice(0, 3);
+  const secondaryActions = contextSecondary
+    .filter((i) => !seen.has(String(i.label ?? '').toLowerCase()))
+    .slice(0, 2);
+
+  const hasDanger = gate?.severity === 'danger' || primaryActions.some((i) => i.tone === 'danger');
+  const hasWarning = gate?.shouldWarn || primaryActions.some((i) => i.tone === 'warning');
+
+  const readinessTone = hasDanger ? 'danger' : hasWarning ? 'warning' : 'ok';
+  const readinessLabel = hasDanger
+    ? 'Blockers must be resolved before advance'
+    : hasWarning
+      ? 'Advance with open prep items?'
+      : 'Ready to advance';
+
+  return {
+    primaryActions,
+    secondaryActions,
+    readinessLabel,
+    readinessTone,
+    criticalCount: primaryActions.length,
+    canAdvanceSafely: readinessTone === 'ok',
+  };
+}

@@ -7,6 +7,7 @@ import { buildAdvanceReadinessGate } from '../utils/advanceReadinessGate.js';
 import AdvanceReadinessGate from './AdvanceReadinessGate.jsx';
 import { selectFranchiseHQViewModel } from '../utils/franchiseCommandCenter.js';
 import { buildWeeklyCommandHub } from '../utils/weeklyCommandHub.js';
+import { buildCommandCenterSummary } from '../utils/weeklyHubLayout.js';
 import { rankLeaguePulseItems } from '../../core/leaguePulse.js';
 import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda, CompactNewsCard } from './ScreenSystem.jsx';
 import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
@@ -40,6 +41,10 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
   const gate = useMemo(
     () => buildAdvanceReadinessGate({ league, prep: hqPrep, weeklyContext: hqWeeklyContext }),
     [league, hqPrep, hqWeeklyContext],
+  );
+  const commandSummary = useMemo(
+    () => buildCommandCenterSummary({ gate, weeklyContext: hqWeeklyContext }),
+    [gate, hqWeeklyContext],
   );
 
   if (command.readyState !== 'ready') {
@@ -304,6 +309,63 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         <p className="app-hq-hero-footnote">Sim to Sunday • {footerDays} days until kickoff</p>
       </section>
 
+      {/* ── Actions Required ─────────────────────────────────────────── */}
+      {commandSummary.criticalCount > 0 ? (
+        <section
+          className={`card app-hq-actions-required tone-${commandSummary.readinessTone}`}
+          aria-label="Actions Required"
+          data-testid="hq-actions-required"
+          style={{ padding: 'var(--space-2)', marginBottom: 8 }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <strong>Actions Required</strong>
+            <StatusChip
+              label={`${commandSummary.criticalCount} open`}
+              tone={commandSummary.readinessTone === 'danger' ? 'warning' : 'info'}
+            />
+          </div>
+          <div className="app-hq-intel-list">
+            {commandSummary.primaryActions.map((item, idx) => (
+              <button
+                key={`req-${idx}`}
+                type="button"
+                className={`app-hq-intel-item tone-${item.tone ?? 'warning'}`}
+                style={{ display: 'flex', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0', textAlign: 'left' }}
+                onClick={() => item.tab && onNavigate?.(item.tab)}
+              >
+                <span>
+                  <strong style={{ display: 'block' }}>{item.label}</strong>
+                  <small>{item.detail}</small>
+                </span>
+                <span aria-hidden>›</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Weekly Prep')}>
+              Review weekly prep
+            </button>
+            {commandSummary.readinessTone !== 'ok' ? (
+              <button type="button" className="btn btn-sm" onClick={() => setShowGate(true)}>
+                {commandSummary.readinessLabel}
+              </button>
+            ) : null}
+          </div>
+        </section>
+      ) : (
+        <section
+          className="card app-hq-actions-required tone-ok"
+          aria-label="Actions Required"
+          data-testid="hq-actions-required"
+          style={{ padding: 'var(--space-2)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <span className="app-hq-intel-item tone-ok" style={{ margin: 0 }}>No blockers — ready to advance.</span>
+          <button type="button" className="btn btn-sm" onClick={handleAdvanceOrGate} disabled={busy || simulating}>
+            {busy || simulating ? 'Advancing…' : 'Advance Week'}
+          </button>
+        </section>
+      )}
+
       <div
         className="app-hq-action-tiles"
         style={{
@@ -496,47 +558,57 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
 
       {lineupToast ? <p className="app-inline-toast" role="status" aria-live="polite">{lineupToast}</p> : null}
 
-
-
-
-      <SectionCard title={decisionReview?.heading ?? 'What Mattered Last Week'} subtitle={decisionReview?.resultSummary ?? 'Run a completed game to unlock a weekly decision review.'} variant="compact">
-        <div className="app-hq-intel-list" role="list" aria-label="Weekly decision impact recap">
-          {(decisionReview?.bullets ?? []).slice(0, 4).map((bullet, idx) => (
-            <p key={`decision-${idx}`} role="listitem" className="app-hq-intel-item tone-info">{bullet}</p>
-          ))}
-        </div>
-        {decisionReview?.recommendedAction ? (
-          <div className="app-hq-impact-card tone-info" style={{ marginTop: 10 }}>
-            <div className="app-hq-impact-card__head">
-              <strong>Recommended next action</strong>
-              <StatusChip label={decisionReview.recommendedAction.label} tone="info" />
-            </div>
-            <p>{decisionReview.recommendedAction.reason}</p>
-            <button
-              type="button"
-              className="btn btn-sm app-hq-impact-card__cta"
-              onClick={() => onNavigate?.(decisionReview.recommendedAction.route)}
-              aria-label={`Decision review: ${decisionReview.recommendedAction.label}`}
-            >
-              {decisionReview.recommendedAction.label}
-            </button>
+      {/* ── Decision Review (background context, collapsed) ────────────── */}
+      <SectionCard
+        title={decisionReview?.heading ?? 'What Mattered Last Week'}
+        subtitle={decisionReview?.resultSummary ?? 'Run a completed game to unlock a weekly decision review.'}
+        variant="compact"
+      >
+        <details className="app-hq-background-section__inner">
+          <summary className="app-hq-section-expand">Show decision recap ▾</summary>
+          <div className="app-hq-intel-list" role="list" aria-label="Weekly decision impact recap">
+            {(decisionReview?.bullets ?? []).slice(0, 4).map((bullet, idx) => (
+              <p key={`decision-${idx}`} role="listitem" className="app-hq-intel-item tone-info">{bullet}</p>
+            ))}
           </div>
-        ) : null}
+          {decisionReview?.recommendedAction ? (
+            <div className="app-hq-impact-card tone-info" style={{ marginTop: 10 }}>
+              <div className="app-hq-impact-card__head">
+                <strong>Recommended next action</strong>
+                <StatusChip label={decisionReview.recommendedAction.label} tone="info" />
+              </div>
+              <p>{decisionReview.recommendedAction.reason}</p>
+              <button
+                type="button"
+                className="btn btn-sm app-hq-impact-card__cta"
+                onClick={() => onNavigate?.(decisionReview.recommendedAction.route)}
+                aria-label={`Decision review: ${decisionReview.recommendedAction.label}`}
+              >
+                {decisionReview.recommendedAction.label}
+              </button>
+            </div>
+          ) : null}
+        </details>
       </SectionCard>
 
+      {/* ── Operations Snapshot (background context, collapsed) ────────── */}
       <SectionCard title="Operations Snapshot" subtitle="Last result, standing, and upcoming slate." variant="compact">
-        <div className="app-hq-team-overview">
-          <div><span>{postAdvanceNote.heading}</span><strong>{postAdvanceNote.result}</strong></div>
-          <div><span>Key Takeaway</span><strong>{postAdvanceNote.takeaway}</strong></div>
-          <div><span>Next Action</span><strong>{postAdvanceNote.nextAction}</strong></div>
-          <div><span>Record Update</span><strong>{postAdvanceNote.recordDelta}</strong></div>
-          <div><span>Next Opponent</span><strong>{postAdvanceNote.nextOpponent}</strong></div>
-          <div><span>News Note</span><strong>{postAdvanceNote.note}</strong></div>
-          <div><span>Review Routes</span><div className="app-hq-opponent-chips">{postAdvanceNote.actions.length ? postAdvanceNote.actions.map((action) => <button key={action.targetRoute} type="button" onClick={() => onNavigate?.(action.targetRoute)}>{action.label}</button>) : <em>No review actions</em>}</div></div>
-          <div><span>Next 3</span><div className="app-hq-opponent-chips">{nextOpponents.length ? nextOpponents.map((chip) => <em key={chip}>{chip}</em>) : <em>No future games on file</em>}</div></div>
-        </div>
+        <details className="app-hq-background-section__inner">
+          <summary className="app-hq-section-expand">Show snapshot ▾</summary>
+          <div className="app-hq-team-overview">
+            <div><span>{postAdvanceNote.heading}</span><strong>{postAdvanceNote.result}</strong></div>
+            <div><span>Key Takeaway</span><strong>{postAdvanceNote.takeaway}</strong></div>
+            <div><span>Next Action</span><strong>{postAdvanceNote.nextAction}</strong></div>
+            <div><span>Record Update</span><strong>{postAdvanceNote.recordDelta}</strong></div>
+            <div><span>Next Opponent</span><strong>{postAdvanceNote.nextOpponent}</strong></div>
+            <div><span>News Note</span><strong>{postAdvanceNote.note}</strong></div>
+            <div><span>Review Routes</span><div className="app-hq-opponent-chips">{postAdvanceNote.actions.length ? postAdvanceNote.actions.map((action) => <button key={action.targetRoute} type="button" onClick={() => onNavigate?.(action.targetRoute)}>{action.label}</button>) : <em>No review actions</em>}</div></div>
+            <div><span>Next 3</span><div className="app-hq-opponent-chips">{nextOpponents.length ? nextOpponents.map((chip) => <em key={chip}>{chip}</em>) : <em>No future games on file</em>}</div></div>
+          </div>
+        </details>
       </SectionCard>
 
+      {/* ── League Pulse (background context, collapsed) ────────────────── */}
       <SectionCard
         title="League Pulse"
         subtitle="Around the league this week."
@@ -550,19 +622,6 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
           {!leaguePulseItems.length ? <EmptyState title="No league pulse yet." body="Advance to generate weekly stories." /> : null}
         </div>
       </SectionCard>
-
-      <section className="card" aria-label="Advance readiness">
-        <p className="app-hq-intel-item tone-info">
-          {weeklyCommandHub.readiness.readyToAdvance ? 'Ready to advance.' : `${weeklyCommandHub.readiness.criticalOpen} critical item open.`} {' '}
-          {weeklyCommandHub.readiness.recommendedOpen ? `${weeklyCommandHub.readiness.recommendedOpen} recommended actions remaining.` : 'No recommended actions remaining.'}
-          {weeklyCommandHub.readiness.lastCompletedAction ? ` Last review: ${weeklyCommandHub.readiness.lastCompletedAction}.` : ''}
-        </p>
-        {weeklyCommandHub.primaryAction?.blocking ? (
-          <button type="button" className="btn btn-sm app-hq-impact-card__cta" onClick={() => onNavigate?.(weeklyCommandHub.primaryAction.route)}>
-            Resolve blocker: {weeklyCommandHub.primaryAction.label}
-          </button>
-        ) : null}
-      </section>
 
       {showGate ? (
         <div style={{ padding: '0 var(--space-2)', marginBottom: 8 }}>

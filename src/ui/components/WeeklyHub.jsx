@@ -6,7 +6,7 @@ import { ACTION_LABELS } from "../constants/navigationCopy.js";
 import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 import { deriveTeamCapSnapshot, formatMoneyM, formatPercent } from "../utils/numberFormatting.js";
 import { buildIncomingOfferPresentation } from "../utils/tradeOfferPresentation.js";
-import { buildNeedsAttentionItems, buildPrimaryAction } from "../utils/weeklyHubLayout.js";
+import { buildNeedsAttentionItems, buildPrimaryAction, buildCommandCenterSummary } from "../utils/weeklyHubLayout.js";
 import { findLatestUserCompletedGame } from "../utils/completedGameSelectors.js";
 import { buildCompletedGamePresentation } from "../utils/boxScoreAccess.js";
 import { buildWeeklyIntelligence, buildActionableWeeklyPriorities } from "../utils/weeklyIntelligence.js";
@@ -42,21 +42,36 @@ function phaseLabel(phase) {
   return "Offseason";
 }
 
-function SectionHeader({ title, subtitle }) {
+function SectionHeader({ title, subtitle, badge }) {
   return (
     <div className="weekly-section-head">
-      <h3 className="weekly-section__title">{title}</h3>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <h3 className="weekly-section__title">{title}</h3>
+        {badge ?? null}
+      </div>
       {subtitle ? <p className="weekly-section__subtitle">{subtitle}</p> : null}
     </div>
   );
 }
+
+const QUICK_ACTIONS = [
+  { icon: "🧭", label: "Team", sub: "Depth + game plan", tab: "Team" },
+  { icon: "📋", label: "Roster", sub: "Lineup and contracts", tab: "Roster" },
+  { icon: "📈", label: "League", sub: "Standings and leaders", tab: "League" },
+  { icon: "💸", label: "Free Agency", sub: "Market movement", tab: "Free Agency" },
+  { icon: "🎯", label: "Draft", sub: "Big board and picks", tab: "Draft" },
+  { icon: "📰", label: "News", sub: "Latest stories", tab: "News" },
+];
 
 export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, simulating, onOpenBoxScore }) {
   const user = useMemo(() => getUserTeam(league), [league]);
   const nextGame = useMemo(() => getNextGame(league), [league]);
   const weeklyContext = useMemo(() => evaluateWeeklyContext(league), [league]);
   const latestCompletedGame = useMemo(() => findLatestUserCompletedGame(league), [league]);
-  const latestResultPresentation = useMemo(() => buildCompletedGamePresentation(latestCompletedGame?.game ?? null, { seasonId: league?.seasonId, week: latestCompletedGame?.week, source: "weekly_hub_last_game" }), [league?.seasonId, latestCompletedGame]);
+  const latestResultPresentation = useMemo(
+    () => buildCompletedGamePresentation(latestCompletedGame?.game ?? null, { seasonId: league?.seasonId, week: latestCompletedGame?.week, source: "weekly_hub_last_game" }),
+    [league?.seasonId, latestCompletedGame],
+  );
   const prep = useMemo(() => deriveWeeklyPrepState(league), [league]);
   const matchupIntel = useMemo(() => buildWeeklyIntelligence({ league, team: user, nextGame, prep }), [league, user, nextGame, prep]);
   const matchupPriorities = useMemo(() => buildActionableWeeklyPriorities({ team: user, nextGame, prep }), [user, nextGame, prep]);
@@ -81,56 +96,56 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
     latestUserGameId: latestCompletedGame?.gameId ?? null,
   });
 
-  const standingsSnapshot = useMemo(() => {
-    const teams = Array.isArray(league?.teams) ? league.teams : [];
-    const userTeam = teams.find((team) => Number(team.id) === Number(league?.userTeamId));
-    if (!userTeam) return null;
-    const byPct = [...teams].sort((a, b) => {
-      const aGames = (a.wins ?? 0) + (a.losses ?? 0) + (a.ties ?? 0);
-      const bGames = (b.wins ?? 0) + (b.losses ?? 0) + (b.ties ?? 0);
-      const aPct = aGames ? ((a.wins ?? 0) + 0.5 * (a.ties ?? 0)) / aGames : 0;
-      const bPct = bGames ? ((b.wins ?? 0) + 0.5 * (b.ties ?? 0)) / bGames : 0;
-      return bPct - aPct;
-    });
-    const conferenceTeams = byPct.filter((team) => Number(team.conf) === Number(userTeam.conf));
-    const confRank = conferenceTeams.findIndex((team) => Number(team.id) === Number(userTeam.id)) + 1;
-    const playoffLine = conferenceTeams[6] ?? null;
-    return {
-      confRank,
-      overallRank: byPct.findIndex((team) => Number(team.id) === Number(userTeam.id)) + 1,
-      playoffLineRecord: playoffLine ? `${playoffLine.wins ?? 0}-${playoffLine.losses ?? 0}` : "—",
-    };
-  }, [league]);
-
-  const topOffer = weeklyContext?.incomingOffers?.[0] ?? null;
+  const commandSummary = buildCommandCenterSummary({ gate, weeklyContext });
 
   const standingsMeta = useMemo(() => {
     const teams = Array.isArray(league?.teams) ? league.teams : [];
     const userTeam = teams.find((team) => Number(team?.id) === Number(league?.userTeamId));
-    if (!userTeam) return { standingsPosition: 'Unranked', divisionName: 'Division' };
+    if (!userTeam) return { standingsPosition: "Unranked", divisionName: "Division", confRank: 0, overallRank: 0, playoffLineRecord: "—" };
+
     const divisionTeams = teams.filter((team) => Number(team?.conf) === Number(userTeam?.conf) && Number(team?.div) === Number(userTeam?.div));
-    const byPct = [...divisionTeams].sort((a, b) => {
+    const byDivPct = [...divisionTeams].sort((a, b) => {
       const aGames = (a?.wins ?? 0) + (a?.losses ?? 0) + (a?.ties ?? 0);
       const bGames = (b?.wins ?? 0) + (b?.losses ?? 0) + (b?.ties ?? 0);
       const aPct = aGames ? ((a?.wins ?? 0) + 0.5 * (a?.ties ?? 0)) / aGames : 0;
       const bPct = bGames ? ((b?.wins ?? 0) + 0.5 * (b?.ties ?? 0)) / bGames : 0;
       return bPct - aPct;
     });
-    const divRank = byPct.findIndex((team) => Number(team?.id) === Number(userTeam?.id)) + 1;
-    const divisionLabels = ['East', 'North', 'South', 'West'];
-    const divisionName = `${Number(userTeam?.conf) === 0 ? 'AFC' : 'NFC'} ${divisionLabels[Number(userTeam?.div)] ?? 'Division'}`;
-    return { standingsPosition: divRank > 0 ? `#${divRank}` : 'Unranked', divisionName };
+    const divRank = byDivPct.findIndex((team) => Number(team?.id) === Number(userTeam?.id)) + 1;
+
+    const byConfPct = [...teams]
+      .filter((team) => Number(team?.conf) === Number(userTeam?.conf))
+      .sort((a, b) => {
+        const aGames = (a?.wins ?? 0) + (a?.losses ?? 0) + (a?.ties ?? 0);
+        const bGames = (b?.wins ?? 0) + (b?.losses ?? 0) + (b?.ties ?? 0);
+        const aPct = aGames ? ((a?.wins ?? 0) + 0.5 * (a?.ties ?? 0)) / aGames : 0;
+        const bPct = bGames ? ((b?.wins ?? 0) + 0.5 * (b?.ties ?? 0)) / bGames : 0;
+        return bPct - aPct;
+      });
+    const confRank = byConfPct.findIndex((team) => Number(team?.id) === Number(userTeam?.id)) + 1;
+    const playoffLine = byConfPct[6] ?? null;
+
+    const byOverallPct = [...teams].sort((a, b) => {
+      const aGames = (a?.wins ?? 0) + (a?.losses ?? 0) + (a?.ties ?? 0);
+      const bGames = (b?.wins ?? 0) + (b?.losses ?? 0) + (b?.ties ?? 0);
+      const aPct = aGames ? ((a?.wins ?? 0) + 0.5 * (a?.ties ?? 0)) / aGames : 0;
+      const bPct = bGames ? ((b?.wins ?? 0) + 0.5 * (b?.ties ?? 0)) / bGames : 0;
+      return bPct - aPct;
+    });
+    const overallRank = byOverallPct.findIndex((team) => Number(team?.id) === Number(userTeam?.id)) + 1;
+
+    const divisionLabels = ["East", "North", "South", "West"];
+    const divisionName = `${Number(userTeam?.conf) === 0 ? "AFC" : "NFC"} ${divisionLabels[Number(userTeam?.div)] ?? "Division"}`;
+    return {
+      standingsPosition: divRank > 0 ? `#${divRank}` : "Unranked",
+      divisionName,
+      confRank: confRank > 0 ? confRank : 0,
+      overallRank: overallRank > 0 ? overallRank : 0,
+      playoffLineRecord: playoffLine ? `${playoffLine.wins ?? 0}-${playoffLine.losses ?? 0}` : "—",
+    };
   }, [league]);
 
-  const quickActions = useMemo(() => ([
-    { icon: '🧭', label: 'Team', sub: 'Depth + game plan', tab: 'Team' },
-    { icon: '📋', label: 'Roster', sub: 'Lineup and contracts', tab: 'Roster' },
-    { icon: '📈', label: 'League', sub: 'Standings and leaders', tab: 'League' },
-    { icon: '💸', label: 'Free Agency', sub: 'Market movement', tab: 'Free Agency' },
-    { icon: '🎯', label: 'Draft', sub: 'Big board and picks', tab: 'Draft' },
-    { icon: '📰', label: 'News', sub: 'Latest stories', tab: 'News' },
-  ]), []);
-
+  const topOffer = weeklyContext?.incomingOffers?.[0] ?? null;
   const topOfferSummary = topOffer ? buildIncomingOfferPresentation({ offer: topOffer, league, userTeamId: league?.userTeamId }) : null;
 
   const handleAdvanceOrGate = () => {
@@ -157,27 +172,66 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
     return handleAdvanceOrGate();
   };
 
+  // Actions Required: show when there are real actionable items (not the fallback ok item)
+  const actionableItems = allAttentionItems.filter((i) => i.tone !== "ok");
+  const hasActions = actionableItems.length > 0;
+  const actionsRequiredBadge = hasActions
+    ? <Badge variant="outline" className={`tone-${commandSummary.readinessTone}`}>{commandSummary.criticalCount > 0 ? commandSummary.criticalCount : actionableItems.length}</Badge>
+    : null;
+
   return (
     <div className="weekly-hub-v2 weekly-hub-v3 app-screen-stack">
+
+      {/* ── Hero ────────────────────────────────────────────────── */}
       <div className="hub-hero card-enter">
-        <div className="hub-hero__eyebrow">WEEK {league?.week ?? 1} · SEASON {league?.seasonId ?? league?.year ?? '—'}</div>
-        <div className="hub-hero__title">{user?.name ?? 'Your Team'}</div>
-        <div className="hub-hero__record">{user?.wins ?? 0}–{user?.losses ?? 0}{(user?.ties ?? 0) > 0 ? `–${user?.ties ?? 0}` : ''}</div>
+        <div className="hub-hero__eyebrow">WEEK {league?.week ?? 1} · SEASON {league?.seasonId ?? league?.year ?? "—"}</div>
+        <div className="hub-hero__title">{user?.name ?? "Your Team"}</div>
+        <div className="hub-hero__record">{user?.wins ?? 0}–{user?.losses ?? 0}{(user?.ties ?? 0) > 0 ? `–${user?.ties ?? 0}` : ""}</div>
         <div className="hub-hero__meta">{standingsMeta.standingsPosition} in {standingsMeta.divisionName}</div>
       </div>
 
-      <div className="hub-action-grid">
-        {quickActions.map((item) => (
-          <button key={item.tab} className="hub-action-card card-enter" onClick={() => onNavigate?.(item.tab)}>
-            <span className="hub-action-card__icon" aria-hidden>{item.icon}</span>
-            <span className="hub-action-card__label">{item.label}</span>
-            <span className="hub-action-card__sub">{item.sub}</span>
-          </button>
-        ))}
-      </div>
+      {/* ── Readiness Warning Banner (only when danger-level) ───── */}
+      {gate.shouldWarn && gate.severity === "danger" ? (
+        <div className={`weekly-readiness-banner tone-danger`} role="alert" aria-live="polite">
+          <strong>Advance blocked: </strong>
+          {gate.riskItems.find((i) => i.severity === "danger")?.label ?? "Resolve blockers before advancing."}
+          <Button size="sm" variant="ghost" style={{ marginLeft: 8 }} onClick={() => setShowGate(true)}>Review</Button>
+        </div>
+      ) : null}
 
-      <section className="weekly-section">
-        <SectionHeader title="This Week" subtitle="Primary action first, then urgent follow-ups." />
+      {/* ── Actions Required ─────────────────────────────────────── */}
+      <section className="weekly-section" aria-label="Actions Required">
+        <SectionHeader
+          title="Actions Required"
+          subtitle={hasActions ? "Resolve before advancing this week." : "No blockers — you are clear to advance."}
+          badge={actionsRequiredBadge}
+        />
+        {hasActions ? (
+          <div className="weekly-urgent-list">
+            {actionableItems.slice(0, 3).map((item, idx) => (
+              <button
+                key={`${item.label}-${idx}`}
+                className={`weekly-urgent-item tone-${item.tone}`}
+                onClick={() => item.tab && onNavigate?.(item.tab)}
+              >
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{item.detail}</span>
+                </div>
+                <span aria-hidden>›</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="weekly-urgent-item tone-ok" style={{ padding: "10px 12px" }}>
+            No urgent blockers. Review weekly prep and advance when ready.
+          </p>
+        )}
+      </section>
+
+      {/* ── This Week ────────────────────────────────────────────── */}
+      <section className="weekly-section" aria-label="This Week">
+        <SectionHeader title="This Week" subtitle="Primary action and advance controls." />
         <Card variant="primary" className="weekly-primary weekly-hero">
           <CardHeader className="weekly-primary__header">
             <div className="weekly-hero__identity">
@@ -186,16 +240,24 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
             </div>
             <div className="weekly-hud__meta">
               <Badge variant="outline">{phaseLabel(league.phase)}</Badge>
-              {nextGame ? <Badge>{`W${nextGame.week} ${nextGame.isHome ? 'vs' : '@'} ${nextGame.opp?.abbr ?? 'TBD'}`}</Badge> : null}
+              {nextGame ? <Badge>{`W${nextGame.week} ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"}`}</Badge> : null}
+              {gate.shouldWarn ? (
+                <Badge className={`tone-${gate.severity}`}>{commandSummary.readinessLabel}</Badge>
+              ) : (
+                <Badge className="tone-ok">Ready</Badge>
+              )}
             </div>
           </CardHeader>
           <CardContent className="weekly-hero__actions">
             <Button size="lg" className="weekly-hero__action-main" disabled={busy || simulating} onClick={handlePrimaryAction}>
               {busy || simulating ? ACTION_LABELS.working : primaryAction.cta}
             </Button>
-            <Button size="sm" variant="secondary" onClick={handleAdvanceOrGate} disabled={busy || simulating}>{simulating ? ACTION_LABELS.simulating : ACTION_LABELS.advanceWeek}</Button>
+            <Button size="sm" variant="secondary" onClick={handleAdvanceOrGate} disabled={busy || simulating}>
+              {simulating ? ACTION_LABELS.simulating : ACTION_LABELS.advanceWeek}
+            </Button>
           </CardContent>
         </Card>
+
         {showGate ? (
           <AdvanceReadinessGate
             gate={gate}
@@ -204,23 +266,11 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
             onCancel={() => setShowGate(false)}
           />
         ) : null}
-        {allAttentionItems.length > 0 ? (
-          <div className="weekly-urgent-list" style={{ marginTop: 8 }}>
-            {allAttentionItems.slice(0, 3).map((item, idx) => (
-              <button key={`${item.label}-${idx}`} className={`weekly-urgent-item tone-${item.tone}`} onClick={() => onNavigate?.(item.tab)}>
-                <div>
-                  <strong>{item.label}</strong>
-                  <span>{item.detail}</span>
-                </div>
-                <span>›</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
       </section>
 
-      <section className="weekly-section">
-        <SectionHeader title="Team Snapshot" subtitle="Compact context: record, owner confidence, and cap." />
+      {/* ── Pulse ───────────────────────────────────────────────── */}
+      <section className="weekly-section" aria-label="Pulse">
+        <SectionHeader title="Pulse" subtitle="Record, cap, and owner confidence at a glance." />
         <div className="weekly-card-grid">
           <Card variant="secondary" className="weekly-hub-card">
             <CardContent className="weekly-hub-card__body">
@@ -231,21 +281,36 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
           </Card>
           <Card variant="secondary" className="weekly-hub-card">
             <CardContent className="weekly-hub-card__body">
-              <p className="weekly-card-eyebrow">Next opponent</p>
-              <strong>{nextGame ? `Week ${nextGame.week} ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.name ?? nextGame.opp?.abbr ?? "TBD"}` : "No upcoming matchup"}</strong>
-              <p>{nextGame ? "Prepare lineup and game plan before kickoff." : "Advance to generate the next matchup."}</p>
+              <p className="weekly-card-eyebrow">Matchup</p>
+              <strong>
+                {nextGame
+                  ? `Week ${nextGame.week} ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.name ?? nextGame.opp?.abbr ?? "TBD"}`
+                  : "No upcoming matchup"}
+              </strong>
+              <p>
+                {nextGame
+                  ? `${nextGame.opp?.wins ?? 0}-${nextGame.opp?.losses ?? 0} · finalize depth and game plan`
+                  : "Advance to generate the next matchup."}
+              </p>
+              {nextGame ? (
+                <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                  <Button size="sm" variant="outline" onClick={() => onNavigate?.("Weekly Prep")}>Weekly Prep</Button>
+                  <Button size="sm" variant="ghost" onClick={() => onNavigate?.("Game Plan")}>Game Plan</Button>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
           <Card variant="secondary" className="weekly-hub-card">
             <CardContent className="weekly-hub-card__body">
               <p className="weekly-card-eyebrow">Cap</p>
               <strong>{formatMoneyM(cap.capRoom)} room</strong>
-              <p>{Number(cap.capRoom ?? 0) < 0 ? "Over cap: open Financials now." : "Cap is stable this week."}</p>
+              <p>{Number(cap.capRoom ?? 0) < 0 ? "Over cap — open Financials now." : "Cap is stable."}</p>
             </CardContent>
           </Card>
         </div>
       </section>
 
+      {/* ── Matchup Intel (coordinator brief) ───────────────────── */}
       <details className="weekly-expandable" open>
         <summary className="weekly-expandable__summary">
           <div>
@@ -257,7 +322,7 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
         <div className="weekly-expandable__body">
           <div className="weekly-intel-insights" role="list" aria-label="Matchup intelligence insights">
             {matchupIntel.insights.map((insight) => (
-              <div key={insight.id} role="listitem" className={`weekly-intel-insight tone-${insight.tone ?? 'info'}`}>
+              <div key={insight.id} role="listitem" className={`weekly-intel-insight tone-${insight.tone ?? "info"}`}>
                 <span>{insight.text}</span>
               </div>
             ))}
@@ -265,12 +330,21 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
           {matchupPriorities.length > 0 ? (
             <div className="weekly-intel-priorities" aria-label="Weekly priorities" style={{ marginTop: 8 }}>
               {matchupPriorities.map((item) => (
-                <div key={item.id} className={`weekly-urgent-item tone-${item.severity === 'warning' ? 'warning' : 'info'}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px' }}>
+                <div
+                  key={item.id}
+                  className={`weekly-urgent-item tone-${item.severity === "warning" ? "warning" : "info"}`}
+                  style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px" }}
+                >
                   {item.icon ? <span aria-hidden="true" style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span> : null}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <strong style={{ display: 'block' }}>{item.title}</strong>
-                    <span style={{ display: 'block', fontSize: '0.85em', opacity: 0.85, marginBottom: 6 }}>{item.description}</span>
-                    <Button size="sm" variant="outline" onClick={() => item.targetRoute && onNavigate?.(item.targetRoute)} disabled={!item.targetRoute}>
+                    <strong style={{ display: "block" }}>{item.title}</strong>
+                    <span style={{ display: "block", fontSize: "0.85em", opacity: 0.85, marginBottom: 6 }}>{item.description}</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => item.targetRoute && onNavigate?.(item.targetRoute)}
+                      disabled={!item.targetRoute}
+                    >
                       {item.ctaLabel}
                     </Button>
                   </div>
@@ -278,39 +352,65 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
               ))}
             </div>
           ) : null}
-          <div className="weekly-hub-prep-ctas" style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.('Weekly Prep')}>Open weekly prep</Button>
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.('Game Plan')}>Review game plan</Button>
+          <div className="weekly-hub-prep-ctas" style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Weekly Prep")}>Review weekly prep</Button>
+            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Game Plan")}>Review game plan</Button>
           </div>
         </div>
       </details>
 
-      <section className="weekly-section">
-        <SectionHeader title="Results" subtitle="One direct path to the latest completed game." />
-        <Card variant="secondary" className="weekly-hub-card">
-          <CardContent className="weekly-hub-card__body">
-            <p className="weekly-card-eyebrow">Latest completed game</p>
-            <strong>{latestCompletedGame?.story?.headline ?? "No completed game yet"}</strong>
-            <p>{latestCompletedGame?.story?.detail ?? "Play and finish a game to unlock Game Book details."}</p>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => (latestCompletedGame?.gameId ? onOpenBoxScore?.(latestCompletedGame.gameId) : onNavigate?.("Schedule"))}
-            >
-              {latestCompletedGame?.gameId ? (latestResultPresentation?.ctaLabel ?? "View result") : "Open schedule"}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => onNavigate?.("Weekly Results")}>
-              Weekly Results
-            </Button>
-          </CardContent>
-        </Card>
+      {/* ── Quick Navigation ─────────────────────────────────────── */}
+      <section className="weekly-section" aria-label="Quick navigation">
+        <SectionHeader title="Go To" subtitle="Quick access to every front-office surface." />
+        <div className="hub-action-grid">
+          {QUICK_ACTIONS.map((item) => (
+            <button key={item.tab} className="hub-action-card card-enter" onClick={() => onNavigate?.(item.tab)}>
+              <span className="hub-action-card__icon" aria-hidden>{item.icon}</span>
+              <span className="hub-action-card__label">{item.label}</span>
+              <span className="hub-action-card__sub">{item.sub}</span>
+            </button>
+          ))}
+        </div>
       </section>
 
+      {/* ── Latest Result (background context, collapsed) ────────── */}
+      <details className="weekly-expandable">
+        <summary className="weekly-expandable__summary">
+          <div>
+            <h3 className="weekly-section__title">Latest Result</h3>
+            <p className="weekly-section__subtitle">{latestCompletedGame?.story?.headline ?? "No completed game yet."}</p>
+          </div>
+          <span className="weekly-expandable__chevron">▾</span>
+        </summary>
+        <div className="weekly-expandable__body">
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">Last completed game</p>
+              <strong>{latestCompletedGame?.story?.headline ?? "No completed game yet"}</strong>
+              <p>{latestCompletedGame?.story?.detail ?? "Play and finish a game to unlock Game Book details."}</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => (latestCompletedGame?.gameId ? onOpenBoxScore?.(latestCompletedGame.gameId) : onNavigate?.("Schedule"))}
+              >
+                {latestCompletedGame?.gameId ? (latestResultPresentation?.ctaLabel ?? "View result") : "Open schedule"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => onNavigate?.("Weekly Results")}>
+                Weekly Results
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </details>
+
+      {/* ── League context (background, collapsed) ───────────────── */}
       <details className="weekly-expandable">
         <summary className="weekly-expandable__summary">
           <div>
             <h3 className="weekly-section__title">League</h3>
-            <p className="weekly-section__subtitle">Compact standings + top league signal.</p>
+            <p className="weekly-section__subtitle">
+              {standingsMeta.confRank > 0 ? `Conference #${standingsMeta.confRank} · Playoff line ${standingsMeta.playoffLineRecord}` : "Standings and league news."}
+            </p>
           </div>
           <span className="weekly-expandable__chevron">▾</span>
         </summary>
@@ -319,8 +419,12 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
             <Card variant="secondary" className="weekly-hub-card">
               <CardContent className="weekly-hub-card__body">
                 <p className="weekly-card-eyebrow">Standings</p>
-                <strong>{standingsSnapshot ? `Conference #${standingsSnapshot.confRank}` : "Unavailable"}</strong>
-                <p>{standingsSnapshot ? `Overall #${standingsSnapshot.overallRank} · Playoff line ${standingsSnapshot.playoffLineRecord}` : "Standings fill in as games are played."}</p>
+                <strong>{standingsMeta.confRank > 0 ? `Conference #${standingsMeta.confRank}` : "Unavailable"}</strong>
+                <p>
+                  {standingsMeta.overallRank > 0
+                    ? `Overall #${standingsMeta.overallRank} · Playoff line ${standingsMeta.playoffLineRecord}`
+                    : "Standings fill in as games are played."}
+                </p>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("Standings")}>Open standings</Button>
               </CardContent>
             </Card>
@@ -328,13 +432,20 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
               <CardContent className="weekly-hub-card__body">
                 <p className="weekly-card-eyebrow">League desk</p>
                 <strong>{topOffer ? `${topOffer.offeringTeamAbbr ?? "Team"} made an offer` : "No major league alerts"}</strong>
-                <p>{topOffer ? (topOfferSummary?.estimateLabel ?? topOffer.reason ?? "Open Trade Center for details.") : "Open league tabs for standings, leaders, and news."}</p>
-                <Button size="sm" variant="outline" onClick={() => onNavigate?.(topOffer ? "Trade Center" : "League")}>{topOffer ? "Open trade center" : "Open league"}</Button>
+                <p>
+                  {topOffer
+                    ? (topOfferSummary?.estimateLabel ?? topOffer.reason ?? "Open Trade Center for details.")
+                    : "Open league tabs for standings, leaders, and news."}
+                </p>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.(topOffer ? "Trade Center" : "League")}>
+                  {topOffer ? "Open trade center" : "Open league"}
+                </Button>
               </CardContent>
             </Card>
           </div>
         </div>
       </details>
+
     </div>
   );
 }

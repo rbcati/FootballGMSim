@@ -714,6 +714,37 @@ label {
 .weekly-tools-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .weekly-secondary-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
 .weekly-hub-v3 { gap: 8px; }
+/* ── Weekly Command Center V1 ── */
+.weekly-readiness-banner {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-radius: var(--radius-md); font-size: var(--text-sm); margin-bottom: 4px;
+}
+.weekly-readiness-banner.tone-danger { background: rgba(255,69,58,.12); border: 1px solid rgba(255,69,58,.35); color: var(--text); }
+.weekly-readiness-banner.tone-warning { background: rgba(255,159,10,.1); border: 1px solid rgba(255,159,10,.3); color: var(--text); }
+/* FranchiseHQ background-context collapsible sections */
+.app-hq-background-section { border: 1px solid var(--hairline); border-radius: var(--radius-md); margin-bottom: 8px; overflow: hidden; }
+.app-hq-background-section__summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 14px; cursor: pointer; list-style: none; user-select: none;
+  background: var(--surface-elevated);
+}
+.app-hq-background-section__summary::-webkit-details-marker { display: none; }
+.app-hq-background-section__summary strong { font-size: var(--text-sm); }
+.app-hq-background-section__summary small { font-size: 11px; color: var(--text-subtle); flex: 1; margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-hq-background-section__summary span { color: var(--text-muted); font-size: 12px; transition: transform .2s; }
+details[open] .app-hq-background-section__summary span { transform: rotate(180deg); }
+.app-hq-background-section__body { padding: 10px 14px 14px; }
+/* Inner collapsible for SectionCard-wrapped background sections */
+.app-hq-background-section__inner { border: none; }
+.app-hq-section-expand {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+  font-size: var(--text-xs); color: var(--text-muted); padding: 4px 0 8px; list-style: none; user-select: none;
+}
+.app-hq-section-expand::-webkit-details-marker { display: none; }
+/* Actions Required tone on FranchiseHQ */
+.app-hq-actions-required.tone-danger { border-color: rgba(255,69,58,.35) !important; background: rgba(255,69,58,.06) !important; }
+.app-hq-actions-required.tone-warning { border-color: rgba(255,159,10,.35) !important; background: rgba(255,159,10,.06) !important; }
+.app-hq-actions-required.tone-ok { border-color: rgba(52,199,89,.35) !important; background: rgba(52,199,89,.06) !important; }
 .weekly-section-head { display: grid; gap: 2px; }
 .weekly-section__subtitle { margin: 0; font-size: 11px; color: var(--text-subtle); }
 .weekly-card-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }

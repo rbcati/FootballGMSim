@@ -5,6 +5,8 @@ import TeamHub from '../TeamHub.jsx';
 import WeeklyPrepScreen from '../WeeklyPrepScreen.jsx';
 import GamePlanScreen from '../GamePlanScreen.jsx';
 import NewsFeed from '../NewsFeed.jsx';
+import WeeklyHub from '../WeeklyHub.jsx';
+import FranchiseHQ from '../FranchiseHQ.jsx';
 
 const league = {
   year: 2026,
@@ -80,5 +82,124 @@ describe('weekly loop cohesion surfaces', () => {
     const html = renderToString(<NewsFeed league={league} onNavigate={() => {}} onPlayerSelect={() => {}} />);
     expect(html).toContain('News &amp; Injuries');
     expect(html).toContain('Injury board');
+  });
+});
+
+describe('WeeklyHub command center layout', () => {
+  it('renders Actions Required section', () => {
+    const html = renderToString(
+      <WeeklyHub league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} onOpenBoxScore={() => {}} />,
+    );
+    expect(html).toContain('Actions Required');
+  });
+
+  it('renders This Week section with advance controls', () => {
+    const html = renderToString(
+      <WeeklyHub league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} onOpenBoxScore={() => {}} />,
+    );
+    expect(html).toContain('This Week');
+    expect(html).toContain('Advance Week');
+  });
+
+  it('renders Pulse section for secondary KPIs', () => {
+    const html = renderToString(
+      <WeeklyHub league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} onOpenBoxScore={() => {}} />,
+    );
+    expect(html).toContain('Pulse');
+    expect(html).toContain('Record');
+    expect(html).toContain('Cap');
+  });
+
+  it('renders matchup card when next game exists', () => {
+    const html = renderToString(
+      <WeeklyHub league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} onOpenBoxScore={() => {}} />,
+    );
+    expect(html).toContain('Matchup');
+    expect(html).toContain('DET');
+  });
+
+  it('renders Go To quick navigation section below decision area', () => {
+    const html = renderToString(
+      <WeeklyHub league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} onOpenBoxScore={() => {}} />,
+    );
+    expect(html).toContain('Go To');
+    // Quick nav must appear after decision sections in DOM order
+    const actionsPos = html.indexOf('Actions Required');
+    const goToPos = html.indexOf('Go To');
+    expect(actionsPos).toBeLessThan(goToPos);
+  });
+
+  it('renders without crashing when no next game exists', () => {
+    const noGameLeague = {
+      ...league,
+      schedule: { weeks: [{ week: 5, games: [{ id: 'g5', home: 2, away: 1, homeScore: 24, awayScore: 27, played: true }] }] },
+    };
+    expect(() => renderToString(
+      <WeeklyHub league={noGameLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} onOpenBoxScore={() => {}} />,
+    )).not.toThrow();
+  });
+
+  it('shows ready badge when gate has no warnings', () => {
+    // Offseason phase: gate short-circuits and returns no warnings → "Ready" badge visible
+    const offseasonLeague = { ...league, phase: 'offseason_resign', schedule: { weeks: [] } };
+    const html = renderToString(
+      <WeeklyHub league={offseasonLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} onOpenBoxScore={() => {}} />,
+    );
+    expect(html).toContain('Ready');
+  });
+});
+
+describe('FranchiseHQ command center layout', () => {
+  it('renders Actions Required section', () => {
+    const html = renderToString(
+      <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    expect(html).toContain('Actions Required');
+  });
+
+  it('renders advance week CTA', () => {
+    const html = renderToString(
+      <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    expect(html).toContain('Advance Week');
+  });
+
+  it('renders Coordinator Brief section', () => {
+    const html = renderToString(
+      <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    expect(html).toContain('Coordinator Brief');
+  });
+
+  it('renders Season Pulse section', () => {
+    const html = renderToString(
+      <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    expect(html).toContain('Season Pulse');
+  });
+
+  it('renders background sections with collapsible inner bodies', () => {
+    const html = renderToString(
+      <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    // These sections remain as SectionCards (heading preserved) with collapsible inner details
+    expect(html).toContain('Operations Snapshot');
+    expect(html).toContain('League Pulse');
+    // Collapsible summary triggers are present inside section bodies
+    expect(html).toContain('app-hq-background-section__inner');
+  });
+
+  it('renders advance-week-cta data-testid', () => {
+    const html = renderToString(
+      <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    expect(html).toContain('data-testid="advance-week-cta"');
+  });
+
+  it('renders without crashing when no completed games exist', () => {
+    const freshLeague = { ...league, schedule: { weeks: [{ week: 1, games: [{ id: 'g1', home: 1, away: 2, played: false }] }] } };
+    expect(() => renderToString(
+      <FranchiseHQ league={freshLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    )).not.toThrow();
   });
 });
