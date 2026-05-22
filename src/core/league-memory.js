@@ -500,9 +500,31 @@ function buildTeamStatLeaders(standings = []) {
 
 export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [], teams = [], seasonStats = [], championshipGameId = null, playerSeasonStatsV1 = null, transactionTimelineV1 = null }) {
   const sorted = [...(standings || [])].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
-  const userRow = sorted.find((t) => Number(t.id) === Number(userTeamId)) || null;
-  const userTeam = teams.find((t) => Number(t?.id) === Number(userTeamId)) ?? null;
-  const userRows = seasonStats.filter((row) => Number(row?.teamId) === Number(userTeamId));
+
+  const targetId = Number(userTeamId);
+  let userRow = null;
+  for (let i = 0; i < sorted.length; i++) {
+    if (Number(sorted[i].id) === targetId) {
+      userRow = sorted[i];
+      break;
+    }
+  }
+
+  let userTeam = null;
+  for (let i = 0; i < teams.length; i++) {
+    if (Number(teams[i]?.id) === targetId) {
+      userTeam = teams[i];
+      break;
+    }
+  }
+
+  const userRows = [];
+  for (let i = 0; i < seasonStats.length; i++) {
+    if (Number(seasonStats[i]?.teamId) === targetId) {
+      userRows.push(seasonStats[i]);
+    }
+  }
+
   const previousSummary = null;
   const seasonReview = userRow ? buildSeasonReview({ team: userTeam, standingsRow: userRow, teamStats: userRows, previousSummary }) : null;
   const playerReportCards = userRow ? buildPlayerReportCards({ team: userTeam, teamRows: userRows, review: seasonReview }) : [];
