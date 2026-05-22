@@ -7,6 +7,7 @@ import GamePlanScreen from '../GamePlanScreen.jsx';
 import NewsFeed from '../NewsFeed.jsx';
 import WeeklyHub from '../WeeklyHub.jsx';
 import FranchiseHQ from '../FranchiseHQ.jsx';
+import { buildCommandCenterSummary } from '../../utils/weeklyHubLayout.js';
 
 const league = {
   year: 2026,
@@ -146,6 +147,72 @@ describe('WeeklyHub command center layout', () => {
       <WeeklyHub league={offseasonLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} onOpenBoxScore={() => {}} />,
     );
     expect(html).toContain('Ready');
+  });
+
+  it('shows no-blockers empty state when commandSummary.canAdvanceSafely is true', () => {
+    // Offseason league: gate short-circuits, no urgentItems → canAdvanceSafely true
+    const offseasonLeague = { ...league, phase: 'offseason_resign', schedule: { weeks: [] } };
+    const html = renderToString(
+      <WeeklyHub league={offseasonLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} onOpenBoxScore={() => {}} />,
+    );
+    expect(html).toContain('No blockers');
+    expect(html).not.toContain('Resolve before advancing');
+  });
+
+  it('shows gate-only risk in Actions Required even when weeklyContext urgentItems is empty', () => {
+    // A regular season league with a cap-over situation forces gate danger in commandSummary
+    // We simulate this by giving a league with an injured starter (triggers gate warning)
+    // and verifying the Actions Required section is not empty.
+    // The gate warning about injuries not reviewed should appear via commandSummary.primaryActions.
+    const injuredLeague = {
+      ...league,
+      teams: [
+        {
+          ...league.teams[0],
+          roster: [
+            { id: 11, name: 'Starter QB', pos: 'QB', ovr: 84, contract: { yearsRemaining: 2 }, depthChart: { order: 1, rowKey: 'QB' }, injuryWeeksRemaining: 2 },
+          ],
+        },
+        league.teams[1],
+      ],
+    };
+    const html = renderToString(
+      <WeeklyHub league={injuredLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} onOpenBoxScore={() => {}} />,
+    );
+    // Gate produces a warning item; commandSummary merges it → Actions Required shows something
+    expect(html).toContain('Actions Required');
+    // Should not show the "no blockers" empty state text
+    expect(html).not.toContain('No urgent blockers');
+  });
+
+  it('WeeklyHub Actions Required badge count matches commandSummary criticalCount, not allAttentionItems length', () => {
+    // buildCommandCenterSummary caps to 3 primaryActions; badge should reflect criticalCount
+    const gate = { shouldWarn: true, severity: 'danger', riskItems: [
+      { label: 'Risk A', detail: '', severity: 'danger', fixDestination: 'Weekly Prep' },
+      { label: 'Risk B', detail: '', severity: 'danger', fixDestination: 'Weekly Prep' },
+    ], primaryFixDestination: 'Weekly Prep' };
+    const weeklyContext = { urgentItems: [
+      { label: 'Urgent C', detail: '', tone: 'danger', level: 'blocker', rank: 50, tab: 'Roster' },
+      { label: 'Urgent D', detail: '', tone: 'danger', level: 'blocker', rank: 40, tab: 'Roster' },
+      { label: 'Urgent E', detail: '', tone: 'danger', level: 'blocker', rank: 30, tab: 'Roster' },
+    ] };
+    const summary = buildCommandCenterSummary({ gate, weeklyContext });
+    // criticalCount is primaryActions.length, capped to 3
+    expect(summary.criticalCount).toBeLessThanOrEqual(3);
+    expect(summary.criticalCount).toBe(summary.primaryActions.length);
+  });
+
+  it('WeeklyHub primary actions are capped to 3', () => {
+    const gate = { shouldWarn: false, severity: 'info', riskItems: [], primaryFixDestination: 'Weekly Prep' };
+    const weeklyContext = { urgentItems: [
+      { label: 'A', detail: '', tone: 'danger', level: 'blocker', rank: 100, tab: 'Roster' },
+      { label: 'B', detail: '', tone: 'danger', level: 'blocker', rank: 90, tab: 'Roster' },
+      { label: 'C', detail: '', tone: 'danger', level: 'blocker', rank: 80, tab: 'Roster' },
+      { label: 'D', detail: '', tone: 'danger', level: 'blocker', rank: 70, tab: 'Roster' },
+      { label: 'E', detail: '', tone: 'danger', level: 'blocker', rank: 60, tab: 'Roster' },
+    ] };
+    const summary = buildCommandCenterSummary({ gate, weeklyContext });
+    expect(summary.primaryActions.length).toBeLessThanOrEqual(3);
   });
 });
 

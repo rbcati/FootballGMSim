@@ -172,11 +172,11 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
     return handleAdvanceOrGate();
   };
 
-  // Actions Required: show when there are real actionable items (not the fallback ok item)
-  const actionableItems = allAttentionItems.filter((i) => i.tone !== "ok");
-  const hasActions = actionableItems.length > 0;
+  // Actions Required: unified source of truth via commandSummary (gate riskItems + context urgentItems merged)
+  const primaryActions = commandSummary.primaryActions;
+  const hasActions = primaryActions.length > 0;
   const actionsRequiredBadge = hasActions
-    ? <Badge variant="outline" className={`tone-${commandSummary.readinessTone}`}>{commandSummary.criticalCount > 0 ? commandSummary.criticalCount : actionableItems.length}</Badge>
+    ? <Badge variant="outline" className={`tone-${commandSummary.readinessTone}`}>{commandSummary.criticalCount}</Badge>
     : null;
 
   return (
@@ -208,11 +208,14 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
         />
         {hasActions ? (
           <div className="weekly-urgent-list">
-            {actionableItems.slice(0, 3).map((item, idx) => (
+            {primaryActions.slice(0, 3).map((item, idx) => (
               <button
                 key={`${item.label}-${idx}`}
                 className={`weekly-urgent-item tone-${item.tone}`}
-                onClick={() => item.tab && onNavigate?.(item.tab)}
+                onClick={() => {
+                  const dest = item.tab ?? gate.primaryFixDestination ?? "Weekly Prep";
+                  onNavigate?.(dest);
+                }}
               >
                 <div>
                   <strong>{item.label}</strong>
@@ -221,6 +224,27 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
                 <span aria-hidden>›</span>
               </button>
             ))}
+            {commandSummary.secondaryActions.length > 0 ? (
+              <div style={{ marginTop: 4 }}>
+                {commandSummary.secondaryActions.slice(0, 2).map((item, idx) => (
+                  <button
+                    key={`sec-${item.label}-${idx}`}
+                    className={`weekly-urgent-item tone-${item.tone ?? "info"}`}
+                    style={{ opacity: 0.8 }}
+                    onClick={() => {
+                      const dest = item.tab ?? "Weekly Prep";
+                      onNavigate?.(dest);
+                    }}
+                  >
+                    <div>
+                      <strong>{item.label}</strong>
+                      <span>{item.detail}</span>
+                    </div>
+                    <span aria-hidden>›</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : (
           <p className="weekly-urgent-item tone-ok" style={{ padding: "10px 12px" }}>
