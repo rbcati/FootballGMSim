@@ -854,7 +854,7 @@ function buildViewState() {
     franchiseSeasonReviews: Array.isArray(meta?.franchiseSeasonReviews) ? meta.franchiseSeasonReviews.slice(-40) : [],
     seasonStorylines: Array.isArray(meta?.seasonStorylines) ? meta.seasonStorylines : [],
     hallOfFameClasses: Array.isArray(meta?.hallOfFame?.classes) ? meta.hallOfFame.classes.slice(0, 20) : [],
-    weeklyHeadlines: Array.isArray(meta?.weeklyHeadlines) ? meta.weeklyHeadlines.slice(-30) : [],
+    weeklyHeadlines: Array.isArray(meta?.weeklyHeadlines) ? meta.weeklyHeadlines.slice(-40) : [],
     settings: normalizeLeagueSettings(meta?.settings ?? {}),
     economy: normalizeLeagueEconomy(meta?.economy ?? {}, { year: meta?.year }),
     tradeDeadline,
@@ -2967,18 +2967,31 @@ async function handleAdvanceWeek(payload, id) {
   // ── Franchise Chronicle: parse this week's results into ranked headlines ───
   if (results.length > 0) {
     try {
+      // Pass current team records so the engine can detect upsets, streaks, and
+      // undefeated watches. applyGameResultToCache already mutated wins/losses.
+      const teamsSnapshot = cache.getAllTeams().map((t) => ({
+        id: t.id,
+        name: t.name,
+        abbr: t.abbr,
+        wins: t.wins ?? 0,
+        losses: t.losses ?? 0,
+        recentResults: Array.isArray(t.recentResults) ? t.recentResults : [],
+        conf: t.conf,
+        div: t.div,
+      }));
       const newHeadlines = parseWeeklyHeadlines({
         results,
         week,
         year: meta.year ?? 0,
         getPlayer: (id) => cache.getPlayer(id) ?? null,
+        teams: teamsSnapshot,
       });
       if (newHeadlines.length > 0) {
         const existing = Array.isArray(cache.getMeta().weeklyHeadlines) ? cache.getMeta().weeklyHeadlines : [];
-        // Deduplicate by id and keep the most recent 30
+        // Deduplicate by id; keep the most recent 40 (was 30, expanded for 6/week)
         const combined = [...existing, ...newHeadlines]
           .filter((h, idx, arr) => arr.findIndex((x) => x.id === h.id) === idx)
-          .slice(-30);
+          .slice(-40);
         cache.setMeta({ weeklyHeadlines: combined });
       }
     } catch (chronicleErr) {

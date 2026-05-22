@@ -14,6 +14,7 @@ import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay 
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildGameBookDestination } from '../utils/managementScreenRouting.js';
 import ChronicleHeadlineBanner from './ChronicleHeadlineBanner.tsx';
+import LeaguePulseCard from './LeaguePulseCard.jsx';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -416,6 +417,15 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         ))}
       </div>
 
+      {/* ── League Pulse — weekly headlines (prominent, above passive stats) ── */}
+      <LeaguePulseCard
+        headlines={Array.isArray(league?.weeklyHeadlines) ? league.weeklyHeadlines : []}
+        currentWeek={safeNum(league?.week, 1)}
+        currentYear={safeNum(league?.year, 0)}
+        onNavigate={onNavigate}
+        onViewAll={() => onNavigate?.('News')}
+      />
+
       {lastGame ? (
         <SectionCard title="Next Action" subtitle="Postgame handoff from the latest completed week." variant="info">
           <div className="app-hq-next-action-panel" data-testid="hq-next-action">
@@ -636,19 +646,23 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         </details>
       </SectionCard>
 
-      {/* ── League Pulse (background context, collapsed) ────────────────── */}
+      {/* ── League Pulse — overflow stories (collapsed background context) ── */}
+      {/* ── League Pulse overflow (collapsed background context) ─────────── */}
       <SectionCard
         title="League Pulse"
-        subtitle="Around the league this week."
+        subtitle="Franchise events and league stories this week."
         variant="compact"
         actions={<button type="button" className="btn btn-sm" onClick={() => onNavigate?.('League Pulse')}>Open full pulse</button>}
       >
-        <div className="app-news-compact-list">
-          {leaguePulseItems.map((item) => (
-            <CompactNewsCard key={item.id} title={item.headline} subtitle={item.detail} />
-          ))}
-          {!leaguePulseItems.length ? <EmptyState title="No league pulse yet." body="Advance to generate weekly stories." /> : null}
-        </div>
+        <details className="app-hq-background-section__inner">
+          <summary className="app-hq-section-expand">Show league stories ▾</summary>
+          <div className="app-news-compact-list" style={{ marginTop: 8 }}>
+            {leaguePulseItems.map((item) => (
+              <CompactNewsCard key={item.id} title={item.headline} subtitle={item.detail} />
+            ))}
+            {!leaguePulseItems.length ? <EmptyState title="No league pulse yet." body="Advance to generate weekly stories." /> : null}
+          </div>
+        </details>
       </SectionCard>
 
       {showGate ? (

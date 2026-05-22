@@ -15,12 +15,17 @@ interface ChronicleHeadlineBannerProps {
   onViewAll?: () => void;
 }
 
-const TYPE_ICON: Record<WeeklyHeadline['type'], string> = {
+const TYPE_ICON: Partial<Record<WeeklyHeadline['type'], string>> & { _default: string } = {
   INJURY: '🚑',
   MILESTONE: '🏆',
   UPSET: '⚡',
   BLOWOUT: '💥',
   COMEBACK: '🔥',
+  OVERTIME: '⏱️',
+  STREAK: '📈',
+  PERFORMANCE: '⭐',
+  DEFENSIVE: '🛡️',
+  _default: '📰',
 };
 
 const SEVERITY_STYLE: Record<WeeklyHeadline['severity'], React.CSSProperties> = {
@@ -48,7 +53,7 @@ const SEVERITY_BADGE: Record<WeeklyHeadline['severity'], { bg: string; color: st
 };
 
 function HeadlineCard({ headline, onViewAll }: { headline: WeeklyHeadline; onViewAll?: () => void }) {
-  const icon = TYPE_ICON[headline.type] ?? '📰';
+  const icon = TYPE_ICON[headline.type] ?? TYPE_ICON._default;
   const sev = SEVERITY_STYLE[headline.severity];
   const badge = SEVERITY_BADGE[headline.severity];
 

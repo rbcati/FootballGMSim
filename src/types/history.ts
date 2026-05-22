@@ -49,7 +49,7 @@ export interface WeeklyHeadline {
   id: string;
   week: number;
   year: number;
-  type: 'INJURY' | 'MILESTONE' | 'UPSET' | 'BLOWOUT' | 'COMEBACK';
+  type: 'INJURY' | 'MILESTONE' | 'UPSET' | 'BLOWOUT' | 'COMEBACK' | 'OVERTIME' | 'STREAK' | 'PERFORMANCE' | 'DEFENSIVE';
   severity: 'CRITICAL' | 'MAJOR' | 'MINOR';
   headlineText: string;
   detailText: string;

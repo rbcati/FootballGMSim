@@ -6,7 +6,8 @@
  * Accessible: focus trap, Escape to close.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
+import { buildPostgameEmotionalFrame } from '../utils/postgameEmotionalFrame.js';
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -71,6 +72,7 @@ export default function PostGameSummary({
   leaders,
   injuries,
   momentumChange,
+  recentResults,
   onClose,
   onViewGameBook,
 }) {
@@ -111,6 +113,11 @@ export default function PostGameSummary({
     el.addEventListener('keydown', trap);
     return () => el.removeEventListener('keydown', trap);
   }, []);
+
+  const emotionalFrame = useMemo(
+    () => buildPostgameEmotionalFrame(gameResult, leaders, injuries, momentumChange, recentResults),
+    [gameResult, leaders, injuries, momentumChange, recentResults],
+  );
 
   if (!gameResult) return null;
 
@@ -267,6 +274,58 @@ export default function PostGameSummary({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Emotional frame — biggest positive, concern, momentum */}
+        {emotionalFrame && (emotionalFrame.biggestPositive || emotionalFrame.biggestConcern || emotionalFrame.momentumDirection) && (
+          <div style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--hairline)',
+            borderRadius: 12,
+            padding: '12px 14px',
+            marginBottom: 12,
+          }}>
+            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 10 }}>
+              Week Takeaways
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {emotionalFrame.biggestPositive ? (
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: '1rem', lineHeight: 1.4, flexShrink: 0 }}>✅</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#34C759' }}>{emotionalFrame.biggestPositive.label}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 1 }}>{emotionalFrame.biggestPositive.detail}</div>
+                  </div>
+                </div>
+              ) : null}
+              {emotionalFrame.biggestConcern ? (
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: '1rem', lineHeight: 1.4, flexShrink: 0 }}>
+                    {emotionalFrame.biggestConcern.tone === 'danger' ? '⚠️' : '📌'}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: emotionalFrame.biggestConcern.tone === 'danger' ? '#FF453A' : emotionalFrame.biggestConcern.tone === 'warning' ? '#FF9F0A' : 'var(--text-muted)' }}>
+                      {emotionalFrame.biggestConcern.label}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 1 }}>{emotionalFrame.biggestConcern.detail}</div>
+                  </div>
+                </div>
+              ) : null}
+              {emotionalFrame.momentumDirection ? (
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: '1rem', lineHeight: 1.4, flexShrink: 0 }}>
+                    {emotionalFrame.momentumDirection.icon === '↑' ? '📈' : emotionalFrame.momentumDirection.icon === '↓' ? '📉' : '➡️'}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: emotionalFrame.momentumDirection.tone === 'ok' ? '#34C759' : emotionalFrame.momentumDirection.tone === 'danger' ? '#FF453A' : 'var(--text-muted)' }}>
+                      Momentum: {emotionalFrame.momentumDirection.label}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 1 }}>{emotionalFrame.momentumDirection.detail}</div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         )}
