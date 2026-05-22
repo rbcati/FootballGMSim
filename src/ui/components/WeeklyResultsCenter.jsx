@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from '../utils/boxScoreAccess.js';
 import { deriveCompactResultRecap, getGameLifecycleBucket, resolveDefaultResultsWeek, selectWeekGames } from '../utils/gameCenterResults.js';
 import { buildWeeklyLeagueRecap } from '../utils/weeklyLeagueRecap.js';
@@ -166,6 +166,7 @@ export default function WeeklyResultsCenter({ league, initialWeek = null, onGame
   const totalWeeks = Number(league?.schedule?.weeks?.length ?? 0);
   const resolvedWeek = useMemo(() => resolveDefaultResultsWeek(league?.schedule, { initialWeek, currentWeek: league?.week }), [initialWeek, league?.schedule, league?.week]);
   const [selectedWeek, setSelectedWeek] = useState(resolvedWeek);
+  useEffect(() => { setSelectedWeek(resolvedWeek); }, [resolvedWeek]);
 
   const teamById = useMemo(() => {
     const out = {};
