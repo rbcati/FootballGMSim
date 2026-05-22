@@ -510,29 +510,15 @@ function buildTeamStatLeaders(standings = []) {
 
 export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [], teams = [], seasonStats = [], championshipGameId = null, playerSeasonStatsV1 = null, transactionTimelineV1 = null }) {
   const sorted = [...(standings || [])].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
+
   const teamMap = new Map();
   for (const t of (teams || [])) {
     if (t?.id != null) teamMap.set(Number(t.id), t);
   }
 
-  const numericUserTeamId = Number(userTeamId);
-
-  let userRow = null;
-  for (let i = 0; i < sorted.length; i++) {
-    if (Number(sorted[i]?.id) === numericUserTeamId) {
-      userRow = sorted[i];
-      break;
-    }
-  }
-
-  const userTeam = teamMap.get(numericUserTeamId) ?? null;
-
-  const userRows = [];
-  for (let i = 0; i < (seasonStats || []).length; i++) {
-    if (Number(seasonStats[i]?.teamId) === numericUserTeamId) {
-      userRows.push(seasonStats[i]);
-    }
-  }
+  const userRow = sorted.find((t) => Number(t.id) === Number(userTeamId)) || null;
+  const userTeam = teamMap.get(Number(userTeamId)) ?? null;
+  const userRows = seasonStats.filter((row) => Number(row?.teamId) === Number(userTeamId));
   const previousSummary = null;
   const seasonReview = userRow ? buildSeasonReview({ team: userTeam, standingsRow: userRow, teamStats: userRows, previousSummary }) : null;
   const playerReportCards = userRow ? buildPlayerReportCards({ team: userTeam, teamRows: userRows, review: seasonReview }) : [];
