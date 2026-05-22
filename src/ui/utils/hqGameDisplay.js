@@ -33,8 +33,27 @@ export function getLatestUserCompletedGame(league) {
 
   if (!completed.length) return null;
   completed.sort((a, b) => a.__sortKey - b.__sortKey);
-  const latest = completed[completed.length - 1];
+  const latest = { ...completed[completed.length - 1] };
   delete latest.__sortKey;
+
+  // Slim schedule stores home/away as numeric IDs — enrich with team objects
+  // so that opponent abbreviation displays correctly in HQ.
+  const teams = Array.isArray(league?.teams) ? league.teams : [];
+  if (typeof latest.home !== 'object' || !latest.home?.abbr) {
+    const homeTeam = teams.find((t) => Number(t?.id) === Number(latest.homeId));
+    if (homeTeam) {
+      latest.home = homeTeam;
+      latest.homeAbbr = latest.homeAbbr ?? homeTeam.abbr;
+    }
+  }
+  if (typeof latest.away !== 'object' || !latest.away?.abbr) {
+    const awayTeam = teams.find((t) => Number(t?.id) === Number(latest.awayId));
+    if (awayTeam) {
+      latest.away = awayTeam;
+      latest.awayAbbr = latest.awayAbbr ?? awayTeam.abbr;
+    }
+  }
+
   return latest;
 }
 

@@ -387,23 +387,38 @@ export function selectFranchiseHQViewModel(league) {
     )
     : null;
 
+  // Slim schedule stores home/away as numeric IDs; resolve team objects for abbr display.
+  const scheduleTeams = Array.isArray(vm.league?.teams) ? vm.league.teams : [];
+  const prevHomeTeam = previousScheduledGame
+    ? (typeof previousScheduledGame.home === 'object' && previousScheduledGame.home?.abbr
+        ? previousScheduledGame.home
+        : scheduleTeams.find((t) => Number(t?.id) === Number(previousScheduledGame?.homeId ?? previousScheduledGame?.home)) ?? null)
+    : null;
+  const prevAwayTeam = previousScheduledGame
+    ? (typeof previousScheduledGame.away === 'object' && previousScheduledGame.away?.abbr
+        ? previousScheduledGame.away
+        : scheduleTeams.find((t) => Number(t?.id) === Number(previousScheduledGame?.awayId ?? previousScheduledGame?.away)) ?? null)
+    : null;
+
   const fallbackLastGame = previousScheduledGame
     ? {
       id: previousScheduledGame?.id,
-      homeId: previousScheduledGame?.homeId,
-      awayId: previousScheduledGame?.awayId,
-      homeAbbr: previousScheduledGame?.home?.abbr ?? 'HOME',
-      awayAbbr: previousScheduledGame?.away?.abbr ?? 'AWAY',
+      homeId: previousScheduledGame?.homeId ?? Number(previousScheduledGame?.home),
+      awayId: previousScheduledGame?.awayId ?? Number(previousScheduledGame?.away),
+      home: prevHomeTeam,
+      away: prevAwayTeam,
+      homeAbbr: previousScheduledGame?.homeAbbr ?? prevHomeTeam?.abbr ?? 'HOME',
+      awayAbbr: previousScheduledGame?.awayAbbr ?? prevAwayTeam?.abbr ?? 'AWAY',
       score: {
-        home: safeNum(previousScheduledGame?.homeScore),
-        away: safeNum(previousScheduledGame?.awayScore),
+        home: safeNum(previousScheduledGame?.homeScore ?? previousScheduledGame?.score?.home),
+        away: safeNum(previousScheduledGame?.awayScore ?? previousScheduledGame?.score?.away),
       },
       week: previousScheduledGame?.week,
       userWon:
-          (previousScheduledGame?.homeId === Number(vm.league?.userTeamId)
-            && safeNum(previousScheduledGame?.homeScore) > safeNum(previousScheduledGame?.awayScore))
-          || (previousScheduledGame?.awayId === Number(vm.league?.userTeamId)
-            && safeNum(previousScheduledGame?.awayScore) > safeNum(previousScheduledGame?.homeScore)),
+          (Number(previousScheduledGame?.homeId ?? previousScheduledGame?.home) === Number(vm.league?.userTeamId)
+            && safeNum(previousScheduledGame?.homeScore ?? previousScheduledGame?.score?.home) > safeNum(previousScheduledGame?.awayScore ?? previousScheduledGame?.score?.away))
+          || (Number(previousScheduledGame?.awayId ?? previousScheduledGame?.away) === Number(vm.league?.userTeamId)
+            && safeNum(previousScheduledGame?.awayScore ?? previousScheduledGame?.score?.away) > safeNum(previousScheduledGame?.homeScore ?? previousScheduledGame?.score?.home)),
     }
     : null;
 
