@@ -219,8 +219,9 @@ function PositionGroup({ group, players, onPlayerSelect, recentlyMovedId }) {
 }
 
 export default function DragAndDropDepthChart({ league, actions, onPlayerSelect, onNavigate = null }) {
-  const userTeam = league?.teams?.find((t) => t.id === league.userTeamId);
-  const roster = userTeam?.roster ?? [];
+  // Guard against null entries in the teams array after a save/load migration
+  const userTeam = league?.teams?.find((t) => t?.id === league?.userTeamId);
+  const roster = Array.isArray(userTeam?.roster) ? userTeam.roster.filter(Boolean) : [];
 
   const [chartOrder, setChartOrder] = useState(() => buildChartOrder(roster));
   const [activeGroup, setActiveGroup] = useState(null);

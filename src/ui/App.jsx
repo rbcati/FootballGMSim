@@ -517,14 +517,17 @@ function AppContent() {
       awayId: userResult.awayId,
     });
 
+    const resolvedHomeAbbr = homeTeam?.abbr ?? userResult.homeName?.slice(0, 3) ?? 'HOME';
+    const resolvedAwayAbbr = awayTeam?.abbr ?? userResult.awayName?.slice(0, 3) ?? 'AWAY';
+
     lastShownSkipWeekRef.current = simWeek;
     setSkipGameSummary({
       homeScore,
       awayScore,
-      homeTeam: homeTeam ?? { id: userResult.homeId, abbr: userResult.homeName?.slice(0, 3) ?? 'HOME' },
-      awayTeam: awayTeam ?? { id: userResult.awayId, abbr: userResult.awayName?.slice(0, 3) ?? 'AWAY' },
-      homeAbbr: homeTeam?.abbr ?? userResult.homeName?.slice(0, 3) ?? 'HOME',
-      awayAbbr: awayTeam?.abbr ?? userResult.awayName?.slice(0, 3) ?? 'AWAY',
+      homeTeam: homeTeam ?? { id: userResult.homeId, abbr: resolvedHomeAbbr },
+      awayTeam: awayTeam ?? { id: userResult.awayId, abbr: resolvedAwayAbbr },
+      homeAbbr: resolvedHomeAbbr,
+      awayAbbr: resolvedAwayAbbr,
       userTeamId: league.userTeamId,
       week: simWeek,
       phase: league.phase,
@@ -532,6 +535,30 @@ function AppContent() {
       injuries,
       gameId,
     });
+
+    // Archive the user's completed game immediately so Franchise HQ's
+    // "Last Result" card always reflects the real score — not a stale
+    // placeholder or a different team's result from the migration batch.
+    try {
+      saveGame(gameId, {
+        season: league?.seasonId,
+        week: simWeek,
+        homeId: userResult.homeId,
+        awayId: userResult.awayId,
+        homeAbbr: resolvedHomeAbbr,
+        awayAbbr: resolvedAwayAbbr,
+        homeScore,
+        awayScore,
+        teamStats: userResult.teamStats ?? null,
+        playerStats: userResult.playerStats ?? null,
+        scoringSummary: Array.isArray(userResult.scoringSummary) ? userResult.scoringSummary : [],
+        recap: userResult.recap ?? userResult.recapText ?? null,
+        summary: userResult.summary ?? null,
+        timestamp: Date.now(),
+      });
+    } catch {
+      // archive save is best-effort; game result is still correct in league state
+    }
   }, [simulating, lastResults, lastSimWeek, userGameLogs, postGameResult, league]);
 
   // ── Keyboard shortcuts (desktop) ──────────────────────────────────────────
@@ -649,8 +676,11 @@ function AppContent() {
     }
     const timeoutMs = 15000;
     const timer = setTimeout(() => {
+      // Set active: false so the slot stops showing "Loading franchise state…"
+      // while the error banner is visible. The user can retry via the banner.
       setInitFlow((prev) => prev?.active ? {
         ...prev,
+        active: false,
         timedOut: true,
         message: 'Initialization is taking longer than expected. You can retry without losing this slot.',
       } : prev);
