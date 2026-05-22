@@ -510,6 +510,31 @@ function buildTeamStatLeaders(standings = []) {
 
 export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [], teams = [], seasonStats = [], championshipGameId = null, playerSeasonStatsV1 = null, transactionTimelineV1 = null }) {
   const sorted = [...(standings || [])].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
+  const targetId = Number(userTeamId);
+  let userRow = null;
+  for (let i = 0; i < sorted.length; i++) {
+    if (Number(sorted[i].id) === targetId) {
+      userRow = sorted[i];
+      break;
+    }
+  }
+
+  const teamMap = new Map();
+  let userTeam = null;
+  for (const t of (teams || [])) {
+    if (t?.id != null) {
+      teamMap.set(Number(t.id), t);
+      if (Number(t.id) === targetId) userTeam = t;
+    }
+  }
+
+  const userRows = [];
+  for (let i = 0; i < seasonStats.length; i++) {
+    if (Number(seasonStats[i]?.teamId) === targetId) {
+      userRows.push(seasonStats[i]);
+    }
+  }
+
 
   const teamMap = new Map();
   for (let i = 0; i < teams.length; i++) {

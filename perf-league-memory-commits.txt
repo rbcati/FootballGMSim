@@ -1,0 +1,15 @@
+f8c83e0 ⚡ Optimize array find and filter operations in league-memory.js
+5d6f733 Merge pull request #1476 from rbcati/jules-9711884292951892196-f544efed
+1524eb3 Merge pull request #1477 from rbcati/jules-5803438390917813883-4793e3a8
+550ee9c Merge pull request #1474 from rbcati/perf-optimize-updateTeamStandings-18200742960152627513
+468fde8 ⚡ Optimize team lookup in league memory storyline generation
+c921b1a Optimize team lookup in buildSeasonArchiveSummary
+f52ef51 Add patch artifacts and pr description
+0d5aea3 ⚡ Optimize array find and filter operations in league-memory.js
+c35f4a4 perf(game-simulator): optimize updateTeamStandings with _teamsMap
+12edcbf Merge pull request #1473 from rbcati/trade-finder-perf-10458898793941188429
+2a7c876 ⚡ Remove redundant team search in trade finder
+17e62c2 Merge pull request #1449 from rbcati/ui-polish-visual-feedback-2464769559739155932
+737ef03 Merge pull request #1471 from rbcati/fix-daily-regression-tests-and-increase-tension-10108473366848380974
+1baf7ed test: fix daily regression tests
+c026f8c feat(ui): improve visual polish with smooth transitions and robust tactile feedback
