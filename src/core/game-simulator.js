@@ -326,8 +326,12 @@ export function updateTeamStandings(league, teamId, stats) {
     // 1. Resolve Team Object
     let team = null;
 
-    if (league && league.teams) {
-        team = league.teams.find(t => t.id === teamId);
+    if (league) {
+        if (league._teamsMap) {
+            team = league._teamsMap[teamId];
+        } else if (league.teams) {
+            team = league.teams.find(t => t.id === teamId);
+        }
     }
 
     // Return null if we can't find the team
