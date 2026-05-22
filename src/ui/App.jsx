@@ -173,6 +173,7 @@ function AppContent() {
   const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showWeeklyEventModal, setShowWeeklyEventModal] = useState(false);
+  const [simConfirmTarget, setSimConfirmTarget] = useState(null);
   const { settings, updateSetting } = useSettings();
   const soundEnabled = settings?.soundEnabled ?? true;
   const isWeeklyResultPhase = league?.phase === 'preseason' || league?.phase === 'regular' || league?.phase === 'playoffs';
@@ -429,6 +430,11 @@ function AppContent() {
     actions.simToPhase(targetPhase);
   }, [busy, simulating, isBatchSimBlocking, actions]);
 
+  const handleRequestSimToPhase = useCallback((targetPhase) => {
+    if (busy || simulating || advancingRef.current || isBatchSimBlocking) return;
+    setSimConfirmTarget(targetPhase);
+  }, [busy, simulating, isBatchSimBlocking]);
+
   const handleCancelBatchSim = useCallback(() => {
     actions.cancelSimToPhase();
   }, [actions]);
@@ -440,7 +446,7 @@ function AppContent() {
   }, [actions, batchSim]);
 
   const handleReset = useCallback(() => {
-    if (window.confirm('Reset/Delete your active save? This cannot be undone.')) {
+    if (window.confirm('Reset Franchise? This permanently deletes your current save and starts over. This cannot be undone.')) {
       actions.reset();
     }
   }, [actions]);
@@ -696,7 +702,7 @@ function AppContent() {
       return {
         label: 'Sim to Playoffs',
         title: 'Simulate all remaining regular season weeks',
-        onClick: () => handleSimToPhase('playoffs'),
+        onClick: () => handleRequestSimToPhase('playoffs'),
         disabled: !canUseTopActions,
       };
     }
@@ -704,7 +710,7 @@ function AppContent() {
       return {
         label: 'Sim to Offseason',
         title: 'Simulate remaining playoff games to offseason',
-        onClick: () => handleSimToPhase('offseason'),
+        onClick: () => handleRequestSimToPhase('offseason'),
         disabled: !canUseTopActions,
       };
     }
@@ -712,12 +718,12 @@ function AppContent() {
       return {
         label: 'Sim to Season',
         title: 'Simulate through offseason to next preseason',
-        onClick: () => handleSimToPhase('preseason'),
+        onClick: () => handleRequestSimToPhase('preseason'),
         disabled: !canUseTopActions,
       };
     }
     return null;
-  }, [safePhase, canUseTopActions, handleSimToPhase]);
+  }, [safePhase, canUseTopActions, handleRequestSimToPhase]);
 
   const utilityActions = useMemo(() => {
     const items = [];
@@ -726,7 +732,7 @@ function AppContent() {
       items.push({
         label: 'Sim to Offseason',
         title: 'Simulate through playoffs to offseason',
-        onClick: () => handleSimToPhase('offseason'),
+        onClick: () => handleRequestSimToPhase('offseason'),
         disabled: !canUseTopActions,
       });
     }
@@ -734,19 +740,19 @@ function AppContent() {
       items.push({
         label: 'Sim to Season',
         title: 'Simulate through offseason to next preseason',
-        onClick: () => handleSimToPhase('preseason'),
+        onClick: () => handleRequestSimToPhase('preseason'),
         disabled: !canUseTopActions,
       });
     }
 
     items.push(
-      { label: 'Save Game', onClick: () => activeSlot && actions.saveSlot(activeSlot), disabled: !activeSlot || busy || isBatchSimBlocking },
-      { label: 'Save Slots', onClick: () => setActiveSlot(null), disabled: busy || isBatchSimBlocking },
+      { label: 'Quick Save', onClick: () => activeSlot && actions.saveSlot(activeSlot), disabled: !activeSlot || busy || isBatchSimBlocking },
+      { label: 'Manage Saves', onClick: () => setActiveSlot(null), disabled: busy || isBatchSimBlocking },
       { label: 'Reset Franchise', onClick: handleReset, disabled: busy || isBatchSimBlocking, danger: true },
     );
 
     return items;
-  }, [safePhase, canUseTopActions, activeSlot, actions, busy, isBatchSimBlocking, handleReset, handleSimToPhase]);
+  }, [safePhase, canUseTopActions, activeSlot, actions, busy, isBatchSimBlocking, handleReset, handleRequestSimToPhase]);
 
   const simPhaseLabel = useMemo(() => {
     if (!league?.phase) return 'Initializing';
@@ -1051,6 +1057,42 @@ function AppContent() {
         </div>
       </header>
 
+      {/* ── Sim Confirmation Dialog ───────────────────────────────────── */}
+      {simConfirmTarget ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm long simulation"
+          data-testid="sim-confirm-dialog"
+          className="app-banner app-banner-warn"
+          style={{ margin: '0 0 8px', display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px' }}
+        >
+          <span className="app-banner-text" data-testid="sim-confirm-text">
+            {simConfirmTarget === 'playoffs'
+              ? 'Sim all remaining regular-season weeks? You may skip weekly decisions, injuries, contracts, and game-plan adjustments.'
+              : simConfirmTarget === 'offseason'
+              ? 'Sim to offseason? You may skip remaining games and weekly decisions.'
+              : 'Sim through offseason to next preseason? You may skip offseason decisions.'}
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="btn btn-primary app-banner-btn"
+              data-testid="sim-confirm-proceed"
+              onClick={() => { handleSimToPhase(simConfirmTarget); setSimConfirmTarget(null); }}
+            >
+              Sim anyway
+            </button>
+            <button
+              className="btn app-banner-btn"
+              data-testid="sim-confirm-cancel"
+              onClick={() => setSimConfirmTarget(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* ── Simulation progress bar ────────────────────────────────────── */}
       {simulating && (
         <div className="app-sim-progress">
@@ -1083,15 +1125,27 @@ function AppContent() {
       {batchSim && (
         <div className="app-batch-overlay">
           <div className="app-batch-title">
-            Simulating to {batchSim.targetPhase}...
+            {batchSim.targetPhase === 'playoffs'
+              ? 'Simulating to playoffs…'
+              : batchSim.targetPhase === 'offseason'
+              ? 'Simulating to offseason…'
+              : batchSim.targetPhase === 'preseason'
+              ? 'Simulating to next season…'
+              : `Simulating to ${batchSim.targetPhase}…`}
           </div>
           <div className="app-batch-detail">
-            {batchSim.phase === 'regular' ? `Week ${batchSim.currentWeek}` :
-             batchSim.phase === 'playoffs' ? `Playoffs Week ${batchSim.currentWeek}` :
-             batchSim.phase || 'Initializing...'}
+            {batchSim.phase === 'regular' ? `Regular Season · Week ${batchSim.currentWeek}` :
+             batchSim.phase === 'playoffs' ? `Playoffs · Week ${batchSim.currentWeek}` :
+             batchSim.phase || 'Starting up…'}
           </div>
           <div className="app-batch-detail" style={{ opacity: 0.85, fontSize: 12 }}>
-            Status: {batchSim.status || 'running'}
+            {batchSim.status === 'running' || !batchSim.status
+              ? 'Simulating weeks — this may take a moment.'
+              : batchSim.status === 'cancelled'
+              ? 'Simulation cancelled. You can retry or return to your franchise.'
+              : batchSim.status === 'completed'
+              ? 'Simulation complete!'
+              : batchSim.status}
           </div>
           <div className="app-batch-bar">
             <div className="app-batch-bar-fill" />

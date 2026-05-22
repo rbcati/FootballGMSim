@@ -190,6 +190,38 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
         <div className="hub-hero__meta">{standingsMeta.standingsPosition} in {standingsMeta.divisionName}</div>
       </div>
 
+      {/* ── GM Weekly Loop Hint (early-game guide, weeks 1–4) ───── */}
+      {(league?.week ?? 1) <= 4 ? (
+        <div
+          className="weekly-loop-hint"
+          role="note"
+          aria-label="GM weekly loop guide"
+          data-testid="gm-loop-hint"
+          style={{ padding: '8px 12px', marginBottom: 8, background: 'var(--surface-2, var(--surface))', borderRadius: 8, fontSize: '0.82em', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, opacity: 0.9 }}
+        >
+          <strong style={{ marginRight: 2 }}>Weekly loop:</strong>
+          <button
+            style={{ background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer', textDecoration: 'underline', color: 'var(--accent, inherit)', fontSize: 'inherit' }}
+            onClick={() => onNavigate?.("Roster")}
+            aria-label="Go to Roster and Depth Chart"
+          >1) Review roster/depth</button>
+          <span aria-hidden="true">→</span>
+          <button
+            style={{ background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer', textDecoration: 'underline', color: 'var(--accent, inherit)', fontSize: 'inherit' }}
+            onClick={() => onNavigate?.("Game Plan")}
+            aria-label="Go to Game Plan"
+          >2) Set game plan</button>
+          <span aria-hidden="true">→</span>
+          <button
+            style={{ background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer', textDecoration: 'underline', color: 'var(--accent, inherit)', fontSize: 'inherit' }}
+            onClick={() => onNavigate?.("Weekly Prep")}
+            aria-label="Go to Weekly Prep"
+          >3) Check actions required</button>
+          <span aria-hidden="true">→</span>
+          <span style={{ opacity: 0.75 }}>4) Advance week</span>
+        </div>
+      ) : null}
+
       {/* ── Readiness Warning Banner (only when danger-level) ───── */}
       {gate.shouldWarn && gate.severity === "danger" ? (
         <div className={`weekly-readiness-banner tone-danger`} role="alert" aria-live="polite">
