@@ -34,6 +34,12 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await expect(advanceBtn).toBeVisible();
   const startWeek = await page.evaluate(() => window?.state?.league?.week ?? 1);
   await advanceBtn.click();
+  // Fresh franchises trigger the readiness gate (game plan not reviewed).
+  // Dismiss it so the user-game prompt appears with the "Simulate (Skip)" option.
+  const gateAdvanceBtn = page.getByTestId('gate-advance-anyway-btn');
+  if (await gateAdvanceBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await gateAdvanceBtn.click();
+  }
   const skipPrompt = page.getByRole('button', { name: /Simulate \(Skip\)/i });
   await skipPrompt.click({ timeout: 10000 }).catch(() => {});
   await page.waitForFunction(

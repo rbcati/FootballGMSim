@@ -122,3 +122,25 @@ export function getGamesByWeek(season: string | number, week: number): ArchivedG
     .filter((game) => String(game?.season ?? "") === seasonKey && Number(game?.week) === weekNum)
     .sort((a, b) => Number(a?.timestamp ?? 0) - Number(b?.timestamp ?? 0));
 }
+
+/** Returns the most recent archived game involving the given user team, or null. */
+export function getLatestUserTeamGame(
+  userTeamId: number | string | null | undefined,
+): ArchivedGame | null {
+  if (userTeamId == null) return null;
+  const uid = Number(userTeamId);
+  if (!Number.isFinite(uid)) return null;
+  const items = Object.values(safeRead()).filter(
+    (g) => Number(g?.homeId) === uid || Number(g?.awayId) === uid,
+  );
+  if (!items.length) return null;
+  return (
+    items.sort((a, b) => {
+      const seasonDiff = Number(b?.season ?? 0) - Number(a?.season ?? 0);
+      if (seasonDiff) return seasonDiff;
+      const weekDiff = Number(b?.week ?? 0) - Number(a?.week ?? 0);
+      if (weekDiff) return weekDiff;
+      return Number(b?.timestamp ?? 0) - Number(a?.timestamp ?? 0);
+    })[0] ?? null
+  );
+}

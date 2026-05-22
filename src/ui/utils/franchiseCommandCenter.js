@@ -4,7 +4,7 @@ import { deriveTeamCapSnapshot, formatMoneyM } from './numberFormatting.js';
 import { getHQViewModel } from '../../state/selectors.js';
 import { rankHqPriorityItems, getActionContext } from './hqHelpers.js';
 import { buildCompletedGamePresentation } from './boxScoreAccess.js';
-import { getRecentGames as getArchivedRecentGames } from '../../core/archive/gameArchive.ts';
+import { getLatestUserTeamGame } from '../../core/archive/gameArchive.ts';
 import { logChronicleEvent, syncFranchiseChronicle } from './franchiseChronicle.js';
 import { applyEventDecision, pickWorstEventChoice, resolveWeeklyEvent } from './franchiseEvents.js';
 import { buildWeeklyIntelligence, buildActionableWeeklyPriorities } from './weeklyIntelligence.js';
@@ -375,7 +375,9 @@ export function selectFranchiseHQViewModel(league) {
   const prep = deriveWeeklyPrepState(vm.league);
   const nextGame = getPrepNextGame(vm.league);
   const previousScheduledGame = getPrevGame(vm.league);
-  const latestArchived = getArchivedRecentGames(1)?.[0] ?? null;
+  // Use user-team-filtered lookup so a non-user game from batch simulation
+  // never surfaces as the "last game" in Franchise HQ.
+  const latestArchived = getLatestUserTeamGame(vm.league?.userTeamId) ?? null;
   const latestGamePresentation = latestArchived
     ? buildCompletedGamePresentation(
       {

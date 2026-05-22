@@ -281,8 +281,10 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
   const [injuredOnly, setInjuredOnly] = useState(false);
 
   const activeTeamId = teamId ?? league?.userTeamId;
-  const team = league?.teams?.find(t => t.id === activeTeamId);
-  const roster = team?.roster || [];
+  // Use optional chaining on `t` to guard against null entries in the teams array
+  const team = league?.teams?.find(t => t?.id === activeTeamId);
+  // Filter null/undefined players so downstream helpers don't throw on bad save data
+  const roster = Array.isArray(team?.roster) ? team.roster.filter(Boolean) : [];
   const isUserTeam = activeTeamId === league?.userTeamId;
 
   const filtered = useMemo(() => {
