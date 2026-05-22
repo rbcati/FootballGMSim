@@ -324,6 +324,70 @@ export function pruneWeeklyPrepStorage(activeLeague) {
   }
 }
 
+// ---- Game plan write helpers ----
+
+export const GAME_PLAN_DEFAULTS = Object.freeze({
+  runPassBalance: 50,
+  aggressionLevel: 50,
+  deepShortBalance: 50,
+});
+
+export const GAME_PLAN_PRESETS = Object.freeze({
+  balanced: Object.freeze({ label: 'Balanced', runPassBalance: 50, aggressionLevel: 50, deepShortBalance: 50 }),
+  attackWeakSecondary: Object.freeze({ label: 'Attack Weak Secondary', runPassBalance: 65, aggressionLevel: 60, deepShortBalance: 62 }),
+  groundControl: Object.freeze({ label: 'Ground Control', runPassBalance: 35, aggressionLevel: 42, deepShortBalance: 40 }),
+  quickGame: Object.freeze({ label: 'Quick Game / Protect QB', runPassBalance: 58, aggressionLevel: 45, deepShortBalance: 30 }),
+  conservativeUnderdog: Object.freeze({ label: 'Conservative Underdog', runPassBalance: 45, aggressionLevel: 35, deepShortBalance: 38 }),
+  aggressiveFavorite: Object.freeze({ label: 'Aggressive Favorite', runPassBalance: 62, aggressionLevel: 68, deepShortBalance: 60 }),
+});
+
+export function normalizeGamePlan(rawPlan) {
+  const raw = rawPlan && typeof rawPlan === 'object' ? rawPlan : {};
+  function clampField(val, def) {
+    const n = Number(val);
+    if (!Number.isFinite(n)) return def;
+    return Math.min(100, Math.max(0, n));
+  }
+  return {
+    runPassBalance: clampField(raw.runPassBalance, GAME_PLAN_DEFAULTS.runPassBalance),
+    aggressionLevel: clampField(raw.aggressionLevel, GAME_PLAN_DEFAULTS.aggressionLevel),
+    deepShortBalance: clampField(raw.deepShortBalance, GAME_PLAN_DEFAULTS.deepShortBalance),
+  };
+}
+
+export function getStoredGamePlan() {
+  return readStoredGamePlan();
+}
+
+export function saveStoredGamePlan(nextPlan) {
+  if (typeof window === 'undefined') return;
+  try {
+    const normalized = normalizeGamePlan(nextPlan);
+    const existing = readStoredGamePlan();
+    window.localStorage.setItem(GAME_PLAN_STORAGE_KEY, JSON.stringify({ ...existing, ...normalized }));
+  } catch {
+    // no-op on quota/permission issues
+  }
+}
+
+export function resetStoredGamePlan() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(GAME_PLAN_STORAGE_KEY, JSON.stringify({ ...GAME_PLAN_DEFAULTS }));
+  } catch {
+    // no-op on quota/permission issues
+  }
+}
+
+export function recommendGamePlanPreset({ prep } = {}) {
+  const insights = prep?.insights ?? {};
+  if (insights.weakSecondary) return 'attackWeakSecondary';
+  if (insights.weakRunDefense) return 'groundControl';
+  if (insights.elitePassRush) return 'quickGame';
+  if (insights.explosiveOpponentOffense) return 'conservativeUnderdog';
+  return 'balanced';
+}
+
 export function deriveWeeklyPrepState(league) {
   const userTeam = getTeam(league, league?.userTeamId);
   const nextGame = getNextGame(league);
