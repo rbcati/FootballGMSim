@@ -512,11 +512,22 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
   const sorted = [...(standings || [])].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
 
   const teamMap = new Map();
-  for (const t of (teams || [])) {
-    if (t?.id != null) teamMap.set(Number(t.id), t);
+  for (let i = 0; i < teams.length; i++) {
+    const t = teams[i];
+    if (t?.id != null) {
+      teamMap.set(Number(t.id), t);
+    }
   }
 
-  const userRow = sorted.find((t) => Number(t.id) === Number(userTeamId)) || null;
+  const sortedMap = new Map();
+  for (let i = 0; i < sorted.length; i++) {
+    const t = sorted[i];
+    if (t?.id != null) {
+      sortedMap.set(Number(t.id), t);
+    }
+  }
+
+  const userRow = sortedMap.get(Number(userTeamId)) || null;
   const userTeam = teamMap.get(Number(userTeamId)) ?? null;
   const userRows = seasonStats.filter((row) => Number(row?.teamId) === Number(userTeamId));
   const previousSummary = null;
