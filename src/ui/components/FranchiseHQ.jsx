@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { autoBuildDepthChart, depthWarnings } from '../../core/depthChart.js';
-import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
+import { markWeeklyPrepStep, deriveWeeklyPrepState } from '../utils/weeklyPrep.js';
+import { evaluateWeeklyContext } from '../utils/weeklyContext.js';
+import { buildAdvanceReadinessGate } from '../utils/advanceReadinessGate.js';
+import AdvanceReadinessGate from './AdvanceReadinessGate.jsx';
 import { selectFranchiseHQViewModel } from '../utils/franchiseCommandCenter.js';
 import { buildWeeklyCommandHub } from '../utils/weeklyCommandHub.js';
 import { rankLeaguePulseItems } from '../../core/leaguePulse.js';
@@ -30,7 +33,14 @@ function formatRecordInline(record) {
 
 export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, simulating }) {
   const [lineupToast, setLineupToast] = useState(null);
+  const [showGate, setShowGate] = useState(false);
   const command = useMemo(() => selectFranchiseHQViewModel(league), [league]);
+  const hqPrep = useMemo(() => deriveWeeklyPrepState(league), [league]);
+  const hqWeeklyContext = useMemo(() => evaluateWeeklyContext(league), [league]);
+  const gate = useMemo(
+    () => buildAdvanceReadinessGate({ league, prep: hqPrep, weeklyContext: hqWeeklyContext }),
+    [league, hqPrep, hqWeeklyContext],
+  );
 
   if (command.readyState !== 'ready') {
     return <EmptyState title="HQ loading" body="Team context is still loading or this save is missing team ownership metadata." />;
@@ -39,6 +49,24 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
   const userTeam = (league?.teams ?? []).find((t) => Number(t?.id) === Number(league?.userTeamId));
   const opponent = command.nextGame?.opp ?? null;
   const nextOpponentDisplay = useMemo(() => getNextOpponentDisplay(command.nextGame), [command.nextGame]);
+
+  const handleAdvanceOrGate = () => {
+    if (gate.shouldWarn) {
+      setShowGate(true);
+    } else {
+      onAdvanceWeek?.();
+    }
+  };
+
+  const handleGateAdvanceAnyway = () => {
+    setShowGate(false);
+    onAdvanceWeek?.();
+  };
+
+  const handleGateReview = (dest) => {
+    setShowGate(false);
+    onNavigate?.(dest);
+  };
 
   const handleSetLineup = () => {
     const team = (league?.teams ?? []).find((t) => Number(t?.id) === Number(league?.userTeamId));
@@ -323,7 +351,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
               {hqNextAction.route ? (
                 <button type="button" className="btn btn-sm" onClick={() => onNavigate?.(hqNextAction.route)}>{hqNextAction.label}</button>
               ) : (
-                <button type="button" className="btn btn-sm" onClick={onAdvanceWeek} disabled={busy || simulating}>{busy || simulating ? 'Advancing…' : 'Advance Week'}</button>
+                <button type="button" className="btn btn-sm" onClick={handleAdvanceOrGate} disabled={busy || simulating}>{busy || simulating ? 'Advancing…' : 'Advance Week'}</button>
               )}
             </article>
           </div>
@@ -536,8 +564,18 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         ) : null}
       </section>
 
+      {showGate ? (
+        <div style={{ padding: '0 var(--space-2)', marginBottom: 8 }}>
+          <AdvanceReadinessGate
+            gate={gate}
+            onAdvanceAnyway={handleGateAdvanceAnyway}
+            onReview={handleGateReview}
+            onCancel={() => setShowGate(false)}
+          />
+        </div>
+      ) : null}
       <div className="app-hq-sticky-advance">
-        <Button className="app-command-advance app-command-advance-gold" data-testid="advance-week-cta" onClick={onAdvanceWeek} disabled={busy || simulating} aria-label={`Advance Week — move from ${command.weekLabel} to next week`} title="Advance Week">
+        <Button className="app-command-advance app-command-advance-gold" data-testid="advance-week-cta" onClick={handleAdvanceOrGate} disabled={busy || simulating} aria-label={`Advance Week — move from ${command.weekLabel} to next week`} title="Advance Week">
           {busy || simulating ? 'Advancing…' : 'Advance Week'}
           <HQIcon name="arrowRight" size={16} />
         </Button>

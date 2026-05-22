@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,8 @@ import { findLatestUserCompletedGame } from "../utils/completedGameSelectors.js"
 import { buildCompletedGamePresentation } from "../utils/boxScoreAccess.js";
 import { buildWeeklyIntelligence, buildActionableWeeklyPriorities } from "../utils/weeklyIntelligence.js";
 import { deriveWeeklyPrepState } from "../utils/weeklyPrep.js";
+import { buildAdvanceReadinessGate } from "../utils/advanceReadinessGate.js";
+import AdvanceReadinessGate from "./AdvanceReadinessGate.jsx";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -58,6 +60,12 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
   const prep = useMemo(() => deriveWeeklyPrepState(league), [league]);
   const matchupIntel = useMemo(() => buildWeeklyIntelligence({ league, team: user, nextGame, prep }), [league, user, nextGame, prep]);
   const matchupPriorities = useMemo(() => buildActionableWeeklyPriorities({ team: user, nextGame, prep }), [user, nextGame, prep]);
+
+  const gate = useMemo(
+    () => buildAdvanceReadinessGate({ league, prep, weeklyContext }),
+    [league, prep, weeklyContext],
+  );
+  const [showGate, setShowGate] = useState(false);
 
   if (!league || !user || !weeklyContext) return null;
 
@@ -125,10 +133,28 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
 
   const topOfferSummary = topOffer ? buildIncomingOfferPresentation({ offer: topOffer, league, userTeamId: league?.userTeamId }) : null;
 
+  const handleAdvanceOrGate = () => {
+    if (gate.shouldWarn) {
+      setShowGate(true);
+    } else {
+      onAdvanceWeek?.();
+    }
+  };
+
+  const handleGateAdvanceAnyway = () => {
+    setShowGate(false);
+    onAdvanceWeek?.();
+  };
+
+  const handleGateReview = (dest) => {
+    setShowGate(false);
+    onNavigate?.(dest);
+  };
+
   const handlePrimaryAction = () => {
     if (primaryAction.type === "boxscore" && primaryAction.gameId) return onOpenBoxScore?.(primaryAction.gameId);
     if (primaryAction.type === "navigate") return onNavigate?.(primaryAction.tab);
-    return onAdvanceWeek?.();
+    return handleAdvanceOrGate();
   };
 
   return (
@@ -167,9 +193,17 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
             <Button size="lg" className="weekly-hero__action-main" disabled={busy || simulating} onClick={handlePrimaryAction}>
               {busy || simulating ? ACTION_LABELS.working : primaryAction.cta}
             </Button>
-            <Button size="sm" variant="secondary" onClick={onAdvanceWeek} disabled={busy || simulating}>{simulating ? ACTION_LABELS.simulating : ACTION_LABELS.advanceWeek}</Button>
+            <Button size="sm" variant="secondary" onClick={handleAdvanceOrGate} disabled={busy || simulating}>{simulating ? ACTION_LABELS.simulating : ACTION_LABELS.advanceWeek}</Button>
           </CardContent>
         </Card>
+        {showGate ? (
+          <AdvanceReadinessGate
+            gate={gate}
+            onAdvanceAnyway={handleGateAdvanceAnyway}
+            onReview={handleGateReview}
+            onCancel={() => setShowGate(false)}
+          />
+        ) : null}
         {allAttentionItems.length > 0 ? (
           <div className="weekly-urgent-list" style={{ marginTop: 8 }}>
             {allAttentionItems.slice(0, 3).map((item, idx) => (
