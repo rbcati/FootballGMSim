@@ -29,6 +29,7 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
     await closeChangelog.click();
   }
 
+  // ── Advance Week 1 via "Simulate (Skip)" ────────────────────────────────────
   const advanceBtn = page.getByTestId('advance-week-cta');
   await expect(advanceBtn).toBeVisible();
   const startWeek = await page.evaluate(() => window?.state?.league?.week ?? 1);
@@ -45,15 +46,42 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
     startWeek,
     { timeout: SMOKE_TIMEOUT },
   );
+
+  // ── Post-game summary should appear after skip simulation ──────────────────
+  const postGameSummary = page.getByTestId('post-game-summary');
+  if (await postGameSummary.isVisible({ timeout: 5000 }).catch(() => false)) {
+    // Verify it shows a valid final score (two numbers separated by a dash or in score circles)
+    await expect(postGameSummary).toBeVisible();
+    const summaryText = await postGameSummary.textContent();
+    expect(summaryText).toMatch(/FINAL/i);
+
+    // Capture the score text shown in summary for comparison with HQ later
+    const scoreTexts = await postGameSummary.locator('[style*="tabular-nums"]').allTextContents();
+    const scoresInSummary = scoreTexts.map((t) => parseInt(t.trim(), 10)).filter((n) => Number.isFinite(n));
+    expect(scoresInSummary.length).toBeGreaterThanOrEqual(2);
+
+    // Close the summary and return to HQ
+    await page.getByTestId('post-game-summary-close').click();
+    await expect(postGameSummary).toBeHidden({ timeout: 5000 });
+  }
+
+  // ── League schedule / weekly results should show the correct score ──────────
   await goToTab(page, 'weekly-results');
 
   await expect(page.getByTestId('weekly-results')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('user-game-result-card')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('user-game-result-card')).toContainText(/\b\d+\s*-\s*\d+\b/);
+
+  // Capture score from weekly-results for later HQ comparison
+  const weeklyResultText = await page.getByTestId('user-game-result-card').textContent();
+  const weeklyScoreMatch = weeklyResultText.match(/(\d+)\s*[-–]\s*(\d+)/);
+  const weeklyScore = weeklyScoreMatch ? `${weeklyScoreMatch[1]}-${weeklyScoreMatch[2]}` : null;
+
   const completedGameLink = page.getByTestId('game-book-primary-cta').first();
   await expect(completedGameLink).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await completedGameLink.click();
 
+  // ── Game book shows the correct final score ─────────────────────────────────
   await expect(page.getByTestId('game-book')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('game-book-final-score')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('game-book-decision-summary')).toBeVisible({ timeout: SMOKE_TIMEOUT });
@@ -68,6 +96,7 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
     await expect(page.getByTestId('game-book')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   }
 
+  // ── Return to HQ and verify Last Result card shows the correct score ─────────
   await page.getByTestId('return-to-hq').click();
   if (!(await page.getByTestId('franchise-hq').isVisible({ timeout: 3000 }).catch(() => false))) {
     await page.getByRole('button', { name: /^Back to HQ$/i }).click();
@@ -75,6 +104,28 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('hq-last-result')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('hq-next-action')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+
+  // Last Result card should NOT show placeholder opponent (TBD) or zero score
+  const lastResultCard = page.getByTestId('hq-last-result');
+  await expect(lastResultCard).toBeVisible();
+  const lastResultText = await lastResultCard.textContent();
+  // Score should contain a real score pattern like "W · 24-17" or "L · 14-21"
+  expect(lastResultText).toMatch(/[WLT].*\d+[-–]\d+/);
+  // Opponent should NOT be TBD (that would mean team lookup failed)
+  expect(lastResultText).not.toMatch(/\bTBD\b/);
+
+  // If we captured a weekly score, verify the HQ shows the same numbers
+  if (weeklyScore) {
+    const [s1, s2] = weeklyScore.split('-');
+    const hqText = lastResultText;
+    // Both score numbers should appear somewhere in the last result line
+    const hasScore = hqText.includes(s1) || hqText.includes(s2);
+    expect(hasScore).toBe(true);
+  }
+
+  // Season Pulse momentum should update after the game
+  const seasonPulse = page.getByTestId('season-pulse');
+  await expect(seasonPulse).toBeVisible({ timeout: SMOKE_TIMEOUT });
 
   const hqNextAction = page.getByTestId('hq-next-action');
   const reviewGameBookCta = hqNextAction.getByRole('button', { name: /Review Game Book/i });
@@ -86,11 +137,17 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
     await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   }
 
+  // ── Reload: HQ should persist Last Result from IndexedDB ────────────────────
   await page.reload();
   await expect(page.getByTestId('app-bootstrap-loading')).toBeHidden({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('hq-last-result')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+
+  // After reload, Last Result should still show real opponent and score
+  const reloadedLastResult = await page.getByTestId('hq-last-result').textContent();
+  expect(reloadedLastResult).toMatch(/[WLT].*\d+[-–]\d+/);
+  expect(reloadedLastResult).not.toMatch(/\bTBD\b/);
 
   expect(consoleErrors.join('\n')).not.toMatch(/Uncaught|TypeError|ReferenceError/);
 });

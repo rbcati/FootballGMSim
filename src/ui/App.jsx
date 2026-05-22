@@ -42,6 +42,7 @@ import LeagueDashboard     from './components/LeagueDashboard.jsx';
 import LiveGame            from './components/LiveGame.jsx';
 import LiveGameView        from './components/LiveGameView.jsx';
 import PostGameScreen      from './components/PostGameScreen.jsx';
+import PostGameSummary    from './components/PostGameSummary.jsx';
 import SaveSlotManager     from './components/SaveSlotManager.jsx';
 import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
 import { toWorker }        from '../worker/protocol.js';
@@ -152,6 +153,11 @@ class LiveGameErrorBoundary extends Component {
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
+function safeSkipScore(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function AppContent() {
   const { state, actions } = useWorker();
   const {
@@ -186,8 +192,11 @@ function AppContent() {
     [league?.pendingWeeklyEvents],
   );
 
-  // Post-game result shown after GameSimulation completes (before advancing week)
+  // Post-game result shown after GameSimulation watch mode completes
   const [postGameResult, setPostGameResult] = useState(null);
+  // Skip-mode summary shown after advanceWeek({ skipUserGame: true }) completes
+  const [skipGameSummary, setSkipGameSummary] = useState(null);
+  const lastShownSkipWeekRef = useRef(null);
   const [initFlow, setInitFlow] = useState(null);
   const [bootRequestId, setBootRequestId] = useState(null);
   const [safeStarterWarning, setSafeStarterWarning] = useState('');
@@ -464,6 +473,67 @@ function AppContent() {
     setActiveView('saves');
   }, [actions, bootRequestId]);
 
+  // ── Skip-mode post-game summary ──────────────────────────────────────────
+  // After advanceWeek({ skipUserGame: true }), WEEK_COMPLETE fires with lastResults.
+  // Show a PostGameSummary overlay so the user sees the final score.
+  useEffect(() => {
+    if (simulating) return;
+    if (!Array.isArray(lastResults) || lastResults.length === 0) return;
+    if (userGameLogs) return; // watch mode handles its own PostGameScreen
+    if (postGameResult) return; // watch-mode overlay already up
+    if (!league?.userTeamId) return;
+
+    const simWeek = lastSimWeek ?? Math.max(1, (league?.week ?? 1) - 1);
+    if (lastShownSkipWeekRef.current === simWeek) return; // already shown for this week
+
+    const userResult = lastResults.find(
+      (r) => Number(r?.homeId) === Number(league.userTeamId) || Number(r?.awayId) === Number(league.userTeamId),
+    );
+    if (!userResult) return;
+
+    const teams = Array.isArray(league?.teams) ? league.teams : [];
+    const homeTeam = teams.find((t) => Number(t?.id) === Number(userResult.homeId));
+    const awayTeam = teams.find((t) => Number(t?.id) === Number(userResult.awayId));
+
+    const homeScore = safeSkipScore(userResult.homeScore ?? userResult.scoreHome, 0);
+    const awayScore = safeSkipScore(userResult.awayScore ?? userResult.scoreAway, 0);
+    const userIsHome = Number(userResult.homeId) === Number(league.userTeamId);
+    const userScore = userIsHome ? homeScore : awayScore;
+    const oppScore = userIsHome ? awayScore : homeScore;
+    const diff = userScore - oppScore;
+    const momentumChange = diff > 14 ? 3 : diff > 0 ? 2 : diff === 0 ? 0 : diff > -14 ? -2 : -3;
+
+    // Collect newly injured players from user roster
+    const userTeam = teams.find((t) => Number(t?.id) === Number(league.userTeamId));
+    const injuries = (userTeam?.roster ?? [])
+      .filter((p) => safeSkipScore(p?.injuryWeeksRemaining ?? p?.injuredWeeks ?? p?.injury?.gamesRemaining, 0) > 0)
+      .sort((a, b) => safeSkipScore(b?.ovr) - safeSkipScore(a?.ovr))
+      .slice(0, 3);
+
+    const gameId = userResult.gameId ?? buildCanonicalGameId({
+      seasonId: league?.seasonId,
+      week: simWeek,
+      homeId: userResult.homeId,
+      awayId: userResult.awayId,
+    });
+
+    lastShownSkipWeekRef.current = simWeek;
+    setSkipGameSummary({
+      homeScore,
+      awayScore,
+      homeTeam: homeTeam ?? { id: userResult.homeId, abbr: userResult.homeName?.slice(0, 3) ?? 'HOME' },
+      awayTeam: awayTeam ?? { id: userResult.awayId, abbr: userResult.awayName?.slice(0, 3) ?? 'AWAY' },
+      homeAbbr: homeTeam?.abbr ?? userResult.homeName?.slice(0, 3) ?? 'HOME',
+      awayAbbr: awayTeam?.abbr ?? userResult.awayName?.slice(0, 3) ?? 'AWAY',
+      userTeamId: league.userTeamId,
+      week: simWeek,
+      phase: league.phase,
+      momentumChange,
+      injuries,
+      gameId,
+    });
+  }, [simulating, lastResults, lastSimWeek, userGameLogs, postGameResult, league]);
+
   // ── Keyboard shortcuts (desktop) ──────────────────────────────────────────
   // Space / Enter  → Advance week (when not busy and no modal open)
   // S              → Manual save
@@ -473,8 +543,8 @@ function AppContent() {
       // Skip if focus is inside an input, textarea, or select
       const tag = document.activeElement?.tagName?.toUpperCase();
       if (['INPUT','TEXTAREA','SELECT','BUTTON'].includes(tag)) return;
-      // Skip if any modal/overlay is open (postGame, userGamePrompt, etc.)
-      if (postGameResult || promptUserGame || userGameLogs) return;
+      // Skip if any modal/overlay is open (postGame, skipSummary, userGamePrompt, etc.)
+      if (postGameResult || skipGameSummary || promptUserGame || userGameLogs) return;
       // Skip if not in an active league
       if (!league) return;
 
@@ -491,7 +561,7 @@ function AppContent() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [league, busy, leagueReady, postGameResult, promptUserGame, userGameLogs, handleAdvanceWeek, actions, activeSlot]);
+  }, [league, busy, leagueReady, postGameResult, skipGameSummary, promptUserGame, userGameLogs, handleAdvanceWeek, actions, activeSlot]);
 
   // Expose state and actions to window for E2E testing
   useEffect(() => {
@@ -1586,6 +1656,20 @@ function AppContent() {
             if (!archivePayload?.gameId) return;
             saveGame(archivePayload.gameId, archivePayload);
           }}
+        />
+      )}
+
+      {/* ── Skip-mode Post-Game Summary ────────────────────────────────── */}
+      {skipGameSummary && !postGameResult && (
+        <PostGameSummary
+          gameResult={skipGameSummary}
+          injuries={skipGameSummary.injuries}
+          momentumChange={skipGameSummary.momentumChange}
+          onClose={() => setSkipGameSummary(null)}
+          onViewGameBook={skipGameSummary.gameId ? () => {
+            setSkipGameSummary(null);
+            setExternalBoxScoreId(skipGameSummary.gameId);
+          } : undefined}
         />
       )}
 
