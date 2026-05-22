@@ -348,9 +348,11 @@ function extractStreakHeadlines(
   for (const res of results) {
     const homeScore = num(res.scoreHome ?? res.homeScore, 0);
     const awayScore = num(res.scoreAway ?? res.awayScore, 0);
-    const winnerId = homeScore >= awayScore
+    const winnerId = homeScore > awayScore
       ? teamId(res.home ?? res.homeTeamId)
-      : teamId(res.away ?? res.awayTeamId);
+      : homeScore < awayScore
+        ? teamId(res.away ?? res.awayTeamId)
+        : NaN; // tie — no winner, no streak credit
     if (!isNaN(winnerId)) winnerIds.add(winnerId);
   }
 
@@ -510,9 +512,10 @@ function extractDefensiveHeadlines(
     const total = homeScore + awayScore;
     if (total === 0) continue;
 
-    // Check turnovers forced by winning defense
+    // Check turnovers forced by winning defense — read from the LOSER's stats
+    // because teamStats.turnovers = giveaways committed (losing offense's giveaways = winning defense's takeaways)
     const homeWon = homeScore > awayScore;
-    const defStats = homeWon ? res.teamStats?.home : res.teamStats?.away;
+    const defStats = homeWon ? res.teamStats?.away : res.teamStats?.home;
     const turnoversForced = num(defStats?.turnovers, 0);
     if (turnoversForced < 4) continue;
 

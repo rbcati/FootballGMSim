@@ -176,8 +176,8 @@ describe('parseWeeklyHeadlines — defensive domination', () => {
       homeScore: 35,
       awayScore: 14,
       teamStats: {
-        home: { passYds: 300, rushYds: 130, turnovers: 4 },
-        away: { passYds: 150, rushYds: 60, turnovers: 0 },
+        home: { passYds: 300, rushYds: 130, turnovers: 0 },
+        away: { passYds: 150, rushYds: 60, turnovers: 4 }, // loser's giveaways = winner's forced takeaways
       },
     })];
     const headlines = parseWeeklyHeadlines({ results, week: 7, year: 2025 });
@@ -187,8 +187,8 @@ describe('parseWeeklyHeadlines — defensive domination', () => {
   it('does not generate DEFENSIVE headline for 3 turnovers', () => {
     const results = [makeGame({
       teamStats: {
-        home: { passYds: 280, rushYds: 110, turnovers: 3 },
-        away: { passYds: 190, rushYds: 75, turnovers: 0 },
+        home: { passYds: 280, rushYds: 110, turnovers: 0 },
+        away: { passYds: 190, rushYds: 75, turnovers: 3 }, // 3 giveaways by loser — below threshold of 4
       },
     })];
     const headlines = parseWeeklyHeadlines({ results, week: 7, year: 2025 });
