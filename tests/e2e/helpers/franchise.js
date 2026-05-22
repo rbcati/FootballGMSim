@@ -195,6 +195,7 @@ export async function simulateSingleWeek(page) {
       else if (window.handleGlobalAdvance) window.handleGlobalAdvance();
     });
   }
+  await page.getByRole('button', { name: /Advance anyway/i }).click({ timeout: 1000 }).catch(() => {});
   await page.getByRole('button', { name: /Simulate \(Skip\)/i }).click({ timeout: 10000 }).catch(() => {});
   await page.waitForFunction(
     (baseline) => {

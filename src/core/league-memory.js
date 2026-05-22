@@ -108,6 +108,7 @@ export function buildSeasonStorylineSnapshot(memoryMeta, teams, userTeamId) {
   const teamHistory = memoryMeta.franchiseHistoryByTeam[String(champId)] || null;
   const teamObj = teamMap.get(Number(champId));
   const championName = latest?.champion?.name || teamObj?.name || 'Unknown';
+
   const droughtRows = Object.entries(memoryMeta.franchiseHistoryByTeam)
     .map(([teamId, item]) => {
       const lastTitle = item?.lastChampionshipYear ?? null;
@@ -117,6 +118,7 @@ export function buildSeasonStorylineSnapshot(memoryMeta, teams, userTeamId) {
     .slice(0, 3);
 
   const userHistory = memoryMeta.franchiseHistoryByTeam[String(userTeamId)] || null;
+
   return [
     {
       id: `champ-${latest.year}`,
@@ -508,8 +510,14 @@ function buildTeamStatLeaders(standings = []) {
 
 export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [], teams = [], seasonStats = [], championshipGameId = null, playerSeasonStatsV1 = null, transactionTimelineV1 = null }) {
   const sorted = [...(standings || [])].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
+
+  const teamMap = new Map();
+  for (const t of (teams || [])) {
+    if (t?.id != null) teamMap.set(Number(t.id), t);
+  }
+
   const userRow = sorted.find((t) => Number(t.id) === Number(userTeamId)) || null;
-  const userTeam = teams.find((t) => Number(t?.id) === Number(userTeamId)) ?? null;
+  const userTeam = teamMap.get(Number(userTeamId)) ?? null;
   const userRows = seasonStats.filter((row) => Number(row?.teamId) === Number(userTeamId));
   const previousSummary = null;
   const seasonReview = userRow ? buildSeasonReview({ team: userTeam, standingsRow: userRow, teamStats: userRows, previousSummary }) : null;

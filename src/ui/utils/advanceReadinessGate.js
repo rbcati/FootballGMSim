@@ -66,7 +66,7 @@ export function buildAdvanceReadinessGate({ league, prep, weeklyContext } = {}) 
     riskItems.push({
       id: 'plan-not-reviewed',
       label: 'Game plan has not been reviewed.',
-      detail: 'Review and confirm your tactical script before kickoff.',
+      detail: 'Review and confirm your tactical script before kickoff. Poor execution here can cost you the game.',
       severity: 'warning',
       fixDestination: 'Game Plan',
     });
