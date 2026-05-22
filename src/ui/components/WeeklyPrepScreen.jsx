@@ -82,42 +82,21 @@ function matchupMismatchWarning(plan, insights) {
   return null;
 }
 
-function GamePlanControlCenter({ prep, league, onPlanReviewed }) {
-  const [plan, setPlan] = useState(() => normalizeGamePlan(prep?.gamePlan ?? {}));
-
+// GamePlanControlCenter receives plan and liveSummary from WeeklyPrepScreen (single source of truth).
+// onPlanChange notifies parent of slider/preset updates; parent owns persistence and recomputation.
+function GamePlanControlCenter({ prep, league, plan, liveSummary, onPlanChange, onPlanReviewed }) {
   const insights = prep?.insights ?? {};
   const recommendedKey = recommendGamePlanPreset({ prep });
-
-  const hasBlockingLineupIssue = useMemo(
-    () => (prep?.lineupIssues ?? []).some((i) => i.level === 'urgent' && String(i.label).toLowerCase().includes('depth chart blocker')),
-    [prep],
-  );
-  const majorInjuryStress = useMemo(
-    () => (prep?.lineupIssues ?? []).some((i) => String(i.label).toLowerCase().includes('injury stack')),
-    [prep],
-  );
-
-  const liveMultipliers = useMemo(() => deriveGamePlanMultipliers({
-    weeklyPrepState: {
-      insights,
-      completion: { ...(prep?.completion ?? {}), planReviewed: true },
-      hasTracking: true,
-    },
-    gamePlan: plan,
-    teamContext: { hasBlockingLineupIssue, majorInjuryStress },
-  }), [plan, insights, prep?.completion, hasBlockingLineupIssue, majorInjuryStress]);
-
-  const liveSummary = useMemo(() => getGamePlanSynergySummary(liveMultipliers), [liveMultipliers]);
 
   const warning = useMemo(() => matchupMismatchWarning(plan, insights), [plan, insights]);
 
   const applyPlan = useCallback((nextPlan) => {
     const normalized = normalizeGamePlan(nextPlan);
-    setPlan(normalized);
+    onPlanChange(normalized);
     saveStoredGamePlan(normalized);
     markWeeklyPrepStep(league, 'planReviewed', true);
     onPlanReviewed?.();
-  }, [league, onPlanReviewed]);
+  }, [league, onPlanChange, onPlanReviewed]);
 
   const handleSlider = useCallback((field, rawValue) => {
     applyPlan({ ...plan, [field]: Number(rawValue) });
@@ -250,7 +229,9 @@ function GamePlanControlCenter({ prep, league, onPlanReviewed }) {
   );
 }
 
-export default function WeeklyPrepScreen({ league, onNavigate }) {
+// WeeklyPrepScreen owns the live plan state. GamePlanControlCenter, Active Effects, Readiness Command,
+// and Prep Checklist all derive from the same liveMultipliers/liveSummary so they never conflict.
+export default function WeeklyPrepScreen({ league, onNavigate, onOpenBoxScore }) {
   const model = useMemo(() => buildWeeklyPrepScreenModel({ league }), [league]);
   const prep = model.prep;
 
@@ -264,18 +245,85 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
     [league, weeklyIntelligence, weeklyContext, prep],
   );
 
+  // Single source of truth: live plan state lives here, not inside GamePlanControlCenter.
+  const [plan, setPlan] = useState(() => normalizeGamePlan(prep?.gamePlan ?? {}));
   const [localPlanReviewed, setLocalPlanReviewed] = useState(false);
+  // Tracks the auto-mark from useEffect so checklist and readiness update on first render.
+  const [localOpponentScouted, setLocalOpponentScouted] = useState(false);
 
   useEffect(() => {
     markWeeklyPrepStep(league, 'opponentScouted', true);
+    setLocalOpponentScouted(true);
     setLocalPlanReviewed(false);
+    // Sync plan to stored state whenever the week/season changes.
+    setPlan(normalizeGamePlan(prep?.gamePlan ?? {}));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league?.seasonId, league?.week, league?.userTeamId]);
 
+  const hasBlockingLineupIssue = useMemo(
+    () => (prep?.lineupIssues ?? []).some((i) => i.level === 'urgent' && String(i.label).toLowerCase().includes('depth chart blocker')),
+    [prep],
+  );
+  const majorInjuryStress = useMemo(
+    () => (prep?.lineupIssues ?? []).some((i) => String(i.label).toLowerCase().includes('injury stack')),
+    [prep],
+  );
+
   const effectivePlanReviewed = localPlanReviewed || Boolean(prep?.completion?.planReviewed);
-  const effectiveRemaining = effectivePlanReviewed && !prep?.completion?.planReviewed
-    ? Math.max(0, (prep?.remaining ?? 4) - 1)
-    : (prep?.remaining ?? 4);
+  const effectiveOpponentScouted = localOpponentScouted || Boolean(prep?.completion?.opponentScouted);
+
+  // Effective completion merges localStorage-backed values with local UI state, so checklist
+  // and readiness counts update immediately without a full state reload.
+  const effectiveCompletion = useMemo(() => ({
+    lineupChecked: Boolean(prep?.completion?.lineupChecked),
+    injuriesReviewed: Boolean(prep?.completion?.injuriesReviewed),
+    opponentScouted: effectiveOpponentScouted,
+    planReviewed: effectivePlanReviewed,
+  }), [prep?.completion, effectiveOpponentScouted, effectivePlanReviewed]);
+
+  // Live multipliers always treat planReviewed as true so both "Projected prep impact" in
+  // Game Plan Control Center and "Active Effects" show the same projected plan quality.
+  const liveMultipliers = useMemo(() => deriveGamePlanMultipliers({
+    weeklyPrepState: {
+      insights: prep?.insights ?? {},
+      completion: { ...effectiveCompletion, planReviewed: true },
+      hasTracking: true,
+    },
+    gamePlan: plan,
+    teamContext: { hasBlockingLineupIssue, majorInjuryStress },
+  }), [plan, prep?.insights, effectiveCompletion, hasBlockingLineupIssue, majorInjuryStress]);
+
+  const liveSummary = useMemo(() => getGamePlanSynergySummary(liveMultipliers), [liveMultipliers]);
+
+  const effectiveRemaining = Object.values(effectiveCompletion).filter((done) => !done).length;
   const effectiveScore = Math.round(((4 - effectiveRemaining) / 4) * 100);
+
+  // Readiness tone/status derive from liveSummary so they update on every plan change.
+  const liveReadinessTone = liveSummary.severity === 'major_risk' ? 'danger' : liveSummary.severity === 'minor_risk' ? 'warning' : 'success';
+  const liveReadinessStatus = liveSummary.severity === 'major_risk'
+    ? 'Major Risk'
+    : effectiveScore >= 100
+      ? 'Ready to Advance'
+      : effectiveScore >= 50
+        ? 'Needs Attention'
+        : 'Major Risk';
+
+  const handlePlanChange = useCallback((nextPlan) => {
+    setPlan(nextPlan);
+  }, []);
+
+  // Route Game Book destinations to onOpenBoxScore when available; silently no-op when not.
+  // All other destinations pass through onNavigate unchanged.
+  const handleNavigation = useCallback((destination) => {
+    if (typeof destination === 'string' && destination.startsWith('Game Book:')) {
+      const gameId = destination.slice('Game Book:'.length).trim();
+      if (gameId && onOpenBoxScore) {
+        onOpenBoxScore(gameId);
+      }
+      return;
+    }
+    onNavigate?.(destination);
+  }, [onNavigate, onOpenBoxScore]);
 
   if (!prep?.nextGame || !prep?.opponent) {
     return <EmptyState title="Weekly prep unavailable" body="No upcoming opponent found. Open Schedule for next matchup details." />;
@@ -291,7 +339,7 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
       <SectionCard
         title={`Weekly Prep War Room · Week ${model.week}`}
         subtitle={model.matchupHeadline}
-        actions={<TonePill tone={model.readinessTone} label={model.readinessStatus} />}
+        actions={<TonePill tone={liveReadinessTone} label={liveReadinessStatus} />}
       >
         <div className="weekly-prep-hero-row">
           <div className="weekly-prep-team">
@@ -313,7 +361,7 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
 
       <SectionCard title="Readiness Command" subtitle="Confirm prep quality before returning to HQ.">
         <div className="weekly-prep-command-row">
-          <TonePill tone={model.readinessTone} label={`${effectiveScore}% ready`} />
+          <TonePill tone={liveReadinessTone} label={`${effectiveScore}% ready`} />
           <TonePill tone={effectiveRemaining === 0 ? 'success' : 'warning'} label={`${4 - effectiveRemaining}/4 complete`} />
           <TonePill tone={effectiveRemaining === 0 ? 'success' : 'warning'} label={effectiveRemaining === 0 ? 'Ready to Advance' : 'Needs Attention'} />
         </div>
@@ -324,6 +372,9 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
         key={`${league?.seasonId}:${league?.week}`}
         prep={prep}
         league={league}
+        plan={plan}
+        liveSummary={liveSummary}
+        onPlanChange={handlePlanChange}
         onPlanReviewed={() => setLocalPlanReviewed(true)}
       />
 
@@ -368,13 +419,19 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
         </div>
       </SectionCard>
 
-      <SectionCard title="Active Effects" subtitle="Strategy synergy and readiness impacts for this week.">
-        <div className="weekly-prep-command-row">
-          <TonePill tone={prep.prepSummary?.severity === 'major_risk' ? 'danger' : prep.prepSummary?.severity === 'minor_risk' ? 'warning' : 'success'} label={`Prep state: ${prep.prepSummary?.status ?? 'Ready'}`} />
-          <TonePill tone={prep.prepSummary?.netImpact >= 0 ? 'success' : 'warning'} label={`Net impact ${prep.prepSummary?.netImpact >= 0 ? '+' : ''}${Number(prep.prepSummary?.netImpact ?? 0).toFixed(3)}`} />
+      <SectionCard title="Active Effects" subtitle="Live plan impact for this week.">
+        <div className="weekly-prep-command-row" data-testid="active-effects-summary">
+          <TonePill
+            tone={liveSummary.severity === 'major_risk' ? 'danger' : liveSummary.severity === 'minor_risk' ? 'warning' : 'success'}
+            label={`Live plan: ${liveSummary.status}`}
+          />
+          <TonePill
+            tone={liveSummary.netImpact >= 0 ? 'success' : 'warning'}
+            label={`Net impact ${liveSummary.netImpact >= 0 ? '+' : ''}${Number(liveSummary.netImpact ?? 0).toFixed(3)}`}
+          />
         </div>
-        <div className="weekly-prep-effects-grid">
-          {(prep.prepSummary?.reasons?.length ? prep.prepSummary.reasons : ['No active matchup synergy or readiness penalties.']).map((reason) => (
+        <div className="weekly-prep-effects-grid" data-testid="active-effects-reasons">
+          {(liveSummary?.reasons?.length ? liveSummary.reasons : ['No active matchup synergy or readiness penalties.']).map((reason) => (
             <div key={reason} className="weekly-prep-effect-row">{reason}</div>
           ))}
         </div>
@@ -382,10 +439,10 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
 
       <SectionCard title="Prep Checklist" subtitle="Status-driven checks aligned with HQ loop.">
         <div className="weekly-prep-command-row">
-          <TonePill tone={prep.completion.lineupChecked ? 'success' : 'warning'} label={`Lineup ${prep.completion.lineupChecked ? 'checked' : 'pending'}`} />
-          <TonePill tone={prep.completion.injuriesReviewed ? 'success' : 'warning'} label={`Injuries ${prep.completion.injuriesReviewed ? 'reviewed' : 'pending'}`} />
-          <TonePill tone={prep.completion.opponentScouted ? 'success' : 'warning'} label={`Opponent ${prep.completion.opponentScouted ? 'scouted' : 'pending'}`} />
-          <TonePill tone={effectivePlanReviewed ? 'success' : 'warning'} label={`Plan ${effectivePlanReviewed ? 'reviewed' : 'pending'}`} />
+          <TonePill tone={effectiveCompletion.lineupChecked ? 'success' : 'warning'} label={`Lineup ${effectiveCompletion.lineupChecked ? 'checked' : 'pending'}`} />
+          <TonePill tone={effectiveCompletion.injuriesReviewed ? 'success' : 'warning'} label={`Injuries ${effectiveCompletion.injuriesReviewed ? 'reviewed' : 'pending'}`} />
+          <TonePill tone={effectiveCompletion.opponentScouted ? 'success' : 'warning'} label={`Opponent ${effectiveCompletion.opponentScouted ? 'scouted' : 'pending'}`} />
+          <TonePill tone={effectiveCompletion.planReviewed ? 'success' : 'warning'} label={`Plan ${effectiveCompletion.planReviewed ? 'reviewed' : 'pending'}`} />
         </div>
       </SectionCard>
 
@@ -406,7 +463,7 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => onNavigate?.(action.destination)}
+                  onClick={() => handleNavigation(action.destination)}
                   data-testid={`prep-action-cta-${action.id}`}
                 >
                   {action.ctaLabel}
