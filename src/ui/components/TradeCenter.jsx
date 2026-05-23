@@ -21,6 +21,7 @@ import { buildTradeAssetDisplay } from "../utils/tradeAssetDisplay.js";
 import { getTradeLockReason } from "../utils/tradeLockReason.js";
 import { getBudgetLabel, toneToCssColor } from "../utils/transactionMarket.js";
 import { logCompletedTradeAction, persistFranchiseChronicle } from "../utils/franchiseChronicle.js";
+import { getPickBaseValueFromMatrix } from "../../core/trades/tradeValuationModifiers.js";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -43,7 +44,6 @@ function playerTradeValue(player) {
   return Math.round(Math.pow(ovr, 1.8) * pMult * ageF);
 }
 
-const PICK_VALUES = [0, 800, 300, 150, 60, 25, 10, 3];
 
 function fmtSalary(annual) {
   if (annual == null) return "—";
@@ -394,8 +394,8 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     setTheirPicks((source?.offering?.pickIds ?? []).map((id) => theirAvailablePicksMap.get(String(id)) ?? { id }));
   }, [counterOfferId, incomingOffers, myAvailablePicksMap, theirAvailablePicksMap]);
 
-  const myOfferValue = useMemo(() => [...offering].reduce((s, id) => s + playerTradeValue(myRosterMap.get(toAssetId(id))), 0) + myPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [offering, myRosterMap, myPicks]);
-  const theirOfferValue = useMemo(() => [...receiving].reduce((s, id) => s + playerTradeValue(theirRosterMap.get(toAssetId(id))), 0) + theirPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [receiving, theirRosterMap, theirPicks]);
+  const myOfferValue = useMemo(() => [...offering].reduce((s, id) => s + playerTradeValue(myRosterMap.get(toAssetId(id))), 0) + myPicks.reduce((s, pk) => s + getPickBaseValueFromMatrix(pk.round), 0), [offering, myRosterMap, myPicks]);
+  const theirOfferValue = useMemo(() => [...receiving].reduce((s, id) => s + playerTradeValue(theirRosterMap.get(toAssetId(id))), 0) + theirPicks.reduce((s, pk) => s + getPickBaseValueFromMatrix(pk.round), 0), [receiving, theirRosterMap, theirPicks]);
 
   const myCapAfter = useMemo(() => {
     const base = liveMyTeam?.capRoom ?? 0;

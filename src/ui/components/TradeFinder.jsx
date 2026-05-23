@@ -9,6 +9,7 @@ import { normalizeManagement, CONTRACT_PLAN_LABELS, TRADE_STATUS_LABELS } from '
 import { buildAskOfferOutcome } from '../utils/tradeFinderOffers.js';
 import { buildTradeFinderAnalysis } from '../../core/trades/tradeFinderAnalysis.js';
 import { buildTradeFinderProfileContext } from '../utils/playerProfileContext.js';
+import TradeExplanationPanel from './TradeExplanationPanel.jsx';
 
 function money(v) { return `$${Number(v ?? 0).toFixed(1)}M`; }
 
@@ -297,6 +298,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
                 {Array.isArray(idea.confidenceReasons) && idea.confidenceReasons.length ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{idea.confidenceReasons.join(' · ')}</div> : null}
                 <div style={{ fontSize: 12 }}>{idea.recommendation}: {idea.reason}</div>
                 {Array.isArray(idea.warnings) && idea.warnings.length ? <div style={{ fontSize: 12, color: 'var(--warning)' }}>Warnings: {idea.warnings.join(' · ')}</div> : null}
+                <TradeExplanationPanel idea={idea} />
                 <div style={{ display: 'flex', gap: 6 }}>
                   <Button className="btn" onClick={() => onPlayerSelect?.(idea.targetPlayerId, buildTradeFinderProfileContext(idea, 'target'))}>Open Player</Button>
                   <Button className="btn" style={{ minHeight: 44 }} onClick={() => handleUseFramework(idea)}>Use Framework</Button>

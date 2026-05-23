@@ -15,6 +15,8 @@ import {
 import {
   applyPositionalNeedModifiers,
   calculateTeamDepthDeficiencies,
+  getNeedLevelForPlayer,
+  POSITION_NEED_LEVEL,
 } from './tradePositionalNeeds.js';
 
 const PICK_VALUE_SCALING = 0.184;
@@ -250,6 +252,33 @@ function buildIdea({ need, target, outgoingAssets, targetTeam, cap, packageType,
   confidenceReasons.push(...realismReasons);
   if (valueMatch === 'expensive' || valueMatch === 'unrealistic') confidenceReasons.push('Package remains short on value.');
   const confidence = feasibilityLabel === 'likely_reasonable' && !warnings.includes(PREMIUM_PICK_WARNING) ? 'high' : feasibilityLabel === 'long_shot' || feasibilityLabel === 'cap_constrained' || feasibilityLabel === 'overpay_risk' ? 'low' : 'medium';
+
+  // Derived explanation block — strictly read-only, no formula changes.
+  const decayedPicks = outgoingAssets
+    .filter((a) => a.assetType === 'pick')
+    .map((a) => ({
+      label: a.label,
+      round: a.round,
+      year: a.year,
+      baseValue: getNormalizedPickValueFromUnifiedMatrix(a),
+      decayedValue: num(a.valueScore),
+    }));
+  const positionalContexts = targetDepthNeeds != null
+    ? outgoingAssets
+        .filter((a) => a.assetType === 'player')
+        .map((a) => ({ pos: a.pos, needLevel: getNeedLevelForPlayer(a, targetDepthNeeds) }))
+    : null;
+  const verdictKey = valueDelta <= -35 ? 'FAVORABLE' : valueDelta <= 25 ? 'FAIR' : valueDelta <= 75 ? 'NEEDS_MORE_VALUE' : 'UNFAVORABLE';
+  const explanationMeta = Object.freeze({
+    posture: teamPosture,
+    outgoingScore: outgoingValue,
+    incomingScore: targetValue,
+    verdict: verdictKey,
+    diminishingReturnsApplied: outgoingAssets.length > 1,
+    decayedPicks,
+    positionalContexts,
+  });
+
   return {
     id: `${need.pos}-${target.id}-${outgoingAssets.map((a) => a.playerId ?? a.pickId).join('-')}`,
     targetPlayerId: target.id, targetPlayerName: target.name, targetTeamId: target.teamId,
@@ -266,6 +295,7 @@ function buildIdea({ need, target, outgoingAssets, targetTeam, cap, packageType,
     needFitTag: need.needLevel === 'urgent' ? 'urgent_need' : 'team_need',
     recommendation: valueMatch === 'unrealistic' ? 'avoid' : 'consider',
     reason: `Possible package to address ${need.pos}.`,
+    explanationMeta,
   };
 }
 
