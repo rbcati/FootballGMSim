@@ -521,7 +521,8 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
 
   const teamMap = new Map();
   let userTeam = null;
-  for (const t of (teams || [])) {
+  for (let i = 0; i < (teams || []).length; i++) {
+    const t = teams[i];
     if (t?.id != null) {
       teamMap.set(Number(t.id), t);
       if (Number(t.id) === targetId) userTeam = t;
@@ -534,27 +535,6 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
       userRows.push(seasonStats[i]);
     }
   }
-
-
-  const teamMap = new Map();
-  for (let i = 0; i < teams.length; i++) {
-    const t = teams[i];
-    if (t?.id != null) {
-      teamMap.set(Number(t.id), t);
-    }
-  }
-
-  const sortedMap = new Map();
-  for (let i = 0; i < sorted.length; i++) {
-    const t = sorted[i];
-    if (t?.id != null) {
-      sortedMap.set(Number(t.id), t);
-    }
-  }
-
-  const userRow = sortedMap.get(Number(userTeamId)) || null;
-  const userTeam = teamMap.get(Number(userTeamId)) ?? null;
-  const userRows = seasonStats.filter((row) => Number(row?.teamId) === Number(userTeamId));
   const previousSummary = null;
   const seasonReview = userRow ? buildSeasonReview({ team: userTeam, standingsRow: userRow, teamStats: userRows, previousSummary }) : null;
   const playerReportCards = userRow ? buildPlayerReportCards({ team: userTeam, teamRows: userRows, review: seasonReview }) : [];

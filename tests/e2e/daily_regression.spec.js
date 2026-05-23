@@ -21,7 +21,7 @@ test.describe('Daily Regression Pass', () => {
         const startWeek = await page.evaluate(() => window.state.league.week);
         console.log(`Current Week: ${startWeek}`);
 
-        await simulateSingleWeek(page);
+        await simulateSingleWeek(page, { advanceAnyway: true });
 
         // Wait for week to increment
         await page.waitForFunction((startWeek) => {

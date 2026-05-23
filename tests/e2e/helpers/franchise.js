@@ -183,7 +183,8 @@ export async function selectScheduleWeekTab(page, weekNumber) {
   await weekRow.getByRole('tab', { name: String(weekNumber), exact: true }).click();
 }
 
-export async function simulateSingleWeek(page) {
+export async function simulateSingleWeek(page, options = {}) {
+  const { advanceAnyway = false } = options;
   const startWeek = await page.evaluate(() => window?.state?.league?.week ?? 1);
   const advanceCta = page.getByTestId('advance-week-cta');
   if (await advanceCta.isVisible().catch(() => false)) {
@@ -195,7 +196,9 @@ export async function simulateSingleWeek(page) {
       else if (window.handleGlobalAdvance) window.handleGlobalAdvance();
     });
   }
-  await page.getByRole('button', { name: /Advance anyway/i }).click({ timeout: 1000 }).catch(() => {});
+  if (advanceAnyway) {
+    await page.getByRole('button', { name: /Advance anyway/i }).click({ timeout: 1000 }).catch(() => {});
+  }
   await page.getByRole('button', { name: /Simulate \(Skip\)/i }).click({ timeout: 10000 }).catch(() => {});
   await page.waitForFunction(
     (baseline) => {
