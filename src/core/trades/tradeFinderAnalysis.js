@@ -6,6 +6,12 @@ import {
   evaluateMultiAssetPackageValue,
   getPickBaseValueFromMatrix,
 } from './tradeValuationModifiers.js';
+import {
+  TEAM_STRATEGIC_POSTURE,
+  applyStrategicValuationModifiers,
+  classifyTeamStrategicPosture,
+  getTeamContextSnapshot,
+} from './teamStrategicDirection.js';
 
 const PICK_VALUE_SCALING = 0.184;
 
@@ -203,9 +209,13 @@ function scorePackageIdea({ need, valueDelta, valueMatch, warnings, capImpact })
   return clamp(score, 1, 99);
 }
 function classifyValueMatchDetail(v){return buildValueDeltaLabel(v);}
-function buildIdea({ need, target, outgoingAssets, targetTeam, cap, packageType }) {
-  const targetValue = getPlayerValueSafe(target);
-  const outgoingValue = evaluateMultiAssetPackageValue(outgoingAssets.map((a) => num(a.valueScore)));
+function buildIdea({ need, target, outgoingAssets, targetTeam, cap, packageType, strategicContext = {} }) {
+  const teamPosture = strategicContext?.teamPosture ?? TEAM_STRATEGIC_POSTURE.NEUTRAL;
+  const currentSeason = strategicContext?.currentSeason ?? null;
+  const targetBaseValue = getPlayerValueSafe(target);
+  const targetValue = applyStrategicValuationModifiers({ assetType: 'player', ...target }, targetBaseValue, teamPosture, { currentSeason });
+  const outgoingStrategicValues = outgoingAssets.map((a) => applyStrategicValuationModifiers(a, num(a.valueScore), teamPosture, { currentSeason }));
+  const outgoingValue = evaluateMultiAssetPackageValue(outgoingStrategicValues);
   const valueDelta = Math.round(targetValue - outgoingValue);
   const valueMatch = classifyValueMatch(valueDelta);
   const capData = calculatePackageCapImpact({ target, outgoingAssets, cap });
@@ -246,17 +256,17 @@ function buildIdea({ need, target, outgoingAssets, targetTeam, cap, packageType 
   };
 }
 
-function generatePackageVariants({ need, target, chipPool, picks, nonStarterIds, targetTeam, cap }) {
+function generatePackageVariants({ need, target, chipPool, picks, nonStarterIds, targetTeam, cap, strategicContext }) {
   const ideas = [];
   const base = chipPool.find((c) => c.pos === target.pos) ?? chipPool[0];
   if (!base) return ideas;
-  const oneForOne = buildIdea({ need, target, outgoingAssets: [base], targetTeam, cap, packageType: 'one_for_one' });
+  const oneForOne = buildIdea({ need, target, outgoingAssets: [base], targetTeam, cap, packageType: 'one_for_one', strategicContext });
   ideas.push(oneForOne);
   const smallestPick = choosePickForPackage({ picks, valueDelta: oneForOne.valueDelta, target, need, baseValueMatch: oneForOne.valueMatch });
-  if (smallestPick && ['expensive', 'unrealistic'].includes(oneForOne.valueMatch)) ideas.push(buildIdea({ need, target, outgoingAssets: [base, smallestPick], targetTeam, cap, packageType: 'player_plus_pick' }));
+  if (smallestPick && ['expensive', 'unrealistic'].includes(oneForOne.valueMatch)) ideas.push(buildIdea({ need, target, outgoingAssets: [base, smallestPick], targetTeam, cap, packageType: 'player_plus_pick', strategicContext }));
   const extra = chipPool.find((c) => c.playerId !== base.playerId && nonStarterIds.has(c.playerId));
-  if (extra && oneForOne.valueMatch === 'unrealistic') ideas.push(buildIdea({ need, target, outgoingAssets: [base, extra], targetTeam, cap, packageType: 'two_players' }));
-  if (Number(base.salary) > Number(getPlayerSalary(target))) ideas.push(buildIdea({ need, target, outgoingAssets: [base], targetTeam, cap, packageType: 'cap_relief' }));
+  if (extra && oneForOne.valueMatch === 'unrealistic') ideas.push(buildIdea({ need, target, outgoingAssets: [base, extra], targetTeam, cap, packageType: 'two_players', strategicContext }));
+  if (Number(base.salary) > Number(getPlayerSalary(target))) ideas.push(buildIdea({ need, target, outgoingAssets: [base], targetTeam, cap, packageType: 'cap_relief', strategicContext }));
   return ideas.filter((i) => i.packageAssetCount <= 3 && (!(target.pos === 'K' || target.pos === 'P') || i.outgoingAssets.every((a)=>a.assetType!=='pick'||a.valueTier!=='premium')));
 }
 
@@ -276,7 +286,13 @@ export function buildTradeFinderAnalysis({ userTeam, league = {}, teams = [], us
   for (const need of targetNeeds.slice(0, 4)) {
     for (const target of getTargetsFromIndex({ need, targetIndex })) {
       const targetTeam = teamMap.get(num(target.teamId));
-      ideas.push(...generatePackageVariants({ need, target, chipPool, picks: userPickChips, nonStarterIds, targetTeam, cap }));
+      const targetRoster = leaguePlayers.filter((p) => num(p?.teamId, -1) === num(targetTeam?.id, -1));
+      const targetContext = getTeamContextSnapshot({
+        ...targetTeam,
+        roster: targetRoster,
+      }, { currentSeason });
+      const teamPosture = classifyTeamStrategicPosture({ ...targetTeam, roster: targetRoster }, { currentSeason });
+      ideas.push(...generatePackageVariants({ need, target, chipPool, picks: userPickChips, nonStarterIds, targetTeam, cap, strategicContext: { teamPosture, targetContext, currentSeason } }));
     }
   }
   const tradeIdeas = sortAndCapTradeIdeas(ideas, userTeamId);

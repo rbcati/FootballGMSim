@@ -1173,6 +1173,8 @@ function awardCompensatoryPicksForUpcomingDraft(metaObj = ensureCompMeta(cache.g
 
 function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {}) {
   const isDraftBoardMode = context?.marketMode === 'draft_board';
+  const teamPosture = context?.teamPosture ?? TEAM_STRATEGIC_POSTURE.NEUTRAL;
+  const currentSeason = Number(context?.currentSeason ?? 0) || null;
   const playerVal = playerIds.reduce((sum, pid) => {
     const player = cache.getPlayer(Number(pid));
     let value = _tradeValue(player, context);
@@ -1184,14 +1186,16 @@ function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {
       const expiringPenalty = yearsRemaining <= 1 ? 0.78 : 1.0;
       value *= veteranPenalty * lowPremiumPenalty * expiringPenalty;
     }
-    return sum + value;
+    const adjusted = applyStrategicValuationModifiers({ assetType: 'player', ...player }, value, teamPosture, { currentSeason });
+    return sum + adjusted;
   }, 0);
   const pickVal = pickIds.reduce((sum, pid) => {
     const pick = resolvePickById(pid);
     let value = getPickRoundValue(pick?.round, { week: context?.week ?? 1, teamDirection: context?.teamDirection ?? 'balanced', projectedRange: pick?.projectedRange ?? 'mid' });
     if (isDraftBoardMode) value *= 1.2;
     if (pick?.isCompensatory) value *= 0.84;
-    return sum + value;
+    const adjusted = applyStrategicValuationModifiers({ assetType: 'pick', ...pick }, value, teamPosture, { currentSeason });
+    return sum + adjusted;
   }, 0);
   return playerVal + pickVal;
 }
@@ -6865,11 +6869,15 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
     return actualAav > expectedAav * 1.28;
   });
   const lowPremiumIncoming = incomingPlayers.length > 0 && incomingPlayers.every((p) => LOW_PREMIUM_POSITIONS.has(p?.pos));
+  const aiRoster = cache.getPlayersByTeam(Number(toTeamId));
+  const aiPosture = classifyTeamStrategicPosture({ ...to, roster: aiRoster }, { currentSeason: meta?.year, phase: meta?.phase }, { minGamesForClassification: 7 });
   const valuationContext = {
     week,
     teamDirection: aiDirection,
     needPositions: aiNeeds.needs,
     marketMode: isDraftDay ? 'draft_board' : 'normal',
+    teamPosture: aiPosture,
+    currentSeason: meta?.year,
   };
   const offerVal    = calcAssetBundleValue(offering, valuationContext);
   const receiveVal  = calcAssetBundleValue(receiving, valuationContext);
