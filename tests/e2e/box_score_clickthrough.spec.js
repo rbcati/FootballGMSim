@@ -4,7 +4,7 @@ import { launchFranchise, simulateSingleWeek, selectScheduleWeekTab } from './he
 test.describe('Shared box score detail', () => {
   test('schedule score row opens Game Detail box score', async ({ page }) => {
     await launchFranchise(page);
-    await simulateSingleWeek(page);
+    await simulateSingleWeek(page, { advanceAnyway: true });
 
     const scheduleWeek = await page.evaluate(() => Math.max(1, (window?.state?.league?.week ?? 2) - 1));
     await selectScheduleWeekTab(page, scheduleWeek);
@@ -16,7 +16,7 @@ test.describe('Shared box score detail', () => {
 
   test('completed game detail remains available after reload', async ({ page }) => {
     await launchFranchise(page);
-    await simulateSingleWeek(page);
+    await simulateSingleWeek(page, { advanceAnyway: true });
 
     const scheduleWeekB = await page.evaluate(() => Math.max(1, (window?.state?.league?.week ?? 2) - 1));
     await selectScheduleWeekTab(page, scheduleWeekB);

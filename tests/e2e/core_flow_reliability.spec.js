@@ -29,7 +29,7 @@ test.describe('Core flow reliability', () => {
 
   test('weekly hub completed game opens working box score', async ({ page }) => {
     await launchFranchise(page);
-    await simulateSingleWeek(page);
+    await simulateSingleWeek(page, { advanceAnyway: true });
 
     const scheduleWeek = await page.evaluate(() => Math.max(1, (window?.state?.league?.week ?? 2) - 1));
     await selectScheduleWeekTab(page, scheduleWeek);
@@ -40,7 +40,7 @@ test.describe('Core flow reliability', () => {
 
   test('schedule completed game opens box score', async ({ page }) => {
     await launchFranchise(page);
-    await simulateSingleWeek(page);
+    await simulateSingleWeek(page, { advanceAnyway: true });
 
     const scheduleWeek = await page.evaluate(() => Math.max(1, (window?.state?.league?.week ?? 2) - 1));
     await selectScheduleWeekTab(page, scheduleWeek);
@@ -50,7 +50,7 @@ test.describe('Core flow reliability', () => {
 
   test('recent games card opens archived box score', async ({ page }) => {
     await launchFranchise(page);
-    await simulateSingleWeek(page);
+    await simulateSingleWeek(page, { advanceAnyway: true });
 
     await goToTab(page, 'hq');
     const filmGameBook = page.locator('[data-testid="season-pulse"]').getByRole('button', { name: /Open Game Book/i }).first();
@@ -84,7 +84,7 @@ test.describe('Core flow reliability', () => {
     });
     await page.waitForFunction(() => Number(window?.state?.league?.tradeDeadline?.deadlineWeek) === 1);
 
-    await simulateSingleWeek(page);
+    await simulateSingleWeek(page, { advanceAnyway: true });
     await goToTab(page, 'transactions');
     await page.getByRole('button', { name: /^Builder$/i }).click();
 

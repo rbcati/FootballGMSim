@@ -1,0 +1,1 @@
+cb9d70e ⚡ Optimize uncached team lookup in inner simulation loop

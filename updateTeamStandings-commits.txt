@@ -1,1 +1,0 @@
-bc34765 perf(game-simulator): optimize updateTeamStandings with _teamsMap

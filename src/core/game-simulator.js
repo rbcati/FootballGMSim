@@ -322,11 +322,23 @@ function calculateSeasonsWithTeam(player, team) {
  * @param {number} teamId - The team ID to update.
  * @param {object} stats - The stats to add/update { wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 }.
  */
+export function ensureTeamsMap(league) {
+    if (!league) return;
+    if (league.teams && !league._teamsMap) {
+        league._teamsMap = {};
+        for (let i = 0; i < league.teams.length; i++) {
+            const t = league.teams[i];
+            if (t && t.id !== undefined) league._teamsMap[t.id] = t;
+        }
+    }
+}
+
 export function updateTeamStandings(league, teamId, stats) {
     // 1. Resolve Team Object
     let team = null;
 
     if (league) {
+        ensureTeamsMap(league);
         if (league._teamsMap) {
             team = league._teamsMap[teamId];
         } else if (league.teams) {
@@ -2936,8 +2948,13 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         home = league._teamsMap[homeTeamId];
         away = league._teamsMap[awayTeamId];
     } else {
-        home = league.teams.find(t => t && t.id === homeTeamId);
-        away = league.teams.find(t => t && t.id === awayTeamId);
+        league._teamsMap = {};
+        for (let i = 0; i < league.teams.length; i++) {
+            const t = league.teams[i];
+            if (t && t.id !== undefined) league._teamsMap[t.id] = t;
+        }
+        home = league._teamsMap[homeTeamId];
+        away = league._teamsMap[awayTeamId];
     }
 
     if (!home || !away) {
@@ -3471,13 +3488,7 @@ export function simulateBatch(games, options = {}) {
     }
 
     // OPTIMIZATION: create maps for fast lookups during commit
-    if (league.teams && !league._teamsMap) {
-        league._teamsMap = {};
-        for (let i = 0; i < league.teams.length; i++) {
-            const t = league.teams[i];
-            if (t && t.id !== undefined) league._teamsMap[t.id] = t;
-        }
-    }
+    ensureTeamsMap(league);
 
     if (league.schedule && !league._scheduleMap) {
         league._scheduleMap = {};
