@@ -26,6 +26,7 @@ import {
   calculateTeamCapObligations,
   getActiveCapHit,
 } from './contracts/contractObligations.js';
+import { validatePickOwnership } from './trades/draftPickIntegrity.js';
 
 /** Broad stat leader bounds (regular NFL-ish full season); outside = warning only */
 export const STAT_LEADER_WARN = {
@@ -780,19 +781,20 @@ export function runDynastySoakAudit(input = {}) {
     }
   }
 
-  const seenPickIds = new Map();
-  for (const team of teams) {
-    const picks = Array.isArray(team?.picks) ? team.picks : [];
-    for (const pick of picks) {
-      const pickId = pick?.id ?? pick?.pickId ?? null;
-      if (pickId == null || pickId === '') continue;
-      const key = String(pickId);
-      if (seenPickIds.has(key)) {
-        fail('duplicate_draft_pick_id', `Draft pick ${key} appears on both team:${seenPickIds.get(key)} and team:${team.id}`, { pickId, teamId: team.id });
-        bumpSummary(summary, 'draftHealth', 'fail');
-      } else {
-        seenPickIds.set(key, team.id);
-      }
+  const pickIntegrityResult = validatePickOwnership({ teams });
+  for (const err of pickIntegrityResult.errors) {
+    if (err.code === 'duplicate_pick_id') {
+      fail('duplicate_draft_pick_id', err.message, err.context);
+      bumpSummary(summary, 'draftHealth', 'fail');
+    } else if (err.code === 'pick_owner_mismatch') {
+      fail('pick_owner_mismatch', err.message, { ...err.context, seed: viewState?.seed, season: viewState?.year, phase: viewState?.phase, teamId: err.context?.teamId });
+      bumpSummary(summary, 'draftHealth', 'fail');
+    } else if (err.code === 'duplicate_pick_identity') {
+      fail('duplicate_pick_identity', err.message, { ...err.context, seed: viewState?.seed, season: viewState?.year, phase: viewState?.phase });
+      bumpSummary(summary, 'draftHealth', 'fail');
+    } else if (err.code === 'pick_missing_round' || err.code === 'pick_missing_season' || err.code === 'pick_missing_original_owner') {
+      warn(err.code, err.message, { ...err.context, seed: viewState?.seed, season: viewState?.year, phase: viewState?.phase, teamId: err.context?.teamId });
+      bumpSummary(summary, 'draftHealth', 'warn');
     }
   }
 
