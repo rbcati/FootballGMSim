@@ -4,6 +4,7 @@ import { buildBoxScoreViewModel, buildPlayerStatSections, unwrapBoxScoreResponse
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { buildGameBookStory } from "../utils/gameBookStory.js";
 import { getPlayerProfileId, hasValidPlayerProfileId, openPlayerProfile } from "../utils/playerProfileNavigation.js";
+import ReplayableGameFlowViewer from "./ReplayableGameFlowViewer.jsx";
 
 const QUALITY_BADGE_CLASS = {
   "Full detail": "success",
@@ -61,6 +62,7 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
   const vm = useMemo(() => buildBoxScoreViewModel({ league, game, gameId, scheduleGame: fallbackGame, context: { season: league?.seasonId, week: league?.week } }), [league, game, gameId, fallbackGame]);
   const [sortState, setSortState] = useState({});
   const [showAllPlays, setShowAllPlays] = useState(false);
+  const [showReplay, setShowReplay] = useState(false);
 
   if (!vm || vm.status === "unavailable") {
     return <EmptyState title="Game Book unavailable" body="Game data missing." />;
@@ -282,6 +284,30 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
               </ul>
             </>
           ) : null}
+        </section>
+      )}
+      {gfs && (
+        <section className="bs-section" data-testid="game-book-replay-section">
+          <div className="bs-section-header">
+            <h4>Replay Game Flow</h4>
+            <button
+              type="button"
+              className="btn btn-sm btn-secondary"
+              data-testid="game-book-replay-toggle"
+              onClick={() => setShowReplay((prev) => !prev)}
+              aria-expanded={showReplay}
+            >
+              {showReplay ? "Hide" : "Replay"}
+            </button>
+          </div>
+          {showReplay && (
+            <ReplayableGameFlowViewer
+              gameFlowSummary={gfs}
+              homeTeam={vm.homeTeam}
+              awayTeam={vm.awayTeam}
+              finalScore={vm.finalScore}
+            />
+          )}
         </section>
       )}
       <section className="bs-section" data-testid="game-book-turning-points">
