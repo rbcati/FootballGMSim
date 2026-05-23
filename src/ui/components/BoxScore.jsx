@@ -108,6 +108,7 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
   ];
 
   const tableSections = buildPlayerStatSections(vm.playerTables, sortState);
+  const gfs = vm.gameFlowSummary ?? null;
   const driveRows = vm.driveSummaryRows ?? [];
   const turningPointRows = vm.turningPointRows ?? [];
   const notablePerformanceRows = vm.notablePerformanceRows ?? [];
@@ -214,6 +215,75 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
         <h4>Why this game was decided</h4>
         {storyBullets.length ? <ul>{storyBullets.map((b) => <li key={b}>{b}</li>)}</ul> : <p>No detailed team/player stats were recorded for this game.</p>}
       </section>
+      {gfs && (
+        <section className="bs-section" data-testid="game-book-game-flow">
+          <div className="bs-section-header">
+            <h4>Game Flow</h4>
+            <span className="bs-section-count">
+              {gfs.scoringTimeline.length ? `${gfs.scoringTimeline.length} scoring plays` : "Derived from sim data"}
+            </span>
+          </div>
+          {gfs.scoringTimeline.length ? (
+            <ul className="bs-list" aria-label="Scoring flow timeline">
+              {gfs.scoringTimeline.map((entry, i) => (
+                <li key={i} className="bs-list-item" data-testid="game-flow-score-entry">
+                  <strong>Q{entry.quarter} · {entry.label}</strong>
+                  <span>{entry.scoreAfter.away}{mdash}{entry.scoreAfter.home}</span>
+                  {entry.description ? <span>{entry.description}</span> : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {gfs.teamFlow && (vm.homeTeam?.id != null || vm.awayTeam?.id != null) ? (() => {
+            const homeFlow = gfs.teamFlow[String(vm.homeTeam?.id)] ?? gfs.teamFlow[vm.homeTeam?.id] ?? null;
+            const awayFlow = gfs.teamFlow[String(vm.awayTeam?.id)] ?? gfs.teamFlow[vm.awayTeam?.id] ?? null;
+            if (!homeFlow && !awayFlow) return null;
+            const flowRows = [
+              ["Scoring Drives", awayFlow?.scoringDrives, homeFlow?.scoringDrives],
+              ["Turnovers", awayFlow?.turnovers, homeFlow?.turnovers],
+              ["Red Zone (Scr/Trips)", awayFlow ? `${awayFlow.redZoneScores}/${awayFlow.redZoneTrips}` : null, homeFlow ? `${homeFlow.redZoneScores}/${homeFlow.redZoneTrips}` : null],
+              ["Explosive Plays", awayFlow?.explosivePlays, homeFlow?.explosivePlays],
+            ].filter(([, a, h]) => a != null || h != null);
+            return (
+              <div className="bs-table-wrap" role="region" aria-label="Team game-flow snapshot" style={{ marginTop: "0.75rem" }}>
+                <table className="box-score-table" data-testid="game-flow-team-snapshot">
+                  <caption className="sr-only">Team game-flow snapshot: scoring drives, turnovers, red zone, and explosive plays</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Metric</th>
+                      <th scope="col">{vm.awayTeam?.abbr ?? "Away"}</th>
+                      <th scope="col">{vm.homeTeam?.abbr ?? "Home"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {flowRows.map(([label, away, home]) => (
+                      <tr key={label} data-testid="game-flow-snapshot-row">
+                        <td>{label}</td>
+                        <td>{away ?? mdash}</td>
+                        <td>{home ?? mdash}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })() : null}
+          {gfs.turningPoints.length ? (
+            <>
+              <h5 style={{ marginTop: "0.75rem", marginBottom: "0.25rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>Key Turning Points</h5>
+              <ul className="bs-list" aria-label="Game turning points from play digest">
+                {gfs.turningPoints.map((tp, i) => (
+                  <li key={i} className="bs-list-item" data-testid="game-flow-turning-point">
+                    <strong>Q{tp.quarter} · {tp.label}</strong>
+                    <span>{tp.scoreContext.away}{mdash}{tp.scoreContext.home}</span>
+                    {tp.description ? <span>{tp.description}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </section>
+      )}
       <section className="bs-section" data-testid="game-book-turning-points">
         <div className="bs-section-header">
           <h4>Turning points</h4>

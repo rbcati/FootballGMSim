@@ -448,20 +448,29 @@ function PostGameScreenInner({
 
           <div style={{ marginBottom: 12, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 12, padding: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-              <strong style={{ fontSize: "0.8rem" }}>Game Center recap</strong>
-              <button className="btn" style={{ padding: "6px 10px", fontSize: "0.72rem" }} onClick={() => setShowDetails((v) => !v)}>
-                {showDetails ? "Hide details" : "Expand details"}
+              <strong style={{ fontSize: "0.8rem" }}>Game Flow</strong>
+              <button className="btn" style={{ padding: "6px 10px", fontSize: "0.72rem" }} onClick={() => setShowDetails((v) => !v)} data-testid="postgame-flow-toggle">
+                {showDetails ? "Hide" : "Key moments"}
               </button>
             </div>
             {showDetails && (
-              <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+              <div style={{ marginTop: 8, display: "grid", gap: 6 }} data-testid="postgame-flow-moments">
                 {notableMoments.length === 0 ? (
                   <div style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>No notable moments logged for this game.</div>
-                ) : notableMoments.map((m, i) => (
-                  <div key={i} style={{ fontSize: "0.74rem", color: "var(--text-muted)", padding: "6px 8px", background: "var(--surface-strong)", borderRadius: 8 }}>
-                    Q{m.quarter ?? "?"} {m.clock ?? ""} · {m.text ?? "Momentum swing"}
-                  </div>
-                ))}
+                ) : notableMoments.map((m, i) => {
+                  const isTD = m?.isTouchdown;
+                  const isTurnover = m?.turnover;
+                  const dot = isTD ? "·" : isTurnover ? "·" : "·";
+                  const typeLabel = isTD ? "TD" : isTurnover ? "Turnover" : "Score";
+                  return (
+                    <div key={i} style={{ fontSize: "0.74rem", color: "var(--text-muted)", padding: "6px 8px", background: "var(--surface-strong)", borderRadius: 8, display: "flex", gap: 6 }}>
+                      <span style={{ fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>Q{m.quarter ?? "?"}{m.clock ? ` ${m.clock}` : ""}</span>
+                      <span style={{ color: "var(--text-subtle)" }}>{dot}</span>
+                      <span style={{ fontWeight: 600, color: isTD ? "#34C759" : isTurnover ? "#FF453A" : "var(--text)", whiteSpace: "nowrap" }}>{typeLabel}</span>
+                      <span style={{ flex: 1 }}>{m.text ?? "Momentum swing"}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
