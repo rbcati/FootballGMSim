@@ -1,6 +1,10 @@
 import { calculatePlayerValue } from '../trade-logic.js';
 import { buildTradeRealismReasonTags, evaluatePlayerMarketRealism } from '../marketRealismModel.js';
 import { FOOTBALL_ROSTER_CONFIG } from '../sports/footballRosterConfig.js';
+import {
+  applyFuturePickDecayToPickValue,
+  evaluateMultiAssetPackageValue,
+} from './tradeValuationModifiers.js';
 
 const PREMIUM_POS = new Set(['QB', 'WR', 'OL', 'DL', 'CB']);
 const PREMIUM_PICK_WARNING = 'Premium pick included; verify before submitting.';
@@ -70,14 +74,15 @@ function estimateDraftPickValue(pick = {}) {
     : -8;
   return Math.max(20, Math.round(baseByRound + yearAdj));
 }
-function normalizeDraftPickAsset(pick = {}, ownerTeamId) {
+function normalizeDraftPickAsset(pick = {}, ownerTeamId, currentSeason) {
   const pickId = pick?.id ?? pick?.pickId ?? `${ownerTeamId}-${pick?.year ?? pick?.season ?? 'x'}-${pick?.round ?? 'r'}`;
-  const valueScore = estimateDraftPickValue(pick);
+  const baseValue = estimateDraftPickValue(pick);
+  const valueScore = applyFuturePickDecayToPickValue(pick, baseValue, currentSeason);
   const year = pick?.year ?? pick?.season ?? null;
   const round = pick?.round ?? null;
   return { assetType: 'pick', pickId, ownerTeamId: pick?.ownerTeamId ?? pick?.teamId ?? ownerTeamId, originalTeamId: pick?.originalTeamId ?? null, year, round, label: formatDraftPickLabel({ year, round }), valueScore, valueTier: classifyPickTier(valueScore), riskFlags: [] };
 }
-function buildDraftPickChip(pick = {}, ownerTeamId) { return normalizeDraftPickAsset(pick, ownerTeamId); }
+function buildDraftPickChip(pick = {}, ownerTeamId, currentSeason) { return normalizeDraftPickAsset(pick, ownerTeamId, currentSeason); }
 
 function groupPlayersByPosition(roster = []) {
   const map = {};
@@ -141,7 +146,6 @@ function getTargetCandidatesForNeed({ need, leaguePlayers, userTeamId }) {
 const classifyValueMatch = (delta) => (delta <= -35 ? 'favorable' : delta <= 25 ? 'fair' : delta <= 75 ? 'expensive' : 'unrealistic');
 const buildValueDeltaLabel = (d) => d <= -35 ? 'package may overpay' : d <= 25 ? 'near fair value' : d <= 75 ? 'slightly short on value' : 'far short on value';
 const buildOutgoingAssetSummary = (assets = []) => assets.map((a) => a.assetType === 'player' ? `${a.pos} ${a.name}` : a.label).join(' + ');
-const calculateOutgoingPackageValue = (assets = []) => assets.reduce((s, a) => s + num(a.valueScore), 0);
 
 function calculatePackageCapImpact({ target, outgoingAssets, cap }) {
   const incomingSalary = getPlayerSalary(target);
@@ -202,7 +206,7 @@ function scorePackageIdea({ need, valueDelta, valueMatch, warnings, capImpact })
 function classifyValueMatchDetail(v){return buildValueDeltaLabel(v);}
 function buildIdea({ need, target, outgoingAssets, targetTeam, cap, packageType }) {
   const targetValue = getPlayerValueSafe(target);
-  const outgoingValue = calculateOutgoingPackageValue(outgoingAssets);
+  const outgoingValue = evaluateMultiAssetPackageValue(outgoingAssets.map((a) => num(a.valueScore)));
   const valueDelta = Math.round(targetValue - outgoingValue);
   const valueMatch = classifyValueMatch(valueDelta);
   const capData = calculatePackageCapImpact({ target, outgoingAssets, cap });
@@ -262,11 +266,12 @@ function sortAndCapTradeIdeas(ideas = [], userTeamId) { return ideas.filter((i) 
 export function buildTradeFinderAnalysis({ userTeam, league = {}, teams = [], userRoster = [], leaguePlayers = [], cap = {}, footballConfig = FOOTBALL_ROSTER_CONFIG }) {
   const teamMap = new Map(teams.map((t) => [num(t.id), t]));
   const userTeamId = num(userTeam?.id, -1);
+  const currentSeason = league?.year ?? league?.currentSeason ?? null;
   const userRosterByPosition = groupPlayersByPosition(userRoster);
   const targetIndex = buildExternalTargetIndex({ leaguePlayers, userTeamId });
   const targetNeeds = Object.values(buildNeedMap(userRoster, footballConfig, userRosterByPosition)).sort((a, b) => b.needScore - a.needScore).slice(0, 6);
   const { userSurplus, chipPool, nonStarterIds } = buildUserSurplus(userRoster, footballConfig, userRosterByPosition);
-  const userPickChips = getTeamDraftPicks(userTeam, league).map((p) => buildDraftPickChip(p, userTeamId)).filter((p) => p?.pickId).sort((a,b)=>b.valueScore-a.valueScore);
+  const userPickChips = getTeamDraftPicks(userTeam, league).map((p) => buildDraftPickChip(p, userTeamId, currentSeason)).filter((p) => p?.pickId).sort((a,b)=>b.valueScore-a.valueScore);
   const userAssets = [...chipPool, ...userPickChips];
   const ideas = [];
   for (const need of targetNeeds.slice(0, 4)) {
