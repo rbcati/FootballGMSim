@@ -1,5 +1,6 @@
 import { mergeArchivedGameWithScheduleResult, normalizeArchivedGamePayload } from '../../core/gameArchive.js';
 import { isScoringLikeLog, normalizePlayLogEntry } from '../../core/gameEvents.js';
+import { buildGameFlowSummary } from '../../core/sim/gameFlowSummary.js';
 
 const QUALITY = { full: 'Full detail', partial: 'Partial detail', score: 'Score only', missing: 'Missing detail' };
 
@@ -556,6 +557,7 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
       notablePerformances: hasNotablePerformances,
       injuries: hasInjuries,
     },
+    gameFlowSummary: buildGameFlowSummary(payload),
     prepImpact: Array.isArray(payload?.prepImpact) ? payload.prepImpact : (payload?.prepImpact ? [String(payload.prepImpact)] : []),
     detailWarning,
     missingDetailReason: detailWarning,
