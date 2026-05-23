@@ -638,7 +638,7 @@ export function generateAITradeProposalsForUser({
 
   // Keep offers occasional and contextual.
   const baseChance = nearDeadline ? 0.55 : 0.35;
-  if (Math.random() > baseChance) return [];
+  if (U.random() > baseChance) return [];
 
   const aiTeams = U.shuffle(allTeams.filter((t) => Number(t.id) !== userTeamId));
   const proposals = [];
@@ -646,7 +646,7 @@ export function generateAITradeProposalsForUser({
 
   for (const aiTeam of aiTeams) {
     if (proposals.length >= 2) break;
-    if (Math.random() < 0.45 && proposals.length >= 1) continue;
+    if (U.random() < 0.45 && proposals.length >= 1) continue;
 
     const aiDirection = classifyTeamDirection(aiTeam, week);
     const aiSurplus = getSurplusPlayers(aiTeam.id);
@@ -746,9 +746,9 @@ export function generateAITradeProposalsForUser({
     if (
       offerType === 'pick_package'
       && nearDeadline
-      && Math.random() < 0.35
+      && U.random() < 0.35
     ) {
-      const preferredRound = Math.random() < 0.65 ? 3 : 4;
+      const preferredRound = U.random() < 0.65 ? 3 : 4;
       const aiPick = resolveTradablePick(aiTeam, Number(meta?.season ?? meta?.year ?? 1), preferredRound);
       if (aiPick?.id != null) {
         proposal.offering.pickIds.push(aiPick.id);
