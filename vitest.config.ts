@@ -20,6 +20,5 @@ export default defineConfig({
       'dist/**',
     ],
     environment: 'node',
-    setupFiles: ['./vitest.setup.js'],
   },
 });
