@@ -1,0 +1,31 @@
+diff --git a/src/core/league-memory.js b/src/core/league-memory.js
+index 731797c..f65b3d6 100644
+--- a/src/core/league-memory.js
++++ b/src/core/league-memory.js
+@@ -535,26 +535,6 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
+     }
+   }
+
+-
+-  const teamMap = new Map();
+-  for (let i = 0; i < teams.length; i++) {
+-    const t = teams[i];
+-    if (t?.id != null) {
+-      teamMap.set(Number(t.id), t);
+-    }
+-  }
+-
+-  const sortedMap = new Map();
+-  for (let i = 0; i < sorted.length; i++) {
+-    const t = sorted[i];
+-    if (t?.id != null) {
+-      sortedMap.set(Number(t.id), t);
+-    }
+-  }
+-
+-  const userRow = sortedMap.get(Number(userTeamId)) || null;
+-  const userTeam = teamMap.get(Number(userTeamId)) ?? null;
+-  const userRows = seasonStats.filter((row) => Number(row?.teamId) === Number(userTeamId));
+   const previousSummary = null;
+   const seasonReview = userRow ? buildSeasonReview({ team: userTeam, standingsRow: userRow, teamStats: userRows, previousSummary }) : null;
+   const playerReportCards = userRow ? buildPlayerReportCards({ team: userTeam, teamRows: userRows, review: seasonReview }) : [];
