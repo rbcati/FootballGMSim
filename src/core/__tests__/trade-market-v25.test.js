@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateCounterOffer, buildOfferSignature, shouldSkipOfferFromMemory, getPickMarketValue } from '../trade-logic.js';
+import { calculateFuturePickDecay, getPickBaseValueFromMatrix } from '../trades/tradeValuationModifiers.js';
 
 describe('trade market v2.5 counter evaluation', () => {
   const aiTeam = { id: 2, abbr: 'ATL', capRoom: 24 };
@@ -100,7 +101,13 @@ describe('trade market v2.5 offer memory', () => {
   });
 
   it('maps pick round value in descending order', () => {
-    expect(getPickMarketValue({ round: 1 })).toBeGreaterThan(getPickMarketValue({ round: 3 }));
-    expect(getPickMarketValue({ round: 3 })).toBeGreaterThan(getPickMarketValue({ round: 6 }));
+    expect(getPickMarketValue({ round: 1 }, 2026)).toBeGreaterThan(getPickMarketValue({ round: 3 }, 2026));
+    expect(getPickMarketValue({ round: 3 }, 2026)).toBeGreaterThan(getPickMarketValue({ round: 6 }, 2026));
+  });
+
+  it('uses unified decay helper for equivalent pick metadata', () => {
+    const pick = { round: 1, season: 2029 };
+    const expected = calculateFuturePickDecay(getPickBaseValueFromMatrix(1), 2029, 2026);
+    expect(getPickMarketValue(pick, 2026)).toBe(expected);
   });
 });

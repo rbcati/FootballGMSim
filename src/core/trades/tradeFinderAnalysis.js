@@ -4,7 +4,15 @@ import { FOOTBALL_ROSTER_CONFIG } from '../sports/footballRosterConfig.js';
 import {
   applyFuturePickDecayToPickValue,
   evaluateMultiAssetPackageValue,
+  getPickBaseValueFromMatrix,
 } from './tradeValuationModifiers.js';
+
+const PICK_VALUE_SCALING = 0.184;
+
+function getNormalizedPickValueFromUnifiedMatrix(pick = {}) {
+  const baseValue = getPickBaseValueFromMatrix(pick?.round);
+  return Math.max(20, Math.round(baseValue * PICK_VALUE_SCALING));
+}
 
 const PREMIUM_POS = new Set(['QB', 'WR', 'OL', 'DL', 'CB']);
 const PREMIUM_PICK_WARNING = 'Premium pick included; verify before submitting.';
@@ -63,16 +71,7 @@ function formatDraftPickLabel(pick = {}) {
   return 'Unknown draft pick';
 }
 function estimateDraftPickValue(pick = {}) {
-  const round = Number(pick?.round);
-  const year = Number(pick?.year ?? pick?.season);
-  const nowYear = new Date().getUTCFullYear();
-  const baseByRound = Number.isFinite(round)
-    ? (round === 1 ? 175 : round === 2 ? 135 : round <= 4 ? 98 : round <= 7 ? 64 : 52)
-    : 50;
-  const yearAdj = Number.isFinite(year)
-    ? (year <= nowYear + 1 ? 16 : year === nowYear + 2 ? 8 : Math.max(-14, -6 * (year - (nowYear + 2))))
-    : -8;
-  return Math.max(20, Math.round(baseByRound + yearAdj));
+  return getNormalizedPickValueFromUnifiedMatrix(pick);
 }
 function normalizeDraftPickAsset(pick = {}, ownerTeamId, currentSeason) {
   const pickId = pick?.id ?? pick?.pickId ?? `${ownerTeamId}-${pick?.year ?? pick?.season ?? 'x'}-${pick?.round ?? 'r'}`;

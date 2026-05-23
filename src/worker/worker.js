@@ -1003,8 +1003,7 @@ function updateTradeOfferMemory(metaObj, offers = []) {
 }
 
 function getPickRoundValue(round, { week = 1, teamDirection = 'balanced', projectedRange = 'mid' } = {}) {
-  const PICK_VALUES = [0, 950, 360, 150, 70, 30, 12, 4];
-  const base = PICK_VALUES[Number(round ?? 4)] ?? 8;
+  const base = getPickBaseValueFromMatrix(round);
   const rangeAdj = projectedRange === 'early' ? 1.22 : projectedRange === 'late' ? 0.88 : 1.0;
   const stageAdj = Number(week) >= 10 ? 1.1 : Number(week) >= 6 ? 1.05 : 1.0;
   const directionAdj = teamDirection === 'rebuilding' ? 1.15 : teamDirection === 'contender' ? 0.92 : 1.0;

@@ -12,6 +12,29 @@
  * or worker transaction paths.
  */
 
+
+
+/**
+ * Unified base draft pick value matrix used across trade scoring paths.
+ * Keys are rounds; values are base market values prior to any modifiers.
+ */
+export const DEFAULT_PICK_VALUE_MATRIX = Object.freeze({
+  1: 950,
+  2: 360,
+  3: 150,
+  4: 70,
+  5: 30,
+  6: 12,
+  7: 4,
+  default: 8,
+});
+
+export function getPickBaseValueFromMatrix(round, matrix = DEFAULT_PICK_VALUE_MATRIX) {
+  const r = Number(round);
+  if (!Number.isFinite(r)) return Number(matrix?.default ?? 8);
+  return Number(matrix?.[r] ?? matrix?.default ?? 8);
+}
+
 // ── Pick Decay Constants ──────────────────────────────────────────────────────
 
 /**
