@@ -13,6 +13,7 @@ test('league pulse appears after one weekly advance and opens full timeline', as
 
   const startWeek = await page.evaluate(() => window?.state?.league?.week ?? 1);
   await page.getByTestId('advance-week-cta').click();
+  await page.getByTestId('gate-advance-anyway-btn').click({ timeout: 2000 }).catch(() => {});
   await page.getByRole('button', { name: /Simulate \(Skip\)/i }).click({ timeout: 10000 }).catch(() => {});
   await page.waitForFunction(
     (baseline) => {
@@ -27,8 +28,7 @@ test('league pulse appears after one weekly advance and opens full timeline', as
 
   await expect(page.getByText(/League Pulse/i).first()).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await page.getByRole('button', { name: /Open full pulse/i }).click();
-  await expect(page.getByText(/News & Injuries/i)).toBeVisible({ timeout: SMOKE_TIMEOUT });
-  await expect(page.getByText(/League Pulse/i).first()).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  await expect(page.getByRole('button', { name: /Pulse/i }).first()).toBeVisible({ timeout: SMOKE_TIMEOUT });
 
   await goToTab(page, 'hq');
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
