@@ -5,6 +5,8 @@ import {
   getPositionCompatibility,
   getPositionalPenaltyProfile,
   calculateEffectiveAttributes,
+  inferAssignedPositionFromDepthSlot,
+  getEffectivePlayerForRole,
 } from '../sim/positionalMultipliers.js';
 
 describe('positionalMultipliers', () => {
@@ -47,5 +49,19 @@ describe('positionalMultipliers', () => {
     expect(result.pass).toBeLessThan(player.pass);
     expect(result.speed).toBeGreaterThan(result.pass);
     expect(result.ratings.pass).toBeLessThan(player.ratings.pass);
+  });
+
+  it('maps depth slot roles into canonical assigned positions safely', () => {
+    expect(inferAssignedPositionFromDepthSlot('LT')).toBe('OT');
+    expect(inferAssignedPositionFromDepthSlot('RG')).toBe('OG');
+    expect(inferAssignedPositionFromDepthSlot('CB')).toBe('CB');
+    expect(inferAssignedPositionFromDepthSlot(null)).toBe(null);
+  });
+
+  it('defaults safely when assigned role is unknown', () => {
+    const player = { pos: 'WR', routeRunning: 87 };
+    const result = getEffectivePlayerForRole(player, undefined);
+    expect(result).not.toBe(player);
+    expect(result.routeRunning).toBe(87);
   });
 });

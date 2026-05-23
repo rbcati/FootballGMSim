@@ -34,6 +34,21 @@ describe('weekSimulationBridge', () => {
     expect(units.defense.zoneCoverage).toBeGreaterThan(0);
   });
 
+  it('applies severe out-of-position penalties when depth assignment is known', () => {
+    const qbAttrs = mapOverallToAttributesV2(90, 5.5, 'qb');
+    const wrAttrs = mapOverallToAttributesV2(90, 5.5, 'wr');
+    const roster = [
+      { id: 1, name: 'Natural QB', pos: 'QB', attributesV2: qbAttrs, depthChart: { rowKey: 'QB', order: 1 } },
+      { id: 2, name: 'Wrong QB', pos: 'WR', attributesV2: wrAttrs, depthChart: { rowKey: 'QB', order: 1 } },
+    ];
+
+    const natural = aggregateTeamUnitsFromRoster([roster[0]] as any);
+    const mismatch = aggregateTeamUnitsFromRoster([roster[1]] as any);
+
+    expect(mismatch.offense.throwAccuracyShort).toBeLessThanOrEqual(natural.offense.throwAccuracyShort);
+    expect(mismatch.offense.throwPower).toBeLessThan(natural.offense.throwPower);
+  });
+
   it('falls back to legacy simulation when new path throws', async () => {
     const legacySimulate = vi.fn(async () => [{ scoreHome: 14, scoreAway: 10 }]);
     const manager = {

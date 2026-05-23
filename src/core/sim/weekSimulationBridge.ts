@@ -1,5 +1,6 @@
 import type { AttributesV2, Player } from '../../types/player.ts';
 import { ensureAttributesV2 } from '../migration/attributeMigrator.ts';
+import { getEffectivePlayerForRole } from './positionalMultipliers.js';
 import type { GameSummary, Matchup, SimulationManager } from '../../worker/WorkerPool.ts';
 
 const OFFENSE_KEYS: Array<keyof AttributesV2> = [
@@ -70,10 +71,19 @@ export function aggregateTeamUnitsFromRoster(roster: Player[] = []): AggregatedT
   const upgradedRoster = roster
     .map((player) => {
       const upgraded = ensureAttributesV2(player);
+      const assignedSlot = player?.depthChart?.rowKey;
+      const effective = getEffectivePlayerForRole(upgraded, assignedSlot);
+      const merged = {
+        ...upgraded,
+        attributesV2: {
+          ...upgraded.attributesV2,
+          ...(effective.attributesV2 ?? {}),
+        },
+      };
       if (!player.attributesV2 && player.id != null) {
         migratedPlayers.push({ id: player.id, attributesV2: upgraded.attributesV2 });
       }
-      return upgraded as Player & { attributesV2: AttributesV2 };
+      return merged as Player & { attributesV2: AttributesV2 };
     })
     .sort(stablePlayerSort);
 
