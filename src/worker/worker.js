@@ -2587,7 +2587,7 @@ async function handleAdvanceWeek(payload, id) {
               const teamStaff = ensureTeamStaff(team, { year: Number(meta?.year ?? 2025) });
               const staffBonuses = computeStaffTeamBonuses({ ...team, staff: teamStaff }, { staffImpactStrength: getLeagueSetting('staffImpactStrength', 50), year: Number(meta?.year ?? 2025) });
               const recoveryBoost = Number(staffBonuses?.recoveryDelta ?? 0);
-              const extraRecovery = recoveryBoost >= 0.09 ? 1 : Math.random() < Math.max(0, recoveryBoost) * 2.5 ? 1 : 0;
+              const extraRecovery = recoveryBoost >= 0.09 ? 1 : Utils.random() < Math.max(0, recoveryBoost) * 2.5 ? 1 : 0;
               p.injuryWeeksRemaining -= 1 + extraRecovery;
               if (p.injuryWeeksRemaining <= 0) {
                   // Healed
@@ -6463,7 +6463,7 @@ async function handleConductDrill({ teamId, intensity, drillType, positionGroups
     for (const p of players) {
         if (!activePosSet.has(p.pos)) continue;
         // Chance to get a boost: 40-60% depending on intensity
-        const roll = Math.random();
+        const roll = Utils.random();
         const chance = 0.35 + cfg.devMult * 0.15;
         if (roll < chance) {
             const boost = cfg.maxBoost + drillBonus;
@@ -6474,7 +6474,7 @@ async function handleConductDrill({ teamId, intensity, drillType, positionGroups
             dirtyPlayers.push(p.id);
         }
         // Small injury risk from hard training (drill-only, not game injury)
-        if (cfg.injRisk > 0 && Math.random() < cfg.injRisk && !p.injured) {
+        if (cfg.injRisk > 0 && Utils.random() < cfg.injRisk && !p.injured) {
             p.injured = true;
             p.injuryWeeksRemaining = 1;
             cache.updatePlayer(p.id, { injured: true, injuryWeeksRemaining: 1 });
@@ -8729,11 +8729,11 @@ function runAiStaffCarousel(meta, teams) {
       const current = staff?.[roleKey];
       const currentScore = Number(current?.overall ?? 55);
       const stayBias = direction === 'contender' ? 0.8 : direction === 'rebuild' ? 0.58 : 0.68;
-      if (current && currentScore >= 75 && Math.random() < stayBias) continue;
+      if (current && currentScore >= 75 && Utils.random() < stayBias) continue;
       const pool = market.filter((m) => m.roleKey === roleKey).sort((a, b) => Number(b?.overall ?? 0) - Number(a?.overall ?? 0));
       if (!pool.length) continue;
       const shortlist = pool.slice(0, 12);
-      const candidate = shortlist[Math.floor(Math.random() * Math.max(2, shortlist.length / 2))] ?? shortlist[0];
+      const candidate = shortlist[Math.floor(Utils.random() * Math.max(2, shortlist.length / 2))] ?? shortlist[0];
       if (!candidate || Number(candidate?.overall ?? 0) < currentScore + (direction === 'rebuild' ? -3 : 2)) continue;
       staff[roleKey] = { ...candidate, continuity: { teamId: team.id, sinceYear: Number(meta?.year ?? 2025), tenureYears: 0 } };
     }
