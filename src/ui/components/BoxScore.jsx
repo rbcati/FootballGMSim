@@ -141,14 +141,15 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
           <h4>{spec.title}</h4>
           <span className="bs-section-count">{spec.showingLabel}</span>
         </div>
-        <div className="bs-table-wrap bs-table-wrap--compact">
+        <div className="bs-table-wrap bs-table-wrap--compact" role="region" aria-label={`${spec.title} player stats — scroll horizontally to view all columns`}>
           <table className="box-score-table">
+            <caption className="sr-only">{spec.title} statistics for both teams</caption>
             <thead>
               <tr>
-                <th>Team</th>
-                <th>Player</th>
+                <th scope="col">Team</th>
+                <th scope="col">Player</th>
                 {spec.cols.map(([key, label]) => (
-                  <th key={label}>
+                  <th key={label} scope="col">
                     <button type="button" className="btn-link" onClick={() => setSortState((prev) => ({ ...prev, [spec.title]: { key, dir: prev?.[spec.title]?.key === key && prev?.[spec.title]?.dir === desc ? "asc" : desc } }))}>{label}</button>
                   </th>
                 ))}
@@ -286,9 +287,10 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
           <span className="bs-section-count">{driveRows.length ? `${driveRows.length} drives` : "Not recorded"}</span>
         </div>
         {driveRows.length ? (
-          <div className="bs-table-wrap">
+          <div className="bs-table-wrap" role="region" aria-label="Drive summary — scroll horizontally to view all columns">
             <table className="box-score-table">
-              <thead><tr><th>Qtr</th><th>Team</th><th>Start</th><th>End</th><th>Result</th><th>Plays</th><th>Yards</th><th>Pts</th></tr></thead>
+              <caption className="sr-only">Drive summary: quarter, team, field position, result, plays, yards, and points per drive</caption>
+              <thead><tr><th scope="col">Qtr</th><th scope="col">Team</th><th scope="col">Start</th><th scope="col">End</th><th scope="col">Result</th><th scope="col">Plays</th><th scope="col">Yards</th><th scope="col">Pts</th></tr></thead>
               <tbody>
                 {driveRows.map((row) => (
                   <tr key={row.id} data-testid="game-book-drive-row">
@@ -337,10 +339,11 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
       <section className="bs-section" data-testid="game-book-quarter-scores">
         <h4>Score by quarter</h4>
         {hasQuarter ? (
-          <div className="bs-table-wrap">
+          <div className="bs-table-wrap" role="region" aria-label="Score by quarter — scroll horizontally for overtime columns">
             <table className="box-score-table">
+              <caption className="sr-only">Linescore: quarter-by-quarter scoring for both teams</caption>
               <thead>
-                <tr><th>Team</th>{headers.map((h) => <th key={h}>{h}</th>)}<th>Final</th></tr>
+                <tr><th scope="row">Team</th>{headers.map((h) => <th key={h} scope="col">{h}</th>)}<th scope="col">Final</th></tr>
               </thead>
               <tbody>
                 <tr>
@@ -362,9 +365,10 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
       <section className="bs-section" data-testid="game-book-team-comparison">
         <h4>Team comparison</h4>
         {teamRows.length ? (
-          <div className="bs-table-wrap">
+          <div className="bs-table-wrap" role="region" aria-label="Team stat comparison">
             <table className="box-score-table">
-              <thead><tr><th>Stat</th><th>{vm.awayTeam.abbr}</th><th>{vm.homeTeam.abbr}</th></tr></thead>
+              <caption className="sr-only">Side-by-side team statistics: {vm.awayTeam.abbr} vs {vm.homeTeam.abbr}</caption>
+              <thead><tr><th scope="col">Stat</th><th scope="col">{vm.awayTeam.abbr}</th><th scope="col">{vm.homeTeam.abbr}</th></tr></thead>
               <tbody>{teamRows.map((row) => <tr key={row.key ?? row.label}><td>{row.label}</td><td className={row.winner === "away" ? "bs-compare-value--winner" : undefined}>{row.away ?? mdash}</td><td className={row.winner === "home" ? "bs-compare-value--winner" : undefined}>{row.home ?? mdash}</td></tr>)}</tbody>
             </table>
           </div>
@@ -374,9 +378,10 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
       <section className="bs-section" data-testid="game-book-scoring-summary">
         <h4>Scoring summary</h4>
         {vm.scoringSummary?.length ? (
-          <div className="bs-table-wrap">
+          <div className="bs-table-wrap" role="region" aria-label="Scoring summary — scroll horizontally to view all columns">
             <table className="box-score-table">
-              <thead><tr><th>Qtr</th><th>Time</th><th>Team</th><th>Type</th><th>Description</th><th>Score</th></tr></thead>
+              <caption className="sr-only">Scoring plays: quarter, time, team, score type, description, and running score</caption>
+              <thead><tr><th scope="col">Qtr</th><th scope="col">Time</th><th scope="col">Team</th><th scope="col">Type</th><th scope="col">Description</th><th scope="col">Score</th></tr></thead>
               <tbody>
                 {vm.scoringSummary.map((r, i) => (
                   <tr key={i}>

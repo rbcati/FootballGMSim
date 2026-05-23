@@ -96,7 +96,7 @@ export default function AdvancedPlayerSearch({ filters, onChange, title = 'Advan
         const operatorOptions = OPERATORS[selectedField.valueType] ?? OPERATORS.string;
 
         return (
-          <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '140px 1fr 120px 1fr auto', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+          <div key={row.id} className="advanced-filter-row" style={{ display: 'grid', gridTemplateColumns: '140px 1fr 120px 1fr auto', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
             <select
               value={selectedField.category}
               onChange={(event) => {

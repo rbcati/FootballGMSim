@@ -1153,3 +1153,127 @@ html, body {
 }
 
 /* Game is now 100% stable with no freezing; all modal buttons respond instantly on iOS Safari/mobile Chrome; scheme fit updates live and feels meaningful. */
+
+/* ============================================================================
+   RESPONSIVE DENSE DATA UTILITIES
+   Mobile Dense Data Views V1 — layout + accessibility helpers
+   ============================================================================ */
+
+/*
+ * Generic scrollable data region.
+ * Use for any table or dense grid that must scroll horizontally on narrow screens.
+ * Always contains the scroll within this element so body overflow is never triggered.
+ */
+.responsive-data-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  position: relative;
+}
+
+/* Table inside a responsive wrapper — stays at its natural width. */
+.responsive-data-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/*
+ * Sticky identity cell for first-column row identity (player name, team name, etc.).
+ * Apply to both <th> and <td> in the first column when the table scrolls horizontally.
+ */
+.sticky-identity-cell {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+
+/* When the wrapper itself requests sticky first column, auto-apply to child table cells. */
+.responsive-data-wrap--sticky-col table th:first-child,
+.responsive-data-wrap--sticky-col table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+
+/* Dense list row — baseline-aligned flex with wrapping for card/list surfaces. */
+.dense-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-2) var(--space-3);
+}
+
+/* ── AdvancedPlayerSearch filter rows: stack on narrow screens ──────────────── */
+@media (max-width: 600px) {
+  .advanced-filter-row {
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: auto auto;
+  }
+
+  .advanced-filter-row select:first-child {
+    grid-column: 1 / 2;
+  }
+
+  .advanced-filter-row select:nth-child(2) {
+    grid-column: 2 / 3;
+  }
+
+  .advanced-filter-row select:nth-child(3) {
+    grid-column: 1 / 2;
+  }
+
+  .advanced-filter-row input {
+    grid-column: 2 / 3;
+  }
+
+  .advanced-filter-row button {
+    grid-column: 1 / 3;
+    justify-self: end;
+  }
+}
+
+/* ── LeagueHistory / dense tab-list: allow scroll on narrow viewports ──────── */
+.tabs-scroll-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  /* Fade hint at right edge when overflowing */
+  mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+}
+
+/* Remove mask when not overflowing — JS would be needed; safe to keep always. */
+@media (max-width: 768px) {
+  .tabs-scroll-wrap {
+    padding-bottom: var(--space-1);
+  }
+}
+
+/* ── BoxScore table regions: reinforce contained scroll ─────────────────────── */
+@media (max-width: 480px) {
+  .box-score-table {
+    font-size: 0.72rem;
+  }
+
+  .box-score-table th,
+  .box-score-table td {
+    padding: 4px 6px;
+    white-space: nowrap;
+  }
+}
+
+/* ── PlayerProfile career/season-log tables ─────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Ensure the table wrapper never leaks outside the card */
+  .player-career-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    position: relative;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+  }
+}
