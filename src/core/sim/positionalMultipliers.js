@@ -6,6 +6,31 @@ const POSITION_ALIASES = Object.freeze({
   SS: 'S', FS: 'S', PK: 'K',
 });
 
+const DEPTH_SLOT_POSITION_MAP = Object.freeze({
+  QB: 'QB',
+  RB: 'RB',
+  WR: 'WR',
+  TE: 'TE',
+  OL: 'OL',
+  LT: 'OT',
+  LG: 'OG',
+  C: 'C',
+  RG: 'OG',
+  RT: 'OT',
+  EDGE: 'EDGE',
+  IDL: 'IDL',
+  DL: 'IDL',
+  LB: 'LB',
+  CB: 'CB',
+  S: 'S',
+  FS: 'S',
+  SS: 'S',
+  DB: 'CB',
+  K: 'K',
+  P: 'P',
+  RS: 'RS',
+});
+
 const POSITION_GROUPS = Object.freeze({
   QB: 'QB', RB: 'RB_FB', WR: 'WR', TE: 'TE',
   OT: 'OL', OG: 'OL', C: 'OL', OL: 'OL',
@@ -102,4 +127,20 @@ export function calculateEffectiveAttributes(player = {}, assignedPosition, opti
   clone.effectiveProfile = profile;
   clone.effectivePosition = normalizePosition(assignedPosition) ?? normalizePosition(naturalPosition);
   return mapRecord(clone, profile);
+}
+
+export function inferAssignedPositionFromDepthSlot(slotName) {
+  const normalizedSlot = normalizePosition(slotName);
+  if (!normalizedSlot) return null;
+  return DEPTH_SLOT_POSITION_MAP[normalizedSlot] ?? normalizedSlot;
+}
+
+export function normalizeAssignedRole(roleOrSlot) {
+  return inferAssignedPositionFromDepthSlot(roleOrSlot);
+}
+
+export function getEffectivePlayerForRole(player = {}, roleOrPosition, options = {}) {
+  const assignedPosition = normalizeAssignedRole(roleOrPosition);
+  if (!assignedPosition) return { ...player };
+  return calculateEffectiveAttributes(player, assignedPosition, options);
 }
