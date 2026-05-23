@@ -1885,7 +1885,7 @@ export default function PlayerProfile({
               No career stats recorded yet.
             </p>
           ) : (
-            <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
+            <div className="table-wrapper player-career-table-wrap" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
               <Table
                 className="standings-table"
                 style={{ width: "100%", minWidth: 540, fontSize: "0.76rem", lineHeight: 1.3 }}
@@ -1895,7 +1895,7 @@ export default function PlayerProfile({
                     <TableHead
                       style={{
                         paddingLeft: "var(--space-4)",
-                        textAlign: "left", position: "sticky", left: 0, background: "var(--surface)",
+                        textAlign: "left", position: "sticky", left: 0, zIndex: 2, background: "var(--surface)",
                       }}
                     >
                       Year
@@ -2128,7 +2128,7 @@ export default function PlayerProfile({
               {seasonLogRows.length === 0 ? (
                 <EmptyState title="No season rows match this filter." subtitle="Reset filters to show the full archived season log." />
               ) : null}
-              <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
+              <div className="table-wrapper player-career-table-wrap" role="region" aria-label="Player season log — scroll horizontally to view all stat columns" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
                 <Table
                   className="standings-table"
                   style={{

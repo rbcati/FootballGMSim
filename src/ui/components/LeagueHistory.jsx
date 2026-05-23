@@ -218,17 +218,19 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="seasons">Season Archive</TabsTrigger>
-          <TabsTrigger value="records">Record Book</TabsTrigger>
-          <TabsTrigger value="awards">Awards History</TabsTrigger>
-          <TabsTrigger value="hof">Hall of Fame</TabsTrigger>
-          <TabsTrigger value="office">League Office</TabsTrigger>
-          <TabsTrigger value="draft">Draft History</TabsTrigger>
-          <TabsTrigger value="compare">Compare Players</TabsTrigger>
-          <TabsTrigger value="leaders">League Leaders</TabsTrigger>
-        </TabsList>
+        <div className="tabs-scroll-wrap" role="region" aria-label="League history navigation tabs">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="seasons">Season Archive</TabsTrigger>
+            <TabsTrigger value="records">Record Book</TabsTrigger>
+            <TabsTrigger value="awards">Awards History</TabsTrigger>
+            <TabsTrigger value="hof">Hall of Fame</TabsTrigger>
+            <TabsTrigger value="office">League Office</TabsTrigger>
+            <TabsTrigger value="draft">Draft History</TabsTrigger>
+            <TabsTrigger value="compare">Compare Players</TabsTrigger>
+            <TabsTrigger value="leaders">League Leaders</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="overview">
           <OverviewDashboard
