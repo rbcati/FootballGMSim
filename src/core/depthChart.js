@@ -14,6 +14,8 @@ export const DEPTH_CHART_ROWS = [
   { group: 'SPECIAL', key: 'RS', label: 'Return Specialist', match: ['WR', 'RB', 'CB', 'S'], slots: 2, min: 1 },
 ];
 
+import { getPositionalPenaltyProfile } from './sim/positionalMultipliers.js';
+
 const SLOT_ROLES = ['starter', 'backup', 'rotation', 'specialist'];
 
 export function getDepthRows() {
@@ -138,6 +140,17 @@ export function depthWarnings(assignments = {}, players = []) {
       const eligible = players.some((p) => row.match.includes(p?.pos));
       if (eligible) warnings.push({ rowKey: row.key, severity: 'error', message: `${row.label} has no assignment despite eligible players.` });
     }
+
+    ids.forEach((id, idx) => {
+      const assigned = byId.get(Number(id));
+      if (!assigned) return;
+      const profile = getPositionalPenaltyProfile(assigned?.pos, row.key);
+      if (profile.compatibility === 'cross') {
+        warnings.push({ rowKey: row.key, severity: 'warn', message: `${assigned?.name ?? 'Player'} has a severe out-of-position assignment at ${row.label}${idx === 0 ? ' (starter)' : ''}.` });
+      } else if (idx === 0 && (profile.compatibility === 'minor' || profile.compatibility === 'family')) {
+        warnings.push({ rowKey: row.key, severity: 'info', message: `${assigned?.name ?? 'Player'} has a moderate role fit penalty at ${row.label}.` });
+      }
+    });
 
     const injuredStarter = byId.get(Number(ids[0]));
     if (injuredStarter && (injuredStarter?.injuryWeeksRemaining ?? 0) > 0) {

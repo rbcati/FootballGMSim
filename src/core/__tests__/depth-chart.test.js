@@ -20,6 +20,19 @@ describe('depth chart auto population', () => {
     expect(qb2.depthChart.order).toBe(1);
   });
 
+
+
+  it('flags severe and moderate out-of-position depth assignments', () => {
+    const players = [
+      { id: 1, name: 'Arm Punt', pos: 'QB', ovr: 80, teamId: 1, status: 'active' },
+      { id: 2, name: 'Coverage Ace', pos: 'CB', ovr: 82, teamId: 1, status: 'active' },
+      { id: 3, name: 'Free Safety', pos: 'S', ovr: 79, teamId: 1, status: 'active' },
+    ];
+    const warnings = depthWarnings({ OL: [1], S: [2], CB: [3] }, players);
+    expect(warnings.some((w) => w.message.includes('severe out-of-position'))).toBe(true);
+    expect(warnings.some((w) => w.message.includes('moderate role fit penalty'))).toBe(true);
+  });
+
   it('emits warnings for thin groups', () => {
     const players = [{ id: 10, pos: 'QB', ovr: 80, teamId: 1, status: 'active' }];
     const assignments = autoBuildDepthChart(players, {});
