@@ -97,16 +97,16 @@ export function buildSeasonStorylineSnapshot(memoryMeta, teams, userTeamId) {
   const latest = history[history.length - 1] ?? null;
   if (!latest) return [];
 
-  const teamMap = new Map();
-  if (teams) {
-    for (const t of teams) {
-      teamMap.set(Number(t.id), t);
-    }
+  // Create a fast lookup object for O(1) team resolution
+  const teamMap = {};
+  for (let i = 0, len = teams?.length || 0; i < len; i++) {
+    const t = teams[i];
+    if (t?.id != null) teamMap[t.id] = t;
   }
 
   const champId = latest?.champion?.id;
   const teamHistory = memoryMeta.franchiseHistoryByTeam[String(champId)] || null;
-  const teamObj = teamMap.get(Number(champId));
+  const teamObj = teamMap[champId];
   const championName = latest?.champion?.name || teamObj?.name || 'Unknown';
 
   const droughtRows = Object.entries(memoryMeta.franchiseHistoryByTeam)
@@ -134,7 +134,7 @@ export function buildSeasonStorylineSnapshot(memoryMeta, teams, userTeamId) {
       id: `drought-${latest.year}`,
       title: 'Longest title droughts',
       detail: droughtRows.map((r) => {
-        const t = teamMap.get(Number(r.teamId));
+        const t = teamMap[r.teamId];
         return `${t?.abbr ?? r.teamId}: ${r.years}y`;
       }).join(' · '),
       tone: 'info',
