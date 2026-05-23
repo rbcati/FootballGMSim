@@ -1706,7 +1706,7 @@ async function handleLoadSave({ leagueId }, id) {
       if (loadDepthIntegrity.modifiedCount > 0) {
         post(toUI.NOTIFICATION, {
           level: 'info',
-          message: `Roster validated: ${loadDepthIntegrity.modifiedCount} team${loadDepthIntegrity.modifiedCount === 1 ? '' : 's'} repaired.`,
+          message: `Your franchise is ready. Lineup data for ${loadDepthIntegrity.modifiedCount} team${loadDepthIntegrity.modifiedCount === 1 ? '' : 's'} was refreshed automatically.`,
         });
       }
       const loadLegality = runLegalityValidation({ stage: 'load-save', notify: true });

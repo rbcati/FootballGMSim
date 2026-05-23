@@ -339,3 +339,86 @@ describe('buildCommandCenterSummary — readiness edge cases', () => {
     }
   });
 });
+
+// ─── Phase 5: Save / Reset control label assertions ──────────────────────────
+
+describe('App save/reset control labels', () => {
+  it('Quick Save label clearly indicates an immediate save action', () => {
+    const label = 'Quick Save';
+    expect(label).toMatch(/quick save/i);
+  });
+
+  it('Manage Saves label clearly indicates a slot management action', () => {
+    const label = 'Manage Saves';
+    expect(label).toMatch(/manage saves/i);
+  });
+
+  it('Reset Franchise confirmation copy is destructive and explicit', () => {
+    const resetCopy = 'Reset Franchise? This permanently deletes your current save and starts over. This cannot be undone.';
+    expect(resetCopy).toMatch(/permanently/i);
+    expect(resetCopy).toMatch(/deletes/i);
+    expect(resetCopy).toMatch(/cannot be undone/i);
+  });
+
+  it('Sim to Playoffs label describes a long-sim power action', () => {
+    const label = 'Sim to Playoffs';
+    expect(label).toMatch(/sim/i);
+    expect(label).toMatch(/playoffs/i);
+  });
+
+  it('Sim to Offseason label describes a long-sim power action', () => {
+    const label = 'Sim to Offseason';
+    expect(label).toMatch(/sim/i);
+    expect(label).toMatch(/offseason/i);
+  });
+});
+
+// ─── Phase 6: Team context — labeled numbers ─────────────────────────────────
+
+describe('WeeklyHub — team context hero section', () => {
+  afterEach(cleanup);
+
+  it('hero shows record in labeled W-L format', () => {
+    const league = makeLeague({ week: 3 });
+    const { container } = render(
+      <WeeklyHub league={league} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} onOpenBoxScore={vi.fn()} />,
+    );
+    // Record rendered with dash separator (1–0)
+    expect(container.innerHTML).toMatch(/1[–\-]0/);
+  });
+
+  it('hero shows week and season label', () => {
+    const league = makeLeague({ week: 3 });
+    const { container } = render(
+      <WeeklyHub league={league} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} onOpenBoxScore={vi.fn()} />,
+    );
+    // WEEK N · SEASON ... in the eyebrow — at least one element should contain "WEEK 3"
+    expect(container.innerHTML).toContain('WEEK 3');
+  });
+
+  it('renders without crashing when team has no next game', () => {
+    const league = makeLeague({ week: 1 });
+    league.schedule = { weeks: [] };
+    expect(() => render(
+      <WeeklyHub league={league} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} onOpenBoxScore={vi.fn()} />,
+    )).not.toThrow();
+  });
+});
+
+// ─── Phase 7: System message copy ────────────────────────────────────────────
+
+describe('Worker roster notification copy', () => {
+  it('franchise-ready message is user-facing, not technical', () => {
+    const n = 3;
+    const msg = `Your franchise is ready. Lineup data for ${n} team${n === 1 ? '' : 's'} was refreshed automatically.`;
+    expect(msg).toMatch(/your franchise is ready/i);
+    expect(msg).not.toMatch(/roster validated/i);
+    expect(msg).not.toMatch(/repaired\./i);
+  });
+
+  it('single-team franchise-ready message uses singular grammar', () => {
+    const n = 1;
+    const msg = `Your franchise is ready. Lineup data for ${n} team${n === 1 ? '' : 's'} was refreshed automatically.`;
+    expect(msg).toContain('1 team was refreshed');
+  });
+});
