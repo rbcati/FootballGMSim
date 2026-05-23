@@ -12,6 +12,10 @@ import {
   classifyTeamStrategicPosture,
   getTeamContextSnapshot,
 } from './teamStrategicDirection.js';
+import {
+  applyPositionalNeedModifiers,
+  calculateTeamDepthDeficiencies,
+} from './tradePositionalNeeds.js';
 
 const PICK_VALUE_SCALING = 0.184;
 
@@ -214,7 +218,16 @@ function buildIdea({ need, target, outgoingAssets, targetTeam, cap, packageType,
   const currentSeason = strategicContext?.currentSeason ?? null;
   const targetBaseValue = getPlayerValueSafe(target);
   const targetValue = applyStrategicValuationModifiers({ assetType: 'player', ...target }, targetBaseValue, teamPosture, { currentSeason });
-  const outgoingStrategicValues = outgoingAssets.map((a) => applyStrategicValuationModifiers(a, num(a.valueScore), teamPosture, { currentSeason }));
+  const targetDepthNeeds = strategicContext?.targetDepthNeeds ?? null;
+  const outgoingStrategicValues = outgoingAssets.map((a) => {
+    const strategicValue = applyStrategicValuationModifiers(a, num(a.valueScore), teamPosture, { currentSeason });
+    // Apply positional need modifiers from the receiving (target) team's perspective.
+    // Only for player assets and only when the target team's depth needs are available.
+    if (a.assetType === 'player' && targetDepthNeeds != null) {
+      return applyPositionalNeedModifiers(a, strategicValue, targetDepthNeeds, teamPosture);
+    }
+    return strategicValue;
+  });
   const outgoingValue = evaluateMultiAssetPackageValue(outgoingStrategicValues);
   const valueDelta = Math.round(targetValue - outgoingValue);
   const valueMatch = classifyValueMatch(valueDelta);
@@ -292,7 +305,10 @@ export function buildTradeFinderAnalysis({ userTeam, league = {}, teams = [], us
         roster: targetRoster,
       }, { currentSeason });
       const teamPosture = classifyTeamStrategicPosture({ ...targetTeam, roster: targetRoster }, { currentSeason });
-      ideas.push(...generatePackageVariants({ need, target, chipPool, picks: userPickChips, nonStarterIds, targetTeam, cap, strategicContext: { teamPosture, targetContext, currentSeason } }));
+      // Build the target team's positional depth needs so buildIdea can apply
+      // need-based modifiers from the receiving (target) team's perspective.
+      const targetDepthNeeds = calculateTeamDepthDeficiencies(targetRoster, footballConfig);
+      ideas.push(...generatePackageVariants({ need, target, chipPool, picks: userPickChips, nonStarterIds, targetTeam, cap, strategicContext: { teamPosture, targetContext, currentSeason, targetDepthNeeds } }));
     }
   }
   const tradeIdeas = sortAndCapTradeIdeas(ideas, userTeamId);
