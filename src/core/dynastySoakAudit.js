@@ -22,6 +22,10 @@ import {
   passIntsThrownFromTotals,
   PLAYER_SEASON_STATS_ARCHIVE_SCHEMA_VERSION,
 } from './playerSeasonStatsArchive.js';
+import {
+  calculateTeamCapObligations,
+  getActiveCapHit,
+} from './contracts/contractObligations.js';
 
 /** Broad stat leader bounds (regular NFL-ish full season); outside = warning only */
 export const STAT_LEADER_WARN = {
@@ -663,6 +667,30 @@ export function runDynastySoakAudit(input = {}) {
           bumpSummary(summary, 'capHealth', 'fail');
         }
       }
+      if (contract?.signingBonus != null) {
+        const sb = num(contract.signingBonus);
+        if (isBadNum(sb) || sb < 0) {
+          fail('contract_bonus_invalid', `Player ${p?.id ?? 'unknown'} contract.signingBonus is invalid (${contract.signingBonus})`, { playerId: p?.id, teamId: tid });
+          bumpSummary(summary, 'capHealth', 'fail');
+        }
+      }
+      if (contract?.yearsTotal != null) {
+        const yt = num(contract.yearsTotal);
+        if (isBadNum(yt) || yt <= 0) {
+          fail('contract_years_total_invalid', `Player ${p?.id ?? 'unknown'} contract.yearsTotal is invalid (${contract.yearsTotal})`, { playerId: p?.id, teamId: tid });
+          bumpSummary(summary, 'capHealth', 'fail');
+        }
+      }
+      try {
+        const hit = getActiveCapHit(p);
+        if (isBadNum(hit)) {
+          fail('player_cap_hit_nan', `Player ${p?.id ?? 'unknown'} on team ${tid} produced non-finite cap hit`, { teamId: tid, playerId: p?.id });
+          bumpSummary(summary, 'capHealth', 'fail');
+        }
+      } catch (e) {
+        fail('player_cap_hit_throw', `getActiveCapHit threw for player ${p?.id ?? 'unknown'}: ${e?.message}`, { teamId: tid, playerId: p?.id });
+        bumpSummary(summary, 'capHealth', 'fail');
+      }
     }
 
     const capUsed = num(team?.capUsed);
@@ -684,6 +712,31 @@ export function runDynastySoakAudit(input = {}) {
     if (isBadNum(pf) || isBadNum(pa)) {
       fail('team_points_nan', `Team ${tid} non-finite ptsFor/ptsAgainst`, { teamId: tid, pf, pa });
       bumpSummary(summary, 'statHealth', 'fail');
+    }
+
+    if (team?.deadCap != null) {
+      const dc = num(team.deadCap);
+      if (isBadNum(dc) || dc < 0) {
+        fail('dead_cap_invalid', `Team ${tid} deadCap is invalid (${team.deadCap})`, { teamId: tid, deadCap: team.deadCap });
+        bumpSummary(summary, 'capHealth', 'fail');
+      }
+    }
+    if (team?.deadMoneyNextYear != null) {
+      const dmny = num(team.deadMoneyNextYear);
+      if (isBadNum(dmny) || dmny < 0) {
+        fail('dead_money_next_year_invalid', `Team ${tid} deadMoneyNextYear is invalid (${team.deadMoneyNextYear})`, { teamId: tid, deadMoneyNextYear: team.deadMoneyNextYear });
+        bumpSummary(summary, 'capHealth', 'fail');
+      }
+    }
+    try {
+      const obligations = calculateTeamCapObligations(team, roster);
+      if (isBadNum(obligations.playerPayroll) || isBadNum(obligations.totalCapUsed) || isBadNum(obligations.capRoom)) {
+        fail('contract_obligations_nan', `Team ${tid} calculateTeamCapObligations produced non-finite values`, { teamId: tid, playerPayroll: obligations.playerPayroll, totalCapUsed: obligations.totalCapUsed });
+        bumpSummary(summary, 'capHealth', 'fail');
+      }
+    } catch (e) {
+      fail('contract_obligations_throw', `calculateTeamCapObligations threw for team ${tid}: ${e?.message}`, { teamId: tid });
+      bumpSummary(summary, 'capHealth', 'fail');
     }
 
     try {
@@ -724,6 +777,22 @@ export function runDynastySoakAudit(input = {}) {
     } catch (e) {
       fail('ai_strategy_throw', `buildAiTeamStrategy threw for team ${tid}: ${e?.message}`, { teamId: tid });
       bumpSummary(summary, 'aiHealth', 'fail');
+    }
+  }
+
+  const seenPickIds = new Map();
+  for (const team of teams) {
+    const picks = Array.isArray(team?.picks) ? team.picks : [];
+    for (const pick of picks) {
+      const pickId = pick?.id ?? pick?.pickId ?? null;
+      if (pickId == null || pickId === '') continue;
+      const key = String(pickId);
+      if (seenPickIds.has(key)) {
+        fail('duplicate_draft_pick_id', `Draft pick ${key} appears on both team:${seenPickIds.get(key)} and team:${team.id}`, { pickId, teamId: team.id });
+        bumpSummary(summary, 'draftHealth', 'fail');
+      } else {
+        seenPickIds.set(key, team.id);
+      }
     }
   }
 
@@ -1160,6 +1229,23 @@ export function runDynastySoakAudit(input = {}) {
     }
   }
 
+  let stateSizeKb = null;
+  if (teams.length > 0) {
+    try {
+      const stateLen = JSON.stringify(viewState).length;
+      stateSizeKb = Math.round(stateLen / 1024);
+      if (stateLen > 20_000_000) {
+        fail('state_size_explosive', `View state JSON ~${stateSizeKb}KB exceeds 20MB; possible state leak`, { stateSizeKb });
+        bumpSummary(summary, 'historyHealth', 'fail');
+      } else if (stateLen > 5_000_000) {
+        warn('state_size_large', `View state JSON ~${stateSizeKb}KB exceeds 5MB; watch for growth`, { stateSizeKb });
+        bumpSummary(summary, 'historyHealth', 'warn');
+      }
+    } catch {
+      // JSON.stringify can fail on circular refs; skip silently
+    }
+  }
+
   const passed = failures.length === 0;
   const severity = failures.some((f) => /throw|crash|missing|nan|empty roster|impossible/i.test(f.code))
     ? 'error'
@@ -1185,6 +1271,10 @@ export function runDynastySoakAudit(input = {}) {
     warningCodesSample: warnings.slice(0, 30).map((w) => w.code),
     capStressedWarnings: warnings.filter((w) => w.code === 'cap_stressed').length,
     depthWarnings: warnings.filter((w) => String(w.code).startsWith('depth_')).length,
+    deadCapWarnings: failures.filter((f) => f.code === 'dead_cap_invalid').length,
+    deadMoneyWarnings: failures.filter((f) => f.code === 'dead_money_next_year_invalid').length,
+    contractObligationsThrows: failures.filter((f) => f.code === 'contract_obligations_throw').length,
+    stateSizeKb,
     economyRegressionSnapshot,
   };
 

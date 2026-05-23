@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "test": "playwright test",
     "test:unit": "vitest run",
-    "test:soak": "vitest run tests/unit/dynastySoakAudit.test.js tests/unit/dynastySoakCli.test.js tests/unit/dynastySoakRunner.test.js tests/unit/dynastySoakPersistence.test.js tests/unit/dynastySoakMergeAudit.test.js tests/integration/dynastySoak.test.js",
+    "test:soak": "vitest run tests/unit/dynastySoakAudit.test.js tests/unit/dynastySoakCli.test.js tests/unit/dynastySoakRunner.test.js tests/unit/dynastySoakPersistence.test.js tests/unit/dynastySoakMergeAudit.test.js tests/integration/dynastySoak.test.js tests/unit/dynastySoakFinancialInvariants.test.js",
     "audit:dynasty": "tsx scripts/dynasty-soak.mjs",
     "test:e2e": "playwright test",
     "check:netlify-parity": "bash scripts/netlify-parity-check.sh",
