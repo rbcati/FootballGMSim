@@ -264,7 +264,6 @@ export function buildTradeFinderAnalysis({ userTeam, league = {}, teams = [], us
   const userTeamId = num(userTeam?.id, -1);
   const userRosterByPosition = groupPlayersByPosition(userRoster);
   const targetIndex = buildExternalTargetIndex({ leaguePlayers, userTeamId });
-  const teamMap = new Map(teams.map((t) => [num(t.id), t]));
   const targetNeeds = Object.values(buildNeedMap(userRoster, footballConfig, userRosterByPosition)).sort((a, b) => b.needScore - a.needScore).slice(0, 6);
   const { userSurplus, chipPool, nonStarterIds } = buildUserSurplus(userRoster, footballConfig, userRosterByPosition);
   const userPickChips = getTeamDraftPicks(userTeam, league).map((p) => buildDraftPickChip(p, userTeamId)).filter((p) => p?.pickId).sort((a,b)=>b.valueScore-a.valueScore);
