@@ -1,1 +1,0 @@
-9b7dd1a docs: Mark legacy dashboard routing as historical

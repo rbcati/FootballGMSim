@@ -260,6 +260,7 @@ function generatePackageVariants({ need, target, chipPool, picks, nonStarterIds,
 function sortAndCapTradeIdeas(ideas = [], userTeamId) { return ideas.filter((i) => num(i.targetTeamId) !== userTeamId).sort((a, b) => b.fitScore - a.fitScore).slice(0, 15); }
 
 export function buildTradeFinderAnalysis({ userTeam, league = {}, teams = [], userRoster = [], leaguePlayers = [], cap = {}, footballConfig = FOOTBALL_ROSTER_CONFIG }) {
+  const teamMap = new Map(teams.map((t) => [num(t.id), t]));
   const userTeamId = num(userTeam?.id, -1);
   const userRosterByPosition = groupPlayersByPosition(userRoster);
   const targetIndex = buildExternalTargetIndex({ leaguePlayers, userTeamId });
