@@ -13,6 +13,8 @@
 import React, { useMemo, useState, Component } from "react";
 import PlayerCard from "./PlayerCard.jsx";
 import AdvancedStats from "./AdvancedStats.jsx";
+import { buildGameFlowSummary } from "../../core/sim/gameFlowSummary.js";
+import ReplayableGameFlowViewer from "./ReplayableGameFlowViewer.jsx";
 
 // ── Error boundary so a crash here never freezes the whole app ────────────────
 class PostGameErrorBoundary extends Component {
@@ -195,7 +197,7 @@ function LeaderCard({ label, statLine, player, color }) {
   );
 }
 
-function PostGameScreenInner({
+function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
   homeTeam,
   awayTeam,
   homeScore,
@@ -235,6 +237,9 @@ function PostGameScreenInner({
   }, []);
 
   const { qb, receiver, rusher, defender } = useGameLeaders(logs);
+  const gfs = useMemo(() => buildGameFlowSummary(rawGameRecord ?? boxScoreGame ?? gameRecord ?? null), [rawGameRecord, boxScoreGame, gameRecord]);
+  const [showReplay, setShowReplay] = useState(false);
+
   const notableMoments = (logs || [])
     .filter((l) => l?.isTouchdown || l?.turnover || /field goal|sack|interception|fumble/i.test(l?.text ?? ""))
     .slice(-5)
@@ -449,10 +454,27 @@ function PostGameScreenInner({
           <div style={{ marginBottom: 12, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 12, padding: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
               <strong style={{ fontSize: "0.8rem" }}>Game Flow</strong>
-              <button className="btn" style={{ padding: "6px 10px", fontSize: "0.72rem" }} onClick={() => setShowDetails((v) => !v)} data-testid="postgame-flow-toggle">
-                {showDetails ? "Hide" : "Key moments"}
-              </button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                {gfs && (
+                  <button className="btn btn-secondary" style={{ padding: "6px 10px", fontSize: "0.72rem" }} onClick={() => setShowReplay((v) => !v)} data-testid="postgame-replay-toggle">
+                    {showReplay ? "Hide Replay" : "Replay"}
+                  </button>
+                )}
+                <button className="btn" style={{ padding: "6px 10px", fontSize: "0.72rem" }} onClick={() => setShowDetails((v) => !v)} data-testid="postgame-flow-toggle">
+                  {showDetails ? "Hide" : "Key moments"}
+                </button>
+              </div>
             </div>
+            {showReplay && gfs && (
+              <div style={{ marginTop: 12 }}>
+                <ReplayableGameFlowViewer
+                  gameFlowSummary={gfs}
+                  homeTeam={homeTeam}
+                  awayTeam={awayTeam}
+                  finalScore={{ home: homeScore, away: awayScore }}
+                />
+              </div>
+            )}
             {showDetails && (
               <div style={{ marginTop: 8, display: "grid", gap: 6 }} data-testid="postgame-flow-moments">
                 {notableMoments.length === 0 ? (
