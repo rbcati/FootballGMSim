@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   PICK_DECAY,
   PACKAGE_DR,
+  DEFAULT_PICK_VALUE_MATRIX,
+  getPickBaseValueFromMatrix,
   calculateFuturePickDecay,
   applyFuturePickDecayToPickValue,
   evaluateMultiAssetPackageValue,
@@ -476,5 +478,14 @@ describe('exported constants', () => {
       expect(ranks[i]).toBeLessThan(ranks[i - 1]);
     }
     expect(PACKAGE_DR.ADDITIONAL_ASSET_RETENTION).toBeLessThanOrEqual(ranks[ranks.length - 1]);
+  });
+});
+
+
+describe('unified pick value matrix', () => {
+  it('preserves descending round ordering and default fallback', () => {
+    expect(DEFAULT_PICK_VALUE_MATRIX[1]).toBeGreaterThan(DEFAULT_PICK_VALUE_MATRIX[2]);
+    expect(DEFAULT_PICK_VALUE_MATRIX[2]).toBeGreaterThan(DEFAULT_PICK_VALUE_MATRIX[3]);
+    expect(getPickBaseValueFromMatrix(99)).toBe(DEFAULT_PICK_VALUE_MATRIX.default);
   });
 });

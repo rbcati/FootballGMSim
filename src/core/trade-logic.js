@@ -30,6 +30,10 @@ import { Constants }    from './constants.js';
 import { Utils as U }   from './utils.js';
 import { buildAiTeamStrategy } from './aiTeamStrategy.js';
 import {
+  applyFuturePickDecayToPickValue,
+  getPickBaseValueFromMatrix,
+} from './trades/tradeValuationModifiers.js';
+import {
   adjustTradeValueForMarketRealism,
   buildTradeRealismReasonTags,
   evaluateTradeActionRealism,
@@ -396,10 +400,9 @@ export function classifyTeamDirection(team, week = 1) {
   return 'balanced';
 }
 
-export function getPickMarketValue(pick) {
-  const round = Number(pick?.round ?? 4);
-  const PICK_VALUES = [0, 950, 360, 150, 70, 30, 12, 4];
-  return PICK_VALUES[round] ?? 8;
+export function getPickMarketValue(pick, currentSeason = null) {
+  const baseValue = getPickBaseValueFromMatrix(pick?.round);
+  return applyFuturePickDecayToPickValue(pick, baseValue, currentSeason);
 }
 
 function pickLabel(pick) {
