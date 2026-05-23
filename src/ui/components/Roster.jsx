@@ -35,6 +35,7 @@ import PlayerCompareTray from "./PlayerCompareTray.jsx";
 import PlayerProfile from "./PlayerProfile.jsx";
 import PlayerProfileModalBoundary from "./PlayerProfileModalBoundary.jsx";
 import ExtensionNegotiationModal from "./ExtensionNegotiationModal.jsx";
+import ReleasePreviewModal from "./ReleasePreviewModal.jsx";
 import { teamColor } from "../../data/team-utils.js";
 import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES } from "../../core/scheme-core.js";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -487,7 +488,7 @@ function RosterTable({
   const [posFilter, setPosFilter] = useState(initialFilter || (isResignPhase ? "EXPIRING" : "ALL"));
   const [sortKey, setSortKey] = useState("ovr");
   const [sortDir, setSortDir] = useState("desc");
-  const [releasing, setReleasing] = useState(null);
+  const [releaseCandidate, setReleaseCandidate] = useState(null);
   const [extending, setExtending] = useState(null);
   const [advancedFilters, setAdvancedFilters] = useState([]);
   const [search, setSearch] = useState("");
@@ -554,31 +555,15 @@ function RosterTable({
       }
   };
 
-  const handleRelease = async (player) => {
-    if (releasing !== player.id) {
-      setReleasing(player.id);
-      return;
-    }
-
-    // Check dead cap
-    const c = player.contract;
-    const annualBonus = (c?.signingBonus ?? 0) / (c?.yearsTotal || 1);
-    const deadCap = annualBonus * (c?.years || 1);
-
-    if (deadCap > 0.5) {
-      if (
-        !window.confirm(
-          `Release ${player.name}?\n\nThis will accelerate ${formatMoneyM(deadCap)} of dead cap against your budget.`,
-        )
-      ) {
-        setReleasing(null);
-        return;
-      }
-    }
-
-    setReleasing(null);
-    actions.releasePlayer(player.id, teamId);
-    onRefetch();
+  const openReleasePreview = (player) => {
+    setReleaseCandidate(player ?? null);
+  };
+  const cancelReleasePreview = () => setReleaseCandidate(null);
+  const confirmRelease = () => {
+    if (!releaseCandidate?.id) return;
+    actions.releasePlayer(releaseCandidate.id, teamId);
+    setReleaseCandidate(null);
+    onRefetch?.();
   };
 
   const handleTradeBlockToggle = async (playerId) => {
@@ -597,6 +582,7 @@ function RosterTable({
       console.error('[Roster] updatePlayerManagement failed', e);
     }
   };
+  const releasePreviewCapRoom = toFiniteNumber(team?.capRoom, 0);
 
 
 
@@ -616,6 +602,13 @@ function RosterTable({
           }}
         />
       )}
+      <ReleasePreviewModal
+        open={Boolean(releaseCandidate)}
+        player={releaseCandidate}
+        capRoomNow={releasePreviewCapRoom}
+        onCancel={cancelReleasePreview}
+        onConfirm={confirmRelease}
+      />
       {/* Player comparison modal */}
       {showComparison && comparePlayerA && comparePlayerB && (
         <PlayerComparison
@@ -851,7 +844,7 @@ function RosterTable({
                 </TableRow>
               )}
                   {evaluatedDisplayed.map(({ player, eval: playerEval }, idx) => {
-                const isReleasing = releasing === player.id;
+                const isReleasing = releaseCandidate?.id === player.id;
                 const isExpiring = (player.contract?.years || 0) <= 1;
                 const yearsLeft =
                   player.contract?.yearsRemaining ??
@@ -1148,7 +1141,7 @@ function RosterTable({
                               fontSize: "var(--text-xs)",
                               padding: "2px 10px",
                             }}
-                            onClick={() => handleRelease(player)}
+                            onClick={() => openReleasePreview(player)}
                           >
                             Confirm
                           </Button>
@@ -1158,7 +1151,7 @@ function RosterTable({
                               fontSize: "var(--text-xs)",
                               padding: "2px 8px",
                             }}
-                            onClick={() => setReleasing(null)}
+                            onClick={cancelReleasePreview}
                           >
                             Cancel
                           </Button>
@@ -1202,7 +1195,7 @@ function RosterTable({
                               color: "var(--danger)",
                               borderColor: "var(--danger)",
                             }}
-                            onClick={() => handleRelease(player)}
+                            onClick={() => openReleasePreview(player)}
                           >
                             Cut
                           </Button>
