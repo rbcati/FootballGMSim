@@ -179,6 +179,15 @@ import { deriveGamePlanMultipliers } from '../core/sim/gamePlanMultipliers.ts';
 import { buildGamePlanNarrative } from '../core/narrative.js';
 import { buildRosterBuildingAnalysis } from '../core/rosterBuildingAnalysis.js';
 import { buildAiTeamStrategy, mapPlayerPosToNeedGroup } from '../core/aiTeamStrategy.js';
+import {
+  TEAM_STRATEGIC_POSTURE,
+  classifyTeamStrategicPosture,
+  applyStrategicValuationModifiers,
+} from '../core/trades/teamStrategicDirection.js';
+import {
+  calculateTeamDepthDeficiencies,
+  applyPositionalNeedModifiers,
+} from '../core/trades/tradePositionalNeeds.js';
 
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
@@ -1175,6 +1184,7 @@ function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {
   const isDraftBoardMode = context?.marketMode === 'draft_board';
   const teamPosture = context?.teamPosture ?? TEAM_STRATEGIC_POSTURE.NEUTRAL;
   const currentSeason = Number(context?.currentSeason ?? 0) || null;
+  const depthNeedsMap = context?.depthNeedsMap ?? null;
   const playerVal = playerIds.reduce((sum, pid) => {
     const player = cache.getPlayer(Number(pid));
     let value = _tradeValue(player, context);
@@ -1186,7 +1196,11 @@ function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {
       const expiringPenalty = yearsRemaining <= 1 ? 0.78 : 1.0;
       value *= veteranPenalty * lowPremiumPenalty * expiringPenalty;
     }
-    const adjusted = applyStrategicValuationModifiers({ assetType: 'player', ...player }, value, teamPosture, { currentSeason });
+    const playerAsset = { assetType: 'player', ...player };
+    let adjusted = applyStrategicValuationModifiers(playerAsset, value, teamPosture, { currentSeason });
+    if (depthNeedsMap && player) {
+      adjusted = applyPositionalNeedModifiers(playerAsset, adjusted, depthNeedsMap, teamPosture);
+    }
     return sum + adjusted;
   }, 0);
   const pickVal = pickIds.reduce((sum, pid) => {
@@ -6871,6 +6885,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   const lowPremiumIncoming = incomingPlayers.length > 0 && incomingPlayers.every((p) => LOW_PREMIUM_POSITIONS.has(p?.pos));
   const aiRoster = cache.getPlayersByTeam(Number(toTeamId));
   const aiPosture = classifyTeamStrategicPosture({ ...to, roster: aiRoster }, { currentSeason: meta?.year, phase: meta?.phase }, { minGamesForClassification: 7 });
+  const aiDepthNeeds = calculateTeamDepthDeficiencies(aiRoster);
   const valuationContext = {
     week,
     teamDirection: aiDirection,
@@ -6878,6 +6893,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
     marketMode: isDraftDay ? 'draft_board' : 'normal',
     teamPosture: aiPosture,
     currentSeason: meta?.year,
+    depthNeedsMap: aiDepthNeeds,
   };
   const offerVal    = calcAssetBundleValue(offering, valuationContext);
   const receiveVal  = calcAssetBundleValue(receiving, valuationContext);
@@ -7150,7 +7166,21 @@ async function handleCounterIncomingTrade({ offerId, offering, receiving }, id) 
     pickIds: Array.isArray(receiving?.pickIds) ? receiving.pickIds : [],
   };
 
-  const aiReceivesValue = calcAssetBundleValue(userBundle);
+  const counterAiRoster = cache.getPlayersByTeam(Number(offer.offeringTeamId));
+  const counterAiPosture = classifyTeamStrategicPosture(
+    { ...aiTeam, roster: counterAiRoster },
+    { currentSeason: latestMeta?.year, phase: latestMeta?.phase },
+    { minGamesForClassification: 7 },
+  );
+  const counterAiDepthNeeds = calculateTeamDepthDeficiencies(counterAiRoster);
+  const counterValuationContext = {
+    week: Number(latestMeta?.currentWeek ?? 1),
+    teamDirection: offer?.offeringDirection ?? 'balanced',
+    teamPosture: counterAiPosture,
+    currentSeason: latestMeta?.year,
+    depthNeedsMap: counterAiDepthNeeds,
+  };
+  const aiReceivesValue = calcAssetBundleValue(userBundle, counterValuationContext);
   const aiGivesValue = calcAssetBundleValue(aiBundle);
   const response = evaluateCounterOffer({
     aiTeam,

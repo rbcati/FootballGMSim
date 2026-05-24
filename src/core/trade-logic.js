@@ -38,6 +38,15 @@ import {
   buildTradeRealismReasonTags,
   evaluateTradeActionRealism,
 } from './marketRealismModel.js';
+import {
+  TEAM_STRATEGIC_POSTURE,
+  classifyTeamStrategicPosture,
+  applyStrategicValuationModifiers,
+} from './trades/teamStrategicDirection.js';
+import {
+  calculateTeamDepthDeficiencies,
+  applyPositionalNeedModifiers,
+} from './trades/tradePositionalNeeds.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -260,11 +269,13 @@ export async function runAIToAITrades() {
   // Randomise order so the same teams don't always trade first.
   const shuffled = U.shuffle([...allTeams]);
 
-  // Build surplus/need/strategy maps upfront — avoids repeated roster scans.
+  // Build surplus/need/strategy/posture/depth maps upfront — avoids repeated roster scans.
   const surplusMap = {};
   const needsMap   = {};
   const rosterMap = {};
   const strategyMap = {};
+  const postureMap = {};
+  const depthNeedsMap = {};
   for (const team of shuffled) {
     const roster = cache.getPlayersByTeam(team.id);
     rosterMap[team.id] = roster;
@@ -275,6 +286,12 @@ export async function runAIToAITrades() {
       phase: meta?.phase,
       year: meta?.year,
     });
+    postureMap[team.id] = classifyTeamStrategicPosture(
+      { ...team, roster },
+      { currentSeason: meta?.year, phase: meta?.phase },
+      { minGamesForClassification: 7 },
+    );
+    depthNeedsMap[team.id] = calculateTeamDepthDeficiencies(roster);
     surplusMap[team.id] = getSurplusPlayers(team.id);
     needsMap[team.id]   = getTeamNeeds(team.id);
   }
@@ -344,9 +361,25 @@ export async function runAIToAITrades() {
         && !realismForTeamB.flags.includes('contender_rental');
       if (directionlessVeteranSwap) continue;
 
+      // Apply strategic posture and positional need modifiers from each receiving team's perspective.
+      const teamAPosture = postureMap[teamA.id] ?? TEAM_STRATEGIC_POSTURE.NEUTRAL;
+      const teamBPosture = postureMap[teamB.id] ?? TEAM_STRATEGIC_POSTURE.NEUTRAL;
+      const assetFromB = { assetType: 'player', ...playerFromB };
+      const assetFromA = { assetType: 'player', ...playerFromA };
+
+      let teamAContextualValue = applyStrategicValuationModifiers(assetFromB, valueB, teamAPosture);
+      teamAContextualValue = applyPositionalNeedModifiers(
+        assetFromB, teamAContextualValue, depthNeedsMap[teamA.id] ?? {}, teamAPosture,
+      );
+
+      let teamBContextualValue = applyStrategicValuationModifiers(assetFromA, valueA, teamBPosture);
+      teamBContextualValue = applyPositionalNeedModifiers(
+        assetFromA, teamBContextualValue, depthNeedsMap[teamB.id] ?? {}, teamBPosture,
+      );
+
       // Check trade fairness: values must be within ±VALUE_TOLERANCE after team-fit realism.
-      const teamAIncomingValue = valueB * (0.72 + realismForTeamA.fitScore / 100);
-      const teamBIncomingValue = valueA * (0.72 + realismForTeamB.fitScore / 100);
+      const teamAIncomingValue = teamAContextualValue * (0.72 + realismForTeamA.fitScore / 100);
+      const teamBIncomingValue = teamBContextualValue * (0.72 + realismForTeamB.fitScore / 100);
       const ratio = teamAIncomingValue / teamBIncomingValue;
       if (ratio < (1 - VALUE_TOLERANCE) || ratio > (1 + VALUE_TOLERANCE)) continue;
 
