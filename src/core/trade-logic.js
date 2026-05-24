@@ -47,6 +47,8 @@ import {
   calculateTeamDepthDeficiencies,
   applyPositionalNeedModifiers,
 } from './trades/tradePositionalNeeds.js';
+import { getActiveCapHit } from './contracts/contractObligations.js';
+import { applyContractCapBurdenModifiers } from './trades/tradeFinancialModifiers.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -375,6 +377,21 @@ export async function runAIToAITrades() {
       let teamBContextualValue = applyStrategicValuationModifiers(assetFromA, valueA, teamBPosture);
       teamBContextualValue = applyPositionalNeedModifiers(
         assetFromA, teamBContextualValue, depthNeedsMap[teamB.id] ?? {}, teamBPosture,
+      );
+
+      // Cap burden: effective cap room accounts for the salary freed by the outgoing player.
+      // In a 1-for-1 swap each team releases one contract while absorbing another, so
+      // the net cap headroom for receiving is current room + outgoing player's cap hit.
+      const outgoingCapHitA = getActiveCapHit(playerFromA);
+      const outgoingCapHitB = getActiveCapHit(playerFromB);
+      const effectiveCapRoomA = Number(teamA?.capRoom ?? 0) + outgoingCapHitA;
+      const effectiveCapRoomB = Number(teamB?.capRoom ?? 0) + outgoingCapHitB;
+
+      teamAContextualValue = applyContractCapBurdenModifiers(
+        assetFromB, teamAContextualValue, effectiveCapRoomA, teamAPosture,
+      );
+      teamBContextualValue = applyContractCapBurdenModifiers(
+        assetFromA, teamBContextualValue, effectiveCapRoomB, teamBPosture,
       );
 
       // Check trade fairness: values must be within ±VALUE_TOLERANCE after team-fit realism.
