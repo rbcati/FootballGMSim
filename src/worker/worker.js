@@ -1185,6 +1185,7 @@ function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {
   const teamPosture = context?.teamPosture ?? TEAM_STRATEGIC_POSTURE.NEUTRAL;
   const currentSeason = Number(context?.currentSeason ?? 0) || null;
   const depthNeedsMap = context?.depthNeedsMap ?? null;
+  const adjustedAssetValues = [];
   const playerVal = playerIds.reduce((sum, pid) => {
     const player = cache.getPlayer(Number(pid));
     let value = _tradeValue(player, context);
@@ -1201,6 +1202,7 @@ function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {
     if (depthNeedsMap && player) {
       adjusted = applyPositionalNeedModifiers(playerAsset, adjusted, depthNeedsMap, teamPosture);
     }
+    adjustedAssetValues.push(adjusted);
     return sum + adjusted;
   }, 0);
   const pickVal = pickIds.reduce((sum, pid) => {
@@ -1209,9 +1211,10 @@ function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {
     if (isDraftBoardMode) value *= 1.2;
     if (pick?.isCompensatory) value *= 0.84;
     const adjusted = applyStrategicValuationModifiers({ assetType: 'pick', ...pick }, value, teamPosture, { currentSeason });
+    adjustedAssetValues.push(adjusted);
     return sum + adjusted;
   }, 0);
-  return playerVal + pickVal;
+  return evaluateMultiAssetPackageValue(adjustedAssetValues);
 }
 
 function resolvePickById(pickId) {
@@ -7181,7 +7184,7 @@ async function handleCounterIncomingTrade({ offerId, offering, receiving }, id) 
     depthNeedsMap: counterAiDepthNeeds,
   };
   const aiReceivesValue = calcAssetBundleValue(userBundle, counterValuationContext);
-  const aiGivesValue = calcAssetBundleValue(aiBundle);
+  const aiGivesValue = calcAssetBundleValue(aiBundle, counterValuationContext);
   const response = evaluateCounterOffer({
     aiTeam,
     userTeam,
