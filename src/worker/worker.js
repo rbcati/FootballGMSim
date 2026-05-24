@@ -115,7 +115,8 @@ import { processOffseasonEvolution, processWeeklyEvolution } from '../core/progr
 import { buildTeamDevelopmentFocusMap as buildCanonicalDevelopmentFocusMap } from './developmentFocus.js';
 import { derivePlayerVisibleRatingsPatch } from './playerDerivedRatings.js';
 import { evaluateRetirements }     from '../core/retirement-system.js';
-import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer } from '../core/trade-logic.js';
+import { runAIToAITrades, evaluateCounterOffer } from '../core/trade-logic.js';
+import { generateInboundOffersToUser } from '../core/trades/tradeBlockGenerator.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot, buildHallOfFameInducteeRow, syncHallOfFameAfterRecordBook } from '../core/league-memory.js';
 import { buildPlayerSeasonStatsArchiveRows } from '../core/playerSeasonStatsArchive.js';
@@ -929,12 +930,20 @@ function pruneIncomingTradeOffers(metaObj) {
   const week = Number(metaObj?.currentWeek ?? 1);
   const season = Number(metaObj?.season ?? metaObj?.year ?? 1);
   const offers = Array.isArray(metaObj?.incomingTradeOffers) ? metaObj.incomingTradeOffers : [];
+  const deadline = getTradeDeadlineSnapshot(metaObj);
+  if (
+    String(metaObj?.phase ?? 'regular') !== 'regular' ||
+    !isTradeWindowOpen({ week: deadline.currentWeek, phase: deadline.phase, settings: metaObj?.settings, commissionerMode: deadline.canOverride })
+  ) {
+    return [];
+  }
   const normalized = [];
   const seenIds = new Set();
   const seenSignatures = new Set();
   for (const offer of offers) {
     if (!offer) continue;
     if (offer.season != null && Number(offer.season) !== season) continue;
+    if (offer.expiresPhase != null && String(offer.expiresPhase) !== String(metaObj?.phase ?? 'regular')) continue;
     const expiresAfterWeek = Number(offer.expiresAfterWeek ?? (offer.week ?? week) + 2);
     if (expiresAfterWeek < week) continue;
     if (!isOfferStillValid(offer, metaObj?.userTeamId)) continue;
@@ -2890,13 +2899,15 @@ async function handleAdvanceWeek(payload, id) {
     try {
       await runAIToAITrades();
 
-      // Also generate trade proposals for the user
+      // Low-frequency proactive AI inbound offers. This is bounded to one
+      // pass over AI teams per weekly advance and never runs from view-state builds.
       const latestMeta = ensureDynastyMeta(cache.getMeta());
       const existingOffers = pruneIncomingTradeOffers(latestMeta);
-      const tradeProposals = generateAITradeProposalsForUser({
-        existingOffers,
-        offerMemory: latestMeta?.tradeOfferMemory ?? {},
-      });
+      const tradeProposals = generateInboundOffersToUser({
+        meta: latestMeta,
+        teams: cache.getAllTeams(),
+        players: cache.getAllPlayers(),
+      }, latestMeta?.userTeamId, { existingOffers });
       if (tradeProposals.length > 0) {
         const freshOffers = tradeProposals.filter((offer) => {
           const sig = buildOfferSignature(offer);
