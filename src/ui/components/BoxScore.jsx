@@ -48,7 +48,7 @@ function leaderProfileRole(card) {
   return `${card?.label ?? "Box score"} leader`;
 }
 
-function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, onTeamSelect, embedded = false, scheduleGame = null }) {
+function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, onTeamSelect, embedded = false, scheduleGame = null, isManualSimRun = false }) {
   const canLoadArchive = Boolean(gameId && typeof actions?.getBoxScore === "function");
   const { data: archiveGame } = useStableRouteRequest({
     requestKey: canLoadArchive ? `boxscore:${gameId}` : null,
@@ -62,7 +62,7 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
   const vm = useMemo(() => buildBoxScoreViewModel({ league, game, gameId, scheduleGame: fallbackGame, context: { season: league?.seasonId, week: league?.week } }), [league, game, gameId, fallbackGame]);
   const [sortState, setSortState] = useState({});
   const [showAllPlays, setShowAllPlays] = useState(false);
-  const [showReplay, setShowReplay] = useState(false);
+  const [showReplay, setShowReplay] = useState(Boolean(isManualSimRun));
 
   if (!vm || vm.status === "unavailable") {
     return <EmptyState title="Game Book unavailable" body="Game data missing." />;
@@ -301,12 +301,27 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
             </button>
           </div>
           {showReplay && (
-            <ReplayableGameFlowViewer
-              gameFlowSummary={gfs}
-              homeTeam={vm.homeTeam}
-              awayTeam={vm.awayTeam}
-              finalScore={vm.finalScore}
-            />
+            <>
+              {isManualSimRun && (
+                <div style={{ marginBottom: "0.5rem" }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary"
+                    data-testid="game-book-skip-to-box-score"
+                    onClick={() => setShowReplay(false)}
+                  >
+                    Instant Skip to Box Score
+                  </button>
+                </div>
+              )}
+              <ReplayableGameFlowViewer
+                gameFlowSummary={gfs}
+                homeTeam={vm.homeTeam}
+                awayTeam={vm.awayTeam}
+                finalScore={vm.finalScore}
+                initialMode={isManualSimRun ? "playing" : "paused"}
+              />
+            </>
           )}
         </section>
       )}
