@@ -133,7 +133,7 @@ export function rankHqPriorityItems(team, league, weekly, nextGame) {
   const week = safeNum(league?.week, 1);
 
   if (pressure === 'urgent') {
-    items.push({ level: 'urgent', rank: 97, label: 'Owner mandate active', detail: 'Franchise confidence is falling — deliver a result this week.', verb: 'Address pressure', tab: '🤖 GM Advisor' });
+    items.push({ level: 'urgent', rank: 97, label: 'Owner mandate active', detail: 'Franchise confidence is falling — deliver a result this week or face the consequences.', verb: 'Address pressure', tab: '🤖 GM Advisor' });
   } else if (pressure === 'warning') {
     items.push({ level: 'recommended', rank: 82, label: 'Owner confidence slipping', detail: 'Recent trend has increased scrutiny on weekly decisions.', verb: 'Review priorities', tab: '🤖 GM Advisor' });
   }

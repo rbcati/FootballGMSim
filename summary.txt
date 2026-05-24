@@ -1,0 +1,18 @@
+**Daily Regression Pass Summary**
+
+*What was tested:*
+1. Playability Smoke Test (New league, load save, advance week).
+2. State & Persistence Audit (Strategy persistence and validity of cap room/roster sizes).
+3. UI Interaction & Mobile Check (Horizontal scrolling checked, loading stuckness checked).
+4. Contracts & Cap Trust (Cut players, sign free agents, verified roster spots and cap updates).
+5. Tension & Drama Verification (Rivalry generation causes high stakes).
+6. Legacy & Continuity (Retirement/aging logic checks).
+
+*What broke:*
+The E2E test `3. Contracts & Cap Trust` in `tests/e2e/daily_regression.spec.js` broke because it was strictly matching `b.innerText === 'Confirm' || b.innerText === 'Confirm Release'`. The exact text styling on the screen occasionally contains uppercase variations or extra spaces (e.g., `'CONFIRM RELEASE'`).
+
+*What was fixed:*
+Updated the locator logic in `tests/e2e/daily_regression.spec.js` to lower-case the text content and use a looser `.includes('confirm') && (lower.includes('release') || lower === 'confirm')` check which fixes the failure and makes the test robust to slight stylistic or text-case changes in the UI.
+
+*Small improvement:*
+In `src/ui/utils/hqHelpers.js`, updated the urgent owner mandate message from `Franchise confidence is falling — deliver a result this week.` to `Franchise confidence is falling — deliver a result this week or face the consequences.` to heighten the tension and emotional stakes for the user.
