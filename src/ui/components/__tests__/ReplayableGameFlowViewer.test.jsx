@@ -567,3 +567,72 @@ describe("ReplayableGameFlowViewer – integration smoke with BoxScore data shap
     expect(getByTestId("rgfv-current-label").textContent).toContain("Q1");
   });
 });
+
+// ---------------------------------------------------------------------------
+// MatchMomentumTracker integration — tracker renders and updates with RGFV
+// ---------------------------------------------------------------------------
+
+describe("ReplayableGameFlowViewer – MatchMomentumTracker integration", () => {
+  afterEach(cleanup);
+
+  it("renders mmt-root when replayable events exist", () => {
+    const { getByTestId } = renderViewer();
+    expect(getByTestId("mmt-root")).toBeTruthy();
+  });
+
+  it("does not render mmt-root when gameFlowSummary is null", () => {
+    const { queryByTestId } = render(<ReplayableGameFlowViewer gameFlowSummary={null} />);
+    expect(queryByTestId("mmt-root")).toBeNull();
+  });
+
+  it("first tick is current and remaining are future on initial render", () => {
+    const { getAllByTestId } = renderViewer();
+    const ticks = getAllByTestId("mmt-tick");
+    expect(ticks[0].dataset.reveal).toBe("current");
+    for (let i = 1; i < ticks.length; i++) {
+      expect(ticks[i].dataset.reveal).toBe("future");
+    }
+  });
+
+  it("tracker updates: Step Next advances current tick by one", () => {
+    const { getByTestId, getAllByTestId } = renderViewer();
+    fireEvent.click(getByTestId("rgfv-btn-step"));
+    const ticks = getAllByTestId("mmt-tick");
+    expect(ticks[0].dataset.reveal).toBe("past");
+    expect(ticks[1].dataset.reveal).toBe("current");
+    expect(ticks[2].dataset.reveal).toBe("future");
+  });
+
+  it("tracker updates: Skip to End marks last tick as current", () => {
+    const { getByTestId, getAllByTestId } = renderViewer();
+    fireEvent.click(getByTestId("rgfv-btn-skip-end"));
+    const ticks = getAllByTestId("mmt-tick");
+    const last = ticks[ticks.length - 1];
+    expect(last.dataset.reveal).toBe("current");
+    for (let i = 0; i < ticks.length - 1; i++) {
+      expect(ticks[i].dataset.reveal).toBe("past");
+    }
+  });
+
+  it("tracker updates: Restart resets to first tick as current", () => {
+    const { getByTestId, getAllByTestId } = renderViewer();
+    fireEvent.click(getByTestId("rgfv-btn-skip-end"));
+    fireEvent.click(getByTestId("rgfv-btn-restart"));
+    const ticks = getAllByTestId("mmt-tick");
+    expect(ticks[0].dataset.reveal).toBe("current");
+    for (let i = 1; i < ticks.length; i++) {
+      expect(ticks[i].dataset.reveal).toBe("future");
+    }
+  });
+
+  it("tracker shows team abbreviations from homeTeam/awayTeam props", () => {
+    const { getByTestId } = renderViewer();
+    expect(getByTestId("mmt-home-label").textContent).toBe("KC");
+    expect(getByTestId("mmt-away-label").textContent).toBe("BUF");
+  });
+
+  it("tracker renders the correct total number of ticks (5 for MOCK_GFS)", () => {
+    const { getAllByTestId } = renderViewer();
+    expect(getAllByTestId("mmt-tick").length).toBe(TOTAL_EVENTS);
+  });
+});

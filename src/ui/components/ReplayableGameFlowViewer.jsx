@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import MatchMomentumTracker from "./MatchMomentumTracker.jsx";
 
 export const REPLAY_INTERVAL_MS = 1800;
 
@@ -120,6 +121,14 @@ export default function ReplayableGameFlowViewer({
 
   return (
     <div data-testid="rgfv-root" style={{ display: "grid", gap: "0.75rem" }}>
+      {/* Momentum tracker — quarter-segmented visual overview */}
+      <MatchMomentumTracker
+        gameFlowSummary={gameFlowSummary}
+        homeTeam={homeTeam}
+        awayTeam={awayTeam}
+        currentEventIndex={index}
+      />
+
       {/* Progress */}
       <div className="bs-section-header">
         <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)" }}>
