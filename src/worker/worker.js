@@ -188,6 +188,7 @@ import {
   calculateTeamDepthDeficiencies,
   applyPositionalNeedModifiers,
 } from '../core/trades/tradePositionalNeeds.js';
+import { applyContractCapBurdenModifiers } from '../core/trades/tradeFinancialModifiers.js';
 
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
@@ -1185,6 +1186,9 @@ function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {
   const teamPosture = context?.teamPosture ?? TEAM_STRATEGIC_POSTURE.NEUTRAL;
   const currentSeason = Number(context?.currentSeason ?? 0) || null;
   const depthNeedsMap = context?.depthNeedsMap ?? null;
+  const effectiveIncomingCapRoom = Number.isFinite(Number(context?.effectiveIncomingCapRoom))
+    ? Number(context.effectiveIncomingCapRoom)
+    : null;
   const adjustedAssetValues = [];
   const playerVal = playerIds.reduce((sum, pid) => {
     const player = cache.getPlayer(Number(pid));
@@ -1201,6 +1205,9 @@ function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {
     let adjusted = applyStrategicValuationModifiers(playerAsset, value, teamPosture, { currentSeason });
     if (depthNeedsMap && player) {
       adjusted = applyPositionalNeedModifiers(playerAsset, adjusted, depthNeedsMap, teamPosture);
+    }
+    if (effectiveIncomingCapRoom != null && player) {
+      adjusted = applyContractCapBurdenModifiers(playerAsset, adjusted, effectiveIncomingCapRoom, teamPosture);
     }
     adjustedAssetValues.push(adjusted);
     return sum + adjusted;
@@ -6897,6 +6904,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
     teamPosture: aiPosture,
     currentSeason: meta?.year,
     depthNeedsMap: aiDepthNeeds,
+    effectiveIncomingCapRoom: Number(to?.capRoom ?? 0) + capHitOf(receiving?.playerIds ?? []),
   };
   const offerVal    = calcAssetBundleValue(offering, valuationContext);
   const receiveVal  = calcAssetBundleValue(receiving, valuationContext);
@@ -7182,6 +7190,7 @@ async function handleCounterIncomingTrade({ offerId, offering, receiving }, id) 
     teamPosture: counterAiPosture,
     currentSeason: latestMeta?.year,
     depthNeedsMap: counterAiDepthNeeds,
+    effectiveIncomingCapRoom: Number(aiTeam?.capRoom ?? 0) + capHitOf(aiBundle?.playerIds ?? []),
   };
   const aiReceivesValue = calcAssetBundleValue(userBundle, counterValuationContext);
   const aiGivesValue = calcAssetBundleValue(aiBundle, counterValuationContext);

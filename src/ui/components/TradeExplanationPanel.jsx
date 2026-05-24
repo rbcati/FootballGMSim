@@ -87,7 +87,7 @@ export default function TradeExplanationPanel({ idea = null }) {
   const meta = idea?.explanationMeta;
   if (!meta) return null;
 
-  const { posture, outgoingScore, incomingScore, verdict, diminishingReturnsApplied, decayedPicks, positionalContexts } = meta;
+  const { posture, outgoingScore, incomingScore, verdict, diminishingReturnsApplied, decayedPicks, positionalContexts, capBurdenApplied } = meta;
   const hasPickDecay = Array.isArray(decayedPicks) && decayedPicks.length > 0;
   const hasPositionalContext = Array.isArray(positionalContexts) && positionalContexts.length > 0;
 
@@ -110,6 +110,12 @@ export default function TradeExplanationPanel({ idea = null }) {
       {diminishingReturnsApplied && (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
           Multi-asset package: diminishing returns applied.
+        </div>
+      )}
+
+      {capBurdenApplied && (
+        <div style={{ fontSize: 11, color: 'var(--color-danger, var(--danger))', fontWeight: 700 }} className="burden-warning">
+          ⚠️ Cap Burden Penalty Applied
         </div>
       )}
 
