@@ -147,6 +147,7 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
 
   const topOffer = weeklyContext?.incomingOffers?.[0] ?? null;
   const topOfferSummary = topOffer ? buildIncomingOfferPresentation({ offer: topOffer, league, userTeamId: league?.userTeamId }) : null;
+  const incomingOfferCount = Array.isArray(league?.incomingTradeOffers) ? league.incomingTradeOffers.length : 0;
 
   const handleAdvanceOrGate = () => {
     if (gate.shouldWarn) {
@@ -228,6 +229,34 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
           <strong>Advance blocked: </strong>
           {gate.riskItems.find((i) => i.severity === "danger")?.label ?? "Resolve blockers before advancing."}
           <Button size="sm" variant="ghost" style={{ marginLeft: 8 }} onClick={() => setShowGate(true)}>Review</Button>
+        </div>
+      ) : null}
+
+      {/* ── Incoming Trade Offer Notification ───────────────────── */}
+      {incomingOfferCount > 0 ? (
+        <div
+          className="weekly-readiness-banner tone-warning"
+          role="status"
+          aria-live="polite"
+          data-testid="trade-offer-banner"
+          style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}
+        >
+          <span>
+            <strong>
+              {incomingOfferCount === 1
+                ? "You have 1 pending trade offer"
+                : `You have ${incomingOfferCount} pending trade offers`}
+            </strong>
+            {" — review before advancing."}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onNavigate?.("Trade Center")}
+            style={{ whiteSpace: "nowrap" }}
+          >
+            Open Trade Center
+          </Button>
         </div>
       ) : null}
 

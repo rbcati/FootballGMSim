@@ -774,7 +774,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
       ) : (
         <>
           {Array.isArray(myRoster) && myRoster.length > 0 && (
-            <TradeBlockPanel roster={myRoster} onRemove={handleTradeBlockRemove} />
+            <TradeBlockPanel roster={myRoster} onRemove={handleTradeBlockRemove} league={league} userTeamId={myTeamId} />
           )}
           {/* Value + cap panel (original) */}
           {hasSelection && (
