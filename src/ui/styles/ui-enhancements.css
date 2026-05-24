@@ -508,6 +508,12 @@ html, body {
   filter: brightness(0.95);
 }
 
+.btn:hover,
+.play-call-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.05);
+}
+
 .btn.primary {
   background: linear-gradient(135deg, var(--accent), var(--accent-hover));
   border-color: var(--accent);
@@ -2392,8 +2398,8 @@ body {
 
 /* Generic Goal Style (Touchdown, Field Goal) */
 .game-event-overlay.goal .event-text {
-  color: #FFD700;
-  text-shadow: 0 0 25px rgba(255, 215, 0, 0.8), 0 0 45px rgba(255, 69, 0, 0.8);
+  color: var(--accent);
+  text-shadow: 0 0 25px var(--accent), 0 0 45px var(--success);
   font-family: var(--font-sans); font-weight: 900;
   letter-spacing: 2px;
   animation: goal-celebration 1s ease-out;
@@ -2409,8 +2415,8 @@ body {
 
 /* Specific Kick Style (Punt, Kickoff) */
 .game-event-overlay.kick .event-text {
-  color: #0A84FF;
-  text-shadow: 0 0 20px rgba(0, 86, 179, 0.8);
+  color: var(--accent);
+  text-shadow: 0 0 20px var(--accent);
   font-family: var(--font-sans); font-weight: 900;
   letter-spacing: 1px;
   animation: pulse-score-strong 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -2426,8 +2432,8 @@ body {
 
 /* Generic Save Style (Turnover, Defense Stop, Safety) */
 .game-event-overlay.save .event-text {
-  color: #FF453A;
-  border: 4px solid #FF453A;
+  color: var(--danger);
+  border: 4px solid var(--danger);
   background: rgba(0, 0, 0, 0.85);
   padding: 15px 30px;
   transform: rotate(-5deg);
@@ -2442,7 +2448,7 @@ body {
   display: block;
   font-size: 5rem;
   margin-bottom: 10px;
-  filter: drop-shadow(0 0 10px rgba(255, 69, 58, 0.5));
+  filter: drop-shadow(0 0 10px var(--danger));
   animation: shield-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
@@ -2814,7 +2820,7 @@ body {
 }
 
 .view-exit {
-  animation: view-exit 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: view-exit 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 
@@ -2824,31 +2830,31 @@ body {
 
 .game-event-overlay.goal .event-text {
   animation: goal-celebration 1s ease-out !important;
-  color: #FFD700 !important;
-  text-shadow: 0 0 25px rgba(255, 215, 0, 0.8), 0 0 45px rgba(255, 69, 0, 0.8) !important;
+  color: var(--accent) !important;
+  text-shadow: 0 0 25px var(--accent), 0 0 45px var(--success) !important;
   transform-origin: center center;
 }
 
 .game-event-overlay.kick .event-text {
   animation: pulse-score-strong 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
-  color: #0A84FF !important;
-  text-shadow: 0 0 20px rgba(0, 86, 179, 0.8) !important;
+  color: var(--accent) !important;
+  text-shadow: 0 0 20px var(--accent) !important;
   transform-origin: center center;
 }
 
 .game-event-overlay.save::before {
   animation: shield-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
-  filter: drop-shadow(0 0 15px rgba(255, 69, 58, 0.8)) !important;
+  filter: drop-shadow(0 0 15px var(--danger)) !important;
   transform-origin: center center;
 }
 
 /* Ensure keyframes are defined explicitly if they were missing or not robust enough */
 @keyframes goal-celebration {
   0% { transform: scale(1) rotate(0deg); }
-  25% { transform: scale(1.3) rotate(-10deg); filter: brightness(1.2); }
-  50% { transform: scale(1.5) rotate(10deg); filter: brightness(1.4); }
-  75% { transform: scale(1.3) rotate(-10deg); filter: brightness(1.2); }
-  100% { transform: scale(1) rotate(0deg); filter: brightness(1); }
+  25% { transform: scale(1.3) rotate(-10deg); filter: brightness(1.2); color: var(--accent); }
+  50% { transform: scale(1.5) rotate(10deg); filter: brightness(1.4); color: var(--success); }
+  75% { transform: scale(1.3) rotate(-10deg); filter: brightness(1.2); color: var(--accent); }
+  100% { transform: scale(1) rotate(0deg); filter: brightness(1); color: inherit; }
 }
 
 @keyframes pulse-score-strong {
