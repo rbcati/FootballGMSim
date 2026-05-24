@@ -25,6 +25,7 @@ import {
   evaluateMultiAssetPackageValue,
   calculateTotalPackageScore,
 } from '../../src/core/trades/tradeValuationModifiers.js';
+import { applyContractCapBurdenModifiers } from '../../src/core/trades/tradeFinancialModifiers.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -390,5 +391,37 @@ describe('Assertion 6 — diminishing returns blocks low-value asset spam', () =
     // The same five players without discount
     const undiscountedPile = evaluateMultiAssetPackageValue([60, 60, 60, 60, 60]);
     expect(pile).toBeLessThan(undiscountedPile);
+  });
+});
+
+describe('Assertion 7 — cap burden sync devalues expensive incoming contracts on tight-cap AI teams', () => {
+  it('applies financial burden penalty when effective incoming cap room is tight', () => {
+    const aiPosture = TEAM_STRATEGIC_POSTURE.NEUTRAL;
+    const expensiveIncoming = makePlayer('WR', 84, 30, {
+      contract: { baseAnnual: 14, signingBonus: 0, yearsTotal: 3, yearsRemaining: 2 },
+    });
+    const cheapOutgoing = makePlayer('RB', 73, 25, {
+      contract: { baseAnnual: 2, signingBonus: 0, yearsTotal: 2, yearsRemaining: 1 },
+    });
+    const expensiveBase = 210;
+    const cheapBase = 95;
+    const effectiveIncomingCapRoom = 8 + 2; // ai cap room + outgoing cap hit
+
+    const expensiveAdjusted = applyContractCapBurdenModifiers(
+      { ...expensiveIncoming, assetType: 'player' },
+      expensiveBase,
+      effectiveIncomingCapRoom,
+      aiPosture,
+    );
+    const cheapAdjusted = applyContractCapBurdenModifiers(
+      { ...cheapOutgoing, assetType: 'player' },
+      cheapBase,
+      effectiveIncomingCapRoom,
+      aiPosture,
+    );
+
+    expect(expensiveAdjusted).toBeLessThan(expensiveBase);
+    expect(cheapAdjusted).toBeGreaterThanOrEqual(cheapBase);
+    expect(expensiveAdjusted).toBeLessThan(cheapAdjusted * 2);
   });
 });

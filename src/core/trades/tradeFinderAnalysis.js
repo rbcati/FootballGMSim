@@ -18,6 +18,8 @@ import {
   getNeedLevelForPlayer,
   POSITION_NEED_LEVEL,
 } from './tradePositionalNeeds.js';
+import { getActiveCapHit } from '../contracts/contractObligations.js';
+import { applyContractCapBurdenModifiers } from './tradeFinancialModifiers.js';
 
 const PICK_VALUE_SCALING = 0.184;
 
@@ -221,14 +223,22 @@ function buildIdea({ need, target, outgoingAssets, targetTeam, cap, packageType,
   const targetBaseValue = getPlayerValueSafe(target);
   const targetValue = applyStrategicValuationModifiers({ assetType: 'player', ...target }, targetBaseValue, teamPosture, { currentSeason });
   const targetDepthNeeds = strategicContext?.targetDepthNeeds ?? null;
+  const effectiveIncomingCapRoom = Number(targetTeam?.capRoom ?? 0) + Number(getActiveCapHit(target));
+  let capBurdenApplied = false;
   const outgoingStrategicValues = outgoingAssets.map((a) => {
     const strategicValue = applyStrategicValuationModifiers(a, num(a.valueScore), teamPosture, { currentSeason });
     // Apply positional need modifiers from the receiving (target) team's perspective.
     // Only for player assets and only when the target team's depth needs are available.
+    let adjustedValue = strategicValue;
     if (a.assetType === 'player' && targetDepthNeeds != null) {
-      return applyPositionalNeedModifiers(a, strategicValue, targetDepthNeeds, teamPosture);
+      adjustedValue = applyPositionalNeedModifiers(a, adjustedValue, targetDepthNeeds, teamPosture);
     }
-    return strategicValue;
+    if (a.assetType === 'player') {
+      const capAdjustedValue = applyContractCapBurdenModifiers(a, adjustedValue, effectiveIncomingCapRoom, teamPosture);
+      if (capAdjustedValue !== adjustedValue) capBurdenApplied = true;
+      adjustedValue = capAdjustedValue;
+    }
+    return adjustedValue;
   });
   const outgoingValue = evaluateMultiAssetPackageValue(outgoingStrategicValues);
   const valueDelta = Math.round(targetValue - outgoingValue);
@@ -277,6 +287,7 @@ function buildIdea({ need, target, outgoingAssets, targetTeam, cap, packageType,
     diminishingReturnsApplied: outgoingAssets.length > 1,
     decayedPicks,
     positionalContexts,
+    capBurdenApplied,
   });
 
   return {
