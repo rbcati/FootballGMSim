@@ -20,6 +20,7 @@ import { useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
 import { __invalidateStableRouteRequestCache } from "./useStableRouteRequest.js";
 import { buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 import { toWorker, toUI, send as buildMsg } from '../../worker/protocol.js';
+import { applyLeagueDelta } from '../../worker/serialization.js';
 
 const WORKER_REQUEST_TIMEOUT_MS = 20000;
 const WORKER_TIMEOUT_BY_TYPE = Object.freeze({
@@ -221,6 +222,7 @@ export function useWorker() {
   });
   const activeBootRequestIdRef = useRef(null);
   const ignoredBootRequestIdsRef = useRef(new Set());
+  const hasFullStateBaselineRef = useRef(false);
 
   // ── Spawn worker once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -277,11 +279,22 @@ export function useWorker() {
           if (payload?.bootRequestId && activeBootRequestIdRef.current === payload.bootRequestId) {
             activeBootRequestIdRef.current = null;
           }
+          hasFullStateBaselineRef.current = true;
           dispatch({ type: 'FULL_STATE', payload, messageType: type });
           break;
-        case toUI.STATE_UPDATE:
-          dispatch({ type: 'STATE_UPDATE', payload, messageType: type });
+        case toUI.STATE_UPDATE: {
+          if (!hasFullStateBaselineRef.current && payload?._isDelta) {
+            worker.postMessage(buildMsg(toWorker.REQUEST_FULL_STATE));
+            break;
+          }
+          const merged = applyLeagueDelta(leagueRef.current ?? {}, payload);
+          if (merged?._requiresFullState) {
+            worker.postMessage(buildMsg(toWorker.REQUEST_FULL_STATE));
+            break;
+          }
+          dispatch({ type: 'STATE_UPDATE', payload: merged, messageType: type });
           break;
+        }
         case toUI.PROMPT_USER_GAME:
           dispatch({ type: 'PROMPT_USER_GAME' });
           break;
