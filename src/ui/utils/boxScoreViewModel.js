@@ -11,6 +11,20 @@ const toNum = (v) => {
 
 const mdash = '—';
 
+function normalizeAdvancedAttribution(value) {
+  if (!value || typeof value !== 'object') return {};
+  return Object.fromEntries(Object.entries(value).map(([playerId, row]) => [String(playerId), {
+    targets: Number(row?.targets ?? 0),
+    receptionsAllowed: Number(row?.receptionsAllowed ?? 0),
+    coverageTargets: Number(row?.coverageTargets ?? 0),
+    coverageCompletionsAllowed: Number(row?.coverageCompletionsAllowed ?? 0),
+    drops: Number(row?.drops ?? 0),
+    battedPasses: Number(row?.battedPasses ?? 0),
+    sacksAllowed: Number(row?.sacksAllowed ?? 0),
+    sacksMade: Number(row?.sacksMade ?? 0),
+  }]));
+}
+
 function hasValues(obj) {
   return Boolean(obj && typeof obj === 'object' && Object.keys(obj).length > 0);
 }
@@ -559,6 +573,7 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
     },
     gameFlowSummary: buildGameFlowSummary(payload),
     prepImpact: Array.isArray(payload?.prepImpact) ? payload.prepImpact : (payload?.prepImpact ? [String(payload.prepImpact)] : []),
+    advancedAttribution: normalizeAdvancedAttribution(payload?.advancedAttribution),
     detailWarning,
     missingDetailReason: detailWarning,
     hasDetailedStats: archiveQuality === QUALITY.full || archiveQuality === QUALITY.partial,

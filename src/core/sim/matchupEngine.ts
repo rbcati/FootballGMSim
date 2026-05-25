@@ -10,6 +10,15 @@ export interface PlayContext {
   fatigueFactor?: number;
   normalizationConstant?: number;
   playType?: 'pass' | 'run';
+  targetId?: string;
+  defenderId?: string;
+  blockerId?: string;
+  rusherId?: string;
+}
+
+export interface PlayAttributionEvent {
+  event: 'TARGET' | 'RECEPTION_ALLOWED' | 'COVERAGE_TARGET' | 'COVERAGE_COMPLETION_ALLOWED' | 'DROP' | 'BATTED_PASS' | 'SACK_ALLOWED' | 'SACK_MADE';
+  playerId?: string;
 }
 
 export interface PlayResult {
@@ -26,6 +35,7 @@ export interface PlayResult {
   turnoverType: 'interception' | 'fumble' | null;
   isSack: boolean;
   firstDown: boolean;
+  attributionEvents?: PlayAttributionEvent[];
 }
 
 const OFFENSE_WEIGHTS: ReadonlyArray<[keyof AttributesV2, number]> = Object.freeze([
@@ -158,6 +168,12 @@ function nextDownState(ctx: PlayContext, yardsGained: number): Pick<PlayResult, 
   };
 }
 
+
+function maybePushAttribution(events: PlayAttributionEvent[], event: PlayAttributionEvent['event'], playerId?: string) {
+  if (!playerId) return;
+  events.push({ event, playerId });
+}
+
 export function resolveMatchup(
   offense: AttributesV2,
   defense: AttributesV2,
@@ -201,6 +217,25 @@ export function resolveMatchup(
 
   const clockElapsedSec = Math.round(clamp(22 + rng() * (playType === 'run' ? 20 : 16) + (success ? 2 : 0), 18, 45));
   const next = nextDownState(ctx, yardsGained);
+  const attributionEvents: PlayAttributionEvent[] = [];
+  if (playType === 'pass') {
+    maybePushAttribution(attributionEvents, 'TARGET', ctx.targetId);
+    maybePushAttribution(attributionEvents, 'COVERAGE_TARGET', ctx.defenderId);
+    if (success) {
+      maybePushAttribution(attributionEvents, 'RECEPTION_ALLOWED', ctx.targetId);
+      maybePushAttribution(attributionEvents, 'COVERAGE_COMPLETION_ALLOWED', ctx.defenderId);
+    } else if (!isSack) {
+      if (rng() <= 0.34) {
+        maybePushAttribution(attributionEvents, 'DROP', ctx.targetId);
+      } else if (rng() <= 0.26) {
+        maybePushAttribution(attributionEvents, 'BATTED_PASS', ctx.defenderId);
+      }
+    }
+  }
+  if (isSack) {
+    maybePushAttribution(attributionEvents, 'SACK_ALLOWED', ctx.blockerId);
+    maybePushAttribution(attributionEvents, 'SACK_MADE', ctx.rusherId);
+  }
 
   return {
     success,
@@ -213,6 +248,7 @@ export function resolveMatchup(
     turnoverType,
     isSack,
     firstDown: next.nextDown === 1 && next.nextDistance === 10 && next.nextYardLine < 100 && yardsGained >= ctx.distance,
+    attributionEvents,
     ...next,
   };
 }

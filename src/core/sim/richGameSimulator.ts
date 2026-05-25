@@ -53,6 +53,17 @@ export interface GameEventDigestItem {
   awayScore: number;
 }
 
+export interface AdvancedGameStats {
+  targets: number;
+  receptionsAllowed: number;
+  coverageTargets: number;
+  coverageCompletionsAllowed: number;
+  drops: number;
+  battedPasses: number;
+  sacksAllowed: number;
+  sacksMade: number;
+}
+
 export interface RichGameSummary {
   gameId: number | string;
   homeTeamId: number;
@@ -92,6 +103,7 @@ export interface RichGameSummary {
     headlineMoments: string[];
   };
   recapText: string;
+  advancedAttribution?: Record<string, AdvancedGameStats>;
   simFactors: {
     home: { qbRating: number; rushYpc: number; successRate: number; passRate: number };
     away: { qbRating: number; rushYpc: number; successRate: number; passRate: number };
@@ -217,6 +229,13 @@ function defaultPlayers(teamId: number, side: 'home' | 'away'): SimPlayerRef[] {
   ];
 }
 
+
+function pickWeightedPlayer(players: SimPlayerRef[], rng: () => number, weight: (p: SimPlayerRef) => number): SimPlayerRef | null {
+  if (!players.length) return null;
+  const idx = chooseWeightedIndex(players.map((player) => weight(player)), rng);
+  return players[idx] ?? players[0] ?? null;
+}
+
 function chooseWeightedIndex(weights: number[], rng: () => number): number {
   const total = weights.reduce((sum, w) => sum + Math.max(0, w), 0);
   if (total <= 0) return 0;
@@ -307,6 +326,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   const reasonMap = new Map<string, number>();
   const homePrep = payload.homePrepMultipliers ?? NEUTRAL_PREP;
   const awayPrep = payload.awayPrepMultipliers ?? NEUTRAL_PREP;
+  const advancedAttribution = new Map<string, AdvancedGameStats>();
 
   const stats = {
     home: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0, kickReturns: 0, kickReturnYards: 0, puntReturns: 0, puntReturnYards: 0 },
@@ -324,6 +344,12 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
 
     const offensePrep = state.possession === 'home' ? homePrep : awayPrep;
     const playType = getPlayType(state, rng, offensePrep);
+    const offensePlayers = state.possession === 'home' ? homePlayers : awayPlayers;
+    const defensePlayers = state.possession === 'home' ? awayPlayers : homePlayers;
+    const target = playType === 'pass' ? pickWeightedPlayer(offensePlayers.filter((player) => ['WR', 'TE', 'RB'].includes(player.pos)), rng, (player) => (player.ovr ?? 70) + (player.pos === 'WR' ? 12 : player.pos === 'TE' ? 8 : 5)) : null;
+    const defender = playType === 'pass' ? pickWeightedPlayer(defensePlayers.filter((player) => ['CB', 'S', 'FS', 'SS', 'LB'].includes(player.pos)), rng, (player) => (player.ovr ?? 70) + (player.pos === 'CB' ? 10 : 6)) : null;
+    const blocker = pickWeightedPlayer(offensePlayers.filter((player) => ['OT', 'OG', 'C', 'TE', 'RB', 'QB'].includes(player.pos)), rng, (player) => (player.ovr ?? 70) + (player.pos === 'QB' ? -10 : 0));
+    const rusher = pickWeightedPlayer(defensePlayers.filter((player) => ['EDGE', 'DE', 'DT', 'LB'].includes(player.pos)), rng, (player) => (player.ovr ?? 70) + (player.pos === 'EDGE' ? 12 : 6));
     const tunedOffense = applyPrepToOffenseAttributes(offense, offensePrep, playType, state.yardLine >= 80);
     const fatigueBaseline = (stats.home.plays + stats.away.plays) / 220;
     const result = resolveMatchup(tunedOffense, defense, {
@@ -336,6 +362,10 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       normalizationConstant: state.normalizationConstant,
       fatigueFactor: clamp(fatigueBaseline - offensePrep.fatigueDisciplineDelta * 0.35, 0, 0.95),
       playType,
+      targetId: target?.id != null ? String(target.id) : undefined,
+      defenderId: defender?.id != null ? String(defender.id) : undefined,
+      blockerId: blocker?.id != null ? String(blocker.id) : undefined,
+      rusherId: rusher?.id != null ? String(rusher.id) : undefined,
     }, rng);
 
     offenseStats.plays += 1;
@@ -356,6 +386,32 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       defenseStats.sacksMade += 1;
       pushDigest(digest, { quarter: state.quarter, clockSec: state.clockSec, team: state.possession === 'home' ? 'away' : 'home', type: 'sack', text: `${state.possession === 'home' ? 'Away' : 'Home'} defense generated a drive-killing sack.` }, state);
     }
+
+    for (const event of result.attributionEvents ?? []) {
+      if (!event.playerId) continue;
+      const prev = advancedAttribution.get(event.playerId) ?? {
+        targets: 0,
+        receptionsAllowed: 0,
+        coverageTargets: 0,
+        coverageCompletionsAllowed: 0,
+        drops: 0,
+        battedPasses: 0,
+        sacksAllowed: 0,
+        sacksMade: 0,
+      };
+      switch (event.event) {
+        case 'TARGET': prev.targets += 1; break;
+        case 'RECEPTION_ALLOWED': prev.receptionsAllowed += 1; break;
+        case 'COVERAGE_TARGET': prev.coverageTargets += 1; break;
+        case 'COVERAGE_COMPLETION_ALLOWED': prev.coverageCompletionsAllowed += 1; break;
+        case 'DROP': prev.drops += 1; break;
+        case 'BATTED_PASS': prev.battedPasses += 1; break;
+        case 'SACK_ALLOWED': prev.sacksAllowed += 1; break;
+        case 'SACK_MADE': prev.sacksMade += 1; break;
+      }
+      advancedAttribution.set(event.playerId, prev);
+    }
+
     if (Math.abs(result.yardsGained) >= 20 && result.yardsGained > 0) {
       offenseStats.explosivePlays += 1;
       pushDigest(digest, { quarter: state.quarter, clockSec: state.clockSec, team: state.possession, type: 'explosive_play', text: `${state.possession === 'home' ? 'Home' : 'Away'} offense popped an explosive ${result.playType} play.` }, state);
@@ -685,6 +741,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       headlineMoments: digest.slice(0, 3).map((event) => event.text),
     },
     recapText,
+    advancedAttribution: Object.fromEntries(advancedAttribution),
     simFactors: {
       home: {
         qbRating: buildQbRating(homeTeamLine.passComp, homeTeamLine.passAtt, homeTeamLine.passYd, homeTeamLine.passTD, homeTeamLine.turnovers),
