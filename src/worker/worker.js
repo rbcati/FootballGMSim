@@ -147,6 +147,7 @@ import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.j
 import { archiveCompletedSeasonIfNeeded, ensureLeagueHistoryContainer } from '../core/leagueHistory.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonalityModifier } from '../core/development/personalitySystem.js';
 import { applyTeamCultureWeek, classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../core/teamCulture.js';
+import { selectCultureAlerts } from '../core/broadcastNarrative.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
 import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule, enrichArchivedGamePayload, mergeArchivedGameWithScheduleResult } from '../core/gameArchive.js';
 import {
@@ -3124,8 +3125,8 @@ async function handleAdvanceWeek(payload, id) {
         context: { week, seasonId },
       });
 
-      // Low-frequency news for meaningful threshold crossings
-      const latestMetaForCulture = cache.getMeta();
+      // Low-frequency news for meaningful threshold crossings — capped at 3 league-wide per week
+      const cultureAlerts = [];
       for (const [tId, entry] of Object.entries(nextCulture)) {
         const prev = previousCulture[tId];
         if (!prev) continue;
@@ -3136,22 +3137,32 @@ async function handleAdvanceWeek(payload, id) {
         const crossedAbove85 = prevScore <= 85 && newScore > 85;
         const largeShift = absShift > 1.0;
         if (crossedBelow55 || crossedAbove85 || largeShift) {
-          const cTeam = cache.getTeam(Number(tId));
-          if (cTeam) {
-            const direction = newScore > prevScore ? 'improved' : 'declined';
-            const label = classifyTeamCulture(newScore);
-            const narrative = buildTeamCultureNarrative(newScore, entry.lastShift ?? 0, entry.reasons ?? []);
-            const cultureItem = {
-              id: `culture_${tId}_${seasonId}_${week}`,
-              headline: `${cTeam.name}: Culture ${direction} to "${label}"`,
-              body: narrative,
-              week,
-              season: seasonId,
-              type: 'CULTURE',
-              teamId: Number(tId),
-              priority: 'low',
-            };
-            cache.setMeta(addNewsItem(cache.getMeta(), cultureItem));
+          cultureAlerts.push({ teamId: tId, tId, entry, prevScore, newScore, isThreshold: crossedBelow55 || crossedAbove85 });
+        }
+      }
+      // selectCultureAlerts: threshold crossings first, then large-shifts, tie-break by teamId — max 3
+      const selectedCultureAlerts = selectCultureAlerts(cultureAlerts, 3);
+      for (const { tId, entry, prevScore, newScore } of selectedCultureAlerts) {
+        const cTeam = cache.getTeam(Number(tId));
+        if (cTeam) {
+          const direction = newScore > prevScore ? 'improved' : 'declined';
+          const label = classifyTeamCulture(newScore);
+          const narrative = buildTeamCultureNarrative(newScore, entry.lastShift ?? 0, entry.reasons ?? []);
+          const cultureItem = {
+            id: `culture_${tId}_${seasonId}_${week}`,
+            headline: `${cTeam.name}: Culture ${direction} to "${label}"`,
+            body: narrative,
+            week,
+            season: seasonId,
+            type: 'CULTURE',
+            teamId: Number(tId),
+            priority: 'low',
+          };
+          cache.setMeta(addNewsItem(cache.getMeta(), cultureItem));
+          // Surface culture threshold events in weekly headlines banner (deduplicated by id)
+          const currentHeadlines = Array.isArray(cache.getMeta().weeklyHeadlines) ? cache.getMeta().weeklyHeadlines : [];
+          if (!currentHeadlines.some((h) => h.id === cultureItem.id)) {
+            cache.setMeta({ weeklyHeadlines: [...currentHeadlines, { id: cultureItem.id, headline: cultureItem.headline, week, year: meta.year ?? 0 }].slice(-40) });
           }
         }
       }

@@ -10,6 +10,7 @@ import { buildWeeklyCommandHub } from '../utils/weeklyCommandHub.js';
 import { buildCommandCenterSummary } from '../utils/weeklyHubLayout.js';
 import { rankLeaguePulseItems } from '../../core/leaguePulse.js';
 import { classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../../core/teamCulture.js';
+import { buildRecentCultureEvents } from '../../core/broadcastNarrative.js';
 import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda, CompactNewsCard } from './ScreenSystem.jsx';
 import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
@@ -258,6 +259,12 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
     const shift = Number(raw?.lastShift ?? 0);
     const trend = raw?.trend ?? 'flat';
     const reasons = Array.isArray(raw?.reasons) ? raw.reasons : [];
+    const recentEvents = buildRecentCultureEvents(
+      league?.teamCulture ?? {},
+      league?.userTeamId,
+      league?.newsItems,
+    );
+    const recentEventHeadline = recentEvents[0]?.headline ?? null;
     return {
       score,
       label: classifyTeamCulture(score),
@@ -265,8 +272,9 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       trendIcon: trend === 'up' ? '↑' : trend === 'down' ? '↓' : '–',
       tone: trend === 'up' ? 'ok' : trend === 'down' ? 'warning' : 'info',
       narrative: buildTeamCultureNarrative(score, shift, reasons),
+      recentEventHeadline,
     };
-  }, [league?.teamCulture, league?.userTeamId]);
+  }, [league?.teamCulture, league?.userTeamId, league?.newsItems]);
 
   useEffect(() => {
     document.title = `Franchise HQ • ${command.weekLabel} • Football GM Sim`;
@@ -576,6 +584,9 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
             </div>
             <strong>{culturePulse.label}</strong>
             <p style={{ margin: '2px 0 0', fontSize: '0.85em', opacity: 0.9 }}>{culturePulse.narrative}</p>
+            {culturePulse.recentEventHeadline ? (
+              <p style={{ margin: '3px 0 0', fontSize: '0.8em', opacity: 0.7 }} data-testid="culture-recent-event">{culturePulse.recentEventHeadline}</p>
+            ) : null}
           </article>
         </div>
       </SectionCard>

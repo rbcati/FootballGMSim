@@ -90,3 +90,68 @@ export function buildBroadcastGameNotes(gameSummary, context = {}) {
   const momentum = buildMomentumBroadcastNotes(gameSummary.gameFlowSummary, context);
   return rankBroadcastNotes(dedupeBroadcastNotes([...attribution, ...momentum]), { maxNotes: context.maxNotes ?? 3 });
 }
+
+/**
+ * Extract recent CULTURE news items for a team from the newsItems array.
+ * Safe for legacy saves (returns [] for null/undefined inputs).
+ * Deterministic: sorted by season desc, week desc, id asc.
+ */
+export function buildRecentCultureEvents(teamCulture, teamId, newsItems = [], _context = {}) {
+  if (!teamCulture || teamId == null) return [];
+  const idStr = String(teamId);
+  const items = Array.isArray(newsItems) ? newsItems : [];
+  return items
+    .filter((item) => item?.type === 'CULTURE' && String(item?.teamId) === idStr)
+    .sort((a, b) => {
+      const sDiff = (b?.season ?? 0) - (a?.season ?? 0);
+      if (sDiff !== 0) return sDiff;
+      const wDiff = (b?.week ?? 0) - (a?.week ?? 0);
+      if (wDiff !== 0) return wDiff;
+      return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
+    })
+    .slice(0, 3);
+}
+
+/**
+ * Normalize and dedupe culture narrative items for display.
+ * Stable ordering: season desc, week desc, id asc. Dedupes by id.
+ */
+export function normalizeCultureNarrativeItems(items = []) {
+  if (!Array.isArray(items)) return [];
+  const sorted = [...items].sort((a, b) => {
+    const sDiff = (b?.season ?? 0) - (a?.season ?? 0);
+    if (sDiff !== 0) return sDiff;
+    const wDiff = (b?.week ?? 0) - (a?.week ?? 0);
+    if (wDiff !== 0) return wDiff;
+    return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
+  });
+  const seen = new Set();
+  const out = [];
+  for (const item of sorted) {
+    if (!item) continue;
+    const key = String(item?.id ?? normalizeText(item?.headline ?? '')).toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+/**
+ * Select and prioritize culture alerts for news headline generation.
+ * Threshold crossings (below 55 / above 85) are higher priority than large shifts.
+ * Tie-breaks deterministically by teamId string sort.
+ * @param {Array} alerts - objects with { teamId, isThreshold }
+ * @param {number} maxAlerts - max items to return (default 3)
+ */
+export function selectCultureAlerts(alerts = [], maxAlerts = 3) {
+  if (!Array.isArray(alerts)) return [];
+  const cap = Math.max(0, toNum(maxAlerts, 3));
+  return [...alerts]
+    .sort((a, b) => {
+      const pDiff = (a?.isThreshold ? 1 : 2) - (b?.isThreshold ? 1 : 2);
+      if (pDiff !== 0) return pDiff;
+      return String(a?.teamId ?? '').localeCompare(String(b?.teamId ?? ''));
+    })
+    .slice(0, cap);
+}
