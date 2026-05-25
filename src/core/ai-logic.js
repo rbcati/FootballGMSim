@@ -22,6 +22,7 @@ import { evaluatePendingOfferCapReservation } from './pendingOfferCapModel.js';
 import { evaluatePlayerMarketRealism, normalizePositionGroup } from './marketRealismModel.js';
 import { executeAIOffseasonCuts } from './roster/aiRosterCuts.js';
 import { executeAIOffseasonExtensions } from './retention/aiRetentionLogic.js';
+import { calculateTeamDepthDeficiencies, getNeedLevelForPlayer, POSITION_NEED_LEVEL } from './trades/tradePositionalNeeds.js';
 
 class AiLogic {
     static NEED_GROUP_TO_POS = Object.freeze({
@@ -423,13 +424,16 @@ class AiLogic {
         const team = cache.getTeam(teamId);
         if (!team) return;
         const meta = cache.getMeta();
+        const roster = cache.getPlayersByTeam(teamId);
         const strategy = buildAiTeamStrategy({
             team,
-            roster: cache.getPlayersByTeam(teamId),
+            roster,
             league: { year: meta?.year, phase: meta?.phase },
             phase: meta?.phase,
             year: meta?.year,
         });
+        // Positional need sync: classify per-position depth quality to gate bidding decisions.
+        const depthDeficiencies = calculateTeamDepthDeficiencies(roster);
 
         // 1. Identify Needs (prioritize highest gaps; contenders focus on a few real upgrades per day)
         const needs = this._teamNeedsFromStrategy(strategy);
@@ -443,7 +447,14 @@ class AiLogic {
             ? 6
             : 4;
         highNeedPositions = highNeedPositions.slice(0, maxNeedSlots);
-        if (Number(needs.QB ?? 0) >= 1.12 && !highNeedPositions.includes('QB')) {
+        // Prune positions the team already has at SECURE quality (avgStarterOvr >= 80).
+        // Prevents the AI from burning cap on positions that don't genuinely need help.
+        highNeedPositions = highNeedPositions.filter(
+            (pos) => getNeedLevelForPlayer({ pos }, depthDeficiencies) !== POSITION_NEED_LEVEL.SECURE,
+        );
+        // QB force-add: only if QB depth is not already SECURE.
+        const qbDepthNeedLevel = getNeedLevelForPlayer({ pos: 'QB' }, depthDeficiencies);
+        if (Number(needs.QB ?? 0) >= 1.12 && !highNeedPositions.includes('QB') && qbDepthNeedLevel !== POSITION_NEED_LEVEL.SECURE) {
           highNeedPositions = ['QB', ...highNeedPositions].slice(0, maxNeedSlots);
         }
 
@@ -457,7 +468,6 @@ class AiLogic {
         if (freeAgentsMap) {
             const flatFreeAgents = Object.values(freeAgentsMap).flat().filter(Boolean);
             if (flatFreeAgents.length > 0) {
-                const roster = cache.getPlayersByTeam(teamId);
                 const analyzedFreeAgents = flatFreeAgents.map((fa) => {
                     const demand = calculateExtensionDemand(fa);
                     if (demand) {
@@ -546,6 +556,14 @@ class AiLogic {
                 // Check if we already have an active offer out to this player
                 if (fa.offers && fa.offers.find(o => o.teamId === teamId)) continue;
 
+                // Depth-need gate: skip candidates whose position is already SECURE.
+                // Target evaluation score multiplier: CRITICAL → 1.5×, MODERATE → 1.1×, others → 1.0×.
+                const faDepthNeedLevel = getNeedLevelForPlayer({ pos: fa.pos }, depthDeficiencies);
+                if (faDepthNeedLevel === POSITION_NEED_LEVEL.SECURE) continue;
+                const depthNeedMultiplier =
+                    faDepthNeedLevel === POSITION_NEED_LEVEL.CRITICAL ? 1.5 :
+                    faDepthNeedLevel === POSITION_NEED_LEVEL.MODERATE ? 1.1 : 1.0;
+
                 // Calculate Ask / Offer through the V1 contract model.
                 const demand = demandByPlayerId.get(fa.id) ?? calculateExtensionDemand(fa);
                 if (!demand) continue;
@@ -572,7 +590,7 @@ class AiLogic {
                 const realism = evaluatePlayerMarketRealism({
                     player: fa,
                     team,
-                    roster: strategy?.roster ?? cache.getPlayersByTeam(teamId),
+                    roster: strategy?.roster ?? roster,
                     strategy,
                     positionalNeed: needs[pos] ?? 1,
                     capRoom: team.capRoom,
@@ -620,6 +638,8 @@ class AiLogic {
                           : 0.62;
                 if (capHealth < 28) capLimit *= 0.68;
                 else if (capHealth < 40) capLimit *= 0.86;
+                // Widen the cap ceiling for genuine roster holes (CRITICAL → 1.5×, MODERATE → 1.1×).
+                capLimit = Math.min(0.88, capLimit * depthNeedMultiplier);
                 const maxAllowedHit = Math.max(3, Number(team.capRoom ?? 0) * capLimit);
                 if (!urgentPos && capHit > maxAllowedHit) {
                     const qbException = qbDesperate && (market.controlledException || realism.flags.includes('qb_need_exception')) && capHit <= maxAllowedHit * 1.8;
@@ -638,6 +658,8 @@ class AiLogic {
                             capFit: market.capFit,
                             riskTags: market.riskTags,
                             reasons: [...new Set([...(market.reasons ?? []), ...(realism.reasons ?? [])])],
+                            depthNeedLevel: faDepthNeedLevel,
+                            depthNeedMultiplier,
                             marketRealism: {
                                 marketDemandScore: realism.marketDemandScore,
                                 fitScore: realism.fitScore,
