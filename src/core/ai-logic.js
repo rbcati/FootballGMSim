@@ -23,6 +23,7 @@ import { evaluatePlayerMarketRealism, normalizePositionGroup } from './marketRea
 import { executeAIOffseasonCuts } from './roster/aiRosterCuts.js';
 import { executeAIOffseasonExtensions } from './retention/aiRetentionLogic.js';
 import { calculateTeamDepthDeficiencies, getNeedLevelForPlayer, POSITION_NEED_LEVEL } from './trades/tradePositionalNeeds.js';
+import { buildFranchiseTagContract, buildRFATenderContract, TENDER_CONFIG } from './contracts/tenderLogic.js';
 
 class AiLogic {
     static NEED_GROUP_TO_POS = Object.freeze({
@@ -397,6 +398,142 @@ class AiLogic {
                 teamId,
                 playerId: player.id,
                 contract: newContract,
+            });
+        }
+    }
+
+    /**
+     * Execute the Franchise Tag and RFA Tender sweep for an AI team.
+     * Must be called AFTER processExtensions — targets expiring players who
+     * did not receive (or accept) a contract extension.
+     *
+     * Pass 1 — Franchise Tag:
+     *   The highest-OVR expiring player at a critical-need position is tagged.
+     *   Tagged players receive a 1-year fully-guaranteed contract at the
+     *   market average of the top-5 salaries at their position.
+     *   contract.tag = 'franchise' prevents the player entering the FA pool.
+     *
+     * Pass 2 — RFA Tenders:
+     *   Remaining eligible drafted players receive a tender valued by their
+     *   original draft round.  contract.tender records the pick-compensation
+     *   tier owed if another team signs the player away.
+     */
+    static async processTagsAndTenders(teamId) {
+        const team = cache.getTeam(teamId);
+        if (!team) return;
+
+        this.updateTeamCap(teamId);
+
+        const meta       = cache.getMeta();
+        const allPlayers = cache.getAllPlayers();
+        const roster     = cache.getPlayersByTeam(teamId);
+        const year       = Number(meta?.year ?? 2025);
+
+        const isExpiring = (p) => {
+            const yrs = Number(
+                p?.contract?.years ?? p?.contract?.yearsRemaining ?? p?.contract?.yearsLeft ?? 1,
+            );
+            return yrs <= 1;
+        };
+
+        // Expiring players who weren't extended and haven't already been tagged/tendered
+        const unsigned = roster.filter(
+            (p) =>
+                isExpiring(p) &&
+                p?.negotiationStatus !== 'SIGNED' &&
+                !p?.contract?.tag &&
+                !p?.contract?.tender,
+        );
+
+        if (unsigned.length === 0) return;
+
+        const needs = this.calculateTeamNeeds(teamId);
+
+        // ── Pass 1: Franchise Tag ─────────────────────────────────────────────
+        const tagCandidates = unsigned
+            .filter((p) => {
+                const ovr = Number(p?.ovr ?? 0);
+                const pos = String(p?.pos ?? '');
+                return (
+                    ovr >= TENDER_CONFIG.MIN_OVR_FOR_FRANCHISE_TAG &&
+                    (needs[pos] ?? 1.0) >= 1.2
+                );
+            })
+            .sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+
+        if (tagCandidates.length > 0) {
+            const target      = tagCandidates[0];
+            const tagContract = buildFranchiseTagContract(target, allPlayers, year);
+            const freshTeam   = cache.getTeam(teamId);
+            const capAfter    = (freshTeam?.capRoom ?? 0) - tagContract.baseAnnual;
+
+            if (capAfter >= TENDER_CONFIG.MIN_CAP_BUFFER_AFTER_TAG) {
+                cache.updatePlayer(target.id, {
+                    contract:          tagContract,
+                    isTagged:          true,
+                    negotiationStatus: 'TAGGED',
+                    extensionDecision: 'franchise_tagged',
+                });
+                this.updateTeamCap(teamId);
+
+                const tagTeam  = cache.getTeam(teamId);
+                const tagged   = cache.getPlayer(target.id);
+                if (tagTeam && tagged) {
+                    await NewsEngine.logNews(
+                        'TRANSACTION',
+                        `${tagTeam.abbr} placed the Franchise Tag on ${tagged.pos} ${tagged.name} ($${tagContract.baseAnnual.toFixed(1)}M).`,
+                        teamId,
+                        { playerId: target.id, priority: tagged.ovr >= 80 ? 'high' : undefined },
+                    );
+                }
+
+                await Transactions.add({
+                    type:     'FRANCHISE_TAG',
+                    seasonId: meta?.currentSeasonId,
+                    week:     meta?.currentWeek,
+                    teamId,
+                    details:  { playerId: target.id, contract: tagContract },
+                });
+            }
+        }
+
+        // ── Pass 2: RFA Tenders ───────────────────────────────────────────────
+        // Re-fetch roster so the tagged player is excluded via the contract.tag check
+        const rosterNow = cache.getPlayersByTeam(teamId);
+        const tenderCandidates = rosterNow.filter(
+            (p) =>
+                isExpiring(p) &&
+                p?.negotiationStatus !== 'SIGNED' &&
+                !p?.contract?.tag &&
+                !p?.contract?.tender &&
+                Number(p?.ovr ?? 0) >= TENDER_CONFIG.MIN_OVR_FOR_RFA_TENDER &&
+                Number(p?.draftRound ?? 0) >= 1, // only drafted players qualify as RFAs
+        );
+
+        for (const player of tenderCandidates) {
+            const tenderContract = buildRFATenderContract(player, year);
+            const currentTeam   = cache.getTeam(teamId);
+            const capAfter      = (currentTeam?.capRoom ?? 0) - tenderContract.baseAnnual;
+
+            if (capAfter < TENDER_CONFIG.MIN_CAP_BUFFER_AFTER_TAG) continue;
+
+            cache.updatePlayer(player.id, {
+                contract:          tenderContract,
+                negotiationStatus: 'TENDERED',
+                extensionDecision: 'rfa_tendered',
+            });
+            this.updateTeamCap(teamId);
+
+            await Transactions.add({
+                type:     'RFA_TENDER',
+                seasonId: meta?.currentSeasonId,
+                week:     meta?.currentWeek,
+                teamId,
+                details:  {
+                    playerId:        player.id,
+                    contract:        tenderContract,
+                    compensationPick: tenderContract.compensationPick,
+                },
             });
         }
     }
