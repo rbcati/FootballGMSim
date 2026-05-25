@@ -156,4 +156,27 @@ describe('BoxScore – opt-in auto-open replay gate', () => {
     // Without isManualSimRun the viewer starts paused
     expect(getByTestId('rgfv-progress').textContent).toBe('Paused');
   });
+
+  it('renders Broadcast Notes when deterministic notes exist', () => {
+    const gameWithBroadcast = {
+      ...gameWithFlow,
+      advancedAttribution: {
+        7: { sacksAllowed: 6, drops: 3 },
+      },
+    };
+    const { getByTestId, getByText, container } = render(
+      <BoxScore gameId="g-broadcast" league={{ ...baseLeague, gameById: { 'g-broadcast': gameWithBroadcast } }} embedded />,
+    );
+    expect(getByTestId('game-book-broadcast-notes')).toBeTruthy();
+    expect(getByText('Broadcast Notes')).toBeTruthy();
+    expect(container.querySelector('.bs-broadcast-notes')).toBeTruthy();
+  });
+
+  it('does not render Broadcast Notes for legacy games without note signals', () => {
+    const { queryByTestId } = render(
+      <BoxScore gameId="g-no-broadcast" league={{ ...baseLeague, gameById: { 'g-no-broadcast': gameWithFlow } }} embedded />,
+    );
+    expect(queryByTestId('game-book-broadcast-notes')).toBeNull();
+  });
+
 });
