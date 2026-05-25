@@ -191,7 +191,12 @@ import {
   applyPositionalNeedModifiers,
 } from '../core/trades/tradePositionalNeeds.js';
 import { applyContractCapBurdenModifiers } from '../core/trades/tradeFinancialModifiers.js';
-
+import {
+  serializeLeagueDelta,
+  serializePayloadForPost,
+  buildRatingMatrix,
+  buildScheduleBuffer,
+} from './serialization.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -202,13 +207,102 @@ setReloadRequiredCallback((reason) => {
 });
 const isDev = !!import.meta?.env?.DEV;
 
+// ── Serialization State ───────────────────────────────────────────────────────
+// Tracks the last full view state posted to the UI so subsequent STATE_UPDATE
+// messages can be reduced to deltas instead of full object graphs.
+let _lastSentViewState = null;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Send a typed message to the UI thread. */
+/**
+ * Send a typed message to the UI thread with delta-serialization and binary
+ * Transferable optimizations.
+ *
+ * For STATE_UPDATE:
+ *  - Computes a delta against the last sent view state (omits unchanged fields).
+ *  - Packs player rating matrices into a Float32Array Transferable.
+ *  - Packs schedule game data into an Int32Array Transferable.
+ *  - Transferable buffers bypass structured clone entirely (zero-copy transfer).
+ *
+ * For FULL_STATE (initial load / hydration):
+ *  - Records the full state as the delta baseline for subsequent tick-updates.
+ *  - Attaches the same binary Transferables for fast receiver-side parsing.
+ *
+ * For all other messages exceeding 2 MB:
+ *  - Stringifies via JSON.stringify before transfer (faster than V8 structured
+ *    clone for deeply nested objects in the current engine implementation).
+ *    Receiver must detect `_jsonPayload` and parse it back.
+ *
+ * Telemetry: logs serialization + total postMessage latency in dev mode
+ * or whenever a message takes longer than 5 ms.
+ */
 function post(type, payload = {}, id = null) {
-  const msg = { type, payload };
+  const t0 = performance.now();
+
+  let data = payload;
+  const transferList = [];
+
+  if (type === toUI.STATE_UPDATE) {
+    const { delta, ratingMatrix, scheduleBuffer } = serializeLeagueDelta(
+      payload,
+      _lastSentViewState,
+    );
+
+    if (ratingMatrix && ratingMatrix.buffer.buffer.byteLength > 0) {
+      delta._ratingMatrix = { buffer: ratingMatrix.buffer, playerIds: ratingMatrix.playerIds };
+      transferList.push(ratingMatrix.buffer.buffer);
+    }
+    if (scheduleBuffer && scheduleBuffer.buffer.byteLength > 0) {
+      delta._scheduleBuffer = scheduleBuffer;
+      transferList.push(scheduleBuffer.buffer);
+    }
+
+    // Save full payload (not the delta) as the new baseline BEFORE transfer
+    // so next call can diff against a complete view state.
+    _lastSentViewState = payload;
+    data = delta;
+
+  } else if (type === toUI.FULL_STATE) {
+    // Record as delta baseline so the first STATE_UPDATE can diff against it.
+    _lastSentViewState = payload;
+
+    const teamsArr = payload.teams ?? [];
+    const allPlayers = teamsArr.flatMap(t => (Array.isArray(t.roster) ? t.roster : []));
+    if (allPlayers.length > 0) {
+      const rm = buildRatingMatrix(allPlayers);
+      data = { ...payload, _ratingMatrix: { buffer: rm.buffer, playerIds: rm.playerIds } };
+      transferList.push(rm.buffer.buffer);
+    }
+    if (payload.schedule) {
+      const sb = buildScheduleBuffer(payload.schedule);
+      data = data === payload ? { ...payload, _scheduleBuffer: sb } : { ...data, _scheduleBuffer: sb };
+      transferList.push(sb.buffer);
+    }
+
+  } else {
+    // Payload hardening: large non-state messages use the JSON stringify path.
+    const { data: serialized, isJson } = serializePayloadForPost(payload);
+    if (isJson) data = { _jsonPayload: serialized };
+  }
+
+  const t1 = performance.now();
+  const serMs = (t1 - t0).toFixed(2);
+
+  const msg = { type, payload: data };
   if (id) msg.id = id;
-  self.postMessage(msg);
+
+  if (transferList.length > 0) {
+    self.postMessage(msg, transferList);
+  } else {
+    self.postMessage(msg);
+  }
+
+  const totalMs = (performance.now() - t0).toFixed(2);
+  if (isDev || Number(totalMs) > 5) {
+    console.debug(
+      `[Worker|Serialization] type=${type} serMs=${serMs} totalMs=${totalMs} transfers=${transferList.length}`,
+    );
+  }
 }
 
 /** Yield to the event loop so the worker stays responsive during long batches. */
