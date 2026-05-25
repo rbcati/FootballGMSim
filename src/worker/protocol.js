@@ -55,6 +55,7 @@ export const toWorker = Object.freeze({
   SUBMIT_OFFER:       'SUBMIT_OFFER',      // { playerId, teamId, contract }
   ADVANCE_FREE_AGENCY_DAY: 'ADVANCE_FREE_AGENCY_DAY', // {}
   RELEASE_PLAYER:     'RELEASE_PLAYER',    // { playerId, teamId }
+  BULK_RELEASE_PLAYERS: 'BULK_RELEASE_PLAYERS', // { teamId, playerIds: number[] }
   PROCESS_FA_WAVE:    'PROCESS_FA_WAVE',   // AI teams act in FA
 
   /** Trades */

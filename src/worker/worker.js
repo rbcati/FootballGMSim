@@ -6027,62 +6027,71 @@ async function resolvePendingFreeAgencyOffers({ resolutionDay = 7, onlyPlayerId 
 
 // ── Handler: RELEASE_PLAYER ───────────────────────────────────────────────────
 
-async function handleReleasePlayer({ playerId, teamId }, id) {
-  let player = cache.getPlayer(playerId);
-  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+async function releasePlayerWithValidation({ playerId, teamId }) {
+  const player = cache.getPlayer(playerId);
+  if (!player) return { ok: false, error: 'Player not found' };
+  if (Number(player.teamId) !== Number(teamId)) return { ok: false, error: 'Player is not on selected roster' };
 
-  // ── June 1st Dead Money Rule ────────────────────────────────────────────────
-  // Pre-June-1 phases (offseason_resign): ALL remaining prorated bonus accelerates
-  //   to the current year's dead cap.
-  // Post-June-1 phases (free_agency, draft, preseason, regular, playoffs):
-  //   This year's prorated bonus hits current dead cap; future years defer to
-  //   deadMoneyNextYear (carries into next season's cap).
   const meta = ensureDynastyMeta(cache.getMeta());
   const team = cache.getTeam(teamId);
   if (team && player.contract) {
     const yearsRemaining = Math.max(player.contract.years ?? 1, 1);
     const yearsTotal     = Math.max(player.contract.yearsTotal ?? yearsRemaining, 1);
     const totalBonus     = player.contract.signingBonus ?? 0;
-    const annualBonus    = totalBonus / yearsTotal;   // prorated share per year
+    const annualBonus    = totalBonus / yearsTotal;
 
     const isPostJune1 = Constants.SALARY_CAP.POST_JUNE1_PHASES.includes(meta.phase);
 
     if (isPostJune1 && yearsRemaining > 1) {
-      // Current-year prorated bonus → dead cap now
       const currentYearDead = annualBonus;
-      // Future years' prorated bonus → deferred to next season
       const futureYearsDead = annualBonus * (yearsRemaining - 1);
-
-      if (currentYearDead > 0) {
-        cache.updateTeam(teamId, { deadCap: (team.deadCap ?? 0) + currentYearDead });
-      }
+      if (currentYearDead > 0) cache.updateTeam(teamId, { deadCap: (team.deadCap ?? 0) + currentYearDead });
       if (futureYearsDead > 0) {
         const freshTeam = cache.getTeam(teamId);
         cache.updateTeam(teamId, { deadMoneyNextYear: (freshTeam.deadMoneyNextYear ?? 0) + futureYearsDead });
       }
     } else {
-      // Pre-June-1: all remaining prorated bonus hits current year
       const deadMoney = annualBonus * yearsRemaining;
-      if (deadMoney > 0) {
-        cache.updateTeam(teamId, { deadCap: (team.deadCap ?? 0) + deadMoney });
-      }
+      if (deadMoney > 0) cache.updateTeam(teamId, { deadCap: (team.deadCap ?? 0) + deadMoney });
     }
   }
 
-  // Use player.id (the canonical key from the cache) for all subsequent writes.
   markOffseasonRelease(player, teamId, meta);
   cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [] });
   recalculateTeamCap(teamId);
-
-  // meta is already declared above
   await Transactions.add({
     type: 'RELEASE', seasonId: meta.currentSeasonId,
     week: meta.currentWeek, teamId, details: { playerId: player.id },
   });
   await NewsEngine.logTransaction('RELEASE', { teamId, playerId: player.id });
+  return { ok: true, playerId: player.id };
+}
 
+async function handleReleasePlayer({ playerId, teamId }, id) {
+  let player = cache.getPlayer(playerId);
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+
+  await releasePlayerWithValidation({ playerId, teamId });
   await flushDirty();
   post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
+}
+
+async function handleBulkReleasePlayers({ teamId, playerIds }, id) {
+  const uniquePlayerIds = [...new Set((Array.isArray(playerIds) ? playerIds : []).map(Number).filter(Number.isFinite))];
+  const released = [];
+  for (const playerId of uniquePlayerIds) {
+    const outcome = await releasePlayerWithValidation({ playerId, teamId });
+    if (!outcome.ok) {
+      await flushDirty();
+      post(toUI.ERROR, { message: `Bulk release stopped: ${outcome.error}` }, id);
+      post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
+      return post(toUI.SUCCESS, { ok: false, released, failedPlayerId: playerId, error: outcome.error }, id);
+    }
+    released.push(playerId);
+  }
+  await flushDirty();
+  post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
+  post(toUI.SUCCESS, { ok: true, released }, id);
 }
 
 // ── Handler: GET_ROSTER ───────────────────────────────────────────────────────
@@ -10567,6 +10576,7 @@ async function handleMessage(event) {
       case toWorker.SIGN_PLAYER:        return await handleSignPlayer(payload, id);
       case toWorker.SUBMIT_OFFER:       return await handleSubmitOffer(payload, id);
       case toWorker.RELEASE_PLAYER:     return await handleReleasePlayer(payload, id);
+      case toWorker.BULK_RELEASE_PLAYERS: return await handleBulkReleasePlayers(payload, id);
       case toWorker.UPDATE_SETTINGS:    return await handleUpdateSettings(payload, id);
       case toWorker.TOGGLE_COMMISSIONER_MODE: return await handleToggleCommissionerMode(payload, id);
       case toWorker.APPLY_COMMISSIONER_ACTIONS: return await handleApplyCommissionerActions(payload, id);

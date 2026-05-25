@@ -36,6 +36,7 @@ import PlayerProfile from "./PlayerProfile.jsx";
 import PlayerProfileModalBoundary from "./PlayerProfileModalBoundary.jsx";
 import ExtensionNegotiationModal from "./ExtensionNegotiationModal.jsx";
 import ReleasePreviewModal from "./ReleasePreviewModal.jsx";
+import BulkReleasePreviewModal from "./BulkReleasePreviewModal.jsx";
 import { teamColor } from "../../data/team-utils.js";
 import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES } from "../../core/scheme-core.js";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -489,6 +490,9 @@ function RosterTable({
   const [sortKey, setSortKey] = useState("ovr");
   const [sortDir, setSortDir] = useState("desc");
   const [releaseCandidate, setReleaseCandidate] = useState(null);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState([]);
+  const [bulkPreviewOpen, setBulkPreviewOpen] = useState(false);
   const [extending, setExtending] = useState(null);
   const [advancedFilters, setAdvancedFilters] = useState([]);
   const [search, setSearch] = useState("");
@@ -565,6 +569,24 @@ function RosterTable({
     setReleaseCandidate(null);
     onRefetch?.();
   };
+  const toggleBulkPlayer = (playerId) => {
+    setBulkSelectedIds((prev) => prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]);
+  };
+  const selectedPlayers = useMemo(() => {
+    const seen = new Set();
+    return players.filter((p) => bulkSelectedIds.includes(p.id) && !seen.has(p.id) && seen.add(p.id));
+  }, [players, bulkSelectedIds]);
+  const confirmBulkRelease = async (dedupedPlayers) => {
+    const ids = [...new Set((dedupedPlayers ?? []).map((p) => p?.id).filter(Boolean))];
+    if (!ids.length || !actions?.bulkReleasePlayers) return;
+    const result = await actions.bulkReleasePlayers(teamId, ids);
+    if (!result?.ok) {
+      window.alert(`Bulk release stopped after ${result?.released?.length ?? 0} release(s): ${result?.error ?? "Unknown error"}`);
+    }
+    setBulkPreviewOpen(false);
+    setBulkSelectedIds([]);
+    onRefetch?.();
+  };
 
   const handleTradeBlockToggle = async (playerId) => {
     if (!playerId || !actions?.toggleTradeBlock) return;
@@ -608,6 +630,13 @@ function RosterTable({
         capRoomNow={releasePreviewCapRoom}
         onCancel={cancelReleasePreview}
         onConfirm={confirmRelease}
+      />
+      <BulkReleasePreviewModal
+        open={bulkPreviewOpen}
+        players={selectedPlayers}
+        rosterCount={players.length}
+        onCancel={() => setBulkPreviewOpen(false)}
+        onConfirm={confirmBulkRelease}
       />
       {/* Player comparison modal */}
       {showComparison && comparePlayerA && comparePlayerB && (
@@ -681,6 +710,18 @@ function RosterTable({
         <Button variant={evaluationMode ? "default" : "outline"} onClick={() => setEvaluationMode((v) => !v)}>
           {evaluationMode ? "Evaluation view on" : "Evaluation view off"}
         </Button>
+        <Button variant={bulkMode ? "default" : "outline"} onClick={() => { setBulkMode((v) => !v); if (bulkMode) setBulkSelectedIds([]); }} style={{ marginLeft: 8 }}>
+          {bulkMode ? "Bulk cut mode on" : "Bulk cut mode off"}
+        </Button>
+        {bulkMode && (
+          <>
+            <Button variant="outline" onClick={() => setBulkSelectedIds(displayed.map((p) => p.id))} style={{ marginLeft: 8 }}>Select visible</Button>
+            <Button variant="outline" onClick={() => setBulkSelectedIds([])} style={{ marginLeft: 8 }}>Clear</Button>
+            <Button variant="destructive" onClick={() => setBulkPreviewOpen(true)} disabled={bulkSelectedIds.length === 0} style={{ marginLeft: 8 }}>
+              Preview bulk release ({bulkSelectedIds.length})
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Table */}
@@ -699,6 +740,11 @@ function RosterTable({
           >
             <TableHeader>
               <TableRow>
+                <TableHead
+                  style={{ textAlign: "center", width: bulkMode ? 36 : 0 }}
+                >
+                  {bulkMode ? "Sel" : ""}
+                </TableHead>
                 <TableHead
                   style={{
                     paddingLeft: "var(--space-2)",
@@ -832,7 +878,7 @@ function RosterTable({
             <TableBody>
               {displayed.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={12} style={{ padding: 0 }}>
+                  <TableCell colSpan={bulkMode ? 13 : 12} style={{ padding: 0 }}>
                     <EmptyState
                       icon="🧾"
                       title="No players match this filter"
@@ -871,6 +917,9 @@ function RosterTable({
 
                 return (
                   <TableRow key={player.id} style={rowStyle}>
+                    <TableCell style={{ textAlign: "center", padding: "0 var(--space-1)" }}>
+                      {bulkMode ? <input aria-label={`Select ${player.name}`} type="checkbox" checked={bulkSelectedIds.includes(player.id)} onChange={() => toggleBulkPlayer(player.id)} /> : null}
+                    </TableCell>
                     {/* # */}
                     <TableCell
                       style={{
