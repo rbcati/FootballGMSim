@@ -26,3 +26,25 @@ export interface Player {
   ratings?: Record<string, number>;
   attributesV2?: AttributesV2;
 }
+
+/**
+ * Advanced per-play attribution counters for a single season.
+ * Mirrors AdvancedGameStats from richGameSimulator — kept in sync manually.
+ */
+export interface AdvancedSeasonStats {
+  targets: number;
+  receptionsAllowed: number;
+  coverageTargets: number;
+  coverageCompletionsAllowed: number;
+  drops: number;
+  battedPasses: number;
+  sacksAllowed: number;
+  sacksMade: number;
+}
+
+/**
+ * Sparse persistent store for advanced game-attribution counters.
+ * Layout: archive[playerId][year] = AdvancedSeasonStats
+ * Only years in which a player appeared will have an entry.
+ */
+export type PlayerAdvancedStatsStore = Record<string, Record<string, AdvancedSeasonStats>>;
