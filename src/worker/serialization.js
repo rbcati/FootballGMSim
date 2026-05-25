@@ -148,6 +148,7 @@ const DELTA_OBJECT_FIELDS = [
   'settings', 'economy', 'freeAgencyState', 'contractMarket',
   'tradeDeadline', 'playoffSeeds', 'standingsContext', 'standings',
   'records', 'recordBook',
+  'playerSeasonStatsArchive',
 ];
 
 /**

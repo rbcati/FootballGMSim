@@ -1,6 +1,7 @@
 import { resolveMatchup, DEFAULT_NORMALIZATION_CONSTANT } from './matchupEngine.ts';
 import type { AttributesV2 } from '../../types/player.ts';
 import type { DerivedGamePlanMultipliers } from './gamePlanMultipliers.ts';
+import { archiveGameStats } from '../playerSeasonStatsArchive.js';
 
 export interface SimPlayerRef {
   id: number | string;
@@ -125,6 +126,10 @@ export interface RichMatchupPayload {
   awayPlayers?: SimPlayerRef[];
   homePrepMultipliers?: DerivedGamePlanMultipliers;
   awayPrepMultipliers?: DerivedGamePlanMultipliers;
+  /** Season year; required when playerStatsStore is provided for archival. */
+  year?: number;
+  /** Mutable sparse advanced-stats store; mutated in place when year is also set. */
+  playerStatsStore?: Record<string, Record<string, AdvancedGameStats>>;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -716,7 +721,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
 
   const recapText = `${state.homeScore > state.awayScore ? 'Home' : 'Away'} wins ${Math.max(state.homeScore, state.awayScore)}-${Math.min(state.homeScore, state.awayScore)}. ${topReasons[0] ?? 'Balanced execution'} set the tone.`;
 
-  return {
+  const summary: RichGameSummary = {
     gameId: payload.gameId,
     homeTeamId: payload.homeTeamId,
     awayTeamId: payload.awayTeamId,
@@ -757,4 +762,10 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       },
     },
   };
+
+  if (payload.playerStatsStore != null && payload.year != null) {
+    archiveGameStats(payload.playerStatsStore, summary, payload.year);
+  }
+
+  return summary;
 }

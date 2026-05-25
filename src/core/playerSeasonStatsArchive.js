@@ -287,6 +287,98 @@ const TOP_SORTS = [
   { key: 'defInts', pick: (r) => r.defInts, label: 'Def INT' },
 ];
 
+// ── Advanced Game-Attribution Archive ─────────────────────────────────────────
+
+/** Zero-initialized advanced stats counter bag. */
+export function createEmptyAdvancedStats() {
+  return {
+    targets: 0,
+    receptionsAllowed: 0,
+    coverageTargets: 0,
+    coverageCompletionsAllowed: 0,
+    drops: 0,
+    battedPasses: 0,
+    sacksAllowed: 0,
+    sacksMade: 0,
+  };
+}
+
+/**
+ * Merge the advancedAttribution from one RichGameSummary into the persistent
+ * sparse store.  Purely additive → order-independent (replaying games in any
+ * order always produces the same career totals).
+ *
+ * @param {object} playerStatsStore  Mutable sparse store; mutated in place and returned.
+ *                                   Shape: { [playerId]: { [year]: AdvancedStats } }
+ * @param {object} gameSummary       RichGameSummary (must have advancedAttribution).
+ * @param {number} year              Season year used as the bucket key.
+ * @returns {object}  The same (mutated) playerStatsStore.
+ */
+export function archiveGameStats(playerStatsStore, gameSummary, year) {
+  if (!playerStatsStore || typeof playerStatsStore !== 'object') return playerStatsStore ?? {};
+
+  const attribution = gameSummary?.advancedAttribution;
+  if (!attribution || typeof attribution !== 'object') return playerStatsStore;
+
+  const y = num(year);
+  if (!Number.isFinite(y) || y === 0) return playerStatsStore;
+  const yKey = String(y);
+
+  for (const playerId of Object.keys(attribution)) {
+    if (!playerId) continue;
+    const gameStats = attribution[playerId];
+    if (!gameStats || typeof gameStats !== 'object') continue;
+
+    const pid = String(playerId);
+    if (!Object.prototype.hasOwnProperty.call(playerStatsStore, pid)) {
+      playerStatsStore[pid] = {};
+    }
+    const playerYears = playerStatsStore[pid];
+    const prev = playerYears[yKey] ?? createEmptyAdvancedStats();
+
+    playerYears[yKey] = {
+      targets:                    prev.targets                    + num(gameStats.targets),
+      receptionsAllowed:          prev.receptionsAllowed          + num(gameStats.receptionsAllowed),
+      coverageTargets:            prev.coverageTargets            + num(gameStats.coverageTargets),
+      coverageCompletionsAllowed: prev.coverageCompletionsAllowed + num(gameStats.coverageCompletionsAllowed),
+      drops:                      prev.drops                      + num(gameStats.drops),
+      battedPasses:               prev.battedPasses               + num(gameStats.battedPasses),
+      sacksAllowed:               prev.sacksAllowed               + num(gameStats.sacksAllowed),
+      sacksMade:                  prev.sacksMade                  + num(gameStats.sacksMade),
+    };
+  }
+
+  return playerStatsStore;
+}
+
+/**
+ * Sum all per-season AdvancedStats for a given player into career totals.
+ * Pure function — never mutates the archive.
+ *
+ * @param {string|number} playerId
+ * @param {object} statsArchive  playerStatsStore (sparse)
+ * @returns {object} Career-total AdvancedStats; all fields are zero if player not found.
+ */
+export function getCareerStats(playerId, statsArchive) {
+  const pid = String(playerId ?? '');
+  const playerYears = statsArchive?.[pid];
+  if (!playerYears || typeof playerYears !== 'object') return createEmptyAdvancedStats();
+
+  const career = createEmptyAdvancedStats();
+  for (const yearStats of Object.values(playerYears)) {
+    if (!yearStats || typeof yearStats !== 'object') continue;
+    career.targets                    += num(yearStats.targets);
+    career.receptionsAllowed          += num(yearStats.receptionsAllowed);
+    career.coverageTargets            += num(yearStats.coverageTargets);
+    career.coverageCompletionsAllowed += num(yearStats.coverageCompletionsAllowed);
+    career.drops                      += num(yearStats.drops);
+    career.battedPasses               += num(yearStats.battedPasses);
+    career.sacksAllowed               += num(yearStats.sacksAllowed);
+    career.sacksMade                  += num(yearStats.sacksMade);
+  }
+  return career;
+}
+
 /**
  * Compact buckets for League History "Top performers" (max 2 per bucket, unique players preferred).
  */
