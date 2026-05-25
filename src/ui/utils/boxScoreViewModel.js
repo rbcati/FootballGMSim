@@ -573,7 +573,7 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
     },
     gameFlowSummary: buildGameFlowSummary(payload),
     prepImpact: Array.isArray(payload?.prepImpact) ? payload.prepImpact : (payload?.prepImpact ? [String(payload.prepImpact)] : []),
-    advancedAttribution: normalizeAdvancedAttribution(payload?.advancedAttribution),
+    advancedAttribution: normalizeAdvancedAttribution(payload?.advancedAttribution ?? game?.advancedAttribution),
     detailWarning,
     missingDetailReason: detailWarning,
     hasDetailedStats: archiveQuality === QUALITY.full || archiveQuality === QUALITY.partial,
