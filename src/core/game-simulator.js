@@ -1805,6 +1805,14 @@ export function simGameStats(home, away, options = {}) {
                   defensiveTDs: 0, turnoversForced: 0, safeties: 0 },
         };
 
+        // ── Tactical Tendency (User Influence Layer) ──────────────────────
+        // Marginal ±10% probability shifts; does not guarantee outcomes.
+        const _userTendency = String(options?.userTendency || 'BALANCED').toUpperCase();
+        const _userTeamId   = Number(options?.league?.userTeamId || options?.userTeamId || 0);
+        const _homeId       = Number(home?.id || 0);
+        const _awayId       = Number(away?.id || 0);
+        // ─────────────────────────────────────────────────────────────────
+
         // Momentum tracker: -100 (away hot) to +100 (home hot)
         let momentum = 0;
 
@@ -1976,6 +1984,20 @@ export function simGameStats(home, away, options = {}) {
             if (mods.runVolume && mods.runVolume > 1.1) tdShare -= 0.05;
             tdShare = U.clamp(tdShare, 0.35, 0.75);
 
+            // ── User Tendency: marginal drive-level influence ─────────────
+            const isUserPossession = _userTeamId > 0 &&
+                ((isHome && _homeId === _userTeamId) || (!isHome && _awayId === _userTeamId));
+            if (isUserPossession) {
+                if (_userTendency === 'AGGRESSIVE') {
+                    scoreProb = Math.min(0.65, scoreProb + 0.04);
+                    tdShare   = Math.min(0.80, tdShare   + 0.06);
+                } else if (_userTendency === 'CONSERVATIVE') {
+                    scoreProb = Math.max(0.10, scoreProb - 0.02);
+                    tdShare   = Math.max(0.30, tdShare   - 0.04);
+                }
+            }
+            // ─────────────────────────────────────────────────────────────
+
             const driveRoll = U.random();
 
             // Play-by-play log helper (shared by scoring and non-scoring drives)
@@ -2051,13 +2073,18 @@ export function simGameStats(home, away, options = {}) {
                     const offGrp = isHome ? hGroups : aGroups;
                     const defGrp = isHome ? aGroups : hGroups;
                     // Simulate a realistic multi-play drive
+                    // Tendency-adjusted pass/run split (scoring drives)
+                    const _sPassT = isUserPossession && _userTendency === 'AGGRESSIVE' ? 0.55
+                        : isUserPossession && _userTendency === 'CONSERVATIVE' ? 0.35 : 0.45;
+                    const _sRunT  = isUserPossession && _userTendency === 'AGGRESSIVE' ? 0.80
+                        : isUserPossession && _userTendency === 'CONSERVATIVE' ? 0.70 : 0.75;
                     const numPlays = U.rand(3, 8);
                     for (let i = 0; i < numPlays; i++) {
                         const gain = U.rand(-2, 18);
                         const catchYds = Math.max(0, gain);
                         const playRoll = U.random();
                         const qb = _pick(offGrp, 'QB');
-                        if (playRoll < 0.45) {
+                        if (playRoll < _sPassT) {
                             const rec = _pickRec(offGrp);
                             if (qb && rec) {
                                 _addStat(qb, 'passAtt'); _addStat(qb, 'passComp'); _addStat(qb, 'passYds', catchYds);
@@ -2067,7 +2094,7 @@ export function simGameStats(home, away, options = {}) {
                             } else {
                                 addLog(`${offAbbr} pass complete for ${catchYds} yds.`);
                             }
-                        } else if (playRoll < 0.75) {
+                        } else if (playRoll < _sRunT) {
                             const rb = _pick(offGrp, 'RB') || qb;
                             const tackler = _pickTackler(defGrp);
                             if (rb) {
@@ -2079,7 +2106,7 @@ export function simGameStats(home, away, options = {}) {
                             } else {
                                 addLog(`${offAbbr} runs for ${catchYds} yds.`);
                             }
-                        } else if (playRoll < 0.82) {
+                        } else if (playRoll < _sRunT + 0.07) {
                             const rec = _pickRec(offGrp);
                             const coverage = _pickCoverage(defGrp);
                             if (qb) {
@@ -2114,11 +2141,15 @@ export function simGameStats(home, away, options = {}) {
                         if (yardsToGo <= 0) { currentDown = 1; yardsToGo = 10; }
                         else { currentDown = Math.min(currentDown + 1, 4); }
                     }
-                    // Scoring play
+                    // Scoring play — tendency shifts TD pass probability and depth
+                    const _tdPassProb = isUserPossession && _userTendency === 'AGGRESSIVE' ? 0.75
+                        : isUserPossession && _userTendency === 'CONSERVATIVE' ? 0.50 : 0.65;
+                    const _tdYardsMin = isUserPossession && _userTendency === 'AGGRESSIVE' ? 15 : 3;
+                    const _tdYardsMax = isUserPossession && _userTendency === 'AGGRESSIVE' ? 55 : 42;
                     if (typeRoll < tdShare) {
                         const qb = _pick(offGrp, 'QB');
-                        const isTDPass = U.random() < 0.65 && qb;
-                        const tdYds = U.rand(3, 42);
+                        const isTDPass = U.random() < _tdPassProb && qb;
+                        const tdYds = U.rand(_tdYardsMin, _tdYardsMax);
                         if (isTDPass) {
                             const rec = _pickRec(offGrp);
                             if (rec) {
@@ -2236,13 +2267,18 @@ export function simGameStats(home, away, options = {}) {
                 if (logDrive) {
                     const offGrp = isHome ? hGroups : aGroups;
                     const defGrp = isHome ? aGroups : hGroups;
+                    // Tendency-adjusted pass/run split (non-scoring drives)
+                    const _nsPassT = isUserPossession && _userTendency === 'AGGRESSIVE' ? 0.50
+                        : isUserPossession && _userTendency === 'CONSERVATIVE' ? 0.30 : 0.40;
+                    const _nsRunT  = isUserPossession && _userTendency === 'AGGRESSIVE' ? 0.72
+                        : isUserPossession && _userTendency === 'CONSERVATIVE' ? 0.58 : 0.65;
                     const numPlays = U.rand(2, 5);
                     for (let i = 0; i < numPlays; i++) {
                         const gain = U.rand(-3, 12);
                         const catchYds = Math.max(0, gain);
                         const playRoll = U.random();
                         const qb = _pick(offGrp, 'QB');
-                        if (playRoll < 0.4) {
+                        if (playRoll < _nsPassT) {
                             const rec = _pickRec(offGrp);
                             if (qb && rec) {
                                 _addStat(qb, 'passAtt'); _addStat(qb, 'passComp'); _addStat(qb, 'passYds', catchYds);
@@ -2250,7 +2286,7 @@ export function simGameStats(home, away, options = {}) {
                                 addLog(`${_n(qb)} connects with ${_n(rec)} for ${catchYds} yds.`, null, 'pass', rec,
                                     { passer: qb, passYds: catchYds, completed: true });
                             } else { addLog(`${offAbbr} pass complete for ${catchYds} yds.`); }
-                        } else if (playRoll < 0.65) {
+                        } else if (playRoll < _nsRunT) {
                             const rb = _pick(offGrp, 'RB') || qb;
                             const tackler = _pickTackler(defGrp);
                             if (rb) {
@@ -2260,7 +2296,7 @@ export function simGameStats(home, away, options = {}) {
                                 addLog(`${_n(rb)} carries for ${catchYds} yds${tackleText}.`, null, 'run', rb,
                                     { rushYds: catchYds, tackler });
                             } else { addLog(`${offAbbr} runs for ${catchYds} yds.`); }
-                        } else if (playRoll < 0.8) {
+                        } else if (playRoll < _nsRunT + 0.08) {
                             const rec = _pickRec(offGrp);
                             const coverage = _pickCoverage(defGrp);
                             if (qb) {
@@ -2270,7 +2306,7 @@ export function simGameStats(home, away, options = {}) {
                                 addLog(`${_n(qb)} incomplete${rec ? ` toward ${_n(rec)}` : ''}${defText}.`, null, 'pass', qb,
                                     { completed: false, defender: coverage });
                             } else { addLog(`${offAbbr} pass incomplete.`); }
-                        } else if (playRoll < 0.9) {
+                        } else if (playRoll < _nsRunT + 0.18) {
                             const rusher = _pickRusher(defGrp);
                             const sackYds = U.rand(3, 8);
                             if (rusher && qb) {
@@ -2331,6 +2367,8 @@ export function simGameStats(home, away, options = {}) {
                                     null, 'fumble', rb, { defender: dl, forcedFumble: dl });
                             } else { addLog(`FUMBLE! ${defAbbr} takes over.`, null, 'fumble'); }
                         }
+                    } else if (isUserPossession && _userTendency === 'AGGRESSIVE' && U.random() < 0.25) {
+                        addLog(`${offAbbr} goes for it on 4th down!`, yardLine, 'play');
                     } else {
                         addLog(`${offAbbr} punts.`, null, 'punt');
                     }
@@ -3566,7 +3604,7 @@ export function simulateBatch(games, options = {}) {
                 do {
                     // Use simulateMatchup (unified function)
                     // Pass league for scheme fit calculations
-                    gameScores = simulateMatchup(home, away, { verbose, stakes, league, isPlayoff: options.isPlayoff, generateLogs: options.generateLogs, homeAbbr: home.abbr, awayAbbr: away.abbr, overtimeFormat: options.overtimeFormat });
+                    gameScores = simulateMatchup(home, away, { verbose, stakes, league, isPlayoff: options.isPlayoff, generateLogs: options.generateLogs, homeAbbr: home.abbr, awayAbbr: away.abbr, overtimeFormat: options.overtimeFormat, userTendency: options.userTendency });
                     attempts++;
                 } while ((!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) && attempts < 3);
 

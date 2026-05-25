@@ -10680,6 +10680,7 @@ async function handleWatchGame(payload, id) {
     league,
     isPlayoff: meta.phase === 'playoffs',
     generateLogs: true,
+    userTendency: payload?.userTendency || 'BALANCED',
     injuryFactor: Math.max(0, Number(getLeagueSetting('injuryFrequency', 50)) / 50),
     overtimeFormat: getLeagueSetting('overtimeFormat', 'nfl'),
   });

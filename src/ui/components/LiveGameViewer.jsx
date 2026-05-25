@@ -11,7 +11,13 @@ const SPEED_STEPS = [
   { key: 'veryFast', label: 'Very Fast', ms: 140 },
 ];
 
-export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComplete, initialMode = 'watch', onPlaycallOverride }) {
+const TENDENCY_CONFIG = {
+  AGGRESSIVE:   { label: 'Aggressive',   chipClass: 'aggressive' },
+  BALANCED:     { label: 'Balanced',     chipClass: 'balanced' },
+  CONSERVATIVE: { label: 'Conservative', chipClass: 'conservative' },
+};
+
+export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComplete, initialMode = 'watch', onPlaycallOverride, userTendency = 'BALANCED' }) {
   const events = useMemo(() => mapArchiveEventsToLiveFeed(logs, {
     gameId: `${homeTeam?.id || 'h'}-${awayTeam?.id || 'a'}`,
     homeTeamId: homeTeam?.id,
@@ -89,6 +95,10 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
           <span className="watch-mode-chip">{modeLabel}</span>
           {isFinalMinutes ? <span className="watch-mode-chip clutch">Final Minutes</span> : null}
           {finished ? <span className="watch-mode-chip final">Complete</span> : null}
+          {(() => {
+            const tc = TENDENCY_CONFIG[userTendency] || TENDENCY_CONFIG.BALANCED;
+            return <span className={`watch-mode-chip tendency-${tc.chipClass}`}>{tc.label}</span>;
+          })()}
         </div>
         {momentBanner ? <div className={`watch-moment-banner ${momentBanner.type}`}>{momentBanner.text}</div> : null}
       </header>
@@ -165,6 +175,9 @@ const styles = `
 .watch-mode-chip { font-size: 11px; border-radius: 999px; padding: 3px 9px; border: 1px solid #3d4d6d; background: #12213b; color: #d9e7ff; }
 .watch-mode-chip.clutch { border-color: #d6a94f; color: #ffd88f; }
 .watch-mode-chip.final { border-color: #56b58a; color: #91f0c3; }
+.watch-mode-chip.tendency-aggressive { border-color: #ff453a; color: #ffb3b0; background: rgba(255,69,58,0.15); }
+.watch-mode-chip.tendency-balanced { border-color: #0a84ff; color: #a8d4ff; background: rgba(10,132,255,0.12); }
+.watch-mode-chip.tendency-conservative { border-color: #34c759; color: #a3f0b8; background: rgba(52,199,89,0.12); }
 .watch-moment-banner { margin-top: 8px; font-size: 12px; font-weight: 800; border-radius: 9px; padding: 7px 10px; letter-spacing: .01em; }
 .watch-moment-banner.score { background: rgba(95, 190, 130, 0.22); color: #b8f5cb; border: 1px solid rgba(95, 190, 130, 0.45); }
 .watch-moment-banner.turnover { background: rgba(255, 95, 95, 0.2); color: #ffd1d1; border: 1px solid rgba(255, 95, 95, 0.45); }

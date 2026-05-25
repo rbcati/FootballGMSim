@@ -515,7 +515,7 @@ export function useWorker() {
     },
 
     /** Watch the user game (returns a Promise resolving to logs). */
-    watchGame: () => request(toWorker.WATCH_GAME, {}, { silent: false }),
+    watchGame: (userTendency = 'BALANCED') => request(toWorker.WATCH_GAME, { userTendency }, { silent: false }),
 
     /** Simulate user game directly */
     simulateUserGame: () => {
