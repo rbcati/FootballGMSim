@@ -323,6 +323,18 @@ export function archiveGameStats(playerStatsStore, gameSummary, year) {
   const y = num(year);
   if (!Number.isFinite(y) || y === 0) return playerStatsStore;
   const yKey = String(y);
+  const gameId = gameSummary?.gameId != null ? String(gameSummary.gameId) : '';
+  if (gameId) {
+    const meta = (playerStatsStore.__meta && typeof playerStatsStore.__meta === 'object')
+      ? playerStatsStore.__meta
+      : (playerStatsStore.__meta = { archivedGameIds: {} });
+    const archivedGameIds = (meta.archivedGameIds && typeof meta.archivedGameIds === 'object')
+      ? meta.archivedGameIds
+      : (meta.archivedGameIds = {});
+    const dedupeKey = `${yKey}:${gameId}`;
+    if (archivedGameIds[dedupeKey]) return playerStatsStore;
+    archivedGameIds[dedupeKey] = true;
+  }
 
   for (const playerId of Object.keys(attribution)) {
     if (!playerId) continue;

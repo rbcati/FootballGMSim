@@ -164,13 +164,13 @@ describe('archiveGameStats – order-independence', () => {
     expect(storeAB['p1']['2025']).toEqual(storeBA['p1']['2025']);
   });
 
-  it('replaying the same game twice doubles every counter (pure addition, no dedup)', () => {
+  it('does not re-archive the same game twice in the same year', () => {
     const store = {};
-    const game = gameSummaryWith({ 'p1': makeAttribution({ targets: 4, sacksMade: 1 }) });
+    const game = { gameId: 'same-game-1', ...gameSummaryWith({ 'p1': makeAttribution({ targets: 4, sacksMade: 1 }) }) };
     archiveGameStats(store, game, 2025);
     archiveGameStats(store, game, 2025);
-    expect(store['p1']['2025'].targets).toBe(8);
-    expect(store['p1']['2025'].sacksMade).toBe(2);
+    expect(store['p1']['2025'].targets).toBe(4);
+    expect(store['p1']['2025'].sacksMade).toBe(1);
   });
 });
 
@@ -270,7 +270,7 @@ describe('simulateRichGame – playerStatsStore integration', () => {
     const store = {};
     simulateRichGame({ ...basePayload, year: 2025, playerStatsStore: store });
 
-    const playerIds = Object.keys(store);
+    const playerIds = Object.keys(store).filter((pid) => pid !== '__meta');
     expect(playerIds.length).toBeGreaterThan(0);
 
     for (const pid of playerIds) {
