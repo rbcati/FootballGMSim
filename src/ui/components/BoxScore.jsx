@@ -6,6 +6,7 @@ import { buildGameBookStory } from "../utils/gameBookStory.js";
 import { getPlayerProfileId, hasValidPlayerProfileId, openPlayerProfile } from "../utils/playerProfileNavigation.js";
 import ReplayableGameFlowViewer from "./ReplayableGameFlowViewer.jsx";
 import AdvancedGameStats from "./AdvancedGameStats.jsx";
+import { buildBroadcastGameNotes } from "../../core/broadcastNarrative.js";
 
 const QUALITY_BADGE_CLASS = {
   "Full detail": "success",
@@ -121,6 +122,11 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
   const defaultPlayRows = keyPlayRows.slice(0, 12);
   const visiblePlayRows = showAllPlays ? playRows : defaultPlayRows;
   const canTogglePlays = playRows.length > 0 && (showAllPlays || visiblePlayRows.length < playRows.length || keyPlayRows.length === 0);
+  const broadcastNotes = useMemo(() => buildBroadcastGameNotes({
+    advancedAttribution: vm.advancedAttribution,
+    gameFlowSummary: vm.gameFlowSummary,
+  }, { maxNotes: 3 }), [vm.advancedAttribution, vm.gameFlowSummary]);
+
   const playCountLabel = showAllPlays
     ? `Showing all ${playRows.length} recorded plays`
     : keyPlayRows.length
@@ -218,6 +224,21 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
         <h4>Why this game was decided</h4>
         {storyBullets.length ? <ul>{storyBullets.map((b) => <li key={b}>{b}</li>)}</ul> : <p>No detailed team/player stats were recorded for this game.</p>}
       </section>
+      {broadcastNotes.length ? (
+        <section className="bs-section bs-broadcast-notes" data-testid="game-book-broadcast-notes">
+          <div className="bs-section-header">
+            <h4>Broadcast Notes</h4>
+            <span className="bs-section-count">{broadcastNotes.length} notes</span>
+          </div>
+          <ul className="bs-list" data-testid="game-book-broadcast-notes-list">
+            {broadcastNotes.map((note) => (
+              <li key={note.id} className="bs-list-item">
+                <span>{note.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {gfs && (
         <section className="bs-section" data-testid="game-book-game-flow">
           <div className="bs-section-header">
@@ -287,7 +308,7 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
           ) : null}
         </section>
       )}
-      {gfs && (
+            {gfs && (
         <section className="bs-section" data-testid="game-book-replay-section">
           <div className="bs-section-header">
             <h4>Replay Game Flow</h4>
