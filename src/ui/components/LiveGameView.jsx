@@ -64,7 +64,7 @@ export default function LiveGameView(props) {
         </div>
       ) : null}
 
-      <LiveGameViewer {...props} />
+      <LiveGameViewer {...props} userTendency={props.userTendency} />
     </div>
   );
 }

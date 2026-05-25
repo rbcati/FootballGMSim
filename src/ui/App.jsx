@@ -176,6 +176,7 @@ function AppContent() {
   const [activeSlot, setActiveSlot] = useState(() => readStoredActiveSlot());
   const [pendingNewSlot, setPendingNewSlot] = useState(null);
   const [watchMode, setWatchMode] = useState('watch');
+  const [userTendency, setUserTendency] = useState('BALANCED');
   const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showWeeklyEventModal, setShowWeeklyEventModal] = useState(false);
@@ -1523,11 +1524,43 @@ function AppContent() {
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', marginBottom: 2 }}>
                   Choose presentation mode for this game.
                 </div>
+                {/* ── Tactical Tendency Selector ── */}
+                <div style={{ marginBottom: 4 }}>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                    Coaching Tendency
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[
+                      { key: 'CONSERVATIVE', label: 'Conservative', color: '#34C759' },
+                      { key: 'BALANCED',     label: 'Balanced',     color: '#0A84FF' },
+                      { key: 'AGGRESSIVE',   label: 'Aggressive',   color: '#FF453A' },
+                    ].map(({ key, label, color }) => (
+                      <button
+                        key={key}
+                        onClick={() => setUserTendency(key)}
+                        style={{
+                          flex: 1, padding: '7px 4px', borderRadius: 8, fontSize: 'var(--text-xs)', fontWeight: 700,
+                          border: `1.5px solid ${userTendency === key ? color : 'var(--hairline)'}`,
+                          background: userTendency === key ? `${color}22` : 'transparent',
+                          color: userTendency === key ? color : 'var(--text-muted)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-subtle)', marginTop: 4, textAlign: 'center' }}>
+                    {userTendency === 'AGGRESSIVE' ? 'More deep passes & 4th-down attempts'
+                      : userTendency === 'CONSERVATIVE' ? 'More runs & safe punt decisions'
+                      : 'Baseline simulation behavior'}
+                  </div>
+                </div>
                 <button
                   className="btn btn-primary"
                   onClick={() => {
                     setWatchMode('watch');
-                    actions.watchGame();
+                    actions.watchGame(userTendency);
                   }}
                   disabled={busy}
                   style={{
@@ -1543,7 +1576,7 @@ function AppContent() {
                   className="btn"
                   onClick={() => {
                     setWatchMode('fast');
-                    actions.watchGame();
+                    actions.watchGame(userTendency);
                   }}
                   disabled={busy}
                   style={{
@@ -1559,7 +1592,7 @@ function AppContent() {
                   className="btn"
                   onClick={() => {
                     setWatchMode('instant');
-                    actions.watchGame();
+                    actions.watchGame(userTendency);
                   }}
                   disabled={busy}
                   style={{
@@ -1614,6 +1647,7 @@ function AppContent() {
               homeTeam={homeTeam}
               awayTeam={awayTeam}
               initialMode={watchMode}
+              userTendency={userTendency}
               onComplete={(scores) => {
                 try {
                   // Belt-and-suspenders save immediately on game completion
