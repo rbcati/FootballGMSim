@@ -976,6 +976,7 @@ function buildViewState() {
     retiredPlayers: Array.isArray(meta?.retiredPlayers) ? meta.retiredPlayers : [],
     records: meta?.records ?? null,
     recordBook: meta?.recordBook ?? null,
+    playerSeasonStatsArchive: meta?.playerSeasonStatsArchive ?? {},
     leagueHistory: Array.isArray(meta?.leagueHistory) ? meta.leagueHistory.slice(-60) : [],
     franchiseChronicle: Array.isArray(meta?.franchiseChronicle) ? meta.franchiseChronicle.slice(-340) : [],
     franchiseSeasonReviews: Array.isArray(meta?.franchiseSeasonReviews) ? meta.franchiseSeasonReviews.slice(-40) : [],
@@ -2794,7 +2795,16 @@ async function handleAdvanceWeek(payload, id) {
 
   post(toUI.SIM_PROGRESS, { done: 0, total: league._weekGames.length }, id);
   const gamesToSim = [...league._weekGames];
-  const { matchups, migratedPlayers } = buildWeekMatchupsFromLeague(league, meta, week);
+  const playerSeasonStatsArchive = (meta?.playerSeasonStatsArchive && typeof meta.playerSeasonStatsArchive === 'object')
+    ? meta.playerSeasonStatsArchive
+    : {};
+  if (!meta?.playerSeasonStatsArchive || typeof meta.playerSeasonStatsArchive !== 'object') {
+    cache.setMeta({ playerSeasonStatsArchive });
+  }
+  const { matchups, migratedPlayers } = buildWeekMatchupsFromLeague(league, meta, week, {
+    year: Number(meta?.year ?? 0),
+    playerStatsStore: playerSeasonStatsArchive,
+  });
   const useNewSimulationEngine = Boolean(getLeagueSetting('useNewSimulationEngine', false)) && matchups.length === gamesToSim.length;
 
   if (migratedPlayers.length > 0) {
@@ -3272,7 +3282,7 @@ function buildLeagueForSim(schedule, week, seasonId) {
   return leagueObj;
 }
 
-function buildWeekMatchupsFromLeague(league, meta, week) {
+function buildWeekMatchupsFromLeague(league, meta, week, opts = {}) {
   const matchups = [];
   const migratedPlayers = [];
 
@@ -3350,6 +3360,8 @@ function buildWeekMatchupsFromLeague(league, meta, week) {
       })),
       seed: buildDeterministicSeed(`${meta?.currentSeasonId ?? 1}:${week}:${game?.home?.id}:${game?.away?.id}`),
       weather: 'clear',
+      year: opts.year,
+      playerStatsStore: opts.playerStatsStore,
     });
   }
 

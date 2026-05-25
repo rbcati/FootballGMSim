@@ -21,6 +21,8 @@ export interface Matchup {
   awayPlayers?: SimPlayerRef[];
   homePrepMultipliers?: DerivedGamePlanMultipliers;
   awayPrepMultipliers?: DerivedGamePlanMultipliers;
+  year?: number;
+  playerStatsStore?: Record<string, Record<string, unknown>>;
 }
 
 export type GameSummary = RichGameSummary;
