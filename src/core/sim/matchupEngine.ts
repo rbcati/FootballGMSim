@@ -17,7 +17,7 @@ export interface PlayContext {
 }
 
 export interface PlayAttributionEvent {
-  event: 'TARGET' | 'RECEPTION_ALLOWED' | 'COVERAGE_TARGET' | 'COVERAGE_COMPLETION_ALLOWED' | 'DROP' | 'BATTED_PASS' | 'SACK_ALLOWED' | 'SACK_MADE';
+  type: 'TARGET' | 'RECEPTION_ALLOWED' | 'COVERAGE_TARGET' | 'COVERAGE_COMPLETION_ALLOWED' | 'DROP' | 'BATTED_PASS' | 'SACK_ALLOWED' | 'SACK_MADE';
   playerId?: string;
 }
 
@@ -169,9 +169,9 @@ function nextDownState(ctx: PlayContext, yardsGained: number): Pick<PlayResult, 
 }
 
 
-function maybePushAttribution(events: PlayAttributionEvent[], event: PlayAttributionEvent['event'], playerId?: string) {
+function maybePushAttribution(events: PlayAttributionEvent[], event: PlayAttributionEvent['type'], playerId?: string) {
   if (!playerId) return;
-  events.push({ event, playerId });
+  events.push({ type: event, playerId });
 }
 
 export function resolveMatchup(

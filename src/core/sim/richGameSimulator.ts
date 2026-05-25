@@ -399,7 +399,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
         sacksAllowed: 0,
         sacksMade: 0,
       };
-      switch (event.event) {
+      switch (event.type) {
         case 'TARGET': prev.targets += 1; break;
         case 'RECEPTION_ALLOWED': prev.receptionsAllowed += 1; break;
         case 'COVERAGE_TARGET': prev.coverageTargets += 1; break;
