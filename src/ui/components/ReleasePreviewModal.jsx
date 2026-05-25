@@ -69,7 +69,11 @@ export default function ReleasePreviewModal({
           <div><div style={metricLabelStyle()}>Projected Cap Room Preview</div><div>{formatMoneyM(projectedCapRoom)}</div></div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--space-2)", flexWrap: "wrap" }}>
+
+        <div style={{ marginBottom: "var(--space-3)", padding: "var(--space-2)", background: "rgba(255, 69, 58, 0.1)", border: "1px solid var(--danger)", borderRadius: "var(--radius-sm)", color: "var(--danger)", fontSize: "var(--text-sm)", fontWeight: 600 }}>
+          Warning: Releasing a player is permanent and cannot be undone.
+        </div>
+<div style={{ display: "flex", justifyContent: "flex-end", gap: "var(--space-2)", flexWrap: "wrap" }}>
           <button className="btn" onClick={onCancel}>Cancel</button>
           <button className="btn btn-danger" onClick={onConfirm}>Confirm Release</button>
         </div>

@@ -183,7 +183,7 @@ test.describe('Daily Regression Pass', () => {
             await page.evaluate(() => {
                 const rows = document.querySelectorAll('.standings-table tbody tr, table tbody tr');
                 for(let row of rows) {
-                    const confirmBtn = Array.from(row.querySelectorAll('button')).find(b => b.innerText === 'Confirm');
+                    const confirmBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Confirm Release')) || Array.from(row.querySelectorAll('button')).find(b => b.innerText === 'Confirm');
                     if (confirmBtn) { confirmBtn.click(); break; }
                 }
             });
