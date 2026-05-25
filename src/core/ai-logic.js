@@ -21,6 +21,7 @@ import { buildContractFromMarket, evaluateContractMarket } from './contractModel
 import { evaluatePendingOfferCapReservation } from './pendingOfferCapModel.js';
 import { evaluatePlayerMarketRealism, normalizePositionGroup } from './marketRealismModel.js';
 import { executeAIOffseasonCuts } from './roster/aiRosterCuts.js';
+import { executeAIOffseasonExtensions } from './retention/aiRetentionLogic.js';
 
 class AiLogic {
     static NEED_GROUP_TO_POS = Object.freeze({
@@ -350,84 +351,52 @@ class AiLogic {
     }
 
     /**
-     * Process contract extensions for a team's core players.
+     * Process contract extensions for a team's core players during offseason_resign.
+     * Delegates prioritization and cap math to the pure executeAIOffseasonExtensions
+     * utility, then applies each accepted extension to cache.
      * Call this before Free Agency / Draft.
      */
     static async processExtensions(teamId) {
         const team = cache.getTeam(teamId);
         if (!team) return;
 
-        // Re-calc cap first to be safe
         this.updateTeamCap(teamId);
 
         const roster = cache.getPlayersByTeam(teamId);
-        const expiring = roster.filter(p => p.contract && p.contract.years === 1);
+        const meta   = cache.getMeta();
+        const allPlayers = cache.getAllPlayers();
+        const freeAgents = allPlayers.filter((p) => !p.teamId || p.status === 'free_agent');
 
-        for (const p of expiring) {
-            // Extension Criteria:
-            // 1. High OVR (> 80)
-            // 2. Core Age (< 30) or QB (< 32)
-            // 3. Not already negotiated (check negotiationStatus if exists, otherwise assume open)
+        const extensions = executeAIOffseasonExtensions(
+            team,
+            roster,
+            { freeAgents, phase: meta?.phase, season: meta?.year },
+        );
 
-            const isQB = p.pos === 'QB';
-            const maxAge = isQB ? 32 : 30;
+        for (const { player, contract } of extensions) {
+            const newContract = { ...contract, startYear: meta?.year };
 
-            const retention = evaluateReSigningPriority(p, team, { players: roster, phase: cache.getMeta()?.phase, week: cache.getMeta()?.currentWeek });
-            const shouldPrioritize = ['cornerstone_priority', 'strong_keep', 'extension_candidate'].includes(retention.recommendation);
+            cache.updatePlayer(player.id, {
+                contract: newContract,
+                negotiationStatus: 'SIGNED',
+                extensionDecision: 'extended',
+            });
 
-            if ((p.ovr ?? 0) >= 76 && (p.age ?? 25) <= maxAge && shouldPrioritize) {
-                const demand = calculateExtensionDemand(p);
-                if (!demand) continue;
+            this.updateTeamCap(teamId);
 
-                // Check affordability
-                // New Cap Hit = Base + (Bonus / Years)
-                // We need to check if this fits into NEXT year's cap, but for simplicity
-                // we check current cap room buffer. A strict check would project next year.
-                // Let's assume we need at least 5M + new hit in room.
+            await Transactions.add({
+                type: 'EXTEND',
+                seasonId: meta?.currentSeasonId,
+                week: meta?.currentWeek,
+                teamId,
+                details: { playerId: player.id, contract: newContract },
+            });
 
-                const newCapHit = demand.baseAnnual + (demand.signingBonus / demand.yearsTotal);
-                const currentCapHit = (p.contract.baseAnnual || 0) + ((p.contract.signingBonus || 0) / (p.contract.yearsTotal || 1));
-                const netChange = newCapHit - currentCapHit;
-
-                // Allow if we have room for the increase + 2M buffer
-                if (team.capRoom > (netChange + 2)) {
-                    // EXTEND PLAYER
-                    const newContract = {
-                        ...demand,
-                        years: demand.years,
-                        yearsTotal: demand.yearsTotal,
-                        startYear: cache.getMeta().year
-                    };
-
-                    cache.updatePlayer(p.id, {
-                        contract: newContract,
-                        negotiationStatus: 'SIGNED'
-                    });
-
-                    // Update Cap
-                    this.updateTeamCap(teamId);
-
-                    // Add Transaction
-                    await Transactions.add({
-                        type: 'SIGN',
-                        seasonId: cache.getMeta().currentSeasonId,
-                        week: cache.getMeta().currentWeek,
-                        teamId,
-                        details: { playerId: p.id, contract: newContract }
-                    });
-
-                    // Log News
-                    await NewsEngine.logTransaction('SIGN', {
-                        teamId,
-                        playerId: p.id,
-                        contract: newContract
-                    });
-
-                    // Refresh team object for next iteration
-                    const updatedTeam = cache.getTeam(teamId);
-                    team.capRoom = updatedTeam.capRoom;
-                }
-            }
+            await NewsEngine.logTransaction('EXTEND', {
+                teamId,
+                playerId: player.id,
+                contract: newContract,
+            });
         }
     }
 
