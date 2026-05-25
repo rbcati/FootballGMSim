@@ -1096,6 +1096,14 @@ export default function PlayerProfile({
                   <span className="status-chip muted">Status: {playerView.injuryWeeksRemaining > 0 ? `Out ${playerView.injuryWeeksRemaining}w` : "Available"}</span>
                   {playerView.draftYear || playerView.draftRound || playerView.draftPick ? <span className="status-chip muted">Draft: {playerView.draftYear ?? "—"} R{playerView.draftRound ?? "—"} P{playerView.draftPick ?? "—"}</span> : null}
                   {quickTags.map((tag) => <span key={tag} className="status-chip success">{tag}</span>)}
+                  {(player?.contract?.tag === 'franchise' || player?.isTagged) && (
+                    <span className="status-chip warning" title="Franchise Tagged — player is locked to this team for the season.">Franchise Tagged</span>
+                  )}
+                  {player?.contract?.tender && !player?.contract?.tag && (
+                    <span className="status-chip info" title={`RFA Tender — signing this player away requires forfeiting a ${player.contract.compensationPick ?? player.contract.tender.replace(/_/g, ' ')} draft pick.`}>
+                      RFA Tender ({player.contract.tender.replace(/_/g, ' ')})
+                    </span>
+                  )}
                 </div>
 
                 {draftContext?.known ? (
@@ -1724,6 +1732,16 @@ export default function PlayerProfile({
                       </div>
                     </div>
                     <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>{plan.recommendationSummary}</div>
+                    {(player?.contract?.tag === 'franchise' || player?.isTagged) && (
+                      <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: "var(--radius-md)", background: "var(--surface-strong)", border: "1px solid var(--warning, #f59e0b)", fontSize: "var(--text-xs)", fontWeight: 700 }}>
+                        Franchise Tagged — this player is locked to the team. They cannot sign with another franchise.
+                      </div>
+                    )}
+                    {player?.contract?.tender && !player?.contract?.tag && (
+                      <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: "var(--radius-md)", background: "var(--surface-strong)", border: "1px solid var(--hairline)", fontSize: "var(--text-xs)", fontWeight: 700 }}>
+                        RFA Tender ({player.contract.tender.replace(/_/g, ' ')}) — another team may sign this player, but must forfeit a {player.contract.compensationPick ?? player.contract.tender.replace(/_/g, ' ')} draft pick as compensation.
+                      </div>
+                    )}
                   </>
                 );
               })()}

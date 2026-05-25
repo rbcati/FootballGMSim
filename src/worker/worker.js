@@ -8947,6 +8947,17 @@ async function handleAdvanceOffseason(payload, id) {
   // ── Step 1b: AI staff carousel / continuity decisions ───────────────────
   runAiStaffCarousel(meta, allTeams.filter((t) => Number(t?.id) !== Number(meta?.userTeamId)));
 
+  // ── Step 1c: AI franchise tags and RFA tenders ────────────────────────────
+  // Runs after extensions so only players who declined (or weren't offered)
+  // an extension are eligible.  Tagged players receive contract.tag = 'franchise'
+  // which keeps them off the FA pool.  Tendered RFAs receive contract.tender
+  // recording the pick-compensation tier owed if signed away.
+  for (const team of allTeams) {
+    if (Number(team.id) !== Number(meta.userTeamId)) {
+      await AiLogic.processTagsAndTenders(team.id);
+    }
+  }
+
   // ── Step 2: Dynamic progression pass ─────────────────────────────────────
   // processPlayerProgression mutates each player's ratings, ovr, and
   // progressionDelta in place.  We then flush those fields to cache.
