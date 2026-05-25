@@ -146,6 +146,7 @@ import { migrateSaveMetaToCurrent, CURRENT_SAVE_SCHEMA_VERSION } from '../state/
 import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.js';
 import { archiveCompletedSeasonIfNeeded, ensureLeagueHistoryContainer } from '../core/leagueHistory.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonalityModifier } from '../core/development/personalitySystem.js';
+import { applyTeamCultureWeek, classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../core/teamCulture.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
 import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule, enrichArchivedGamePayload, mergeArchivedGameWithScheduleResult } from '../core/gameArchive.js';
 import {
@@ -977,6 +978,7 @@ function buildViewState() {
     records: meta?.records ?? null,
     recordBook: meta?.recordBook ?? null,
     playerSeasonStatsArchive: meta?.playerSeasonStatsArchive ?? {},
+    teamCulture: meta?.teamCulture ?? {},
     leagueHistory: Array.isArray(meta?.leagueHistory) ? meta.leagueHistory.slice(-60) : [],
     franchiseChronicle: Array.isArray(meta?.franchiseChronicle) ? meta.franchiseChronicle.slice(-340) : [],
     franchiseSeasonReviews: Array.isArray(meta?.franchiseSeasonReviews) ? meta.franchiseSeasonReviews.slice(-40) : [],
@@ -3102,6 +3104,62 @@ async function handleAdvanceWeek(payload, id) {
       if (wonGame) {
         cache.setMeta({ ownerGoals: updateGoalsForWin(meta?.ownerGoals) });
       }
+    }
+  }
+
+  // ── Team Culture: weekly drift (official advance only, all teams) ───────────
+  if (results.length > 0 && ['regular', 'playoffs'].includes(meta.phase)) {
+    try {
+      const cultureTeams = cache.getAllTeams();
+      const cultureRosters = {};
+      for (const t of cultureTeams) {
+        cultureRosters[String(t.id)] = cache.getPlayersByTeam(t.id);
+      }
+      const previousCulture = cache.getMeta().teamCulture ?? {};
+      const nextCulture = applyTeamCultureWeek({
+        teams: cultureTeams,
+        rostersByTeam: cultureRosters,
+        games: results,
+        previousCulture,
+        context: { week, seasonId },
+      });
+
+      // Low-frequency news for meaningful threshold crossings
+      const latestMetaForCulture = cache.getMeta();
+      for (const [tId, entry] of Object.entries(nextCulture)) {
+        const prev = previousCulture[tId];
+        if (!prev) continue;
+        const prevScore = prev.score ?? TEAM_CULTURE_DEFAULT;
+        const newScore = entry.score ?? TEAM_CULTURE_DEFAULT;
+        const absShift = Math.abs(entry.lastShift ?? 0);
+        const crossedBelow55 = prevScore >= 55 && newScore < 55;
+        const crossedAbove85 = prevScore <= 85 && newScore > 85;
+        const largeShift = absShift > 1.0;
+        if (crossedBelow55 || crossedAbove85 || largeShift) {
+          const cTeam = cache.getTeam(Number(tId));
+          if (cTeam) {
+            const direction = newScore > prevScore ? 'improved' : 'declined';
+            const label = classifyTeamCulture(newScore);
+            const narrative = buildTeamCultureNarrative(newScore, entry.lastShift ?? 0, entry.reasons ?? []);
+            const cultureItem = {
+              id: `culture_${tId}_${seasonId}_${week}`,
+              headline: `${cTeam.name}: Culture ${direction} to "${label}"`,
+              body: narrative,
+              week,
+              season: seasonId,
+              type: 'CULTURE',
+              teamId: Number(tId),
+              priority: 'low',
+            };
+            cache.setMeta(addNewsItem(cache.getMeta(), cultureItem));
+          }
+        }
+      }
+
+      cache.setMeta({ teamCulture: nextCulture });
+    } catch (cultureErr) {
+      // Culture update must never crash the week advance
+      console.warn('[Worker] Team culture update error (non-fatal):', cultureErr?.message);
     }
   }
 
