@@ -106,6 +106,44 @@ describe('BoxScore – opt-in auto-open replay gate', () => {
     expect(getByTestId('rgfv-progress').textContent).toBe('Playing…');
   });
 
+
+  it('renders advanced game stats section when advancedAttribution exists', () => {
+    const gameWithAdvanced = {
+      ...gameWithFlow,
+      advancedAttribution: {
+        12: { targets: 4, drops: 1, battedPasses: 0, coverageTargets: 0, coverageCompletionsAllowed: 0, receptionsAllowed: 0, sacksAllowed: 1, sacksMade: 0 },
+      },
+      playerStats: {
+        away: { 12: { name: 'WR Alpha', position: 'WR', stats: { targets: 4, receptions: 2 } } },
+        home: {},
+      },
+    };
+    const { getByTestId, getByText } = render(
+      <BoxScore
+        gameId="g-advanced"
+        league={{ ...baseLeague, gameById: { 'g-advanced': gameWithAdvanced } }}
+        embedded
+      />,
+    );
+
+    expect(getByTestId('game-book-advanced-stats')).toBeTruthy();
+    expect(getByText('Advanced Game Stats')).toBeTruthy();
+    expect(getByTestId('game-book-team-comparison')).toBeTruthy();
+  });
+
+  it('does not render advanced game stats for legacy games without advancedAttribution', () => {
+    const { queryByTestId, getByTestId } = render(
+      <BoxScore
+        gameId="g-legacy"
+        league={{ ...baseLeague, gameById: { 'g-legacy': gameWithFlow } }}
+        embedded
+      />,
+    );
+
+    expect(queryByTestId('game-book-advanced-stats')).toBeNull();
+    expect(getByTestId('game-book-team-comparison')).toBeTruthy();
+  });
+
   it('passes initialMode="paused" when viewer opened manually via toggle', () => {
     const { getByTestId } = render(
       <BoxScore

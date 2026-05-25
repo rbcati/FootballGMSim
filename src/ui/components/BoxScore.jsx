@@ -5,6 +5,7 @@ import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { buildGameBookStory } from "../utils/gameBookStory.js";
 import { getPlayerProfileId, hasValidPlayerProfileId, openPlayerProfile } from "../utils/playerProfileNavigation.js";
 import ReplayableGameFlowViewer from "./ReplayableGameFlowViewer.jsx";
+import AdvancedGameStats from "./AdvancedGameStats.jsx";
 
 const QUALITY_BADGE_CLASS = {
   "Full detail": "success",
@@ -512,6 +513,14 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
       {vm.prepImpact?.length ? (
         <section className="bs-section"><h4>Game-plan impact</h4><ul>{vm.prepImpact.map((item, i) => <li key={`${i}-${item}`}>{item}</li>)}</ul></section>
       ) : null}
+      <AdvancedGameStats
+        advancedAttribution={vm.advancedAttribution}
+        playerTables={vm.playerTables}
+        awayTeam={vm.awayTeam}
+        homeTeam={vm.homeTeam}
+        onPlayerSelect={onPlayerSelect}
+        context={{ ...gameContextBase, role: "Advanced Game Stats", returnTo: "game-book" }}
+      />
       {tableSections.length ? tableSections.map(renderTable) : (
         <section className="bs-section" data-testid="game-book-player-stats-empty">
           <h4>Player stat tables</h4>
