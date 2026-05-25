@@ -254,9 +254,11 @@ export function serializeLeagueDelta(fullState, previousState) {
  */
 export function applyLeagueDelta(currentState, delta) {
   if (!delta) return currentState;
-  if (!delta._isDelta) {
-    // Full hydration path — replace wholesale
-    return { ...delta };
+  if (typeof delta !== "object" || Array.isArray(delta)) {
+    return { ...currentState, _requiresFullState: true };
+  }
+  if (delta._isDelta !== true) {
+    return { ...currentState, _requiresFullState: true };
   }
   const patched = { ...currentState };
   for (const [key, value] of Object.entries(delta)) {

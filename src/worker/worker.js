@@ -214,6 +214,19 @@ let _lastSentViewState = null;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+
+function shouldForceFreshBaseline(nextPayload, prevPayload) {
+  if (!prevPayload || !nextPayload) return false;
+  if (nextPayload.phase !== prevPayload.phase) return true;
+
+  const prevDraftOpen = Boolean(prevPayload.draftStarted) || ['active', 'in_progress', 'started'].includes(String(prevPayload.draftLifecycleStatus ?? ''));
+  const nextDraftClosed = !Boolean(nextPayload.draftStarted) && ['complete', 'completed', 'idle', 'finalized', 'not_available'].includes(String(nextPayload.draftLifecycleStatus ?? ''));
+  if (prevDraftOpen && nextDraftClosed) return true;
+
+  return false;
+}
+
+
 /**
  * Send a typed message to the UI thread with delta-serialization and binary
  * Transferable optimizations.
@@ -243,18 +256,24 @@ function post(type, payload = {}, id = null) {
   const transferList = [];
 
   if (type === toUI.STATE_UPDATE) {
+    const forceFreshBaseline = shouldForceFreshBaseline(payload, _lastSentViewState);
+    const previousState = forceFreshBaseline ? null : _lastSentViewState;
+    if (forceFreshBaseline) _lastSentViewState = null;
+
     const { delta, ratingMatrix, scheduleBuffer } = serializeLeagueDelta(
       payload,
-      _lastSentViewState,
+      previousState,
     );
 
     if (ratingMatrix && ratingMatrix.buffer.buffer.byteLength > 0) {
       delta._ratingMatrix = { buffer: ratingMatrix.buffer, playerIds: ratingMatrix.playerIds };
       transferList.push(ratingMatrix.buffer.buffer);
+      delta._ratingMatrix.buffer = null;
     }
     if (scheduleBuffer && scheduleBuffer.buffer.byteLength > 0) {
       delta._scheduleBuffer = scheduleBuffer;
       transferList.push(scheduleBuffer.buffer);
+      delta._scheduleBuffer = null;
     }
 
     // Save full payload (not the delta) as the new baseline BEFORE transfer
@@ -272,11 +291,13 @@ function post(type, payload = {}, id = null) {
       const rm = buildRatingMatrix(allPlayers);
       data = { ...payload, _ratingMatrix: { buffer: rm.buffer, playerIds: rm.playerIds } };
       transferList.push(rm.buffer.buffer);
+      data._ratingMatrix.buffer = null;
     }
     if (payload.schedule) {
       const sb = buildScheduleBuffer(payload.schedule);
       data = data === payload ? { ...payload, _scheduleBuffer: sb } : { ...data, _scheduleBuffer: sb };
       transferList.push(sb.buffer);
+      data._scheduleBuffer = null;
     }
 
   } else {
@@ -10594,6 +10615,7 @@ async function handleMessage(event) {
       case toWorker.GET_DRAFT_CLASSES:  return await handleGetDraftClasses(payload, id);
       case toWorker.GET_DRAFT_CLASS:    return await handleGetDraftClass(payload, id);
       case toWorker.GET_PLAYER_DRAFT_CONTEXT: return await handleGetPlayerDraftContext(payload, id);
+      case toWorker.REQUEST_FULL_STATE:  return post(toUI.FULL_STATE, buildViewState(), id);
 
       default:
         console.warn(`[Worker] Unknown message type: ${type}`);

@@ -367,14 +367,38 @@ describe('applyLeagueDelta', () => {
     expect(prev.week).toBe(1); // original unchanged
   });
 
-  it('falls back to full-state replace when _isDelta is absent', () => {
+  it('rejects malformed patch when _isDelta is absent and requests full reload', () => {
     const prev = makeViewState({ week: 1 });
-    const fullState = makeViewState({ week: 9 });
+    const malformed = { week: 9 };
 
-    const next = applyLeagueDelta(prev, fullState);
+    const next = applyLeagueDelta(prev, malformed);
 
-    expect(next.week).toBe(9);
-    expect(next).not.toBe(fullState); // new object, not the same reference
+    expect(next.week).toBe(1);
+    expect(next._requiresFullState).toBe(true);
+  });
+
+
+
+  it('preserves history arrays across multi-tick deltas unless changed', () => {
+    const history = [{ year: 2024, champ: 'A' }];
+    const chronicle = [{ id: 'c1', text: 'Started franchise' }];
+    let state = makeViewState({ leagueHistory: history, franchiseChronicle: chronicle, week: 1 });
+
+    state = applyLeagueDelta(state, { _isDelta: true, week: 2 });
+    expect(state.leagueHistory).toBe(history);
+    expect(state.franchiseChronicle).toBe(chronicle);
+
+    const nextHistory = [...history, { year: 2025, champ: 'B' }];
+    state = applyLeagueDelta(state, { _isDelta: true, week: 3, leagueHistory: nextHistory });
+    expect(state.leagueHistory).toEqual(nextHistory);
+    expect(state.franchiseChronicle).toBe(chronicle);
+  });
+
+  it('flags non-object deltas for full reload', () => {
+    const prev = makeViewState({ week: 1 });
+    const next = applyLeagueDelta(prev, 'bad_payload');
+    expect(next._requiresFullState).toBe(true);
+    expect(next.week).toBe(1);
   });
 
   it('returns currentState unchanged when delta is null', () => {

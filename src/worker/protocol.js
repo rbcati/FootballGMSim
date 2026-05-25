@@ -158,6 +158,9 @@ export const toWorker = Object.freeze({
   GET_DRAFT_CLASSES:    'GET_DRAFT_CLASSES',    // {} — seasons with logged DRAFT picks
   GET_DRAFT_CLASS:      'GET_DRAFT_CLASS',      // { seasonId } — full redraft model for one class
   GET_PLAYER_DRAFT_CONTEXT: 'GET_PLAYER_DRAFT_CONTEXT', // { playerId } — profile strip + optional class hook
+
+  /** Recovery */
+  REQUEST_FULL_STATE: 'REQUEST_FULL_STATE', // {} — force full hydration snapshot
 });
 
 // ─────────────────────────────────────────────
