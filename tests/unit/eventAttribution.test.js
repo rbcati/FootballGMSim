@@ -1,65 +1,107 @@
 import { describe, expect, it } from 'vitest';
-import { mapOverallToAttributesV2 } from '../../src/core/migration/attributeMigrator.ts';
+import { resolveMatchup } from '../../src/core/sim/matchupEngine.ts';
 import { simulateRichGame } from '../../src/core/sim/richGameSimulator.ts';
+import { mapOverallToAttributesV2 } from '../../src/core/migration/attributeMigrator.ts';
 import { buildBoxScoreViewModel } from '../../src/ui/utils/boxScoreViewModel.js';
 
-function buildPayload(seed = 42) {
-  return {
-    gameId: `attr-${seed}`,
-    homeTeamId: 10,
-    awayTeamId: 20,
-    seed,
-    weather: 'clear',
-    homeOffense: mapOverallToAttributesV2(84, 5.5, `ho-${seed}`),
-    awayOffense: mapOverallToAttributesV2(82, 5.5, `ao-${seed}`),
-    homeDefense: mapOverallToAttributesV2(83, 5.5, `hd-${seed}`),
-    awayDefense: mapOverallToAttributesV2(81, 5.5, `ad-${seed}`),
-    homePlayers: [
-      { id: 'h-qb', name: 'HQB', pos: 'QB', ovr: 84 },
-      { id: 'h-wr1', name: 'HWR1', pos: 'WR', ovr: 82 },
-      { id: 'h-te1', name: 'HTE1', pos: 'TE', ovr: 80 },
-      { id: 'h-edge1', name: 'HEDGE1', pos: 'EDGE', ovr: 84 },
-      { id: 'h-cb1', name: 'HCB1', pos: 'CB', ovr: 83 },
-    ],
-    awayPlayers: [
-      { id: 'a-qb', name: 'AQB', pos: 'QB', ovr: 83 },
-      { id: 'a-wr1', name: 'AWR1', pos: 'WR', ovr: 81 },
-      { id: 'a-te1', name: 'ATE1', pos: 'TE', ovr: 79 },
-      { id: 'a-edge1', name: 'AEDGE1', pos: 'EDGE', ovr: 83 },
-      { id: 'a-cb1', name: 'ACB1', pos: 'CB', ovr: 82 },
-    ],
+const off = {
+  release: 70, routeRunning: 70, separation: 70, catchInTraffic: 70, ballTracking: 70,
+  throwAccuracyShort: 70, throwAccuracyDeep: 70, throwPower: 70, decisionMaking: 70,
+  pocketPresence: 60, passBlockFootwork: 40, passBlockStrength: 55,
+  passRush: 40, pressCoverage: 40, zoneCoverage: 40,
+};
+
+const def = {
+  release: 40, routeRunning: 40, separation: 40, catchInTraffic: 40, ballTracking: 40,
+  throwAccuracyShort: 40, throwAccuracyDeep: 40, throwPower: 40, decisionMaking: 40,
+  pocketPresence: 40, passBlockFootwork: 40, passBlockStrength: 40,
+  passRush: 95, pressCoverage: 85, zoneCoverage: 85,
+};
+
+function sequenceRng(values) {
+  let idx = 0;
+  return () => {
+    const value = values[idx] ?? values[values.length - 1] ?? 0.5;
+    idx += 1;
+    return value;
   };
 }
 
 describe('advanced box score event attribution', () => {
-  it('captures pass-context events in the attribution map', () => {
-    const summary = simulateRichGame(buildPayload(77));
-    const rows = Object.values(summary.advancedAttribution ?? {});
+  it('is deterministic with same seed', () => {
+    const payload = {
+      gameId: 'evt-1',
+      homeTeamId: 1,
+      awayTeamId: 2,
+      seed: 4242,
+      weather: 'clear',
+      homeOffense: mapOverallToAttributesV2(84, 5.5, 'h-off'),
+      awayOffense: mapOverallToAttributesV2(83, 5.5, 'a-off'),
+      homeDefense: mapOverallToAttributesV2(82, 5.5, 'h-def'),
+      awayDefense: mapOverallToAttributesV2(82, 5.5, 'a-def'),
+    };
 
-    const totalTargets = rows.reduce((sum, row) => sum + (row.targets ?? 0), 0);
-    const totalDrops = rows.reduce((sum, row) => sum + (row.drops ?? 0), 0);
-    const totalBatted = rows.reduce((sum, row) => sum + (row.battedPasses ?? 0), 0);
-
-    expect(totalTargets).toBeGreaterThan(0);
-    expect(totalDrops + totalBatted).toBeGreaterThanOrEqual(0);
-  });
-
-  it('is deterministic for seeded replays', () => {
-    const one = simulateRichGame(buildPayload(1234));
-    const two = simulateRichGame(buildPayload(1234));
+    const one = simulateRichGame(payload);
+    const two = simulateRichGame(payload);
     expect(one.advancedAttribution).toEqual(two.advancedAttribution);
   });
 
-  it('keeps legacy summaries render-safe when attribution is absent', () => {
-    const legacySummary = simulateRichGame(buildPayload(88));
-    delete legacySummary.advancedAttribution;
+  it('increments sacks, drops, and batted pass events by attributed player', () => {
+    const dropPlay = resolveMatchup(off, def, {
+      down: 2, distance: 8, yardLine: 45, quarter: 1, clockSec: 600, playType: 'pass',
+      targetId: 'wr-1', defenderId: 'cb-1', blockerId: 'ot-1', rusherId: 'edge-1',
+    }, sequenceRng([0.95, 0.99, 0.99, 0.4, 0.2]));
 
+    const battedPlay = resolveMatchup(off, def, {
+      down: 2, distance: 8, yardLine: 45, quarter: 1, clockSec: 600, playType: 'pass',
+      targetId: 'wr-1', defenderId: 'cb-1', blockerId: 'ot-1', rusherId: 'edge-1',
+    }, sequenceRng([0.95, 0.99, 0.99, 0.4, 0.8, 0.2]));
+
+    const sackPlay = resolveMatchup(off, def, {
+      down: 3, distance: 10, yardLine: 35, quarter: 2, clockSec: 500, playType: 'pass',
+      targetId: 'wr-1', defenderId: 'cb-1', blockerId: 'ot-1', rusherId: 'edge-1',
+    }, sequenceRng([0.95, 0.01, 0.99, 0.4]));
+
+    const flatten = (play) => Object.fromEntries((play.attributionEvents ?? []).map((e) => [e.type, e.playerId]));
+    expect(flatten(dropPlay).DROP).toBe('wr-1');
+    expect(flatten(battedPlay).BATTED_PASS).toBe('cb-1');
+    expect(flatten(sackPlay).SACK_ALLOWED).toBe('ot-1');
+    expect(flatten(sackPlay).SACK_MADE).toBe('edge-1');
+  });
+
+  it('legacy summaries without advanced attribution still build safely', () => {
     const vm = buildBoxScoreViewModel({
-      league: { teams: [{ id: 10, abbr: 'HOM', name: 'Home' }, { id: 20, abbr: 'AWY', name: 'Away' }] },
-      game: { ...legacySummary, id: legacySummary.gameId, played: true },
+      league: { teams: [] },
+      gameId: 'legacy-1',
+      game: { gameId: 'legacy-1', homeId: 1, awayId: 2, homeScore: 21, awayScore: 17, played: true },
+      context: {},
     });
 
+    expect(vm).toBeTruthy();
     expect(vm.advancedAttribution).toEqual({});
-    expect(vm.archiveQuality).toBeTruthy();
+  });
+
+  it('does not mutate player objects passed into simulation', () => {
+    const homePlayers = [{ id: 1, name: 'Home WR', pos: 'WR', ovr: 82 }];
+    const awayPlayers = [{ id: 2, name: 'Away CB', pos: 'CB', ovr: 81 }];
+    const homeSnapshot = JSON.parse(JSON.stringify(homePlayers));
+    const awaySnapshot = JSON.parse(JSON.stringify(awayPlayers));
+
+    simulateRichGame({
+      gameId: 'immut-1',
+      homeTeamId: 1,
+      awayTeamId: 2,
+      seed: 99,
+      weather: 'clear',
+      homeOffense: mapOverallToAttributesV2(82, 5.5, 'h-off-immut'),
+      awayOffense: mapOverallToAttributesV2(82, 5.5, 'a-off-immut'),
+      homeDefense: mapOverallToAttributesV2(82, 5.5, 'h-def-immut'),
+      awayDefense: mapOverallToAttributesV2(82, 5.5, 'a-def-immut'),
+      homePlayers,
+      awayPlayers,
+    });
+
+    expect(homePlayers).toEqual(homeSnapshot);
+    expect(awayPlayers).toEqual(awaySnapshot);
   });
 });
