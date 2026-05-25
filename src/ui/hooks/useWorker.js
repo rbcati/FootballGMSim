@@ -615,6 +615,8 @@ export function useWorker() {
     /** Release a player. */
     releasePlayer: (playerId, teamId) =>
       send(toWorker.RELEASE_PLAYER, { playerId, teamId }),
+    bulkReleasePlayers: (teamId, playerIds) =>
+      request(toWorker.BULK_RELEASE_PLAYERS, { teamId, playerIds }),
 
     /** Fetch a team's roster (returns a Promise — does NOT set busy). */
     getRoster: (teamId) => request(toWorker.GET_ROSTER, { teamId }, { silent: true }),
