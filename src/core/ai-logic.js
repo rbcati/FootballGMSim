@@ -20,6 +20,7 @@ import { buildFreeAgencyMarketAnalysis } from './freeAgency/freeAgencyMarketAnal
 import { buildContractFromMarket, evaluateContractMarket } from './contractModel.js';
 import { evaluatePendingOfferCapReservation } from './pendingOfferCapModel.js';
 import { evaluatePlayerMarketRealism, normalizePositionGroup } from './marketRealismModel.js';
+import { executeAIOffseasonCuts } from './roster/aiRosterCuts.js';
 
 class AiLogic {
     static NEED_GROUP_TO_POS = Object.freeze({
@@ -258,6 +259,63 @@ class AiLogic {
                     week: meta.currentWeek, teamId: team.id,
                     details: { playerId: p.id, deadCap: currentYearDead, aiCapCut: true },
                 });
+            }
+        }
+    }
+
+    /**
+     * Execute AI offseason roster cuts for all AI-controlled teams.
+     *
+     * Runs just before the free_agency phase transition so that cap-strapped
+     * teams can shed toxic contracts and enter free agency with workable space.
+     * Only releases players where Cap Savings > 0 — never worsens the cap.
+     * Human-controlled teams are explicitly skipped.
+     */
+    static async executeOffseasonRosterCuts() {
+        const meta = cache.getMeta();
+        const userTeamId = meta?.userTeamId;
+        const allTeams = cache.getAllTeams();
+        const year = Number(meta?.year ?? 2025);
+
+        for (const team of allTeams) {
+            if (team.id === userTeamId) continue;
+
+            // Refresh cap before evaluation so OVR changes from progression are reflected.
+            this.updateTeamCap(team.id);
+            const freshTeam = cache.getTeam(team.id);
+            const roster = cache.getPlayersByTeam(team.id);
+
+            const cuts = executeAIOffseasonCuts(freshTeam, roster, year);
+            if (cuts.length === 0) continue;
+
+            for (const { player: p, capSavings, reason } of cuts) {
+                if (!p?.contract) continue;
+
+                const c = p.contract;
+                // Pre-June-1 (offseason_resign phase): all remaining prorated bonus hits
+                // current-year dead cap — matches handleReleasePlayer's pre-June-1 path.
+                const yearsRemaining = Math.max(c.years ?? c.yearsRemaining ?? 1, 1);
+                const yearsTotal     = Math.max(c.yearsTotal ?? yearsRemaining, 1);
+                const annualBonus    = (c.signingBonus ?? 0) / yearsTotal;
+                const deadMoney      = Math.round(annualBonus * yearsRemaining * 100) / 100;
+
+                cache.updatePlayer(p.id, { teamId: null, status: 'free_agent', offers: [] });
+
+                const currentTeam = cache.getTeam(team.id);
+                if (deadMoney > 0) {
+                    cache.updateTeam(team.id, { deadCap: (currentTeam.deadCap ?? 0) + deadMoney });
+                }
+                this.updateTeamCap(team.id);
+
+                await Transactions.add({
+                    type: 'RELEASE',
+                    seasonId: meta.currentSeasonId,
+                    week: meta.currentWeek,
+                    teamId: team.id,
+                    details: { playerId: p.id, capSavings, reason, aiOffseasonCut: true },
+                });
+
+                await NewsEngine.logTransaction('RELEASE', { teamId: team.id, playerId: p.id });
             }
         }
     }

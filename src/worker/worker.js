@@ -9072,6 +9072,12 @@ async function handleAdvanceOffseason(payload, id) {
     );
   }
 
+  // ── Step 4b: AI Offseason Roster Cuts ────────────────────────────────────
+  // AI teams with projected cap room below $15M evaluate releasing veterans
+  // whose dead-cap penalty is less than their active cap hit.  Only runs for
+  // AI-controlled teams; human roster is never touched.
+  await AiLogic.executeOffseasonRosterCuts();
+
   // ── Step 5: Phase transition → free_agency ────────────────────────────────
   // All DB writes happen here atomically before the UI is notified.
   cache.setMeta({
