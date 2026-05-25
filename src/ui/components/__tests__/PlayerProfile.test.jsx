@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
 import PlayerProfile from '../PlayerProfile.jsx';
 
@@ -502,6 +502,69 @@ describe('PlayerProfile', () => {
     await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Ghost Legend'));
     await waitFor(() => expect(screen.getByTestId('player-profile-legacy-watch')).toBeTruthy());
     expect(screen.getByText(/Hall of Fame inductee/i)).toBeTruthy();
+  });
+
+  it('renders Advanced Analytics career totals and season ledger when archive data exists', async () => {
+    const advancedLeague = {
+      ...league,
+      playerSeasonStatsArchive: {
+        __meta: { archivedGameIds: { '2030:g1': true } },
+        11: {
+          2030: {
+            targets: 42,
+            drops: 4,
+            battedPasses: 1,
+            coverageTargets: 0,
+            coverageCompletionsAllowed: 0,
+            receptionsAllowed: 0,
+            sacksAllowed: 7,
+            sacksMade: 0,
+          },
+          2031: {
+            targets: 51,
+            drops: 3,
+            battedPasses: 2,
+            coverageTargets: 5,
+            coverageCompletionsAllowed: 2,
+            receptionsAllowed: 2,
+            sacksAllowed: 6,
+            sacksMade: 1,
+          },
+        },
+      },
+    };
+
+    render(<PlayerProfile playerId="11" onClose={vi.fn()} actions={actions} teams={advancedLeague.teams} league={advancedLeague} />);
+    await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Avery Fields'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Career Stats' }));
+
+    const section = screen.getByTestId('player-profile-advanced-analytics');
+    expect(section.textContent).toContain('Advanced Analytics');
+    expect(section.textContent).toContain('Targets');
+    expect(section.textContent).toContain('93');
+    expect(section.textContent).toContain('Sacks Allowed');
+    expect(section.textContent).toContain('13');
+
+    const ledger = screen.getByTestId('player-profile-advanced-ledger');
+    const rows = within(ledger).getAllByRole('row');
+    expect(rows[1].textContent).toContain('2031');
+    expect(rows[2].textContent).toContain('2030');
+
+    const wrapper = screen.getByTestId('player-profile-advanced-ledger-wrap');
+    expect(wrapper.className).toContain('table-wrapper');
+    expect(wrapper.className).toContain('player-career-table-wrap');
+    expect(wrapper.getAttribute('aria-label')).toMatch(/scroll horizontally/i);
+  });
+
+  it('renders the Advanced Analytics empty state for legacy saves without archive data', async () => {
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={{ ...league, playerSeasonStatsArchive: {} }} />);
+    await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Avery Fields'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Career Stats' }));
+
+    expect(screen.getByTestId('player-profile-advanced-empty').textContent).toContain('Advanced tracking begins with newly simulated rich games.');
+    expect(screen.queryByTestId('player-profile-advanced-ledger')).toBeNull();
   });
 
   it('shows legacy watch when career stats and accolades justify legacy scoring', async () => {

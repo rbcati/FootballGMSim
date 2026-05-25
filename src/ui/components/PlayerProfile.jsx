@@ -36,10 +36,23 @@ import { buildLegacyScoreReport, shouldShowLegacyProfileSection } from "../../co
 import { buildPlayerDevelopmentModel } from "../../core/playerDevelopmentModel.js";
 import { buildProspectScoutingReport } from "../../core/scoutingModel.js";
 import { buildPlayerCareerTimeline } from "../utils/playerCareerTimeline.js";
+import { buildPlayerAdvancedStatsView } from "../utils/playerAdvancedStatsViewModel.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
 const CAREER_TIMELINE_LIMIT = 8;
+const ADVANCED_ANALYTICS_EMPTY_TEXT = "Advanced tracking begins with newly simulated rich games.";
+
+const ADVANCED_ANALYTICS_FIELDS = [
+  { key: "targets", label: "Targets", shortLabel: "Tgt" },
+  { key: "drops", label: "Drops", shortLabel: "Drop" },
+  { key: "battedPasses", label: "Batted Passes", shortLabel: "Bat" },
+  { key: "coverageTargets", label: "Coverage Targets", shortLabel: "Cov Tgt" },
+  { key: "coverageCompletionsAllowed", label: "Coverage Completions Allowed", shortLabel: "Cov Cmp" },
+  { key: "receptionsAllowed", label: "Receptions Allowed", shortLabel: "Rec All" },
+  { key: "sacksAllowed", label: "Sacks Allowed", shortLabel: "Sck All" },
+  { key: "sacksMade", label: "Sacks Made", shortLabel: "Sck Made" },
+];
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
 
@@ -394,6 +407,132 @@ const sectionLabelStyle = {
   textTransform: "uppercase",
   letterSpacing: ".08em",
 };
+
+function getAdvancedAnalyticsFocusKeys(position) {
+  const pos = String(position ?? "").toUpperCase();
+  const keys = new Set();
+
+  if (["WR", "TE", "RB", "FB"].includes(pos)) {
+    keys.add("targets");
+    keys.add("drops");
+  }
+  if (["OL", "OT", "OG", "C", "G", "T", "QB"].includes(pos)) {
+    keys.add("sacksAllowed");
+  }
+  if (["EDGE", "DL", "DE", "DT", "NT", "LB", "MLB", "OLB"].includes(pos)) {
+    keys.add("sacksMade");
+    keys.add("battedPasses");
+  }
+  if (["CB", "S", "SS", "FS", "LB", "MLB", "OLB"].includes(pos)) {
+    keys.add("coverageTargets");
+    keys.add("coverageCompletionsAllowed");
+    keys.add("receptionsAllowed");
+  }
+
+  return keys;
+}
+
+function formatAdvancedStat(value) {
+  return Number(value ?? 0).toLocaleString();
+}
+
+function AdvancedAnalyticsSection({ advancedView, player }) {
+  const focusKeys = getAdvancedAnalyticsFocusKeys(player?.pos ?? player?.position);
+
+  return (
+    <section className="card-enter" data-testid="player-profile-advanced-analytics">
+      <h3 style={sectionLabelStyle}>Advanced Analytics</h3>
+      {!advancedView?.hasData ? (
+        <p
+          data-testid="player-profile-advanced-empty"
+          style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-muted)" }}
+        >
+          {ADVANCED_ANALYTICS_EMPTY_TEXT}
+        </p>
+      ) : (
+        <div style={{ display: "grid", gap: "var(--space-3)" }}>
+          <div
+            data-testid="player-profile-advanced-career"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))",
+              gap: 8,
+            }}
+          >
+            {ADVANCED_ANALYTICS_FIELDS.map((field) => {
+              const isFocus = focusKeys.has(field.key);
+              return (
+                <div
+                  key={field.key}
+                  className="stat-box"
+                  data-focus={isFocus ? "true" : "false"}
+                  style={{
+                    padding: "8px 10px",
+                    border: isFocus ? "1px solid var(--accent)" : "1px solid var(--hairline)",
+                  }}
+                >
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>
+                    {field.label}
+                  </div>
+                  <div style={{ fontSize: "1.05rem", fontWeight: 900, fontVariantNumeric: "tabular-nums" }}>
+                    {formatAdvancedStat(advancedView.career?.[field.key])}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div
+            className="table-wrapper player-career-table-wrap"
+            data-testid="player-profile-advanced-ledger-wrap"
+            role="region"
+            aria-label="Player advanced season ledger - scroll horizontally to view all columns"
+            style={{
+              overflowX: "auto",
+              WebkitOverflowScrolling: "touch",
+              border: "1px solid var(--hairline)",
+              borderRadius: "var(--radius-md)",
+              maxWidth: "100%",
+            }}
+          >
+            <Table
+              className="standings-table"
+              data-testid="player-profile-advanced-ledger"
+              style={{
+                width: "100%",
+                minWidth: 780,
+                fontSize: "0.76rem",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              <TableHeader>
+                <TableRow>
+                  <TableHead style={{ textAlign: "left" }}>Year/Season</TableHead>
+                  {ADVANCED_ANALYTICS_FIELDS.map((field) => (
+                    <TableHead key={field.key} style={{ textAlign: "right" }}>
+                      {field.shortLabel}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {advancedView.seasons.map((row) => (
+                  <TableRow key={`advanced-season-${row.season}`}>
+                    <TableCell style={{ fontWeight: 700 }}>{row.season}</TableCell>
+                    {ADVANCED_ANALYTICS_FIELDS.map((field) => (
+                      <TableCell key={`${row.season}-${field.key}`} style={{ textAlign: "right" }}>
+                        {formatAdvancedStat(row[field.key])}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -793,6 +932,15 @@ export default function PlayerProfile({
     ],
   }), [devHistory]);
 
+  const playerAdvancedStatsArchive =
+    league?.playerSeasonStatsArchive
+    ?? league?.meta?.playerSeasonStatsArchive
+    ?? data?.meta?.playerSeasonStatsArchive
+    ?? null;
+  const playerAdvancedStatsView = useMemo(
+    () => buildPlayerAdvancedStatsView(effectivePlayer?.id ?? playerId, playerAdvancedStatsArchive),
+    [effectivePlayer?.id, playerId, playerAdvancedStatsArchive],
+  );
   const careerRows = useMemo(() => mergedProfileSeasonRows, [mergedProfileSeasonRows]);
   const careerTotals = useMemo(() => {
     const posU = String(effectivePlayer?.pos ?? effectivePlayer?.position ?? '').toUpperCase();
@@ -2356,6 +2504,8 @@ export default function PlayerProfile({
             </section>
           )}
           {activeProfileTab === "Career Stats" && (
+            <>
+            <AdvancedAnalyticsSection advancedView={playerAdvancedStatsView} player={player} />
             <section className="card-enter">
               {careerRows.length === 0 ? (
                 <EmptyState
@@ -2406,6 +2556,7 @@ export default function PlayerProfile({
                 </div>
               )}
             </section>
+            </>
           )}
         </div>
       </div>
