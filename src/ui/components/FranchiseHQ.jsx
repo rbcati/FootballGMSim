@@ -9,6 +9,7 @@ import { selectFranchiseHQViewModel } from '../utils/franchiseCommandCenter.js';
 import { buildWeeklyCommandHub } from '../utils/weeklyCommandHub.js';
 import { buildCommandCenterSummary } from '../utils/weeklyHubLayout.js';
 import { rankLeaguePulseItems } from '../../core/leaguePulse.js';
+import { classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../../core/teamCulture.js';
 import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda, CompactNewsCard } from './ScreenSystem.jsx';
 import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
@@ -250,6 +251,22 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
     lastGameDisplay.heroLine,
     userTeam?.capRoom,
   ]);
+
+  const culturePulse = useMemo(() => {
+    const raw = league?.teamCulture?.[String(league?.userTeamId)] ?? null;
+    const score = Number(raw?.score ?? TEAM_CULTURE_DEFAULT);
+    const shift = Number(raw?.lastShift ?? 0);
+    const trend = raw?.trend ?? 'flat';
+    const reasons = Array.isArray(raw?.reasons) ? raw.reasons : [];
+    return {
+      score,
+      label: classifyTeamCulture(score),
+      trend,
+      trendIcon: trend === 'up' ? '↑' : trend === 'down' ? '↓' : '–',
+      tone: trend === 'up' ? 'ok' : trend === 'down' ? 'warning' : 'info',
+      narrative: buildTeamCultureNarrative(score, shift, reasons),
+    };
+  }, [league?.teamCulture, league?.userTeamId]);
 
   useEffect(() => {
     document.title = `Franchise HQ • ${command.weekLabel} • Football GM Sim`;
@@ -545,6 +562,20 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
             <button type="button" className="btn btn-sm" onClick={() => onNavigate?.(seasonPulse.filmRoute)}>
               {seasonPulse.filmCta}
             </button>
+          </article>
+
+          <article
+            className={`app-hq-pulse-card tone-${culturePulse.tone}`}
+            style={{ gridColumn: '1 / -1' }}
+            data-testid="culture-pulse-card"
+            aria-label="Team Culture"
+          >
+            <div className="app-hq-pulse-card__head">
+              <span>Team Culture</span>
+              <StatusChip label={`${culturePulse.score.toFixed(0)} ${culturePulse.trendIcon}`} tone={culturePulse.tone} />
+            </div>
+            <strong>{culturePulse.label}</strong>
+            <p style={{ margin: '2px 0 0', fontSize: '0.85em', opacity: 0.9 }}>{culturePulse.narrative}</p>
           </article>
         </div>
       </SectionCard>
