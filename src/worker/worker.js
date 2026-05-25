@@ -98,6 +98,7 @@ import {
   estimateHoldoutRisk,
   projectTeamFinancials,
 } from '../core/contracts/realisticContracts.js';
+import { generateSlottedRookieContract } from '../core/contracts/rookieWageScale.js';
 import { summarizePlayerMood } from '../core/mood/playerMood.js';
 import { getFreeAgencyDecisionState } from '../core/freeAgency/decisionState.js';
 import {
@@ -7851,17 +7852,13 @@ function _executeDraftPick(pickIndex, playerId, teamId) {
   pk.playerOvr  = player.ovr;
   draftState.currentPickIndex = pickIndex + 1;
 
-  // Sign player to team with a 4-year rookie contract
+  // Sign player to slotted rookie contract — value determined by overall pick position
+  const overallPick = pk?.overall ?? (pickIndex + 1);
+  const draftYear = meta?.year ?? 2025;
   cache.updatePlayer(playerId, {
     teamId,
     status: 'active',
-    contract: {
-      years:        4,
-      yearsTotal:   4,
-      baseAnnual:   0.7,
-      signingBonus: 0.1,
-      guaranteedPct:0.5,
-    },
+    contract: generateSlottedRookieContract(overallPick, draftYear),
   });
 
   recalculateTeamCap(teamId);
