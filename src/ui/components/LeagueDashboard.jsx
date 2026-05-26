@@ -845,6 +845,8 @@ export default function LeagueDashboard({
           <TabErrorBoundary label="Franchise HQ" onNavigate={setActiveTab}>
               <FranchiseHQ
                 league={safeLeague}
+                lastResults={lastResults}
+                lastSimWeek={lastSimWeek}
                 onNavigate={(tab) => {
                   const gameBookRoute = parseGameBookDestination(tab);
                   if (gameBookRoute) {
@@ -951,6 +953,8 @@ export default function LeagueDashboard({
                 <WeeklyResultsCenter
                   league={league}
                   initialWeek={weeklyResultsInitialWeek}
+                  lastResults={lastResults}
+                  lastSimWeek={lastSimWeek}
                   onNavigate={setActiveTab}
                   onGameSelect={(gameId) => openGameDetail(gameId, "League")}
                   onPlayerSelect={handlePlayerSelect}
@@ -1029,6 +1033,8 @@ export default function LeagueDashboard({
             <WeeklyResultsCenter
               league={league}
               initialWeek={weeklyResultsInitialWeek}
+              lastResults={lastResults}
+              lastSimWeek={lastSimWeek}
               onNavigate={setActiveTab}
               onGameSelect={(gameId) => openGameDetail(gameId, "Weekly Results")}
               onPlayerSelect={handlePlayerSelect}

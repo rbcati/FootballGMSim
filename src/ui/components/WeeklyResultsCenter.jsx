@@ -162,9 +162,89 @@ function SpotlightCard({ row, seasonId, onGameSelect }) {
   );
 }
 
-export default function WeeklyResultsCenter({ league, initialWeek = null, onGameSelect, onNavigate, onPlayerSelect }) {
+function normalizeRecentResultGame(result, { seasonId, fallbackWeek } = {}) {
+  if (!result || typeof result !== 'object') return null;
+  const homeId = Number(result?.homeId ?? result?.homeTeamId ?? result?.home?.id ?? result?.home);
+  const awayId = Number(result?.awayId ?? result?.awayTeamId ?? result?.away?.id ?? result?.away);
+  const homeScore = Number(result?.homeScore ?? result?.scoreHome ?? result?.score?.home);
+  const awayScore = Number(result?.awayScore ?? result?.scoreAway ?? result?.score?.away);
+  const week = Number(result?.week ?? fallbackWeek);
+  if (!Number.isFinite(homeId) || !Number.isFinite(awayId) || !Number.isFinite(homeScore) || !Number.isFinite(awayScore)) {
+    return null;
+  }
+  return {
+    ...result,
+    gameId: result?.gameId ?? result?.id,
+    seasonId: result?.seasonId ?? seasonId,
+    week: Number.isFinite(week) ? week : fallbackWeek,
+    home: homeId,
+    away: awayId,
+    homeId,
+    awayId,
+    homeScore,
+    awayScore,
+    played: true,
+    summary: result?.summary ?? (result?.recapText ? { storyline: result.recapText } : undefined),
+    recap: result?.recap ?? result?.recapText,
+  };
+}
+
+function isSameMatchup(a, b) {
+  if (!a || !b) return false;
+  const aId = a?.gameId ?? a?.id;
+  const bId = b?.gameId ?? b?.id;
+  if (aId && bId && String(aId) === String(bId)) return true;
+  const aHome = Number(a?.homeId ?? a?.home);
+  const aAway = Number(a?.awayId ?? a?.away);
+  const bHome = Number(b?.homeId ?? b?.home);
+  const bAway = Number(b?.awayId ?? b?.away);
+  return Number.isFinite(aHome)
+    && Number.isFinite(aAway)
+    && aHome === bHome
+    && aAway === bAway;
+}
+
+function mergeRecentResultsIntoWeekGames(scheduleGames, recentGames) {
+  if (!recentGames.length) return scheduleGames;
+  const usedRecent = new Set();
+  const merged = scheduleGames.map((game) => {
+    const matchIndex = recentGames.findIndex((recent) => isSameMatchup(game, recent));
+    if (matchIndex < 0) return game;
+    usedRecent.add(matchIndex);
+    const recent = recentGames[matchIndex];
+    return {
+      ...game,
+      ...recent,
+      id: game?.id ?? recent?.id,
+      gameId: recent?.gameId ?? game?.gameId ?? game?.id,
+      home: game?.home ?? recent?.home,
+      away: game?.away ?? recent?.away,
+    };
+  });
+  for (let index = 0; index < recentGames.length; index += 1) {
+    if (!usedRecent.has(index)) merged.push(recentGames[index]);
+  }
+  return merged;
+}
+
+export default function WeeklyResultsCenter({ league, initialWeek = null, lastResults = [], lastSimWeek = null, onGameSelect, onNavigate, onPlayerSelect }) {
   const totalWeeks = Number(league?.schedule?.weeks?.length ?? 0);
-  const resolvedWeek = useMemo(() => resolveDefaultResultsWeek(league?.schedule, { initialWeek, currentWeek: league?.week }), [initialWeek, league?.schedule, league?.week]);
+  const recentResultsWeek = useMemo(() => {
+    const parsed = Number(lastSimWeek ?? (Number(league?.week) - 1));
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : null;
+  }, [lastSimWeek, league?.week]);
+  const recentResultGames = useMemo(() => {
+    if (!Array.isArray(lastResults) || !recentResultsWeek) return [];
+    return lastResults
+      .map((result) => normalizeRecentResultGame(result, { seasonId: league?.seasonId, fallbackWeek: recentResultsWeek }))
+      .filter(Boolean);
+  }, [lastResults, league?.seasonId, recentResultsWeek]);
+  const resolvedWeek = useMemo(() => {
+    const parsedInitialWeek = Number(initialWeek);
+    if (Number.isFinite(parsedInitialWeek) && parsedInitialWeek >= 1) return parsedInitialWeek;
+    if (recentResultGames.length && recentResultsWeek) return recentResultsWeek;
+    return resolveDefaultResultsWeek(league?.schedule, { initialWeek, currentWeek: league?.week });
+  }, [initialWeek, league?.schedule, league?.week, recentResultGames.length, recentResultsWeek]);
   const [selectedWeek, setSelectedWeek] = useState(resolvedWeek);
   useEffect(() => { setSelectedWeek(resolvedWeek); }, [resolvedWeek]);
 
@@ -175,8 +255,10 @@ export default function WeeklyResultsCenter({ league, initialWeek = null, onGame
   }, [league?.teams]);
 
   const selectedWeekGames = useMemo(() => {
-    return selectWeekGames(league?.schedule, selectedWeek);
-  }, [league?.schedule, selectedWeek]);
+    const scheduleGames = selectWeekGames(league?.schedule, selectedWeek);
+    const matchingRecentGames = recentResultGames.filter((game) => Number(game?.week) === Number(selectedWeek));
+    return mergeRecentResultsIntoWeekGames(scheduleGames, matchingRecentGames);
+  }, [league?.schedule, recentResultGames, selectedWeek]);
 
   const rows = useMemo(() => selectedWeekGames.map((game, idx) => {
     const homeId = Number(game?.home?.id ?? game?.home);

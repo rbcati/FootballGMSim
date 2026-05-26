@@ -36,7 +36,43 @@ function formatRecordInline(record) {
   return record;
 }
 
-export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, simulating }) {
+function getLatestUserResultFromRecentResults(lastResults, { league, lastSimWeek } = {}) {
+  const userTeamId = Number(league?.userTeamId);
+  if (!Array.isArray(lastResults) || !lastResults.length || !Number.isFinite(userTeamId)) return null;
+  const teams = Array.isArray(league?.teams) ? league.teams : [];
+  const fallbackWeek = safeNum(lastSimWeek ?? (safeNum(league?.week, 1) - 1), 1);
+
+  for (let index = lastResults.length - 1; index >= 0; index -= 1) {
+    const result = lastResults[index];
+    const homeId = Number(result?.homeId ?? result?.homeTeamId ?? result?.home?.id ?? result?.home);
+    const awayId = Number(result?.awayId ?? result?.awayTeamId ?? result?.away?.id ?? result?.away);
+    if (homeId !== userTeamId && awayId !== userTeamId) continue;
+    const homeScore = Number(result?.homeScore ?? result?.scoreHome ?? result?.score?.home);
+    const awayScore = Number(result?.awayScore ?? result?.scoreAway ?? result?.score?.away);
+    if (!Number.isFinite(homeId) || !Number.isFinite(awayId) || !Number.isFinite(homeScore) || !Number.isFinite(awayScore)) continue;
+    const home = teams.find((team) => Number(team?.id) === homeId) ?? null;
+    const away = teams.find((team) => Number(team?.id) === awayId) ?? null;
+    return {
+      ...result,
+      id: result?.id ?? result?.gameId,
+      gameId: result?.gameId ?? result?.id,
+      homeId,
+      awayId,
+      home,
+      away,
+      homeAbbr: result?.homeAbbr ?? home?.abbr ?? result?.homeName?.slice?.(0, 3) ?? 'HOME',
+      awayAbbr: result?.awayAbbr ?? away?.abbr ?? result?.awayName?.slice?.(0, 3) ?? 'AWAY',
+      homeScore,
+      awayScore,
+      score: { home: homeScore, away: awayScore },
+      played: true,
+      week: safeNum(result?.week, fallbackWeek),
+    };
+  }
+  return null;
+}
+
+export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = null, onNavigate, onAdvanceWeek, busy, simulating }) {
   const [lineupToast, setLineupToast] = useState(null);
   const [showGate, setShowGate] = useState(false);
   const command = useMemo(() => selectFranchiseHQViewModel(league), [league]);
@@ -103,7 +139,11 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
     { title: 'Scout Opponent', icon: <HQIcon name="scout" size={22} />, subtitle: command.actionStatuses.scouting.subtitle, badge: command.actionStatuses.scouting.badge || 'New report', onClick: () => { markWeeklyPrepStep(league, 'opponentScouted', true); onNavigate?.('Weekly Prep'); } },
   ];
 
-  const lastGame = useMemo(() => getLatestUserCompletedGame(league) ?? command.lastGameSummary ?? null, [league, command.lastGameSummary]);
+  const recentLastGame = useMemo(
+    () => getLatestUserResultFromRecentResults(lastResults, { league, lastSimWeek }),
+    [lastResults, lastSimWeek, league],
+  );
+  const lastGame = useMemo(() => getLatestUserCompletedGame(league) ?? recentLastGame ?? command.lastGameSummary ?? null, [league, recentLastGame, command.lastGameSummary]);
   const lastGameDisplay = useMemo(() => getLastGameDisplay(lastGame, league?.userTeamId), [lastGame, league?.userTeamId]);
   const footerDays = Math.max(0, 7 - ((safeNum(league?.week, 1) - 1) % 7));
   const heroMeta = useMemo(() => {

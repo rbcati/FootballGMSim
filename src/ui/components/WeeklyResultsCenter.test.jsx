@@ -89,6 +89,35 @@ describe('WeeklyResultsCenter', () => {
     expect(onGameSelect.mock.calls[0][0]).toMatch(/2026_w2_/);
   });
 
+  it('uses latest simulation results when the schedule row is still scoreless', () => {
+    const onGameSelect = vi.fn();
+    const leagueWithScorelessCurrentWeek = {
+      ...league,
+      week: 2,
+      schedule: {
+        weeks: [
+          { week: 1, games: [{ gameId: '2026_w1_1_2', home: 1, away: 2, played: false }] },
+          { week: 2, games: [{ gameId: '2026_w2_2_3', home: 2, away: 3, played: false }] },
+        ],
+      },
+    };
+
+    render(
+      <WeeklyResultsCenter
+        league={leagueWithScorelessCurrentWeek}
+        lastResults={[{ gameId: '2026_w1_1_2', homeId: 1, awayId: 2, homeScore: 24, awayScore: 17 }]}
+        lastSimWeek={1}
+        onGameSelect={onGameSelect}
+        onNavigate={() => {}}
+      />,
+    );
+
+    expect(screen.getByTestId('user-game-result-card')).toBeTruthy();
+    expect(screen.getAllByText(/DAL 17 - 24 PHI|PHI 17 - 24 DAL|DAL 24 - 17 PHI/i).length).toBeGreaterThan(0);
+    fireEvent.click(within(screen.getByTestId('user-game-result-card')).getByRole('button', { name: /open.*game book/i }));
+    expect(onGameSelect).toHaveBeenCalledWith('2026_w1_1_2');
+  });
+
 
   it('renders decision review in Your Game and routes recommended action', () => {
     const onNavigate = vi.fn();
