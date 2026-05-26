@@ -293,6 +293,14 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
     userTeam?.capRoom,
   ]);
 
+  const rosterHealthBadge = useMemo(() => {
+    const roster = Array.isArray(userTeam?.roster) ? userTeam.roster : [];
+    const injuredCount = roster.filter((p) => safeNum(p?.injuryWeeksRemaining, 0) > 0).length;
+    if (injuredCount > 2 || hqTeamBuilder.capPressure === 'critical') return { label: 'Attention', tone: 'danger' };
+    if (injuredCount > 0 || hqTeamBuilder.capPressure === 'high') return { label: 'Monitor', tone: 'warning' };
+    return { label: 'Healthy', tone: 'ok' };
+  }, [userTeam?.roster, hqTeamBuilder.capPressure]);
+
   const culturePulse = useMemo(() => {
     const raw = league?.teamCulture?.[String(league?.userTeamId)] ?? null;
     const score = Number(raw?.score ?? TEAM_CULTURE_DEFAULT);
@@ -482,6 +490,43 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         ))}
       </div>
 
+      {/* ── Roster Health / Office Status (twin parallel status cards) ─────── */}
+      <div className="hq-twin-grid" aria-label="Team status overview" data-testid="hq-twin-status-grid">
+        <article
+          className={`hq-twin-card card tone-${rosterHealthBadge.tone}`}
+          data-testid="roster-health-card"
+          aria-label="Roster Health"
+        >
+          <div className="hq-twin-card__head">
+            <strong>Roster Health</strong>
+            <StatusChip label={rosterHealthBadge.label} tone={rosterHealthBadge.tone} />
+          </div>
+          <p className="hq-twin-card__stat">
+            {hqTeamBuilder.biggestNeed !== 'Needs more data' ? `Need: ${hqTeamBuilder.biggestNeed}` : 'Balanced'}
+          </p>
+          <p className="hq-twin-card__detail">{hqTeamBuilder.nextAction}</p>
+          <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Roster / Team Builder')}>
+            Team Builder
+          </button>
+        </article>
+
+        <article
+          className={`hq-twin-card card tone-${seasonPulse.mandateTone}`}
+          data-testid="office-status-card"
+          aria-label="Office Status"
+        >
+          <div className="hq-twin-card__head">
+            <strong>Office Status</strong>
+            <StatusChip label={`${seasonPulse.approval}%`} tone={seasonPulse.mandateTone} />
+          </div>
+          <p className="hq-twin-card__stat">{seasonPulse.capLabel} cap</p>
+          <p className="hq-twin-card__detail">{seasonPulse.pressureSummary}</p>
+          <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Front Office')}>
+            Front Office
+          </button>
+        </article>
+      </div>
+
       {/* ── League Pulse — weekly headlines (prominent, above passive stats) ── */}
       <LeaguePulseCard
         headlines={Array.isArray(league?.weeklyHeadlines) ? league.weeklyHeadlines : []}
@@ -526,38 +571,43 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
       <SectionCard title={command.weeklyIntelligence?.heading ?? 'Coordinator Brief'} subtitle="Matchup intel and priority actions for this week." variant="compact">
         <div className="app-hq-intel-list" role="list" aria-label="Weekly intelligence">
           {weeklyIntel.map((insight) => (
-            <p key={insight.id} role="listitem" className={`app-hq-intel-item tone-${insight.tone ?? 'info'}`}>{insight.text}</p>
+            <p key={insight.id} role="listitem" className={`app-hq-intel-item hq-intel-text--clamp tone-${insight.tone ?? 'info'}`}>{insight.text}</p>
           ))}
         </div>
         {(command.weeklyAgenda ?? []).length > 0 ? (
-          <div className="app-hq-weekly-priorities" role="list" aria-label="Weekly priorities" style={{ marginTop: 10 }}>
-            {(command.weeklyAgenda ?? []).map((item) => (
-              <article
-                key={item.id}
-                role="listitem"
-                className={`app-hq-impact-card tone-${item.severity === 'warning' ? 'warning' : 'info'}`}
-                style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}
-              >
-                {item.icon ? <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1.4 }}>{item.icon}</span> : null}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="app-hq-impact-card__head">
-                    <strong>{item.title}</strong>
-                    {item.severity === 'warning' ? <StatusChip label="Attention" tone="warning" /> : null}
+          <details className="hq-game-plan-accordion" style={{ marginTop: 10 }}>
+            <summary className="hq-game-plan-accordion__trigger">
+              Game plan indicators ({(command.weeklyAgenda ?? []).length}) ▾
+            </summary>
+            <div className="app-hq-weekly-priorities" role="list" aria-label="Weekly priorities" style={{ marginTop: 8 }}>
+              {(command.weeklyAgenda ?? []).map((item) => (
+                <article
+                  key={item.id}
+                  role="listitem"
+                  className={`app-hq-impact-card tone-${item.severity === 'warning' ? 'warning' : 'info'}`}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}
+                >
+                  {item.icon ? <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1.4 }}>{item.icon}</span> : null}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="app-hq-impact-card__head">
+                      <strong>{item.title}</strong>
+                      {item.severity === 'warning' ? <StatusChip label="Attention" tone="warning" /> : null}
+                    </div>
+                    <p style={{ margin: '2px 0 6px' }}>{item.description}</p>
+                    <button
+                      type="button"
+                      className="btn btn-sm app-hq-impact-card__cta"
+                      onClick={() => item.targetRoute && onNavigate?.(item.targetRoute)}
+                      disabled={!item.targetRoute}
+                      aria-label={`${item.title}: ${item.ctaLabel}`}
+                    >
+                      {item.ctaLabel}
+                    </button>
                   </div>
-                  <p style={{ margin: '2px 0 6px' }}>{item.description}</p>
-                  <button
-                    type="button"
-                    className="btn btn-sm app-hq-impact-card__cta"
-                    onClick={() => item.targetRoute && onNavigate?.(item.targetRoute)}
-                    disabled={!item.targetRoute}
-                    aria-label={`${item.title}: ${item.ctaLabel}`}
-                  >
-                    {item.ctaLabel}
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
+                </article>
+              ))}
+            </div>
+          </details>
         ) : null}
       </SectionCard>
 
@@ -758,7 +808,20 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         </div>
       ) : null}
       <div className="app-hq-sticky-advance">
-        <Button className="app-command-advance app-command-advance-gold" data-testid="advance-week-cta" onClick={handleAdvanceOrGate} disabled={busy || simulating} aria-label={`Advance Week — move from ${command.weekLabel} to next week`} title="Advance Week">
+        <Button
+          className="app-command-advance app-command-advance-gold"
+          data-testid="advance-week-cta"
+          onClick={handleAdvanceOrGate}
+          disabled={busy || simulating || commandSummary.criticalCount > 0}
+          aria-label={
+            busy || simulating
+              ? 'Advancing week…'
+              : commandSummary.criticalCount > 0
+                ? `Advance Week — ${commandSummary.criticalCount} item${commandSummary.criticalCount !== 1 ? 's' : ''} must be resolved first`
+                : `Advance Week — move from ${command.weekLabel} to next week`
+          }
+          title={commandSummary.criticalCount > 0 ? `Resolve ${commandSummary.criticalCount} open item${commandSummary.criticalCount !== 1 ? 's' : ''} to unlock` : 'Advance Week'}
+        >
           {busy || simulating ? 'Advancing…' : 'Advance Week'}
           <HQIcon name="arrowRight" size={16} />
         </Button>
