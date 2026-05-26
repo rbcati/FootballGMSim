@@ -3,8 +3,9 @@ import EmptyState from "./EmptyState.jsx";
 import { getSafeLeagueLeaderCategories } from "../../state/selectors.js";
 import { buildLeagueStatsHubModel } from "../utils/leagueStatsHub.js";
 import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from "../utils/dataBrowser.js";
+import { buildAdvancedStatsLeadersView, ADVANCED_LEADER_DEFS } from "../utils/advancedStatsLeadersViewModel.js";
 
-const TABS = ["Passing", "Rushing", "Receiving", "Tackles", "Sacks", "Interceptions", "Kicking"];
+const TABS = ["Passing", "Rushing", "Receiving", "Tackles", "Sacks", "Interceptions", "Kicking", "Advanced"];
 
 const CATEGORY_CONFIG = {
   Passing: {
@@ -111,6 +112,113 @@ const API_TAB_MAP = Object.freeze({
   Interceptions: { category: "defense", primaryKey: "interceptions", secondaryKey: "passesDefended" },
   // Kicking leaders currently come from local aggregation only.
 });
+
+function AdvancedLeadersPanel({ league, onPlayerSelect }) {
+  const [selectedMetric, setSelectedMetric] = useState(ADVANCED_LEADER_DEFS[0].statKey);
+
+  const archive = league?.playerSeasonStatsArchive ?? league?.meta?.playerSeasonStatsArchive ?? {};
+  const teams = useMemo(() => (Array.isArray(league?.teams) ? league.teams : []), [league?.teams]);
+  const allPlayers = useMemo(
+    () => teams.flatMap((t) => (Array.isArray(t?.roster) ? t.roster : []).map((p) => ({ ...p, teamId: p.teamId ?? t.id, teamAbbr: p.teamAbbr ?? t.abbr }))),
+    [teams],
+  );
+
+  const view = useMemo(
+    () => buildAdvancedStatsLeadersView({ archive, players: allPlayers, teams }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [archive, allPlayers, teams],
+  );
+
+  const currentDef = ADVANCED_LEADER_DEFS.find((d) => d.statKey === selectedMetric) ?? ADVANCED_LEADER_DEFS[0];
+  const rows = view.leaderboards[selectedMetric] ?? [];
+
+  if (!view.hasData) {
+    return (
+      <EmptyState
+        icon="📡"
+        title="No advanced leaders yet"
+        subtitle="Advanced leaderboards populate after rich games are simulated."
+      />
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gap: "var(--space-3)" }}>
+      <div
+        role="group"
+        aria-label="Select advanced metric"
+        style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
+      >
+        {ADVANCED_LEADER_DEFS.map(({ statKey, statLabel }) => (
+          <button
+            key={statKey}
+            type="button"
+            role="radio"
+            aria-checked={selectedMetric === statKey}
+            className={`standings-tab${selectedMetric === statKey ? " active" : ""}`}
+            onClick={() => setSelectedMetric(statKey)}
+            style={{ fontSize: 11, padding: "5px 10px" }}
+          >
+            {statLabel}
+          </button>
+        ))}
+      </div>
+
+      {rows.length === 0 ? (
+        <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", padding: "var(--space-4) 0" }}>
+          No players have recorded {currentDef.statLabel} yet.
+        </div>
+      ) : (
+        <div
+          className="table-wrapper"
+          style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}
+        >
+          <table
+            className="standings-table"
+            aria-label={`${currentDef.statLabel} leaders`}
+            style={{ width: "100%", minWidth: 420 }}
+          >
+            <thead>
+              <tr>
+                <th style={{ width: 48 }}>Rank</th>
+                <th>Player</th>
+                <th>Pos</th>
+                <th>Team</th>
+                <th style={{ textAlign: "right" }}>{currentDef.statLabel}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((entry) => (
+                <tr key={`${entry.playerId}-${entry.statKey}-${entry.rank}`} className="card-enter">
+                  <td>{entry.rank}</td>
+                  <td>
+                    <button
+                      className="btn btn-link"
+                      style={{ padding: 0, minHeight: 0 }}
+                      onClick={() =>
+                        onPlayerSelect?.({
+                          id: entry.playerId,
+                          name: entry.playerName,
+                          pos: entry.pos,
+                          teamName: entry.teamAbbr,
+                        })
+                      }
+                    >
+                      {entry.playerName}
+                    </button>
+                  </td>
+                  <td>{entry.pos}</td>
+                  <td>{entry.teamAbbr}</td>
+                  <td style={{ textAlign: "right" }}>{entry.value.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavigate }) {
   const [activeTab, setActiveTab] = useState("Passing");
@@ -248,69 +356,76 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
           </button>
         ))}
       </div>
-      <div style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>{sourceLabel}</div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <input aria-label="Search league leaders" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search player/team" style={{ minHeight: 32, flex: "1 1 180px" }} />
-        <select aria-label="Filter leaders by position" value={positionFilter} onChange={(e) => setPositionFilter(e.target.value)} style={{ minHeight: 32 }}>
-          <option value="ALL">All positions</option>
-          {positionOptions.map((pos) => <option key={pos} value={pos}>{pos}</option>)}
-        </select>
-        <select aria-label="Filter leaders by team" value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} style={{ minHeight: 32 }}>
-          <option value="ALL">All teams</option>
-          {teamOptions.map((team) => <option key={team} value={team}>{team}</option>)}
-        </select>
-        {hasActiveFilters ? <button type="button" onClick={resetFilters} style={{ minHeight: 32 }}>Reset filters</button> : null}
-      </div>
-      <div style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>{buildShowingLabel(visibleRows.length, rows.length, "leader")}</div>
-      <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
-        <table className="standings-table" style={{ width: "100%", minWidth: 680 }}>
-          <thead>
-            <tr>
-              <th style={{ width: 70 }}>Rank</th>
-              <th><button type="button" onClick={() => handleSort("name")}>Player{sort.key === "name" ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}</button></th>
-              <th><button type="button" onClick={() => handleSort("team")}>Team{sort.key === "team" ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}</button></th>
-              <th style={{ textAlign: "right" }}><button type="button" onClick={() => handleSort("primary")}>{config.primaryLabel}{sort.key === "primary" ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}</button></th>
-              <th style={{ textAlign: "right" }}>{config.secondaryLabel}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleRows.map((entry, index) => (
-              <tr
-                key={`${entry.player?.id ?? entry.player?.name ?? "player"}-${index}`}
-                className="card-enter"
-                style={entry.player?.isUserTeam ? { background: "color-mix(in srgb, var(--accent) 10%, transparent)" } : undefined}
-              >
-                <td>{index + 1}</td>
-                <td>
-                  <button
-                    className="btn btn-link"
-                    style={{ padding: 0, minHeight: 0 }}
-                    onClick={() => onPlayerSelect?.(entry.player)}
+
+      {activeTab === "Advanced" ? (
+        <AdvancedLeadersPanel league={league} onPlayerSelect={onPlayerSelect} />
+      ) : (
+        <>
+          <div style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>{sourceLabel}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <input aria-label="Search league leaders" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search player/team" style={{ minHeight: 32, flex: "1 1 180px" }} />
+            <select aria-label="Filter leaders by position" value={positionFilter} onChange={(e) => setPositionFilter(e.target.value)} style={{ minHeight: 32 }}>
+              <option value="ALL">All positions</option>
+              {positionOptions.map((pos) => <option key={pos} value={pos}>{pos}</option>)}
+            </select>
+            <select aria-label="Filter leaders by team" value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} style={{ minHeight: 32 }}>
+              <option value="ALL">All teams</option>
+              {teamOptions.map((team) => <option key={team} value={team}>{team}</option>)}
+            </select>
+            {hasActiveFilters ? <button type="button" onClick={resetFilters} style={{ minHeight: 32 }}>Reset filters</button> : null}
+          </div>
+          <div style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>{buildShowingLabel(visibleRows.length, rows.length, "leader")}</div>
+          <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
+            <table className="standings-table" style={{ width: "100%", minWidth: 680 }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 70 }}>Rank</th>
+                  <th><button type="button" onClick={() => handleSort("name")}>Player{sort.key === "name" ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}</button></th>
+                  <th><button type="button" onClick={() => handleSort("team")}>Team{sort.key === "team" ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}</button></th>
+                  <th style={{ textAlign: "right" }}><button type="button" onClick={() => handleSort("primary")}>{config.primaryLabel}{sort.key === "primary" ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}</button></th>
+                  <th style={{ textAlign: "right" }}>{config.secondaryLabel}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRows.map((entry, index) => (
+                  <tr
+                    key={`${entry.player?.id ?? entry.player?.name ?? "player"}-${index}`}
+                    className="card-enter"
+                    style={entry.player?.isUserTeam ? { background: "color-mix(in srgb, var(--accent) 10%, transparent)" } : undefined}
                   >
-                    {entry.player?.name ?? "—"}
-                  </button>
-                </td>
-                <td>{entry.player?.teamName ?? "—"}</td>
-                <td style={{ textAlign: "right" }}>{displayNumber(entry.primary)}</td>
-                <td style={{ textAlign: "right" }}>{entry.secondary ?? "—"}</td>
-              </tr>
-            ))}
-            {visibleRows.length === 0 && (
-              <tr>
-                <td colSpan={5} style={{ padding: 0 }}>
-                  <EmptyState
-                    icon="📊"
-                    title="No league leaders yet"
-                    subtitle="No players have logged enough stats this season."
-                    action="Open league"
-                    onAction={() => onNavigate?.("League")}
-                  />
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                    <td>{index + 1}</td>
+                    <td>
+                      <button
+                        className="btn btn-link"
+                        style={{ padding: 0, minHeight: 0 }}
+                        onClick={() => onPlayerSelect?.(entry.player)}
+                      >
+                        {entry.player?.name ?? "—"}
+                      </button>
+                    </td>
+                    <td>{entry.player?.teamName ?? "—"}</td>
+                    <td style={{ textAlign: "right" }}>{displayNumber(entry.primary)}</td>
+                    <td style={{ textAlign: "right" }}>{entry.secondary ?? "—"}</td>
+                  </tr>
+                ))}
+                {visibleRows.length === 0 && (
+                  <tr>
+                    <td colSpan={5} style={{ padding: 0 }}>
+                      <EmptyState
+                        icon="📊"
+                        title="No league leaders yet"
+                        subtitle="No players have logged enough stats this season."
+                        action="Open league"
+                        onAction={() => onNavigate?.("League")}
+                      />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }
