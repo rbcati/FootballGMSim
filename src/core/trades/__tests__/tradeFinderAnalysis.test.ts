@@ -148,4 +148,37 @@ describe('tradeFinderAnalysis target indexing', () => {
     expect(__internal.getTargetsFromIndex({ need: { pos: 'CB' }, targetIndex: index })).toHaveLength(5);
     expect(__internal.getTargetsFromIndex({ need: { pos: 'OL' }, targetIndex: index })).toHaveLength(5);
   });
+
+  it('legacy target candidate helper can reuse a prebuilt target index', () => {
+    const indexedTarget = makePlayer(301, 2, 'WR', 84);
+    const ignoredFullListTarget = makePlayer(302, 2, 'WR', 99);
+    const targetIndex = {
+      WR: [{ player: indexedTarget, valueScore: 120 }],
+    };
+
+    expect(__internal.getTargetCandidatesForNeed({
+      need: { pos: 'WR' },
+      leaguePlayers: [ignoredFullListTarget],
+      userTeamId: 1,
+      targetIndex,
+    }).map((p:any) => p.id)).toEqual([301]);
+  });
+});
+
+describe('tradeFinderAnalysis team roster indexing', () => {
+  it('groups league players by valid team id and ignores invalid/free-agent ids', () => {
+    const players = [
+      makePlayer(401, 2, 'WR', 80),
+      makePlayer(402, 2, 'CB', 79),
+      makePlayer(403, 3, 'OL', 78),
+      makePlayer(404, -1, 'QB', 99),
+      makePlayer(405, null as any, 'DL', 88),
+    ];
+
+    const index = __internal.buildPlayersByTeamIndex(players);
+
+    expect(__internal.getPlayersForTeamFromIndex(index, 2).map((p:any) => p.id)).toEqual([401, 402]);
+    expect(__internal.getPlayersForTeamFromIndex(index, 3).map((p:any) => p.id)).toEqual([403]);
+    expect(__internal.getPlayersForTeamFromIndex(index, -1)).toEqual([]);
+  });
 });
