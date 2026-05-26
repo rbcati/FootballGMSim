@@ -180,10 +180,11 @@ test.describe('Daily Regression Pass', () => {
             // Register dialog handler BEFORE confirming
             page.on('dialog', d => d.accept());
 
+            // The confirm button is now inside the ReleasePreviewModal
             await page.evaluate(() => {
-                const rows = document.querySelectorAll('.standings-table tbody tr, table tbody tr');
-                for(let row of rows) {
-                    const confirmBtn = Array.from(row.querySelectorAll('button')).find(b => b.innerText === 'Confirm');
+                const dialogs = document.querySelectorAll('[role="dialog"]');
+                for(let dialog of dialogs) {
+                    const confirmBtn = Array.from(dialog.querySelectorAll('button')).find(b => b.innerText === 'Confirm Release');
                     if (confirmBtn) { confirmBtn.click(); break; }
                 }
             });
