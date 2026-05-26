@@ -42,6 +42,8 @@ export const INITIAL_WORKER_STATE = {
   workerReady:  false,
   /** true if a save exists (worker confirmed on INIT) */
   hasSave:      false,
+  /** true once the first FULL_STATE baseline has been committed to the active state pool */
+  isHydrated:   false,
   /** the view-model slice from the worker */
   league:       null,   // { seasonId, year, week, phase, userTeamId, teams[] }
   /** results from the last simulated week */
@@ -94,7 +96,7 @@ export function workerReducer(state, action) {
     case 'WORKER_READY':
       return { ...state, workerReady: true, hasSave: action.hasSave ?? false, busy: false, lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType };
     case 'FULL_STATE':
-      return { ...state, busy: false, simulating: false, batchSim: null, league: action.payload, lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType };
+      return { ...state, busy: false, simulating: false, batchSim: null, isHydrated: true, league: action.payload, lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType };
     case 'STATE_UPDATE':
       // Also clear busy: send()-based actions (releasePlayer, setUserTeam)
       // respond with STATE_UPDATE and have no other mechanism to clear the flag.
@@ -283,7 +285,7 @@ export function useWorker() {
           dispatch({ type: 'FULL_STATE', payload, messageType: type });
           break;
         case toUI.STATE_UPDATE: {
-          if (!hasFullStateBaselineRef.current && payload?._isDelta) {
+          if (!hasFullStateBaselineRef.current) {
             worker.postMessage(buildMsg(toWorker.REQUEST_FULL_STATE));
             break;
           }
