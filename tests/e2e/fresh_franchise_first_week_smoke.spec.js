@@ -5,6 +5,67 @@ const SMOKE_TIMEOUT = 90000;
 
 test.setTimeout(120000);
 
+async function findLatestCompletedUserGameWeek(page, fallbackWeek) {
+  return page.evaluate((fallback) => {
+    const league = window?.state?.league ?? {};
+    const userTeamId = Number(league?.userTeamId);
+    const weeks = Array.isArray(league?.schedule?.weeks) ? league.schedule.weeks : [];
+    if (!Number.isFinite(userTeamId) || weeks.length === 0) return fallback;
+
+    const getGames = (week) => {
+      if (Array.isArray(week)) return week;
+      if (Array.isArray(week?.games)) return week.games;
+      return [];
+    };
+    const getTeamId = (team) => Number(team?.id ?? team);
+    const isCompleted = (game) => {
+      const awayScore = Number(game?.awayScore ?? game?.score?.away);
+      const homeScore = Number(game?.homeScore ?? game?.score?.home);
+      const status = String(game?.status ?? game?.state ?? '').toLowerCase();
+      return game?.played === true
+        || game?.completed === true
+        || game?.isFinal === true
+        || status === 'final'
+        || status === 'completed'
+        || (Number.isFinite(awayScore) && Number.isFinite(homeScore));
+    };
+    const isUserGame = (game) => getTeamId(game?.home) === userTeamId || getTeamId(game?.away) === userTeamId;
+
+    for (let index = weeks.length - 1; index >= 0; index -= 1) {
+      const week = weeks[index];
+      const weekNumber = Number(week?.week ?? week?.weekNumber ?? index + 1);
+      if (getGames(week).some((game) => isUserGame(game) && isCompleted(game))) {
+        return Number.isFinite(weekNumber) ? weekNumber : index + 1;
+      }
+    }
+    return fallback;
+  }, fallbackWeek);
+}
+
+async function revealLatestUserGameResult(page, fallbackWeek) {
+  const latestCompletedWeek = await findLatestCompletedUserGameWeek(page, fallbackWeek);
+  await expect(page.getByTestId('weekly-results')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+
+  const resultCard = page.getByTestId('user-game-result-card');
+  const nav = page.getByRole('group', { name: /Weekly results navigation/i });
+  const prevWeek = nav.getByRole('button', { name: /^Prev$/i });
+
+  const maxWeeksToScan = Math.max(1, Number(latestCompletedWeek) + 2);
+  for (let attempt = 0; attempt < maxWeeksToScan; attempt += 1) {
+    if (await resultCard.isVisible({ timeout: 1000 }).catch(() => false)) {
+      return latestCompletedWeek;
+    }
+    if (!(await prevWeek.isEnabled().catch(() => false))) break;
+    await prevWeek.click();
+  }
+
+  await expect(
+    resultCard,
+    `Expected a completed user game result in or before Week ${latestCompletedWeek}`,
+  ).toBeVisible({ timeout: 5000 });
+  return latestCompletedWeek;
+}
+
 test('fresh franchise first week smoke', async ({ page, context }) => {
   const consoleErrors = [];
   page.on('pageerror', (err) => consoleErrors.push(String(err)));
@@ -74,7 +135,7 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   // ── League schedule / weekly results should show the correct score ──────────
   await goToTab(page, 'weekly-results');
 
-  await expect(page.getByTestId('weekly-results')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  await revealLatestUserGameResult(page, startWeek);
   await expect(page.getByTestId('user-game-result-card')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('user-game-result-card')).toContainText(/\b\d+\s*-\s*\d+\b/);
 
@@ -98,6 +159,9 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
     await expect(page.getByTestId('player-profile')).toBeVisible({ timeout: SMOKE_TIMEOUT });
     await expect(page.getByTestId('player-profile-summary')).toBeVisible({ timeout: SMOKE_TIMEOUT });
     await expect(page.getByTestId('player-profile-game-impact')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+    await page.getByRole('button', { name: /^Career Stats$/i }).click();
+    await expect(page.getByTestId('player-profile-advanced-analytics')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+    await expect(page.getByTestId('player-profile-advanced-analytics')).toContainText(/Advanced Analytics/i);
     await page.getByTestId('player-profile-return-to-game-book').click();
     await expect(page.getByTestId('game-book')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   }

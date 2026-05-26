@@ -138,6 +138,35 @@ describe('FranchiseHQ', () => {
     expect(onNavigate).toHaveBeenCalledWith('Game Book:g-9');
   });
 
+  it('uses latest simulation results for the HQ last result while schedule is still scoreless', () => {
+    const league = {
+      ...baseLeague,
+      week: 10,
+      teams: baseLeague.teams.map((team) => team.id === 10 ? { ...team, wins: 7, losses: 3 } : team),
+      schedule: {
+        weeks: [
+          { week: 9, games: [{ id: 'g-9', home: { id: 11, abbr: 'DET' }, away: { id: 10, abbr: 'CHI' }, homeId: 11, awayId: 10, played: false }] },
+          { week: 10, games: [{ id: 'g-10', home: { id: 10, abbr: 'CHI' }, away: { id: 11, abbr: 'DET' }, played: false }] },
+        ],
+      },
+      gameById: {},
+    };
+
+    render(
+      <FranchiseHQ
+        league={league}
+        lastResults={[{ gameId: 'g-9', homeId: 11, awayId: 10, homeScore: 20, awayScore: 23 }]}
+        lastSimWeek={9}
+        onNavigate={() => {}}
+        onAdvanceWeek={() => {}}
+        busy={false}
+        simulating={false}
+      />,
+    );
+
+    expect(screen.getByTestId('hq-last-result').textContent).toMatch(/W.*23-20.*DET/i);
+  });
+
   it('parses Game Book route intents before tab normalization can reject them', () => {
     expect(parseGameBookDestination('Game Book:g-9')).toEqual({ type: 'gameBook', gameId: 'g-9' });
     expect(parseGameBookDestination({ type: 'gameBook', gameId: 'g-9' })).toEqual({ type: 'gameBook', gameId: 'g-9' });
