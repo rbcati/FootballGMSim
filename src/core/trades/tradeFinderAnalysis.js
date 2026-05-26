@@ -153,8 +153,21 @@ function buildExternalTargetIndex({ leaguePlayers = [], userTeamId, getValue = g
 function getTargetsFromIndex({ need, targetIndex, limit = 5 }) {
   return (targetIndex?.[need?.pos] ?? []).slice(0, limit).map((row) => row.player);
 }
-function getTargetCandidatesForNeed({ need, leaguePlayers, userTeamId }) {
-  return getTargetsFromIndex({ need, targetIndex: buildExternalTargetIndex({ leaguePlayers, userTeamId }) });
+function getTargetCandidatesForNeed({ need, leaguePlayers, userTeamId, targetIndex }) {
+  return getTargetsFromIndex({ need, targetIndex: targetIndex ?? buildExternalTargetIndex({ leaguePlayers, userTeamId }) });
+}
+function buildPlayersByTeamIndex(players = []) {
+  const index = new Map();
+  for (const player of Array.isArray(players) ? players : []) {
+    const teamId = player?.teamId == null ? -1 : num(player.teamId, -1);
+    if (teamId < 0) continue;
+    if (!index.has(teamId)) index.set(teamId, []);
+    index.get(teamId).push(player);
+  }
+  return index;
+}
+function getPlayersForTeamFromIndex(playersByTeam, teamId) {
+  return playersByTeam?.get(num(teamId, -1)) ?? [];
 }
 const classifyValueMatch = (delta) => (delta <= -35 ? 'favorable' : delta <= 25 ? 'fair' : delta <= 75 ? 'expensive' : 'unrealistic');
 const buildValueDeltaLabel = (d) => d <= -35 ? 'package may overpay' : d <= 25 ? 'near fair value' : d <= 75 ? 'slightly short on value' : 'far short on value';
@@ -332,6 +345,8 @@ export function buildTradeFinderAnalysis({ userTeam, league = {}, teams = [], us
   const currentSeason = league?.year ?? league?.currentSeason ?? null;
   const userRosterByPosition = groupPlayersByPosition(userRoster);
   const targetIndex = buildExternalTargetIndex({ leaguePlayers, userTeamId });
+  const leaguePlayersByTeam = buildPlayersByTeamIndex(leaguePlayers);
+  const targetContextByTeam = new Map();
   const targetNeeds = Object.values(buildNeedMap(userRoster, footballConfig, userRosterByPosition)).sort((a, b) => b.needScore - a.needScore).slice(0, 6);
   const { userSurplus, chipPool, nonStarterIds } = buildUserSurplus(userRoster, footballConfig, userRosterByPosition);
   const userPickChips = getTeamDraftPicks(userTeam, league).map((p) => buildDraftPickChip(p, userTeamId, currentSeason)).filter((p) => p?.pickId).sort((a,b)=>b.valueScore-a.valueScore);
@@ -340,15 +355,19 @@ export function buildTradeFinderAnalysis({ userTeam, league = {}, teams = [], us
   for (const need of targetNeeds.slice(0, 4)) {
     for (const target of getTargetsFromIndex({ need, targetIndex })) {
       const targetTeam = teamMap.get(num(target.teamId));
-      const targetRoster = leaguePlayers.filter((p) => num(p?.teamId, -1) === num(targetTeam?.id, -1));
-      const targetContext = getTeamContextSnapshot({
-        ...targetTeam,
-        roster: targetRoster,
-      }, { currentSeason });
-      const teamPosture = classifyTeamStrategicPosture({ ...targetTeam, roster: targetRoster }, { currentSeason });
-      // Build the target team's positional depth needs so buildIdea can apply
-      // need-based modifiers from the receiving (target) team's perspective.
-      const targetDepthNeeds = calculateTeamDepthDeficiencies(targetRoster, footballConfig);
+      const targetTeamId = num(targetTeam?.id ?? target.teamId, -1);
+      let cachedContext = targetContextByTeam.get(targetTeamId);
+      if (!cachedContext) {
+        const targetRoster = getPlayersForTeamFromIndex(leaguePlayersByTeam, targetTeamId);
+        const teamWithRoster = { ...targetTeam, roster: targetRoster };
+        cachedContext = {
+          targetContext: getTeamContextSnapshot(teamWithRoster, { currentSeason }),
+          teamPosture: classifyTeamStrategicPosture(teamWithRoster, { currentSeason }),
+          targetDepthNeeds: calculateTeamDepthDeficiencies(targetRoster, footballConfig),
+        };
+        targetContextByTeam.set(targetTeamId, cachedContext);
+      }
+      const { targetContext, teamPosture, targetDepthNeeds } = cachedContext;
       ideas.push(...generatePackageVariants({ need, target, chipPool, picks: userPickChips, nonStarterIds, targetTeam, cap, strategicContext: { teamPosture, targetContext, currentSeason, targetDepthNeeds } }));
     }
   }
@@ -358,6 +377,9 @@ export function buildTradeFinderAnalysis({ userTeam, league = {}, teams = [], us
 
 export const __internal = Object.freeze({
   buildExternalTargetIndex,
+  buildPlayersByTeamIndex,
+  getPlayersForTeamFromIndex,
   getTargetsFromIndex,
+  getTargetCandidatesForNeed,
   groupPlayersByPosition,
 });
