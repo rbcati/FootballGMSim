@@ -491,6 +491,8 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
       </div>
 
       {/* ── Roster Health / Office Status (twin parallel status cards) ─────── */}
+      {/* Data from legacy "Next Action" and "Coordinator Brief" panels is     */}
+      {/* compressed inline here — those single-column sections are removed.   */}
       <div className="hq-twin-grid" aria-label="Team status overview" data-testid="hq-twin-status-grid">
         <article
           className={`hq-twin-card card tone-${rosterHealthBadge.tone}`}
@@ -505,9 +507,48 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
             {hqTeamBuilder.biggestNeed !== 'Needs more data' ? `Need: ${hqTeamBuilder.biggestNeed}` : 'Balanced'}
           </p>
           <p className="hq-twin-card__detail">{hqTeamBuilder.nextAction}</p>
-          <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Roster / Team Builder')}>
-            Team Builder
-          </button>
+          {/* Last result + record — replaces the removed Next Action panel */}
+          {lastGame ? (
+            <p className="hq-twin-card__detail hq-twin-card__divider" data-testid="hq-last-result">
+              {lastGameDisplay.heroLine} · {formatRecordInline(command.teamRecord)}
+            </p>
+          ) : null}
+          {/* Top coordinator intel item — replaces the removed Coordinator Brief */}
+          {weeklyIntel.length > 0 ? (
+            <p className="hq-twin-card__detail hq-intel-text--clamp">{weeklyIntel[0].text}</p>
+          ) : null}
+          {/* Compact game-plan accordion with 2-column button grid */}
+          {(command.weeklyAgenda ?? []).length > 0 ? (
+            <details className="hq-game-plan-accordion">
+              <summary className="hq-game-plan-accordion__trigger">
+                Plan ({(command.weeklyAgenda ?? []).length}) ▾
+              </summary>
+              <div className="hq-game-plan-accordion__grid">
+                {(command.weeklyAgenda ?? []).slice(0, 4).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => item.targetRoute && onNavigate?.(item.targetRoute)}
+                    disabled={!item.targetRoute}
+                    aria-label={`${item.title}: ${item.ctaLabel}`}
+                  >
+                    {item.title}
+                  </button>
+                ))}
+              </div>
+            </details>
+          ) : null}
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
+            <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Roster / Team Builder')}>
+              Team Builder
+            </button>
+            {hqNextAction.route ? (
+              <button type="button" className="btn btn-sm" onClick={() => onNavigate?.(hqNextAction.route)}>
+                {hqNextAction.label}
+              </button>
+            ) : null}
+          </div>
         </article>
 
         <article
@@ -521,6 +562,14 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           </div>
           <p className="hq-twin-card__stat">{seasonPulse.capLabel} cap</p>
           <p className="hq-twin-card__detail">{seasonPulse.pressureSummary}</p>
+          {/* Next opponent + record — replaces the removed Next Action panel */}
+          <p className="hq-twin-card__detail hq-twin-card__divider">
+            Next: {postAdvanceNote.nextOpponent} · {formatRecordInline(command.teamRecord)}
+          </p>
+          {/* Second coordinator intel item — replaces the removed Coordinator Brief */}
+          {weeklyIntel.length > 1 ? (
+            <p className="hq-twin-card__detail hq-intel-text--clamp">{weeklyIntel[1].text}</p>
+          ) : null}
           <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Front Office')}>
             Front Office
           </button>
@@ -536,82 +585,7 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         onViewAll={() => onNavigate?.('News')}
       />
 
-      {lastGame ? (
-        <SectionCard title="Next Action" subtitle="Postgame handoff from the latest completed week." variant="info">
-          <div className="app-hq-next-action-panel" data-testid="hq-next-action">
-            <article data-testid="hq-last-result">
-              <span>Last result</span>
-              <strong>{lastGameDisplay.heroLine}</strong>
-              <small>{postAdvanceNote.takeaway}</small>
-            </article>
-            <article>
-              <span>Current record</span>
-              <strong>{formatRecordInline(command.teamRecord)}</strong>
-              <small>{postAdvanceNote.recordDelta}</small>
-            </article>
-            <article>
-              <span>Next scheduled game</span>
-              <strong>{postAdvanceNote.nextOpponent}</strong>
-              <small>{nextOpponentDisplay.detail}</small>
-            </article>
-            <article>
-              <span>Recommended action</span>
-              <strong>{hqNextAction.label}</strong>
-              <small>{hqNextAction.reason}</small>
-              {hqNextAction.route ? (
-                <button type="button" className="btn btn-sm" onClick={() => onNavigate?.(hqNextAction.route)}>{hqNextAction.label}</button>
-              ) : (
-                <button type="button" className="btn btn-sm" onClick={handleAdvanceOrGate} disabled={busy || simulating}>{busy || simulating ? 'Advancing…' : 'Advance Week'}</button>
-              )}
-            </article>
-          </div>
-        </SectionCard>
-      ) : null}
-
-      <SectionCard title={command.weeklyIntelligence?.heading ?? 'Coordinator Brief'} subtitle="Matchup intel and priority actions for this week." variant="compact">
-        <div className="app-hq-intel-list" role="list" aria-label="Weekly intelligence">
-          {weeklyIntel.map((insight) => (
-            <p key={insight.id} role="listitem" className={`app-hq-intel-item hq-intel-text--clamp tone-${insight.tone ?? 'info'}`}>{insight.text}</p>
-          ))}
-        </div>
-        {(command.weeklyAgenda ?? []).length > 0 ? (
-          <details className="hq-game-plan-accordion" style={{ marginTop: 10 }}>
-            <summary className="hq-game-plan-accordion__trigger">
-              Game plan indicators ({(command.weeklyAgenda ?? []).length}) ▾
-            </summary>
-            <div className="app-hq-weekly-priorities" role="list" aria-label="Weekly priorities" style={{ marginTop: 8 }}>
-              {(command.weeklyAgenda ?? []).map((item) => (
-                <article
-                  key={item.id}
-                  role="listitem"
-                  className={`app-hq-impact-card tone-${item.severity === 'warning' ? 'warning' : 'info'}`}
-                  style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}
-                >
-                  {item.icon ? <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1.4 }}>{item.icon}</span> : null}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="app-hq-impact-card__head">
-                      <strong>{item.title}</strong>
-                      {item.severity === 'warning' ? <StatusChip label="Attention" tone="warning" /> : null}
-                    </div>
-                    <p style={{ margin: '2px 0 6px' }}>{item.description}</p>
-                    <button
-                      type="button"
-                      className="btn btn-sm app-hq-impact-card__cta"
-                      onClick={() => item.targetRoute && onNavigate?.(item.targetRoute)}
-                      disabled={!item.targetRoute}
-                      aria-label={`${item.title}: ${item.ctaLabel}`}
-                    >
-                      {item.ctaLabel}
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </details>
-        ) : null}
-      </SectionCard>
-
-
+      {/* Next Action and Coordinator Brief panels removed — data compressed into hq-twin-grid above */}
 
       <SectionCard title="Season Pulse" subtitle="Pressure, form, and roster leverage at a glance." variant="compact">
         <div className="app-hq-pulse-grid" data-testid="season-pulse">

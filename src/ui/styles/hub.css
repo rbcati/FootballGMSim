@@ -632,10 +632,10 @@
 }
 
 .hq-twin-card {
-  padding: var(--space-3);
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .hq-twin-card__head {
@@ -697,6 +697,21 @@
   display: none;
 }
 
+/* Twin card divider row — separates compressed sections inside a card */
+.hq-twin-card__divider {
+  border-top: 1px solid var(--hairline);
+  padding-top: 4px;
+  margin-top: 2px !important;
+}
+
+/* Game-plan accordion — compact 2-column button grid for tight viewports */
+.hq-game-plan-accordion__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 4px;
+}
+
 /* Mobile Adjustments */
 @media (max-width: 768px) {
   .team-summary-nav-card {
@@ -752,5 +767,26 @@
 
   .hq-twin-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* 375px High-Density Viewport — maximise vertical real estate */
+@media (max-width: 375px) {
+  .hq-twin-card {
+    padding: 6px 8px;
+    gap: 2px;
+  }
+  .hq-twin-grid {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .hq-twin-card__head {
+    margin-bottom: 1px;
+  }
+  .hq-game-plan-accordion {
+    padding-top: 6px;
+  }
+  .hq-game-plan-accordion__trigger {
+    padding: 2px 0;
   }
 }

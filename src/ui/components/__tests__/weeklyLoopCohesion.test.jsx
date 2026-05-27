@@ -231,11 +231,13 @@ describe('FranchiseHQ command center layout', () => {
     expect(html).toContain('Advance Week');
   });
 
-  it('renders Coordinator Brief section', () => {
+  it('renders Roster Health and Office Status cards (replaced Coordinator Brief section)', () => {
     const html = renderToString(
       <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
     );
-    expect(html).toContain('Coordinator Brief');
+    // "Coordinator Brief" section removed — intel compressed into hq-twin-grid cards
+    expect(html).toContain('Roster Health');
+    expect(html).toContain('Office Status');
   });
 
   it('renders Season Pulse section', () => {
