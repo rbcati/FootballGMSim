@@ -60,9 +60,9 @@ describe('FranchiseHQ', () => {
     expect(screen.getByRole('heading', { name: /week 10/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /advance week/i })).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /advance week/i })).toHaveLength(1);
-    expect(screen.getByRole('heading', { name: /weekly command hub/i })).toBeTruthy();
-    expect(screen.getByText(/must handle/i)).toBeTruthy();
-    expect(screen.getByText(/tactical edge/i)).toBeTruthy();
+    // Weekly Command Hub and Game Plan Impact pruned from HQ command deck
+    expect(screen.queryByRole('heading', { name: /weekly command hub/i })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /game plan impact/i })).toBeNull();
     // "Coordinator Brief" section removed — intel is compressed into Roster Health & Office Status cards
     expect(document.querySelector('[data-testid="roster-health-card"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="office-status-card"]')).not.toBeNull();
@@ -71,18 +71,25 @@ describe('FranchiseHQ', () => {
     expect(seasonPulse.getByText(/momentum/i)).toBeTruthy();
     expect(seasonPulse.getByText(/roster lever/i)).toBeTruthy();
     expect(seasonPulse.getByText(/film room/i)).toBeTruthy();
-    expect(screen.getAllByRole('heading', { name: /game plan impact/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/home matchup vs det/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/ratings are tightly clustered/i)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /tactical edge: review game plan/i })).toBeTruthy();
+    // League Views quick links present
+    const linkRow = screen.getByTestId('hq-league-destination-links');
+    expect(within(linkRow).getByRole('button', { name: /view full stats/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /open standings/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /open league news/i })).toBeTruthy();
   });
 
-  it('routes weekly command hub action through onNavigate', () => {
+  it('does not render pruned Weekly Command Hub or Game Plan Impact sections', () => {
     const onNavigate = vi.fn();
-    const view = render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
+    render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
 
-    fireEvent.click(within(view.container).getAllByRole('button', { name: /tactical edge: review game plan/i })[0]);
-    expect(onNavigate).toHaveBeenCalledWith('Game Plan');
+    // Weekly Command Hub removed — purpose covered by Actions Required + Quick Actions
+    expect(screen.queryByRole('heading', { name: /weekly command hub/i })).toBeNull();
+    // Game Plan Impact removed — strategy details belong in Game Plan / Weekly Prep tabs
+    expect(screen.queryByRole('heading', { name: /game plan impact/i })).toBeNull();
+    // Quick Actions (action tiles) still present for the key navigation paths
+    expect(screen.getByTestId('hq-league-destination-links')).toBeTruthy();
+    expect(screen.getByTestId('hq-actions-required')).toBeTruthy();
+    expect(screen.getByTestId('advance-week-cta')).toBeTruthy();
   });
 
   it('routes season pulse roster action through onNavigate', () => {
@@ -207,7 +214,8 @@ describe('FranchiseHQ', () => {
 
     expect(screen.getByText(/no completed game yet/i)).toBeTruthy();
     expect(screen.getByText(/no opponent is locked yet/i)).toBeTruthy();
-    expect(screen.getAllByRole('heading', { name: /game plan impact/i }).length).toBeGreaterThan(0);
+    // Game Plan Impact pruned — no longer rendered on HQ
+    expect(screen.queryByRole('heading', { name: /game plan impact/i })).toBeNull();
     expect(screen.getByText(/no future games on file/i)).toBeTruthy();
     expect(screen.getAllByText(/0-0 · 0 0/i).length).toBeGreaterThan(0);
   });

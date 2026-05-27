@@ -247,7 +247,7 @@ describe('FranchiseHQ command center layout', () => {
     expect(html).toContain('Season Pulse');
   });
 
-  it('renders background sections with collapsible inner bodies', () => {
+  it('renders background sections with collapsible inner bodies; Weekly Command Hub and Game Plan Impact absent', () => {
     const html = renderToString(
       <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
     );
@@ -258,6 +258,10 @@ describe('FranchiseHQ command center layout', () => {
     expect(html).toContain('View full stats');
     // Collapsible summary triggers are present inside section bodies
     expect(html).toContain('app-hq-background-section__inner');
+    // Weekly Command Hub and Game Plan Impact pruned — passive deep panels removed from HQ
+    expect(html).not.toContain('Weekly Command Hub');
+    expect(html).not.toContain('Game Plan Impact');
+    expect(html).not.toContain('Translate coordinator intel');
   });
 
   it('renders advance-week-cta data-testid', () => {
