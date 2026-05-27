@@ -8,15 +8,13 @@ import AdvanceReadinessGate from './AdvanceReadinessGate.jsx';
 import { selectFranchiseHQViewModel } from '../utils/franchiseCommandCenter.js';
 import { buildWeeklyCommandHub } from '../utils/weeklyCommandHub.js';
 import { buildCommandCenterSummary } from '../utils/weeklyHubLayout.js';
-import { rankLeaguePulseItems } from '../../core/leaguePulse.js';
 import { classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../../core/teamCulture.js';
 import { buildRecentCultureEvents } from '../../core/broadcastNarrative.js';
-import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda, CompactNewsCard } from './ScreenSystem.jsx';
+import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda } from './ScreenSystem.jsx';
 import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildGameBookDestination } from '../utils/managementScreenRouting.js';
 import ChronicleHeadlineBanner from './ChronicleHeadlineBanner.tsx';
-import LeaguePulseCard from './LeaguePulseCard.jsx';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -187,11 +185,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
   }, [command.leagueNews, command.leaguePulse, command.postGameReview, command.teamRecord, lastGame, lastGameDisplay.overviewLine, nextOpponentDisplay.isHome, nextOpponentDisplay.opponentAbbr]);
 
   const decisionReview = useMemo(() => command.weeklyDecisionImpact ?? null, [command.weeklyDecisionImpact]);
-  const leaguePulseItems = useMemo(
-    () => rankLeaguePulseItems(league?.leaguePulse || command.leaguePulse || [], league?.userTeamId).slice(0, 5),
-    [command.leagueNews, command.leaguePulse],
-  );
-
   const hqTeamBuilder = useMemo(() => {
     const roster = Array.isArray(userTeam?.roster) ? userTeam.roster : [];
     const byPos = ['QB','RB','WR','TE','OL','DL','LB','CB','S'].map((pos) => ({ pos, players: roster.filter((p) => p?.pos === pos).sort((a,b)=>safeNum(b?.ovr)-safeNum(a?.ovr)) }));
@@ -390,6 +383,17 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
 
         <p className="app-hq-hero-footnote">Sim to Sunday • {footerDays} days until kickoff</p>
       </section>
+      <section
+        className="card"
+        style={{ padding: 'var(--space-2)', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}
+        aria-label="League quick links"
+        data-testid="hq-league-destination-links"
+      >
+        <strong style={{ fontSize: '0.85em', opacity: 0.9 }}>League views:</strong>
+        <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('League Leaders')}>View full stats</button>
+        <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Standings')}>Open standings</button>
+        <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('News')}>Open league news</button>
+      </section>
 
       {/* ── GM Weekly Loop Hint (early-game guide, weeks 1–4) ──────────── */}
       {safeNum(league?.week, 1) <= 4 ? (
@@ -576,15 +580,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         </article>
       </div>
 
-      {/* ── League Pulse — weekly headlines (prominent, above passive stats) ── */}
-      <LeaguePulseCard
-        headlines={Array.isArray(league?.weeklyHeadlines) ? league.weeklyHeadlines : []}
-        currentWeek={safeNum(league?.week, 1)}
-        currentYear={safeNum(league?.year, 0)}
-        onNavigate={onNavigate}
-        onViewAll={() => onNavigate?.('News')}
-      />
-
       {/* Next Action and Coordinator Brief panels removed — data compressed into hq-twin-grid above */}
 
       <SectionCard title="Season Pulse" subtitle="Pressure, form, and roster leverage at a glance." variant="compact">
@@ -748,25 +743,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
             <div><span>News Note</span><strong>{postAdvanceNote.note}</strong></div>
             <div><span>Review Routes</span><div className="app-hq-opponent-chips">{postAdvanceNote.actions.length ? postAdvanceNote.actions.map((action) => <button key={action.targetRoute} type="button" onClick={() => onNavigate?.(action.targetRoute)}>{action.label}</button>) : <em>No review actions</em>}</div></div>
             <div><span>Next 3</span><div className="app-hq-opponent-chips">{nextOpponents.length ? nextOpponents.map((chip) => <em key={chip}>{chip}</em>) : <em>No future games on file</em>}</div></div>
-          </div>
-        </details>
-      </SectionCard>
-
-      {/* ── League Pulse — overflow stories (collapsed background context) ── */}
-      {/* ── League Pulse overflow (collapsed background context) ─────────── */}
-      <SectionCard
-        title="League Pulse"
-        subtitle="Franchise events and league stories this week."
-        variant="compact"
-        actions={<button type="button" className="btn btn-sm" onClick={() => onNavigate?.('League Pulse')}>Open full pulse</button>}
-      >
-        <details className="app-hq-background-section__inner">
-          <summary className="app-hq-section-expand">Show league stories ▾</summary>
-          <div className="app-news-compact-list" style={{ marginTop: 8 }}>
-            {leaguePulseItems.map((item) => (
-              <CompactNewsCard key={item.id} title={item.headline} subtitle={item.detail} />
-            ))}
-            {!leaguePulseItems.length ? <EmptyState title="No league pulse yet." body="Advance to generate weekly stories." /> : null}
           </div>
         </details>
       </SectionCard>

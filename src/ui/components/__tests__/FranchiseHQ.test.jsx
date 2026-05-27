@@ -105,7 +105,7 @@ describe('FranchiseHQ', () => {
     expect(onNavigate).toHaveBeenCalled();
   });
 
-  it('renders League Pulse preview and opens the full News timeline', () => {
+  it('does not render duplicated passive League Pulse panel and keeps league destination links', () => {
     const onNavigate = vi.fn();
     render(
       <FranchiseHQ
@@ -122,11 +122,13 @@ describe('FranchiseHQ', () => {
       />,
     );
 
-    const pulseSection = screen.getByRole('heading', { name: /league pulse/i }).closest('section');
-    expect(pulseSection).toBeTruthy();
-    expect(within(pulseSection).getByText(/rookie hype is building/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /open full pulse/i }));
-    expect(onNavigate).toHaveBeenCalledWith('League Pulse');
+    expect(screen.queryByRole('heading', { name: /league pulse/i })).toBeNull();
+    const linkRow = screen.getByTestId('hq-league-destination-links');
+    expect(within(linkRow).getByRole('button', { name: /view full stats/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /open standings/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /open league news/i })).toBeTruthy();
+    fireEvent.click(within(linkRow).getByRole('button', { name: /open league news/i }));
+    expect(onNavigate).toHaveBeenCalledWith('News');
   });
 
   it('renders Review Game Book as the postgame next action and emits a Game Book route', () => {
