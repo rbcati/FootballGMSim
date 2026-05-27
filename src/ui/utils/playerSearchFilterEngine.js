@@ -2,17 +2,6 @@
 // Internally we use a leaner aggregation to keep the hot filter loop tight (O(N) goal).
 export { buildPlayerAdvancedStatsView } from './playerAdvancedStatsViewModel.js';
 
-const ADVANCED_STAT_KEYS = [
-  'targets',
-  'drops',
-  'battedPasses',
-  'coverageTargets',
-  'coverageCompletionsAllowed',
-  'receptionsAllowed',
-  'sacksAllowed',
-  'sacksMade',
-];
-
 // Maps each public criteria key → [archiveStatKey, comparison operator]
 const CRITERIA_MAP = {
   minTargets:                    ['targets',                    '>='],
@@ -36,11 +25,16 @@ const CRITERIA_MAP = {
 /** All supported criteria keys, exported for form generation. */
 export const CRITERIA_KEYS = Object.keys(CRITERIA_MAP);
 
-function emptyStats() {
-  const s = {};
-  for (const k of ADVANCED_STAT_KEYS) s[k] = 0;
-  return s;
-}
+/**
+ * Shared frozen sentinel returned for players absent from the archive.
+ * Reusing a single object avoids per-player heap allocation on the miss path,
+ * which keeps the hot filter loop lean when scanning large rosters (2 000+ players).
+ */
+const EMPTY_STATS = Object.freeze({
+  targets: 0, drops: 0, battedPasses: 0,
+  coverageTargets: 0, coverageCompletionsAllowed: 0,
+  receptionsAllowed: 0, sacksAllowed: 0, sacksMade: 0,
+});
 
 function safeNum(v) {
   const n = Number(v ?? 0);
@@ -65,17 +59,21 @@ function compileThresholds(criteria) {
 
 /**
  * Read a single season's advanced stats for a player without mutating the archive.
- * Falls back to all-zero stats when the player or season is absent (sparse saves, rookies).
+ *
+ * Returns the raw archive entry directly — passesThresholds reads via `?? 0` so
+ * any keys absent from a sparse entry safely default to zero without a copy-out
+ * allocation. Falls back to the shared EMPTY_STATS sentinel (no heap allocation)
+ * when the player or requested season is missing from the archive.
  */
 function getSeasonStats(playerId, archive, season) {
   const pid = String(playerId ?? '');
   const playerYears = archive[pid];
-  if (!playerYears || typeof playerYears !== 'object') return emptyStats();
+  if (!playerYears || typeof playerYears !== 'object') return EMPTY_STATS;
   const raw = playerYears[String(season)];
-  if (!raw || typeof raw !== 'object') return emptyStats();
-  const out = emptyStats();
-  for (const k of ADVANCED_STAT_KEYS) out[k] = safeNum(raw[k]);
-  return out;
+  if (!raw || typeof raw !== 'object') return EMPTY_STATS;
+  // Return the raw archive entry directly — passesThresholds uses `?? 0` for
+  // any missing stat keys, so no intermediate copy object is needed.
+  return raw;
 }
 
 // Internal keys on the sparse store that are not season buckets.
@@ -85,31 +83,46 @@ const INTERNAL_KEYS = new Set(['__meta', 'meta', 'archivedGameIds']);
  * Aggregate all seasons into career totals directly from the archive.
  * Avoids the overhead of buildPlayerAdvancedStatsView (seasons array, sort, spread),
  * which matters when scanning 2,000+ players in the filter loop.
- * Falls back to all-zero stats for players absent from the archive.
+ *
+ * Uses local numeric variables for accumulation (registers/stack rather than
+ * repeated object property writes) and constructs the result object only once at
+ * the end — a meaningful win in V8's JIT-optimised hot path.
+ *
+ * Falls back to the shared EMPTY_STATS sentinel for players absent from the archive
+ * (no heap allocation on the miss path).
  */
 function getCareerStats(playerId, archive) {
   const pid = String(playerId ?? '');
   const playerYears = archive[pid];
-  if (!playerYears || typeof playerYears !== 'object') return emptyStats();
+  if (!playerYears || typeof playerYears !== 'object') return EMPTY_STATS;
 
-  const career = emptyStats();
+  // Accumulate into local numeric variables; object is constructed once at the end.
+  let targets = 0, drops = 0, battedPasses = 0, coverageTargets = 0,
+      coverageCompletionsAllowed = 0, receptionsAllowed = 0, sacksAllowed = 0, sacksMade = 0;
+
   // eslint-disable-next-line guard-for-in
   for (const key in playerYears) {
     if (INTERNAL_KEYS.has(key)) continue;
     const y = playerYears[key];
     if (!y || typeof y !== 'object') continue;
-    career.targets                    += safeNum(y.targets);
-    career.drops                      += safeNum(y.drops);
-    career.battedPasses               += safeNum(y.battedPasses);
-    career.coverageTargets            += safeNum(y.coverageTargets);
-    career.coverageCompletionsAllowed += safeNum(y.coverageCompletionsAllowed);
-    career.receptionsAllowed          += safeNum(y.receptionsAllowed);
-    career.sacksAllowed               += safeNum(y.sacksAllowed);
-    career.sacksMade                  += safeNum(y.sacksMade);
+    targets                    += safeNum(y.targets);
+    drops                      += safeNum(y.drops);
+    battedPasses               += safeNum(y.battedPasses);
+    coverageTargets            += safeNum(y.coverageTargets);
+    coverageCompletionsAllowed += safeNum(y.coverageCompletionsAllowed);
+    receptionsAllowed          += safeNum(y.receptionsAllowed);
+    sacksAllowed               += safeNum(y.sacksAllowed);
+    sacksMade                  += safeNum(y.sacksMade);
   }
-  return career;
+
+  return { targets, drops, battedPasses, coverageTargets,
+           coverageCompletionsAllowed, receptionsAllowed, sacksAllowed, sacksMade };
 }
 
+/**
+ * Check a stats object (or raw archive entry) against the compiled threshold list.
+ * Uses `?? 0` to handle undefined keys from sparse raw entries without extra allocation.
+ */
 function passesThresholds(stats, thresholds) {
   for (const { statKey, op, threshold } of thresholds) {
     const val = stats[statKey] ?? 0;
