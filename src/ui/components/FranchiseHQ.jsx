@@ -6,11 +6,10 @@ import { evaluateWeeklyContext } from '../utils/weeklyContext.js';
 import { buildAdvanceReadinessGate } from '../utils/advanceReadinessGate.js';
 import AdvanceReadinessGate from './AdvanceReadinessGate.jsx';
 import { selectFranchiseHQViewModel } from '../utils/franchiseCommandCenter.js';
-import { buildWeeklyCommandHub } from '../utils/weeklyCommandHub.js';
 import { buildCommandCenterSummary } from '../utils/weeklyHubLayout.js';
 import { classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../../core/teamCulture.js';
 import { buildRecentCultureEvents } from '../../core/broadcastNarrative.js';
-import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda } from './ScreenSystem.jsx';
+import { EmptyState, StatusChip, ActionTile, SectionCard } from './ScreenSystem.jsx';
 import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildGameBookDestination } from '../utils/managementScreenRouting.js';
@@ -168,7 +167,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
 
   const capSpace = command.teamOverview?.find((item) => item.label === 'Cap Space')?.value ?? '—';
   const weeklyIntel = useMemo(() => command.weeklyIntelligence?.insights ?? [], [command.weeklyIntelligence?.insights]);
-  const gamePlanImpactCards = useMemo(() => command.gamePlanImpact?.recommendedAdjustments ?? [], [command.gamePlanImpact?.recommendedAdjustments]);
   const postAdvanceNote = useMemo(() => {
     const review = command.postGameReview ?? null;
     const recordDelta = lastGame ? `Record now ${formatRecordInline(command.teamRecord)}` : 'Advance to generate game feedback';
@@ -196,21 +194,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
       nextAction: weakest ? `Review ${weakest.pos} starter/depth plan` : 'Review roster needs',
     };
   }, [userTeam]);
-
-
-
-  const weeklyCommandHub = useMemo(() => buildWeeklyCommandHub({
-    league,
-    userTeam,
-    command,
-    teamBuilder: hqTeamBuilder,
-    weeklyDecisionImpact: decisionReview,
-    gamePlanImpact: command.gamePlanImpact,
-    weeklyIntelligence: command.weeklyIntelligence,
-    nextGame: command.nextGame,
-    lastGame,
-  }), [league, userTeam, command, hqTeamBuilder, decisionReview, lastGame]);
-
 
   const hqNextAction = useMemo(() => {
     const roster = Array.isArray(userTeam?.roster) ? userTeam.roster : [];
@@ -649,51 +632,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           </article>
         </div>
       </SectionCard>
-
-      <SectionCard title="Weekly Command Hub" subtitle="Ranked actions for this week before you advance." variant="compact">
-        <div className="app-hq-intel-list">
-          {(weeklyCommandHub.sections ?? []).map((section) => (
-            <div key={section.key} className="app-hq-impact-card" style={{ marginBottom: 8 }}>
-              <div className="app-hq-impact-card__head">
-                <strong>{section.title}</strong>
-                <StatusChip label={`${section.actions.length} action${section.actions.length === 1 ? '' : 's'}`} tone={section.tone === 'danger' ? 'warning' : 'info'} />
-              </div>
-              {section.actions.length ? section.actions.map((action) => (
-                <button
-                  key={action.id}
-                  type="button"
-                  className="btn btn-sm app-hq-impact-card__cta"
-                  style={{ width: '100%', minHeight: 44, textAlign: 'left', marginTop: 6 }}
-                  disabled={!action.route}
-                  onClick={() => action.route && onNavigate?.(action.route)}
-                  aria-label={`${section.title}: ${action.label}`}
-                >
-                  <strong>{action.label}</strong>
-                  <span style={{ display: 'block', opacity: 0.85 }}>{action.detail}</span>
-                </button>
-              )) : <p className="app-hq-intel-item tone-info">No actions right now.</p>}
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-
-      <SectionCard title={command.gamePlanImpact?.heading ?? 'Game Plan Impact'} subtitle={command.gamePlanImpact?.summary ?? 'Translate coordinator intel into fast football actions.'} variant="compact">
-        <div className="app-hq-impact-list" role="list" aria-label="Game plan impact recommendations">
-          {gamePlanImpactCards.map((item) => (
-            <article key={item.id} role="listitem" className={`app-hq-impact-card tone-${item.tag?.tone ?? 'info'}`}>
-              <div className="app-hq-impact-card__head">
-                <strong>{item.title}</strong>
-                <StatusChip label={item.tag?.label ?? `${item.confidenceLevel ?? 'medium'} confidence`} tone={item.tag?.tone ?? 'warning'} />
-              </div>
-              <p>{item.explanation}</p>
-              <button type="button" className="btn btn-sm app-hq-impact-card__cta" onClick={() => onNavigate?.(item.targetRoute)} aria-label={`${item.title}: ${item.ctaLabel}`}>
-                {item.ctaLabel}
-              </button>
-            </article>
-          ))}
-        </div>
-      </SectionCard>
-
 
       {lineupToast ? <p className="app-inline-toast" role="status" aria-live="polite">{lineupToast}</p> : null}
 
