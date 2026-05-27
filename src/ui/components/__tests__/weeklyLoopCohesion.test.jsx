@@ -278,3 +278,75 @@ describe('FranchiseHQ command center layout', () => {
     )).not.toThrow();
   });
 });
+
+describe('FranchiseHQ V3 command hierarchy cleanup — server-render smoke', () => {
+  it('does not contain gm-loop-hint at week 1 (Weekly Loop section removed in V3)', () => {
+    const earlyLeague = { ...league, week: 1 };
+    const html = renderToString(
+      <FranchiseHQ league={earlyLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    expect(html).not.toContain('data-testid="gm-loop-hint"');
+    expect(html).not.toContain('Weekly loop:');
+    expect(html).not.toContain('hq-loop-hint');
+  });
+
+  it('does not contain gm-loop-hint at week 3 (mid early-season)', () => {
+    const earlyLeague = { ...league, week: 3 };
+    const html = renderToString(
+      <FranchiseHQ league={earlyLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    expect(html).not.toContain('data-testid="gm-loop-hint"');
+  });
+
+  it('still contains exactly one advance-week-cta data-testid — no secondary inline CTA', () => {
+    const html = renderToString(
+      <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    // Count occurrences of the canonical testid
+    const matches = (html.match(/data-testid="advance-week-cta"/g) ?? []).length;
+    expect(matches).toBe(1);
+  });
+
+  it('no-blockers branch does not emit an inline Advance Week button separate from the sticky CTA', () => {
+    // Offseason → gate short-circuits, no blockers → "No blockers" branch renders
+    const offseasonLeague = { ...league, phase: 'offseason_resign', schedule: { weeks: [] } };
+    const html = renderToString(
+      <FranchiseHQ league={offseasonLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    // "No blockers" status text appears
+    expect(html).toContain('No blockers');
+    // Only the single sticky CTA contains data-testid="advance-week-cta"
+    const ctaCount = (html.match(/data-testid="advance-week-cta"/g) ?? []).length;
+    expect(ctaCount).toBe(1);
+  });
+
+  it('Decision Review and Operations Snapshot use collapsed details elements — no open attribute', () => {
+    const html = renderToString(
+      <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    // Neither collapsed section should have an open attribute
+    // Confirm the class exists (sections are present)
+    expect(html).toContain('app-hq-background-section__inner');
+    // SSR renders <details> without the open attribute when not set
+    expect(html).not.toMatch(/<details[^>]*\bopen\b/);
+  });
+
+  it('Quick Actions tile labels render: Game Plan, Set Lineup, Training, Scout Opponent', () => {
+    const html = renderToString(
+      <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    expect(html).toContain('Game Plan');
+    expect(html).toContain('Set Lineup');
+    expect(html).toContain('Training');
+    expect(html).toContain('Scout Opponent');
+  });
+
+  it('League Views compact row renders all three link labels', () => {
+    const html = renderToString(
+      <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
+    );
+    expect(html).toContain('View full stats');
+    expect(html).toContain('Open standings');
+    expect(html).toContain('Open league news');
+  });
+});

@@ -124,24 +124,35 @@ describe('WeeklyHub — GM weekly loop hint', () => {
   });
 });
 
-// ─── Phase 3: GM Weekly Loop Hint — FranchiseHQ ──────────────────────────────
+// ─── Phase 3: GM Weekly Loop Hint — FranchiseHQ (V3: removed, Quick Actions cover navigation) ──
 
-describe('FranchiseHQ — GM weekly loop hint', () => {
+describe('FranchiseHQ — GM weekly loop hint (V3: loop section removed)', () => {
   beforeEach(() => {
     if (typeof window !== 'undefined' && window.localStorage) window.localStorage.clear();
   });
   afterEach(cleanup);
 
-  it('renders the loop hint when week is 1 (early game)', () => {
+  // V3: The weekly loop hint block has been removed from FranchiseHQ.
+  // Quick Action tiles now serve as the canonical first-week navigation path.
+
+  it('never renders gm-loop-hint — Weekly Loop section removed in V3', () => {
     const league = makeLeague({ week: 1 });
     render(
       <FranchiseHQ league={league} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
     );
-    expect(screen.getByTestId('gm-loop-hint')).toBeTruthy();
-    expect(screen.getByText(/weekly loop/i)).toBeTruthy();
+    expect(screen.queryByTestId('gm-loop-hint')).toBeNull();
+    expect(screen.queryByText(/weekly loop:/i)).toBeNull();
   });
 
-  it('hides the loop hint when week is 5 (past early-game window)', () => {
+  it('does not render gm-loop-hint at week 3 either', () => {
+    const league = makeLeague({ week: 3 });
+    render(
+      <FranchiseHQ league={league} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
+    );
+    expect(screen.queryByTestId('gm-loop-hint')).toBeNull();
+  });
+
+  it('does not render gm-loop-hint at week 5 (was already hidden before)', () => {
     const league = makeLeague({ week: 5 });
     render(
       <FranchiseHQ league={league} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
@@ -149,44 +160,36 @@ describe('FranchiseHQ — GM weekly loop hint', () => {
     expect(screen.queryByTestId('gm-loop-hint')).toBeNull();
   });
 
-  it('loop hint navigates to Roster/Depth via onNavigate', () => {
+  it('Quick Action tiles navigate to Game Plan replacing the old loop step', () => {
     const onNavigate = vi.fn();
     const league = makeLeague({ week: 2 });
     render(
       <FranchiseHQ league={league} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /1\) roster\/depth/i }));
-    expect(onNavigate).toHaveBeenCalledWith('Team:Roster / Depth');
+    // The Game Plan action tile is the canonical route — find it among all "game plan" buttons
+    const gamePlanBtns = screen.getAllByRole('button', { name: /game plan/i });
+    // Click the first one (the action tile)
+    fireEvent.click(gamePlanBtns[0]);
+    expect(onNavigate).toHaveBeenCalled();
   });
 
-  it('loop hint navigates to Game Plan via onNavigate', () => {
-    const onNavigate = vi.fn();
-    const league = makeLeague({ week: 3 });
-    render(
-      <FranchiseHQ league={league} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
-    );
-    // Multiple "Game Plan" buttons may exist (actionTiles + loop hint)
-    const buttons = screen.getAllByRole('button', { name: /2\) game plan/i });
-    fireEvent.click(buttons[0]);
-    expect(onNavigate).toHaveBeenCalledWith('Game Plan');
-  });
-
-  it('loop hint navigates to Weekly Prep via onNavigate', () => {
+  it('Quick Action tiles navigate to Scout Opponent replacing the old Check Actions step', () => {
     const onNavigate = vi.fn();
     const league = makeLeague({ week: 1 });
     render(
       <FranchiseHQ league={league} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /3\) check actions/i }));
-    expect(onNavigate).toHaveBeenCalledWith('Weekly Prep');
+    // Scout Opponent tile covers the scouting/prep check route
+    const scoutBtns = screen.getAllByRole('button', { name: /scout opponent/i });
+    fireEvent.click(scoutBtns[0]);
+    expect(onNavigate).toHaveBeenCalled();
   });
 
-  it('does not add a second Advance Week button when loop hint is shown', () => {
+  it('only one Advance Week button present — no secondary inline CTA from loop hint', () => {
     const league = makeLeague({ week: 1, injuries: true });
     render(
       <FranchiseHQ league={league} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
     );
-    // Should still have exactly 1 advance week button (sticky footer only when actions present)
     expect(screen.getAllByRole('button', { name: /advance week/i })).toHaveLength(1);
   });
 });
