@@ -8,6 +8,7 @@ import { derivePlayerContractFinancials } from '../utils/contractFormatting.js';
 import { deriveTeamCapSnapshot, formatMoneyM } from '../utils/numberFormatting.js';
 import { summarizeRosterDevelopment } from '../utils/playerDevelopmentSignals.js';
 import { TeamIdentityBadge } from './HQVisuals.jsx';
+import { buildStaffPhilosophySummary } from '../../core/staff/staffPhilosophy.js';
 
 const TEAM_SECTIONS = ['Overview', 'Roster / Depth', 'Contracts', 'Development', 'Injuries'];
 const CRITICAL_POSITION_MIN = { QB: 2, RB: 3, WR: 5, TE: 3, OL: 8, DL: 8, LB: 6, CB: 5, S: 4, K: 1, P: 1 };
@@ -66,6 +67,7 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
   const injuredPlayers = useMemo(() => roster.filter((p) => Number(p?.injury?.gamesRemaining ?? p?.injuryWeeksRemaining ?? 0) > 0), [roster]);
   const developmentSummary = useMemo(() => summarizeRosterDevelopment(roster, new Map()), [roster]);
   const pressureGroups = useMemo(() => getPositionGroupPressure(roster), [roster]);
+  const staffPhilosophy = useMemo(() => buildStaffPhilosophySummary(team ?? {}), [team]);
 
   useEffect(() => {
     const next = normalizeSection(initialSection);
@@ -164,6 +166,22 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
                   <button type="button" className="btn btn-sm btn-secondary" onClick={() => setSubtab('Roster / Depth')}>Open depth</button>
                 </CompactListRow>
               ))}
+            </div>
+          </SectionCard>
+
+
+          <SectionCard title="Staff philosophy" subtitle="Read-only coaching identity snapshot." variant="compact">
+            <div className="app-row-stack">
+              <CompactListRow
+                title={staffPhilosophy.headCoachName}
+                subtitle={`${staffPhilosophy.offensiveLabel} · ${staffPhilosophy.defensiveLabel}`}
+                meta={<StatusChip label="Read-only" tone="info" />}
+              />
+              <CompactInsightCard
+                title={staffPhilosophy.traitLabels.length ? staffPhilosophy.traitLabels.join(' · ') : 'No tagged traits'}
+                subtitle={staffPhilosophy.flavor}
+                tone="team"
+              />
             </div>
           </SectionCard>
 
