@@ -253,7 +253,9 @@ describe('FranchiseHQ command center layout', () => {
     );
     // These sections remain as SectionCards (heading preserved) with collapsible inner details
     expect(html).toContain('Operations Snapshot');
-    expect(html).toContain('League Pulse');
+    expect(html).not.toContain('League Pulse');
+    expect(html).toContain('League views:');
+    expect(html).toContain('View full stats');
     // Collapsible summary triggers are present inside section bodies
     expect(html).toContain('app-hq-background-section__inner');
   });
