@@ -63,7 +63,9 @@ describe('FranchiseHQ', () => {
     expect(screen.getByRole('heading', { name: /weekly command hub/i })).toBeTruthy();
     expect(screen.getByText(/must handle/i)).toBeTruthy();
     expect(screen.getByText(/tactical edge/i)).toBeTruthy();
-    expect(screen.getByRole('heading', { name: /coordinator brief/i })).toBeTruthy();
+    // "Coordinator Brief" section removed — intel is compressed into Roster Health & Office Status cards
+    expect(document.querySelector('[data-testid="roster-health-card"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="office-status-card"]')).not.toBeNull();
     const seasonPulse = within(screen.getByTestId('season-pulse'));
     expect(seasonPulse.getByText(/owner mandate/i)).toBeTruthy();
     expect(seasonPulse.getByText(/momentum/i)).toBeTruthy();
@@ -131,9 +133,11 @@ describe('FranchiseHQ', () => {
     const onNavigate = vi.fn();
     render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
 
-    const nextAction = within(screen.getByTestId('hq-next-action'));
-    expect(nextAction.getAllByText('Review Game Book').length).toBeGreaterThan(0);
-    fireEvent.click(nextAction.getByRole('button', { name: /review game book/i }));
+    // "Next Action" panel removed — Game Book access is now via the Film Room card in Season Pulse
+    const seasonPulse = screen.getByTestId('season-pulse');
+    const filmRoomBtn = within(seasonPulse).getByRole('button', { name: /open game book/i });
+    expect(filmRoomBtn).toBeTruthy();
+    fireEvent.click(filmRoomBtn);
 
     expect(onNavigate).toHaveBeenCalledWith('Game Book:g-9');
   });
@@ -173,12 +177,13 @@ describe('FranchiseHQ', () => {
     expect(normalizeManagementDestination('Game Book:g-9').tab).toBe('Game Book');
   });
 
-  it('opens Game Detail from the HQ Review Game Book next action and returns to Franchise HQ', async () => {
+  it('opens Game Detail from the HQ Film Room card and returns to Franchise HQ', async () => {
     window.matchMedia = window.matchMedia ?? (() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     render(<LeagueDashboard league={baseLeague} actions={{ getDashboardLeaders: vi.fn(() => Promise.resolve({ league: {}, team: {} })) }} busy={false} simulating={false} onAdvanceWeek={() => {}} />);
 
-    const nextAction = within(screen.getByTestId('hq-next-action'));
-    fireEvent.click(nextAction.getByRole('button', { name: /review game book/i }));
+    // "Next Action" panel removed — Game Book access is now via the Film Room card in Season Pulse
+    const seasonPulse = screen.getByTestId('season-pulse');
+    fireEvent.click(within(seasonPulse).getByRole('button', { name: /open game book/i }));
 
     expect(await screen.findByTestId('game-book')).toBeTruthy();
     expect(screen.getByTestId('game-book-final-score').textContent).toContain('CHI 23 - 20 DET');
