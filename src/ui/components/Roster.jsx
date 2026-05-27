@@ -476,6 +476,7 @@ function RosterTable({
   teamId,
   team,
   week,
+  league,
   onRefetch,
   onPlayerSelect,
   phase,
@@ -532,8 +533,13 @@ function RosterTable({
   const hasActiveFilters = Boolean(search.trim()) || posFilter !== "ALL" || advancedFilters.length > 0;
   const resetBrowseFilters = () => { setSearch(""); setPosFilter("ALL"); setAdvancedFilters([]); };
 
+  // Guard against spurious re-renders: only call setPosFilter when the resolved
+  // value has actually changed (prevents cascade when the parent re-renders with
+  // a structurally-identical but reference-distinct initialFilter string).
   useEffect(() => {
-    if (initialFilter) setPosFilter(initialFilter);
+    if (initialFilter) {
+      setPosFilter(prev => (prev === initialFilter ? prev : initialFilter));
+    }
   }, [initialFilter]);
 
   const handleSort = (key) => {
@@ -572,9 +578,12 @@ function RosterTable({
   const toggleBulkPlayer = (playerId) => {
     setBulkSelectedIds((prev) => prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]);
   };
+  // Use a Set for O(1) look-ups — Array.includes is O(n) and rebuilds on every
+  // render tick when bulkSelectedIds grows large.
   const selectedPlayers = useMemo(() => {
+    const selectedSet = new Set(bulkSelectedIds);
     const seen = new Set();
-    return players.filter((p) => bulkSelectedIds.includes(p.id) && !seen.has(p.id) && seen.add(p.id));
+    return players.filter((p) => selectedSet.has(p.id) && !seen.has(p.id) && seen.add(p.id));
   }, [players, bulkSelectedIds]);
   const confirmBulkRelease = async (dedupedPlayers) => {
     const ids = [...new Set((dedupedPlayers ?? []).map((p) => p?.id).filter(Boolean))];
@@ -1942,8 +1951,12 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFil
     else { setSortKey(key); setSortDir("desc"); }
   };
 
+  // Same bail-out guard as RosterTable — functional setter skips re-render when
+  // the incoming filter value equals the current one.
   useEffect(() => {
-    if (initialFilter) setPosFilter(initialFilter);
+    if (initialFilter) {
+      setPosFilter(prev => (prev === initialFilter ? prev : initialFilter));
+    }
   }, [initialFilter]);
 
   const SORT_OPTIONS = [
@@ -2162,17 +2175,24 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
     fetchRoster();
   }, [fetchRoster]);
 
+  // Sync view mode and filter from incoming prop changes.
+  // Functional setters let React bail out cheaply when the resolved value hasn't
+  // actually changed — this is the primary guard against the cascade that fires
+  // whenever a parent re-renders with a structurally-identical but
+  // reference-distinct initialState object (e.g. an inline object literal).
+  // The previously-separate effect for initialViewMode is folded in here to
+  // eliminate the double-trigger on every mount.
   useEffect(() => {
     const next = normalizeInitialRosterState(initialState, initialViewMode);
-    setInitialFilter(next?.safeFilter ?? null);
-    if (next.safeView) setViewMode(next.safeView);
-  }, [initialState, initialViewMode]);
-
-  useEffect(() => {
-    if (["cards", "table", "depth"].includes(initialViewMode)) {
-      setViewMode(initialViewMode);
+    const nextFilter = next?.safeFilter ?? null;
+    const nextView = next.safeView || null;
+    if (nextFilter !== null) {
+      setInitialFilter(prev => (prev === nextFilter ? prev : nextFilter));
     }
-  }, [initialViewMode]);
+    if (nextView) {
+      setViewMode(prev => (prev === nextView ? prev : nextView));
+    }
+  }, [initialState, initialViewMode]);
 
   const handleReorderDepthChart = useCallback((posKey, draggedPlayerId, targetSlotIdx) => {
       const row = DEPTH_ROWS.find((r) => r.key === posKey);
@@ -2210,33 +2230,31 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
       }
   }, [players, actions, fetchRoster]);
 
-  if (teamId == null) {
-    return (
-      <div
-        style={{
-          padding: "var(--space-8)",
-          textAlign: "center",
-          color: "var(--text-muted)",
-        }}
-      >
-        No team selected.
-      </div>
-    );
-  }
+  // ── Depth-chart derivation (memoized so references are stable across renders)
+  // Placed ABOVE the early-return guard to satisfy the Rules of Hooks — hooks
+  // must never be called conditionally.
+  const existingDepthAssignments = useMemo(() => {
+    const result = {};
+    for (const row of DEPTH_ROWS) {
+      result[row.key] = players
+        .filter((p) => (p?.depthChart?.rowKey ? p.depthChart.rowKey === row.key : row.match.includes(p.pos)))
+        .sort((a, b) => (a?.depthChart?.order ?? a.depthOrder ?? 999) - (b?.depthChart?.order ?? b.depthOrder ?? 999))
+        .map((p) => p.id);
+    }
+    return result;
+  }, [players]);
 
-  const capSnapshot = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
-  const capUsed = capSnapshot.capUsed;
-  const capTotal = capSnapshot.capTotal;
-  const capRoom = capSnapshot.capRoom;
-  const existingDepthAssignments = {};
-  for (const row of DEPTH_ROWS) {
-    existingDepthAssignments[row.key] = players
-      .filter((p) => (p?.depthChart?.rowKey ? p.depthChart.rowKey === row.key : row.match.includes(p.pos)))
-      .sort((a, b) => (a?.depthChart?.order ?? a.depthOrder ?? 999) - (b?.depthChart?.order ?? b.depthOrder ?? 999))
-      .map((p) => p.id);
-  }
-  const depthAssignments = autoBuildDepthChart(players, existingDepthAssignments);
-  const depthAlerts = depthWarnings(depthAssignments, players);
+  const depthAssignments = useMemo(
+    () => autoBuildDepthChart(players, existingDepthAssignments),
+    [players, existingDepthAssignments],
+  );
+
+  const depthAlerts = useMemo(
+    () => depthWarnings(depthAssignments, players),
+    [depthAssignments, players],
+  );
+
+  // ── Readiness model — stable reference because depthAssignments is now memoized
   const readiness = useMemo(() => deriveRosterReadinessModel({
     league,
     team,
@@ -2244,20 +2262,8 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
     source: initialState?.source ?? null,
     assignments: depthAssignments,
   }), [league, team, players, initialState?.source, depthAssignments]);
-  const unassignedDepthCount = players.filter((p) => !p?.depthChart?.rowKey).length;
-  const expiringCount = players.filter((p) => getContractYearsLeft(p) <= 1).length;
-  const injuredCount = players.filter((p) => isInjuredPlayer(p)).length;
-  const starterCount = players.filter((p) => isStarterPlayer(p)).length;
-  const depthCount = Math.max(0, players.length - starterCount);
-  const youngDevCount = players.filter((p) => Number(p?.age ?? 40) <= 24 && Number(p?.ovr ?? 0) >= 65).length;
 
-  const avgOvr = players.length
-    ? Math.round(
-        players.reduce((s, p) => s + (p.ovr ?? 70), 0) / players.length,
-      )
-    : 0;
-
-  const isOverLimit = league?.phase === "preseason" && players.length > 53;
+  // ── Team intelligence ────────────────────────────────────────────────────────
   const teamIntel = useMemo(
     () => buildTeamIntelligence({ ...team, roster: players }, { week: league?.week ?? 1 }),
     [team, players, league?.week],
@@ -2272,11 +2278,16 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
     return map;
   }, [players, team, chemistry, league?.week]);
   const developmentSummary = useMemo(() => summarizeRosterDevelopment(players, moraleById), [players, moraleById]);
-  const urgentNeed = teamBuilder?.positionGroups?.find((g) => g.needLevel === 'urgent') ?? teamBuilder?.positionGroups?.find((g) => g.needLevel === 'thin') ?? null;
-  const nextAction = teamBuilder?.recommendedActions?.[0] ?? null;
 
-  const statusBadgeVariant = readiness.status === 'ready' ? 'secondary' : readiness.status === 'blocked' ? 'destructive' : 'outline';
+  // ── Scheme name — memoized so it doesn't create a new string-value each render
+  const schemeName = useMemo(() => {
+    const ut = league?.teams?.find(t => t.id === league?.userTeamId);
+    const offId = ut?.strategies?.offSchemeId;
+    const defId = ut?.strategies?.defSchemeId;
+    return OFFENSIVE_SCHEMES[offId]?.name || DEFENSIVE_SCHEMES[defId]?.name || 'scheme';
+  }, [league]);
 
+  // ── Auto-build depth chart callback ──────────────────────────────────────────
   const handleAutoBuildDepthChart = useCallback(async () => {
     const updates = DEPTH_ROWS.flatMap((row) => (readiness.assignments?.[row.key] ?? []).map((playerId, index) => ({
       playerId,
@@ -2309,6 +2320,43 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
       markWeeklyPrepStep(league, 'lineupChecked', true);
     }
   }, [actions, fetchRoster, league, readiness.assignments, readiness.safeToMarkLineupChecked]);
+
+  // ── Early-return guard (no hooks beyond this point) ──────────────────────────
+  if (teamId == null) {
+    return (
+      <div
+        style={{
+          padding: "var(--space-8)",
+          textAlign: "center",
+          color: "var(--text-muted)",
+        }}
+      >
+        No team selected.
+      </div>
+    );
+  }
+
+  const capSnapshot = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
+  const capUsed = capSnapshot.capUsed;
+  const capTotal = capSnapshot.capTotal;
+  const capRoom = capSnapshot.capRoom;
+  const unassignedDepthCount = players.filter((p) => !p?.depthChart?.rowKey).length;
+  const expiringCount = players.filter((p) => getContractYearsLeft(p) <= 1).length;
+  const injuredCount = players.filter((p) => isInjuredPlayer(p)).length;
+  const starterCount = players.filter((p) => isStarterPlayer(p)).length;
+  const depthCount = Math.max(0, players.length - starterCount);
+  const youngDevCount = players.filter((p) => Number(p?.age ?? 40) <= 24 && Number(p?.ovr ?? 0) >= 65).length;
+
+  const avgOvr = players.length
+    ? Math.round(
+        players.reduce((s, p) => s + (p.ovr ?? 70), 0) / players.length,
+      )
+    : 0;
+
+  const isOverLimit = league?.phase === "preseason" && players.length > 53;
+  const urgentNeed = teamBuilder?.positionGroups?.find((g) => g.needLevel === 'urgent') ?? teamBuilder?.positionGroups?.find((g) => g.needLevel === 'thin') ?? null;
+  const nextAction = teamBuilder?.recommendedActions?.[0] ?? null;
+  const statusBadgeVariant = readiness.status === 'ready' ? 'secondary' : readiness.status === 'blocked' ? 'destructive' : 'outline';
 
   return (
     <div id="roster">
@@ -2569,18 +2617,14 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
           teamId={teamId}
           team={team}
           week={league?.week}
+          league={league}
           onRefetch={fetchRoster}
           onPlayerSelect={handlePlayerSelect}
           phase={league?.phase}
           chemistry={chemistry}
           initialFilter={initialFilter}
           salaryCap={league?.salaryCap ?? 200_000_000}
-          schemeName={(() => {
-            const ut = league?.teams?.find(t => t.id === league.userTeamId);
-            const offId = ut?.strategies?.offSchemeId;
-            const defId = ut?.strategies?.defSchemeId;
-            return OFFENSIVE_SCHEMES[offId]?.name || DEFENSIVE_SCHEMES[defId]?.name || 'scheme';
-          })()}
+          schemeName={schemeName}
         />
       )}
 
@@ -2618,12 +2662,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
                   <Button variant="outline" size="sm" onClick={() => onNavigate?.('HQ')}>Back to HQ</Button>
                 </div>
               </div>
-              <DepthChartView players={players} onReorder={handleReorderDepthChart} schemeName={(() => {
-                const ut = league?.teams?.find(t => t.id === league.userTeamId);
-                const offId = ut?.strategies?.offSchemeId;
-                const defId = ut?.strategies?.defSchemeId;
-                return OFFENSIVE_SCHEMES[offId]?.name || DEFENSIVE_SCHEMES[defId]?.name || 'scheme';
-              })()} />
+              <DepthChartView players={players} onReorder={handleReorderDepthChart} schemeName={schemeName} />
             </>
           )}
         </CardContent></Card>
