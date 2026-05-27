@@ -214,6 +214,13 @@ const isDev = !!import.meta?.env?.DEV;
 // messages can be reduced to deltas instead of full object graphs.
 let _lastSentViewState = null;
 
+// ── State Freshness Token ─────────────────────────────────────────────────────
+// Monotonic counter incremented on every FULL_STATE emission (new league, load,
+// reset, phase hydration).  Injected into both FULL_STATE and STATE_UPDATE
+// payloads so the UI can detect and drop STATE_UPDATE packets that pre-date the
+// last accepted FULL_STATE baseline (stale-packet guard).
+let _stateEpoch = 0;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -281,23 +288,30 @@ function post(type, payload = {}, id = null) {
     // Save full payload (not the delta) as the new baseline BEFORE transfer
     // so next call can diff against a complete view state.
     _lastSentViewState = payload;
+    // Stamp the current epoch so the UI can guard against stale deltas.
+    delta._stateEpoch = _stateEpoch;
     data = delta;
 
   } else if (type === toUI.FULL_STATE) {
+    // Increment the epoch on every authoritative full-state emission so the UI
+    // can detect STATE_UPDATE packets that pre-date this new baseline.
+    _stateEpoch += 1;
     // Record as delta baseline so the first STATE_UPDATE can diff against it.
     _lastSentViewState = payload;
 
     const teamsArr = payload.teams ?? [];
     const allPlayers = teamsArr.flatMap(t => (Array.isArray(t.roster) ? t.roster : []));
+    // Start building the outgoing data object (spread so we never mutate payload).
+    data = { ...payload, _stateEpoch };
     if (allPlayers.length > 0) {
       const rm = buildRatingMatrix(allPlayers);
-      data = { ...payload, _ratingMatrix: { buffer: rm.buffer, playerIds: rm.playerIds } };
+      data._ratingMatrix = { buffer: rm.buffer, playerIds: rm.playerIds };
       transferList.push(rm.buffer.buffer);
       data._ratingMatrix.buffer = null;
     }
     if (payload.schedule) {
       const sb = buildScheduleBuffer(payload.schedule);
-      data = data === payload ? { ...payload, _scheduleBuffer: sb } : { ...data, _scheduleBuffer: sb };
+      data._scheduleBuffer = sb;
       transferList.push(sb.buffer);
       data._scheduleBuffer = null;
     }

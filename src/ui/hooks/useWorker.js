@@ -72,6 +72,33 @@ function isWeeklyResultsPhase(phase) {
   return phase === 'preseason' || phase === 'regular' || phase === 'playoffs';
 }
 
+/**
+ * Returns false only when the incoming STATE_UPDATE carries a `_stateEpoch`
+ * that is strictly lower than the last accepted epoch, indicating the packet
+ * pre-dates the most recent FULL_STATE baseline (e.g. a delayed delta from a
+ * previous load or advance-week cycle that arrived after a new FULL_STATE).
+ *
+ * Safety rules:
+ *  - Missing epoch (legacy payload, no `_stateEpoch`) → always accepted.
+ *  - No baseline yet (lastAcceptedEpoch === 0)          → always accepted.
+ *  - Equal epoch                                        → accepted (same session).
+ *  - Higher epoch                                       → accepted (defensive).
+ *  - Strictly lower epoch                               → DROPPED (stale packet).
+ *
+ * @param {object} payload           Raw STATE_UPDATE payload from the worker
+ * @param {number} lastAcceptedEpoch Epoch value from the last accepted FULL_STATE
+ * @returns {boolean} true → accept, false → drop
+ */
+export function shouldAcceptStateUpdate(payload = {}, lastAcceptedEpoch = 0) {
+  const incomingEpoch = payload?._stateEpoch ?? null;
+  // Legacy payloads without epoch: always accept to preserve existing behaviour.
+  if (incomingEpoch === null) return true;
+  // No baseline established yet: accept everything.
+  if (lastAcceptedEpoch <= 0) return true;
+  // Drop only clearly stale packets (incoming epoch < last accepted).
+  return incomingEpoch >= lastAcceptedEpoch;
+}
+
 export function shouldAcceptBootScopedPayload(payload = {}, activeBootRequestId = null, ignoredBootRequestIds = []) {
   const requestId = payload?.bootRequestId ?? null;
   if (!requestId) return true;
@@ -225,6 +252,12 @@ export function useWorker() {
   const activeBootRequestIdRef = useRef(null);
   const ignoredBootRequestIdsRef = useRef(new Set());
   const hasFullStateBaselineRef = useRef(false);
+  /**
+   * Last _stateEpoch value from an accepted FULL_STATE.
+   * Used by the stale-packet guard to drop STATE_UPDATE messages whose epoch
+   * is lower than the most recently accepted authoritative snapshot.
+   */
+  const lastAcceptedEpochRef = useRef(0);
 
   // ── Spawn worker once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -278,6 +311,12 @@ export function useWorker() {
           if (!shouldAcceptBootScopedPayload(payload, activeBootRequestIdRef.current, ignoredBootRequestIdsRef.current)) {
             break;
           }
+          // Record the epoch from this authoritative snapshot.  Any subsequent
+          // STATE_UPDATE with a lower epoch will be treated as stale and dropped.
+          // Reset tracking on every accepted FULL_STATE (new league, load, reset).
+          if (payload?._stateEpoch != null) {
+            lastAcceptedEpochRef.current = payload._stateEpoch;
+          }
           if (payload?.bootRequestId && activeBootRequestIdRef.current === payload.bootRequestId) {
             activeBootRequestIdRef.current = null;
           }
@@ -286,6 +325,13 @@ export function useWorker() {
           break;
         case toUI.STATE_UPDATE: {
           if (!hasFullStateBaselineRef.current) {
+            worker.postMessage(buildMsg(toWorker.REQUEST_FULL_STATE));
+            break;
+          }
+          // Stale-epoch guard: drop STATE_UPDATE packets whose epoch pre-dates the
+          // last accepted FULL_STATE baseline.  Triggers a fresh-state request so
+          // the UI recovers to a consistent snapshot without any rollback risk.
+          if (!shouldAcceptStateUpdate(payload, lastAcceptedEpochRef.current)) {
             worker.postMessage(buildMsg(toWorker.REQUEST_FULL_STATE));
             break;
           }

@@ -264,7 +264,8 @@ export function applyLeagueDelta(currentState, delta) {
   }
   const patched = { ...currentState };
   for (const [key, value] of Object.entries(delta)) {
-    if (key === '_isDelta') continue;
+    // Skip internal protocol fields that must not leak into the UI league state.
+    if (key === '_isDelta' || key === '_stateEpoch') continue;
     patched[key] = value;
   }
   return patched;
