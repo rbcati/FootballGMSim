@@ -882,11 +882,6 @@ export default function LeagueDashboard({
                 onOpenBoxScore={(gameId) => openGameDetail(gameId, "HQ")}
                 onTeamSelect={setSelectedTeamId}
             />
-            {league.phase !== "preseason" && (
-              <div style={{ marginTop: "var(--space-4)" }}>
-                <StatLeadersWidget onPlayerSelect={handlePlayerSelect} actions={actions} />
-              </div>
-            )}
           </TabErrorBoundary>
         )}
         {activeTab === "Team" && (

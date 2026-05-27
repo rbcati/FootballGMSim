@@ -378,26 +378,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('News')}>Open league news</button>
       </section>
 
-      {/* ── GM Weekly Loop Hint (early-game guide, weeks 1–4) ──────────── */}
-      {safeNum(league?.week, 1) <= 4 ? (
-        <div
-          className="hq-loop-hint card"
-          role="note"
-          aria-label="GM weekly loop guide"
-          data-testid="gm-loop-hint"
-          style={{ padding: '8px var(--space-2)', marginBottom: 8, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, fontSize: '0.85em', opacity: 0.9 }}
-        >
-          <strong>Weekly loop:</strong>
-          <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Roster / Depth')}>1) Roster/Depth</button>
-          <span aria-hidden="true">→</span>
-          <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Game Plan')}>2) Game Plan</button>
-          <span aria-hidden="true">→</span>
-          <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Weekly Prep')}>3) Check Actions</button>
-          <span aria-hidden="true">→</span>
-          <span style={{ opacity: 0.75 }}>4) Advance Week</span>
-        </div>
-      ) : null}
-
       {/* ── Actions Required ─────────────────────────────────────────── */}
       {commandSummary.criticalCount > 0 ? (
         <section
@@ -446,12 +426,9 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           className="card app-hq-actions-required tone-ok"
           aria-label="Actions Required"
           data-testid="hq-actions-required"
-          style={{ padding: 'var(--space-2)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+          style={{ padding: 'var(--space-2)', marginBottom: 8 }}
         >
           <span className="app-hq-intel-item tone-ok" style={{ margin: 0 }}>No blockers — ready to advance.</span>
-          <button type="button" className="btn btn-sm" onClick={handleAdvanceOrGate} disabled={busy || simulating}>
-            {busy || simulating ? 'Advancing…' : 'Advance Week'}
-          </button>
         </section>
       )}
 

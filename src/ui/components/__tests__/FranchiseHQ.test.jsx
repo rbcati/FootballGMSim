@@ -220,3 +220,169 @@ describe('FranchiseHQ', () => {
     expect(screen.getAllByText(/0-0 · 0 0/i).length).toBeGreaterThan(0);
   });
 });
+
+describe('FranchiseHQ V3 command hierarchy cleanup', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('does not render gm-loop-hint at any week — Weekly Loop section removed in V3', () => {
+    // Week 2 — was the most likely week to show the old hint (<=4 gate)
+    render(
+      <FranchiseHQ
+        league={{ ...baseLeague, week: 2 }}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    expect(document.querySelector('[data-testid="gm-loop-hint"]')).toBeNull();
+  });
+
+  it('does not render gm-loop-hint at week 1 either', () => {
+    render(
+      <FranchiseHQ
+        league={{ ...baseLeague, week: 1 }}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    expect(document.querySelector('[data-testid="gm-loop-hint"]')).toBeNull();
+  });
+
+  it('has exactly one Advance Week button — sticky bottom CTA is the sole control', () => {
+    render(
+      <FranchiseHQ
+        league={baseLeague}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    // The canonical CTA lives in app-hq-sticky-advance
+    expect(screen.getByTestId('advance-week-cta')).toBeTruthy();
+    // There must be exactly one button whose accessible name matches "advance week"
+    const advanceBtns = screen.getAllByRole('button', { name: /advance week/i });
+    expect(advanceBtns).toHaveLength(1);
+  });
+
+  it('Quick Actions still render Game Plan, Set Lineup, Training, Scout Opponent', () => {
+    render(
+      <FranchiseHQ
+        league={baseLeague}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    // Use getAllByRole because "Game Plan" / "Scout Opponent" can appear in multiple places
+    // (action tile + game-plan accordion). We just need at least one.
+    expect(screen.getAllByRole('button', { name: /game plan/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole('button', { name: /set lineup/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole('button', { name: /training/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole('button', { name: /scout opponent/i }).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('Actions Required section renders', () => {
+    render(
+      <FranchiseHQ
+        league={baseLeague}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    expect(screen.getByTestId('hq-actions-required')).toBeTruthy();
+  });
+
+  it('League Views links still render in the compact row', () => {
+    render(
+      <FranchiseHQ
+        league={baseLeague}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    const linkRow = screen.getByTestId('hq-league-destination-links');
+    expect(within(linkRow).getByRole('button', { name: /view full stats/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /open standings/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /open league news/i })).toBeTruthy();
+  });
+
+  it('Decision Review section is present but body is collapsed by default', () => {
+    render(
+      <FranchiseHQ
+        league={baseLeague}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    // Section heading is visible
+    expect(screen.getAllByRole('heading', { name: /what mattered last week|decision review/i }).length).toBeGreaterThan(0);
+    // Inner body is behind a <details> — not open by default
+    const decisionDetails = document.querySelector('.app-hq-background-section__inner');
+    expect(decisionDetails).not.toBeNull();
+    expect(decisionDetails.hasAttribute('open')).toBe(false);
+  });
+
+  it('Operations Snapshot section is present but body is collapsed by default', () => {
+    render(
+      <FranchiseHQ
+        league={baseLeague}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    // Both background section details elements should be present and closed
+    const allDetails = document.querySelectorAll('.app-hq-background-section__inner');
+    expect(allDetails.length).toBeGreaterThanOrEqual(2);
+    allDetails.forEach((el) => {
+      expect(el.hasAttribute('open')).toBe(false);
+    });
+  });
+
+  it('Stats/League Leaders are not rendered under FranchiseHQ root', () => {
+    render(
+      <FranchiseHQ
+        league={baseLeague}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    // StatLeadersWidget adds data-testid="stat-leaders-widget" or a heading "League Leaders"
+    // It must not be present inside the HQ component itself
+    expect(document.querySelector('[data-testid="stat-leaders-widget"]')).toBeNull();
+    expect(screen.queryByRole('heading', { name: /^league leaders$/i })).toBeNull();
+  });
+
+  it('LeagueDashboard HQ tab does not mount StatLeadersWidget below FranchiseHQ', () => {
+    window.matchMedia = window.matchMedia ?? (() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    render(
+      <LeagueDashboard
+        league={{ ...baseLeague, phase: 'regular' }}
+        actions={{ getDashboardLeaders: vi.fn(() => Promise.resolve({ league: {}, team: {} })) }}
+        busy={false}
+        simulating={false}
+        onAdvanceWeek={() => {}}
+      />,
+    );
+    // FranchiseHQ renders
+    expect(screen.getByTestId('franchise-hq')).toBeTruthy();
+    // StatLeadersWidget must NOT be below HQ on the HQ tab
+    expect(document.querySelector('[data-testid="stat-leaders-widget"]')).toBeNull();
+  });
+});
