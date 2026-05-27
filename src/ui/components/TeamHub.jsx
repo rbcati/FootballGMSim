@@ -83,6 +83,16 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
     return games.find((g) => (Number(g.homeId ?? g.home) === Number(team?.id) || Number(g.awayId ?? g.away) === Number(team?.id)) && (g.homeScore == null || g.awayScore == null));
   }, [league?.schedule, team?.id]);
 
+  // Memoize initialState objects so Roster's prop-sync effects receive a stable
+  // reference across parent re-renders (prevents the cascade where a new object
+  // literal triggers the effect even when view/filter values haven't changed).
+  // Keys are `view` / `filter` as expected by normalizeInitialRosterState.
+  const rosterTableInitialState = useMemo(
+    () => ({ view: rosterMode === 'depth' ? 'depth' : 'table', filter: 'ALL' }),
+    [rosterMode],
+  );
+  const rosterDevInitialState = useMemo(() => ({ view: 'table', filter: 'DEVELOPMENT' }), []);
+
   const urgentActions = useMemo(() => {
     const flags = [];
     if (capSnapshot.capRoom < 10) flags.push({ tone: 'danger', label: `Cap room low (${formatMoneyM(capSnapshot.capRoom)})`, target: 'Financials' });
@@ -202,7 +212,7 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
             actions={actions}
             onPlayerSelect={onPlayerSelect}
             onNavigate={onNavigate}
-            initialState={{ viewMode: rosterMode === 'depth' ? 'depth' : 'table', initialFilter: 'ALL' }}
+            initialState={rosterTableInitialState}
             initialViewMode={rosterMode === 'depth' ? 'depth' : 'table'}
           />
         </div>
@@ -223,7 +233,7 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
             actions={actions}
             onPlayerSelect={onPlayerSelect}
             onNavigate={onNavigate}
-            initialState={{ viewMode: 'table', initialFilter: 'DEVELOPMENT' }}
+            initialState={rosterDevInitialState}
             initialViewMode="table"
           />
         </div>
