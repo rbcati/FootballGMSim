@@ -6,7 +6,17 @@
  *   b. league player map by numeric/string playerId
  *   e. safe fallback "Player #<id>" — never blank/undefined
  */
-const PLACEHOLDER_PATTERNS = [/^player\s*#?\s*\d+$/i, /^unknown$/i, /^unknown player$/i, /^n\/?a$/i, /^--+$/];
+const PLACEHOLDER_PATTERNS = [
+  /^player\s*#?\s*\d+$/i,
+  /^unknown$/i,
+  /^unknown player$/i,
+  /^n\/?a$/i,
+  /^--+$/,
+  // "QB Starter 7-2", "WR Starter 7-3", "DL Starter 8-3", etc.
+  /\bstarter\b/i,
+  // defaultPlayers fallback names: "H QB1", "A WR2", "H EDGE1"
+  /^[HA]\s+(QB|RB|WR|TE|OL|DL|LB|CB|S|K|P|EDGE|DE|DT|FS|SS|FB|OT|OG|C)\d+$/i,
+];
 
 function isRealName(value) {
   if (typeof value !== 'string') return false;
