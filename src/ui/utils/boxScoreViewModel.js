@@ -1,6 +1,7 @@
 import { mergeArchivedGameWithScheduleResult, normalizeArchivedGamePayload } from '../../core/gameArchive.js';
 import { isScoringLikeLog, normalizePlayLogEntry } from '../../core/gameEvents.js';
 import { buildGameFlowSummary } from '../../core/sim/gameFlowSummary.js';
+import { buildLeaguePlayerMap, resolvePlayerName } from './playerNameResolver.js';
 
 const QUALITY = { full: 'Full detail', partial: 'Partial detail', score: 'Score only', missing: 'Missing detail' };
 
@@ -52,8 +53,12 @@ function normalizePlayerId(id) {
   return Number.isFinite(numeric) ? numeric : id;
 }
 
-function normalizePlayers(raw = {}, side, teamId) {
-  return Object.entries(raw || {}).map(([id, row]) => ({ playerId: normalizePlayerId(id), teamId, teamSide: side, ...row, stats: row?.stats ?? row ?? {} }));
+function normalizePlayers(raw = {}, side, teamId, playerMap = null) {
+  return Object.entries(raw || {}).map(([id, row]) => {
+    const playerId = normalizePlayerId(id);
+    const name = resolvePlayerName(playerId, { row, playerMap });
+    return { playerId, teamId, teamSide: side, ...row, name, stats: row?.stats ?? row ?? {} };
+  });
 }
 
 function formatScoreLine(awayTeam, homeTeam, finalScore) {
@@ -490,8 +495,9 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
   const scoringSummary = normalizeScoringSummary(payload?.scoringSummary);
   const teamStats = payload?.teamStats ?? payload?.stats?.team ?? {};
   const playerStats = payload?.playerStats ?? payload?.stats?.players ?? payload?.stats ?? {};
-  const homePlayers = normalizePlayers(playerStats?.home, 'home', homeId);
-  const awayPlayers = normalizePlayers(playerStats?.away, 'away', awayId);
+  const playerMap = buildLeaguePlayerMap(league);
+  const homePlayers = normalizePlayers(playerStats?.home, 'home', homeId, playerMap);
+  const awayPlayers = normalizePlayers(playerStats?.away, 'away', awayId, playerMap);
 
   const hasScore = homeScore != null && awayScore != null;
   const hasQuarter = Array.isArray(quarterScores?.home) || Array.isArray(quarterScores?.away);

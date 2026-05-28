@@ -23,8 +23,9 @@ export function TeamButton({ team, onSelect }) {
 
 export function PlayerButton({ player, onSelect, context }) {
   if (!player) return <span>—</span>;
+  const displayName = player.name ?? (player.playerId != null ? `Player #${player.playerId}` : 'Player');
   const rawId = getPlayerProfileId(player.playerId ?? player);
-  if (!onSelect || !hasValidPlayerProfileId(rawId)) return <span>{player.name ?? "Unknown"}</span>;
+  if (!onSelect || !hasValidPlayerProfileId(rawId)) return <span>{displayName}</span>;
   return (
     <button
       type="button"
@@ -32,7 +33,7 @@ export function PlayerButton({ player, onSelect, context }) {
       data-testid="game-book-player-link"
       onClick={() => openPlayerProfile(rawId, onSelect, { ...context, player, statLine: player?.stats })}
     >
-      {player.name ?? "Unknown"}
+      {displayName}
     </button>
   );
 }

@@ -532,6 +532,7 @@ export default function LeagueDashboard({
   onDismissNotification,
   externalBoxScoreId,
   onConsumeExternalBoxScore,
+  onGameDetailBack,
   advanceLabel = "Advance",
   advanceDisabled = false,
 }) {
@@ -1213,7 +1214,10 @@ export default function LeagueDashboard({
               gameId={selectedGameId}
               league={league}
               actions={actions}
-              onBack={() => setActiveTab("HQ")}
+              onBack={() => {
+                onGameDetailBack?.();
+                setActiveTab(lastGameTab || "HQ");
+              }}
               onNavigate={setActiveTab}
               onPlayerSelect={handlePlayerSelect}
               onTeamSelect={setSelectedTeamId}
