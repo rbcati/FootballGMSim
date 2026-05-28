@@ -195,6 +195,8 @@ function AppContent() {
 
   // Post-game result shown after GameSimulation watch mode completes
   const [postGameResult, setPostGameResult] = useState(null);
+  // Stash preserves postGameResult while the user browses Game Book, so it can be restored on return.
+  const [postGameResultStash, setPostGameResultStash] = useState(null);
   // Skip-mode summary shown after advanceWeek({ skipUserGame: true }) completes
   const [skipGameSummary, setSkipGameSummary] = useState(null);
   const lastShownSkipWeekRef = useRef(null);
@@ -1443,6 +1445,12 @@ function AppContent() {
           onDismissNotification={actions.dismissNotification}
           externalBoxScoreId={externalBoxScoreId}
           onConsumeExternalBoxScore={() => setExternalBoxScoreId(null)}
+          onGameDetailBack={() => {
+            if (postGameResultStash) {
+              setPostGameResult(postGameResultStash);
+              setPostGameResultStash(null);
+            }
+          }}
           advanceLabel={getAdvanceLabel()}
           advanceDisabled={busy || simulating || isCutdownRequired || isBatchSimBlocking || !!promptUserGame}
         />
@@ -1698,12 +1706,14 @@ function AppContent() {
           boxScoreGameId={postGameResult.gameId}
           onOpenBoxScore={(gameId) => {
             if (!gameId) return;
+            setPostGameResultStash(postGameResult);
             setPostGameResult(null);
             setExternalBoxScoreId(gameId);
           }}
           onContinue={() => {
             try {
               setPostGameResult(null);
+              setPostGameResultStash(null);
               setTimeout(() => {
                 try {
                   actions.advanceWeek({ skipUserGame: true });
@@ -1714,6 +1724,7 @@ function AppContent() {
             } catch (err) {
               console.error('[PostGame] onContinue failed:', err);
               setPostGameResult(null);
+              setPostGameResultStash(null);
             }
           }}
           onArchiveReady={(archivePayload) => {

@@ -113,6 +113,81 @@ function Confetti({ colors }) {
   );
 }
 
+/**
+ * Derives structured playerStats ({ home: {[pid]: {name,pos,stats}}, away: {...} })
+ * from raw play-by-play logs. Used to populate the archive so the Game Book
+ * can display player names when the game is reopened.
+ */
+function derivePlayerStatsFromLogs(logs, homeId, awayId) {
+  const home = {};
+  const away = {};
+
+  const getSide = (teamId) => {
+    const tid = Number(teamId);
+    if (Number.isFinite(tid)) {
+      if (tid === Number(homeId)) return home;
+      if (tid === Number(awayId)) return away;
+    }
+    return null;
+  };
+
+  const addStats = (player, side, statKey, value = 1) => {
+    if (!player || typeof player !== 'object' || !side) return;
+    const pid = String(player.id ?? player.name ?? '?');
+    if (pid === '?') return;
+    if (!side[pid]) {
+      side[pid] = { name: player.name ?? null, pos: player.pos ?? player.position ?? '—', stats: {} };
+    }
+    if (player.name && !side[pid].name) side[pid].name = player.name;
+    side[pid].stats[statKey] = (side[pid].stats[statKey] ?? 0) + (Number(value) || 0);
+  };
+
+  for (const log of (Array.isArray(logs) ? logs : [])) {
+    if (!log || typeof log !== 'object') continue;
+    const offTeamId = log.teamId ?? log.offenseTeamId ?? log.possessionTeamId ?? null;
+    const offSide = getSide(offTeamId);
+    const defTeamId = offTeamId != null
+      ? (Number(offTeamId) === Number(homeId) ? awayId : homeId)
+      : null;
+    const defSide = getSide(defTeamId);
+
+    if (log.passer) {
+      const pSide = getSide(log.passer.teamId) ?? offSide;
+      addStats(log.passer, pSide, 'passAtt');
+      if (log.completed) {
+        addStats(log.passer, pSide, 'passComp');
+        addStats(log.passer, pSide, 'passYd', log.passYds ?? log.yards ?? 0);
+      }
+      if (log.isTouchdown && log.tdType === 'pass') addStats(log.passer, pSide, 'passTD');
+    }
+
+    if (log.player) {
+      const plSide = getSide(log.player.teamId) ?? offSide;
+      if (log.type === 'run' || log.tdType === 'rush' || (log.rushYds != null && !log.passer)) {
+        addStats(log.player, plSide, 'rushAtt');
+        addStats(log.player, plSide, 'rushYd', log.rushYds ?? log.yards ?? 0);
+        if (log.isTouchdown) addStats(log.player, plSide, 'rushTD');
+      }
+      if (log.completed && log.recYds != null) {
+        addStats(log.player, plSide, 'receptions');
+        addStats(log.player, plSide, 'recYd', log.recYds ?? log.yards ?? 0);
+        if (log.isTouchdown && log.tdType === 'pass') addStats(log.player, plSide, 'recTD');
+      }
+    }
+
+    if (log.tackler) {
+      const tSide = getSide(log.tackler.teamId) ?? defSide;
+      addStats(log.tackler, tSide, 'tackles');
+    }
+    if (log.defender) {
+      const dSide = getSide(log.defender.teamId) ?? defSide;
+      addStats(log.defender, dSide, 'passesDefended');
+    }
+  }
+
+  return { home, away };
+}
+
 // Derive game leaders from play logs (accumulated stats per player)
 function useGameLeaders(logs) {
   return useMemo(() => {
@@ -273,6 +348,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
     const recapText = notableMoments.length
       ? notableMoments.map((m) => `Q${m.quarter ?? "?"} ${m.clock ?? ""} ${m.text ?? "Momentum swing"}`).join(" ")
       : `${awayTeam?.abbr ?? "AWY"} ${awayScore} - ${homeScore} ${homeTeam?.abbr ?? "HME"}`;
+    const derivedPlayerStats = derivePlayerStatsFromLogs(logs, homeTeam?.id, awayTeam?.id);
     onArchiveReady({
       gameId: boxScoreGameId,
       season: null,
@@ -285,6 +361,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
       awayScore,
       recapText,
       logs,
+      playerStats: derivedPlayerStats,
       scoringSummary: notableMoments,
       summary: {
         storyline: recapText,

@@ -199,3 +199,120 @@ describe('BoxScore game book rendering', () => {
   });
 
 });
+
+describe('BoxScore player name resolution', () => {
+  const baseLeague = { seasonId: 2031, week: 2, teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] };
+  beforeEach(() => {
+    cleanup();
+    vi.mocked(useStableRouteRequest).mockReturnValue({ data: null });
+  });
+
+  it('shows player name from stat row when present', () => {
+    const game = {
+      homeId: 1, awayId: 2, homeScore: 21, awayScore: 14,
+      teamStats: { home: { passYards: 200 }, away: {} },
+      playerStats: {
+        home: { 11: { name: 'Named QB', stats: { passAtt: 20, passYd: 200 } } },
+        away: {},
+      },
+    };
+    const { container } = render(<BoxScore gameId="g-named" league={{ ...baseLeague, gameById: { 'g-named': game } }} embedded />);
+    expect(container.textContent).toContain('Named QB');
+    expect(container.textContent).not.toContain('Unknown');
+  });
+
+  it('shows Player #ID fallback when stat row has no name', () => {
+    const game = {
+      homeId: 1, awayId: 2, homeScore: 21, awayScore: 14,
+      teamStats: { home: { passYards: 200 }, away: {} },
+      playerStats: {
+        home: { 77: { stats: { passAtt: 20, passYd: 200 } } },
+        away: {},
+      },
+    };
+    const { container } = render(<BoxScore gameId="g-fallback" league={{ ...baseLeague, gameById: { 'g-fallback': game } }} embedded />);
+    expect(container.textContent).toContain('Player #77');
+    expect(container.textContent).not.toContain('Unknown');
+  });
+
+  it('resolves player name from league roster when stat row lacks name', () => {
+    const leagueWithRoster = {
+      ...baseLeague,
+      teams: [
+        { id: 1, abbr: 'KC', roster: [{ id: 55, name: 'Roster QB Name' }] },
+        { id: 2, abbr: 'BUF', roster: [] },
+      ],
+    };
+    const game = {
+      homeId: 1, awayId: 2, homeScore: 28, awayScore: 7,
+      teamStats: { home: { passYards: 300 }, away: {} },
+      playerStats: {
+        home: { 55: { stats: { passAtt: 30, passYd: 300 } } },
+        away: {},
+      },
+    };
+    const { container } = render(<BoxScore gameId="g-roster" league={{ ...leagueWithRoster, gameById: { 'g-roster': game } }} embedded />);
+    expect(container.textContent).toContain('Roster QB Name');
+    expect(container.textContent).not.toContain('Unknown');
+  });
+
+  it('never renders blank or undefined player labels in stat tables', () => {
+    const game = {
+      homeId: 1, awayId: 2, homeScore: 14, awayScore: 7,
+      teamStats: { home: { passYards: 100 }, away: {} },
+      playerStats: {
+        home: {
+          1: { stats: { passAtt: 10, passYd: 100 } },
+          2: { stats: { rushAtt: 8, rushYd: 60 } },
+        },
+        away: { 3: { stats: { tackles: 5, sacks: 1 } } },
+      },
+    };
+    const { container } = render(<BoxScore gameId="g-noblank" league={{ ...baseLeague, gameById: { 'g-noblank': game } }} embedded />);
+    const passingTable = container.querySelector('[data-testid="game-book-table-passing"]');
+    const rushingTable = container.querySelector('[data-testid="game-book-table-rushing"]');
+    const defenseTable = container.querySelector('[data-testid="game-book-table-defense"]');
+    [passingTable, rushingTable, defenseTable].filter(Boolean).forEach((table) => {
+      const cells = table.querySelectorAll('td');
+      cells.forEach((cell) => {
+        expect(cell.textContent).not.toBe('');
+        expect(cell.textContent).not.toBe('undefined');
+        expect(cell.textContent).not.toContain('Unknown');
+      });
+    });
+  });
+
+  it('mobile table wrappers have bs-table-wrap class for horizontal scroll', () => {
+    const game = {
+      homeId: 1, awayId: 2, homeScore: 14, awayScore: 7,
+      teamStats: { home: { passYards: 100 }, away: {} },
+      playerStats: {
+        home: { 11: { name: 'QB Test', stats: { passAtt: 10, passYd: 100 } } },
+        away: {},
+      },
+    };
+    const { container } = render(<BoxScore gameId="g-mobile" league={{ ...baseLeague, gameById: { 'g-mobile': game } }} embedded />);
+    const tableWrap = container.querySelector('[data-testid="game-book-table-passing"] .bs-table-wrap');
+    expect(tableWrap).toBeTruthy();
+    expect(tableWrap.className).toContain('bs-table-wrap');
+  });
+});
+
+describe('PlayerButton fallback display', () => {
+  beforeEach(() => { cleanup(); });
+
+  it('shows Player #ID when player has no name but has playerId', () => {
+    const { container } = render(<PlayerButton player={{ playerId: 42, stats: {} }} />);
+    expect(container.textContent).toBe('Player #42');
+  });
+
+  it('shows generic Player when player has no name and no playerId', () => {
+    const { container } = render(<PlayerButton player={{ stats: {} }} />);
+    expect(container.textContent).toBe('Player');
+  });
+
+  it('does not show Unknown for nameless players', () => {
+    const { container } = render(<PlayerButton player={{ playerId: 88, stats: {} }} />);
+    expect(container.textContent).not.toContain('Unknown');
+  });
+});
