@@ -1,5 +1,23 @@
+function isPlaceholderName(name) {
+  if (!name || typeof name !== 'string') return true;
+  const t = name.trim();
+  if (!t) return true;
+  return /\bstarter\b/i.test(t)
+    || /^[HA]\s+(QB|RB|WR|TE|OL|DL|LB|CB|S|K|P|EDGE|DE|DT|FS|SS|FB|OT|OG|C)\d+$/i.test(t)
+    || /^player\s*#?\s*\d+$/i.test(t)
+    || /^unknown(\s+player)?$/i.test(t);
+}
+
 function playerName(player) {
-  return player?.name || 'Unknown';
+  const raw = player?.name;
+  if (isPlaceholderName(raw)) {
+    const pos = player?.pos || '';
+    const id = player?.id;
+    return id != null ? `${pos}${pos ? ' ' : ''}#${id}` : (pos || 'Player');
+  }
+  const name = String(raw).trim();
+  const parts = name.split(/\s+/);
+  return parts.length >= 2 ? `${parts[0][0]}. ${parts[parts.length - 1]}` : name;
 }
 
 export function getCurrentStandoutPlayers(events = [], visibleCount = events.length) {

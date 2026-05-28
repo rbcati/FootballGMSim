@@ -1915,8 +1915,20 @@ export function simGameStats(home, away, options = {}) {
             for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) return pool[i]; }
             return pool[0];
         };
-        // Format: "QB Patrick Mahomes" → pos + full name
-        const _n = (p) => p ? `${p.pos || ''} ${p.name || '?'}`.trim() : null;
+        // Format compact display name; guards against double position prefix and placeholder names.
+        const _n = (p) => {
+          if (!p) return null;
+          const name = String(p.name || '').trim();
+          const pos = String(p.pos || '').trim();
+          const isPlaceholder = !name
+            || /\bstarter\b/i.test(name)
+            || /^[HA]\s+(QB|RB|WR|TE|OL|DL|LB|CB|S|K|P|EDGE|DE|DT|FS|SS|FB|OT|OG|C)\d+$/i.test(name)
+            || /^player\s*#?\s*\d+$/i.test(name)
+            || /^unknown(\s+player)?$/i.test(name);
+          if (isPlaceholder) return pos ? `${pos} #${p.id ?? '?'}` : `#${p.id ?? '?'}`;
+          const parts = name.split(/\s+/);
+          return parts.length >= 2 ? `${parts[0][0]}. ${parts[parts.length - 1]}` : name;
+        };
 
         // Live per-play stat fields (accumulated over logs for live display)
         const liveStats = {};

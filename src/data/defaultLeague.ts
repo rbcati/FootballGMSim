@@ -39,6 +39,43 @@ const RATING_KEYS = [
   'kickAccuracy',
 ];
 
+// Deterministic name generation — names are stable for a given (teamId, index) seed.
+const FIRST_NAMES = [
+  'Aaron','Andre','Austin','Blake','Brandon','Brett','Brian','Cameron','Carlos','Chase',
+  'Christian','Colin','Curtis','Damon','Darren','Derek','Devon','Dillon','Dominic','Dylan',
+  'Elijah','Ethan','Evan','Fabian','Felix','Finn','Frank','Grant','Greg','Hunter',
+  'Isaiah','Ivan','Jared','Jason','Jordan','Justin','Kevin','Kyle','Landon','Liam',
+  'Logan','Lucas','Malik','Marcus','Mason','Matt','Mike','Nathan','Nick','Noah',
+  'Omar','Parker','Patrick','Quinn','Ramon','Ryan','Sam','Sean','Trey','Tyler',
+  'Victor','Wesley','Xavier','Zach',
+] as const;
+
+const LAST_NAMES = [
+  'Adams','Allen','Anderson','Baker','Barnes','Bell','Bennett','Black','Boyd','Brown',
+  'Butler','Campbell','Carter','Clark','Cole','Collins','Cook','Cooper','Cox','Cruz',
+  'Davis','Dixon','Edwards','Elliott','Ellis','Evans','Fisher','Fletcher','Ford','Foster',
+  'Garcia','Gonzalez','Green','Griffin','Hall','Harris','Hayes','Hernandez','Hill','Howard',
+  'Ingram','Jackson','James','Johnson','Jones','Jordan','Kelly','King','Knight','Lawrence',
+  'Lee','Lewis','Long','Lopez','Lynch','Martin','Martinez','Miller','Mitchell','Moore',
+  'Morgan','Morris','Murphy','Murray','Nelson','Ortiz','Parker','Perez','Perry','Phillips',
+  'Price','Reid','Rivera','Roberts','Robinson','Rodriguez','Ross','Russell','Sanchez','Sanders',
+  'Scott','Shaw','Smith','Taylor','Thomas','Thompson','Turner','Walker','Ward','Washington',
+  'White','Williams','Wilson','Wood','Wright','Young',
+] as const;
+
+function seededPick<T extends readonly string[]>(arr: T, seed: number): T[number] {
+  let t = ((seed * 2654435761) >>> 0);
+  t = (t + 0x6D2B79F5) | 0;
+  let r = Math.imul(t ^ (t >>> 15), 1 | t);
+  r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+  return arr[((r ^ (r >>> 14)) >>> 0) % arr.length];
+}
+
+function generatePlayerName(teamId: number, index: number): string {
+  const seed = (teamId * 997 + index) * 1000003;
+  return `${seededPick(FIRST_NAMES, seed)} ${seededPick(LAST_NAMES, seed + 499979)}`;
+}
+
 function buildRatings(pos: string, ovr: number) {
   const ratings = Object.fromEntries(RATING_KEYS.map((key) => [key, Math.max(45, Math.min(90, ovr - 2))]));
   const boost = (keys: string[], amount = 8) => {
@@ -67,7 +104,7 @@ function makePlayer(teamId: number, index: number, pos: string, depthOrder: numb
   const id = teamId * 1000 + index + 1;
   return {
     id,
-    name: `${pos} Starter ${teamId + 1}-${depthOrder}`,
+    name: generatePlayerName(teamId, index),
     pos,
     age: 23 + ((teamId + index) % 10),
     ratings,

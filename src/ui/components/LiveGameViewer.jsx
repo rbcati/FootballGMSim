@@ -5,15 +5,15 @@ import { mapArchiveEventsToLiveFeed, getNextImportantEvent } from '../../core/li
 import { getCurrentStandoutPlayers, summarizeGameSwing } from '../utils/liveGamePresentation.js';
 
 const SPEED_STEPS = [
-  { key: 'slow', label: 'Slow', ms: 1400 },
-  { key: 'normal', label: 'Normal', ms: 850 },
-  { key: 'fast', label: 'Fast', ms: 350 },
-  { key: 'veryFast', label: 'Very Fast', ms: 140 },
+  { key: 'slow',     label: 'Slow',      ms: 1400 },
+  { key: 'normal',   label: 'Normal',    ms: 850  },
+  { key: 'fast',     label: 'Fast',      ms: 350  },
+  { key: 'veryFast', label: '2×',        ms: 140  },
 ];
 
 const TENDENCY_CONFIG = {
-  AGGRESSIVE:   { label: 'Aggressive',   chipClass: 'aggressive' },
-  BALANCED:     { label: 'Balanced',     chipClass: 'balanced' },
+  AGGRESSIVE:   { label: 'Aggressive',   chipClass: 'aggressive'   },
+  BALANCED:     { label: 'Balanced',     chipClass: 'balanced'     },
   CONSERVATIVE: { label: 'Conservative', chipClass: 'conservative' },
 };
 
@@ -107,36 +107,52 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
         <section className="watch-panel">
           <div className={`momentum ${swing.tone}`}>Momentum: {swing.label}</div>
           <div className="jump-row">
-            <JumpBtn label="Scoring Plays" onClick={() => setIndex(getNextImportantEvent(events, index, 'score'))} />
+            <JumpBtn label="Scores" onClick={() => setIndex(getNextImportantEvent(events, index, 'score'))} />
             <JumpBtn label="Red Zone" onClick={() => setIndex(getNextImportantEvent(events, index, 'redZone'))} />
             <JumpBtn label="Turnovers" onClick={() => setIndex(getNextImportantEvent(events, index, 'turnover'))} />
-            <JumpBtn label="Final Minutes" onClick={() => setIndex(getNextImportantEvent(events, index, 'finalMinutes'))} />
+            <JumpBtn label="Late Game" onClick={() => setIndex(getNextImportantEvent(events, index, 'finalMinutes'))} />
             <JumpBtn label="End" onClick={() => setIndex(events.length - 1)} />
           </div>
           <GameEventFeed events={events} activeIndex={index} />
         </section>
 
         <aside className="watch-side">
-          <h3>Standouts</h3>
-          <ul>
-            <li>QB: {formatQb(standout.qb)}</li>
-            <li>Rush: {formatRush(standout.rusher)}</li>
-            <li>Rec: {formatRec(standout.receiver)}</li>
-            <li>Sacks: {standout.sacks ? `${standout.sacks.player} (${standout.sacks.sacks})` : '—'}</li>
-            <li>INT: {standout.picks ? `${standout.picks.player} (${standout.picks.picks})` : '—'}</li>
+          <h3 className="watch-side-title">Standouts</h3>
+          <ul className="standout-list">
+            <li><span className="standout-pos">QB</span>{formatQb(standout.qb)}</li>
+            <li><span className="standout-pos">Rush</span>{formatRush(standout.rusher)}</li>
+            <li><span className="standout-pos">Rec</span>{formatRec(standout.receiver)}</li>
+            <li><span className="standout-pos">Sacks</span>{standout.sacks ? `${standout.sacks.player} (${standout.sacks.sacks})` : '—'}</li>
+            <li><span className="standout-pos">INT</span>{standout.picks ? `${standout.picks.player} (${standout.picks.picks})` : '—'}</li>
           </ul>
+
           <div className="controls">
-            <button onClick={() => setPaused((prev) => !prev)}>{paused ? 'Resume' : 'Pause'}</button>
-            {SPEED_STEPS.map((step) => (
-              <button key={step.key} className={speed === step.key ? 'active' : ''} onClick={() => { setSpeed(step.key); setPaused(false); }}>{step.label}</button>
-            ))}
-            <button title="Lean run on next drive." onClick={() => onPlaycallOverride?.({ type: 'run_heavy' })}>Run Heavy</button>
-            <button title="Lean pass on next drive." onClick={() => onPlaycallOverride?.({ type: 'pass_heavy' })}>Pass Heavy</button>
-            <button title="Request a timeout for your team." onClick={() => onPlaycallOverride?.({ type: 'timeout' })}>Timeout</button>
-            <button onClick={() => setIndex(getNextImportantEvent(events, index, 'score'))}>Skip to Next Score</button>
-            <button onClick={() => setIndex(getNextImportantEvent(events, index, 'keyPlay'))}>Skip to Key Play</button>
-            <button onClick={() => setIndex(events.length - 1)}>Sim to End</button>
+            <div className="controls-label">Speed</div>
+            <div className="speed-row">
+              <button className="ctrl-btn pause-btn" onClick={() => setPaused((prev) => !prev)}>{paused ? '▶' : '⏸'}</button>
+              {SPEED_STEPS.map((step) => (
+                <button key={step.key} className={`ctrl-btn${speed === step.key && !paused ? ' active' : ''}`}
+                  onClick={() => { setSpeed(step.key); setPaused(false); }}>{step.label}</button>
+              ))}
+            </div>
+            <div className="controls-label">Skip</div>
+            <div className="skip-row">
+              <button className="ctrl-btn" onClick={() => setIndex(getNextImportantEvent(events, index, 'score'))}>Next Score</button>
+              <button className="ctrl-btn" onClick={() => setIndex(getNextImportantEvent(events, index, 'keyPlay'))}>Key Play</button>
+              <button className="ctrl-btn" onClick={() => setIndex(events.length - 1)}>Sim End</button>
+            </div>
+            {onPlaycallOverride ? (
+              <>
+                <div className="controls-label">Playcall</div>
+                <div className="playcall-row">
+                  <button className="ctrl-btn" title="Lean run on next drive." onClick={() => onPlaycallOverride?.({ type: 'run_heavy' })}>Run Heavy</button>
+                  <button className="ctrl-btn" title="Lean pass on next drive." onClick={() => onPlaycallOverride?.({ type: 'pass_heavy' })}>Pass Heavy</button>
+                  <button className="ctrl-btn" title="Request a timeout." onClick={() => onPlaycallOverride?.({ type: 'timeout' })}>Timeout</button>
+                </div>
+              </>
+            ) : null}
           </div>
+
           {finished ? (
             <div className="watch-final-card">
               <div className="watch-final-label">Final</div>
@@ -165,57 +181,94 @@ function ordinal(n) {
 }
 
 function formatQb(v) { return v ? `${v.player} ${v.comp}/${v.att} ${v.yds}y ${v.td}TD` : '—'; }
-function formatRush(v) { return v ? `${v.player} ${v.yds}y (${v.att} att)` : '—'; }
-function formatRec(v) { return v ? `${v.player} ${v.rec} rec, ${v.yds}y` : '—'; }
+function formatRush(v) { return v ? `${v.player} ${v.yds}y (${v.att})` : '—'; }
+function formatRec(v) { return v ? `${v.player} ${v.rec} rec ${v.yds}y` : '—'; }
 
 const styles = `
-.watch-overlay { position: fixed; inset: 0; background: #071021; color: #f3f6ff; z-index: 7000; display:flex; flex-direction:column; }
-.watch-header { position: sticky; top: 0; z-index: 2; padding: 10px; background: #071021; border-bottom: 1px solid #253149; }
-.watch-state-strip { display:flex; align-items:center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-.watch-mode-chip { font-size: 11px; border-radius: 999px; padding: 3px 9px; border: 1px solid #3d4d6d; background: #12213b; color: #d9e7ff; }
-.watch-mode-chip.clutch { border-color: #d6a94f; color: #ffd88f; }
-.watch-mode-chip.final { border-color: #56b58a; color: #91f0c3; }
-.watch-mode-chip.tendency-aggressive { border-color: #ff453a; color: #ffb3b0; background: rgba(255,69,58,0.15); }
-.watch-mode-chip.tendency-balanced { border-color: #0a84ff; color: #a8d4ff; background: rgba(10,132,255,0.12); }
-.watch-mode-chip.tendency-conservative { border-color: #34c759; color: #a3f0b8; background: rgba(52,199,89,0.12); }
-.watch-moment-banner { margin-top: 8px; font-size: 12px; font-weight: 800; border-radius: 9px; padding: 7px 10px; letter-spacing: .01em; }
-.watch-moment-banner.score { background: rgba(95, 190, 130, 0.22); color: #b8f5cb; border: 1px solid rgba(95, 190, 130, 0.45); }
-.watch-moment-banner.turnover { background: rgba(255, 95, 95, 0.2); color: #ffd1d1; border: 1px solid rgba(255, 95, 95, 0.45); }
-.watch-moment-banner.lead { background: rgba(124, 196, 255, 0.2); color: #d5ebff; border: 1px solid rgba(124, 196, 255, 0.45); }
-.watch-moment-banner.final { background: rgba(255, 215, 100, 0.2); color: #ffeec6; border: 1px solid rgba(255, 215, 100, 0.5); }
-.live-scorebug { display:grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items:center; }
-.sb-team { display:flex; justify-content:space-between; align-items:center; background:#111c33; border:1px solid #30405f; padding:8px 10px; border-radius:10px; }
-.sb-team.has-ball { border-color:#fbbf24; box-shadow: inset 0 0 0 1px #fbbf24; }
+/* ── Layout ─────────────────────────────────────────────────────────── */
+.watch-overlay { position:fixed; inset:0; background:#071021; color:#f3f6ff; z-index:7000; display:flex; flex-direction:column; overflow:hidden; }
+.watch-header { position:sticky; top:0; z-index:2; padding:8px 10px; background:#071021; border-bottom:1px solid #253149; }
+.watch-state-strip { display:flex; align-items:center; gap:5px; margin-top:6px; flex-wrap:wrap; }
+.watch-main { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; padding:8px; flex:1; overflow:hidden; min-height:0; }
+@media (min-width:960px) { .watch-main { grid-template-columns:2fr 1fr; } }
+.watch-panel, .watch-side { background:#0f172b; border:1px solid #2d3a55; border-radius:12px; padding:10px; overflow:auto; }
+
+/* ── Mode chips ──────────────────────────────────────────────────────── */
+.watch-mode-chip { font-size:11px; border-radius:999px; padding:3px 8px; border:1px solid #3d4d6d; background:#12213b; color:#d9e7ff; }
+.watch-mode-chip.clutch { border-color:#d6a94f; color:#ffd88f; }
+.watch-mode-chip.final { border-color:#56b58a; color:#91f0c3; }
+.watch-mode-chip.tendency-aggressive { border-color:#ff453a; color:#ffb3b0; background:rgba(255,69,58,.15); }
+.watch-mode-chip.tendency-balanced { border-color:#0a84ff; color:#a8d4ff; background:rgba(10,132,255,.12); }
+.watch-mode-chip.tendency-conservative { border-color:#34c759; color:#a3f0b8; background:rgba(52,199,89,.12); }
+
+/* ── Moment banner ───────────────────────────────────────────────────── */
+.watch-moment-banner { margin-top:6px; font-size:12px; font-weight:800; border-radius:8px; padding:5px 10px; }
+.watch-moment-banner.score { background:rgba(95,190,130,.22); color:#b8f5cb; border:1px solid rgba(95,190,130,.45); }
+.watch-moment-banner.turnover { background:rgba(255,95,95,.2); color:#ffd1d1; border:1px solid rgba(255,95,95,.45); }
+.watch-moment-banner.lead { background:rgba(124,196,255,.2); color:#d5ebff; border:1px solid rgba(124,196,255,.45); }
+.watch-moment-banner.final { background:rgba(255,215,100,.2); color:#ffeec6; border:1px solid rgba(255,215,100,.5); }
+
+/* ── Scorebug ────────────────────────────────────────────────────────── */
+.live-scorebug { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; }
+.sb-team { display:flex; justify-content:space-between; align-items:center; background:#111c33; border:1px solid #30405f; padding:7px 10px; border-radius:9px; }
+.sb-team.has-ball { border-color:#fbbf24; box-shadow:inset 0 0 0 1px #fbbf24; }
 .sb-center { text-align:center; font-size:12px; color:#d0dbf5; }
 .sb-flags { display:flex; justify-content:center; gap:4px; margin-top:4px; flex-wrap:wrap; }
-.sb-flag { font-size: 9px; font-weight: 800; letter-spacing: .05em; border-radius: 999px; padding: 2px 6px; background: #1c2f4d; border: 1px solid #3d5b88; }
-.sb-flag.redzone { border-color: #8a3e3e; background: #3c1d28; color: #ffb9b9; }
-.sb-flag.clutch { border-color: #8f6f2b; background: #3a2f18; color: #ffe4a3; }
-.sb-flag.overtime { border-color: #5377b0; background: #1c335d; color: #c6ddff; }
-.watch-main { display:grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 10px; height: 100%; overflow: hidden; }
-.watch-panel, .watch-side { background:#0f172b; border:1px solid #2d3a55; border-radius:12px; padding:10px; overflow:auto; }
-.momentum { font-size:12px; margin-bottom:8px; padding:6px 8px; border-radius:8px; font-weight:700; }
-.momentum.offense { background:#173b2f; } .momentum.defense { background:#3d2527; } .momentum.swing { background:#3b2f18; } .momentum.neutral { background:#253149; }
-.jump-row { display:flex; gap:6px; overflow:auto; padding-bottom:6px; }
-.jump-btn { white-space:nowrap; background:#182741; color:#d8e6ff; border:1px solid #37527d; border-radius:999px; padding:6px 10px; font-size:12px; }
-.live-feed { display:grid; gap:8px; }
-.feed-quarter-marker { font-size: 10px; color: #90a7cf; text-transform: uppercase; letter-spacing: .08em; border-top: 1px dashed #334866; padding-top: 8px; margin-top: 2px; }
-.feed-row { display:grid; grid-template-columns:auto 1fr; gap:8px; border-left:2px solid #344766; padding:6px 0 6px 8px; border-radius: 8px; }
-.feed-row.routine { background: rgba(18,31,53,0.4); }
-.feed-row.major { background: rgba(33,54,88,0.62); border-left-color: #6ca3df; }
-.feed-row.latest { border-left-color:#7cc4ff; background:#13213a; box-shadow: inset 0 0 0 1px rgba(124, 196, 255, 0.2); }
-.feed-time { font-size:11px; color:#9fb4d8; }
-.feed-headline { font-size:13px; font-weight: 600; }
-.feed-meta { display:flex; gap:6px; flex-wrap:wrap; font-size:11px; color:#9fb4d8; }
-.feed-score { font-weight: 700; color: #d8e8ff; }
-.feed-tag { background:#1b2f4f; border:1px solid #415d89; border-radius:999px; padding:1px 6px; }
-.watch-side ul { margin: 0; padding-left: 16px; display:grid; gap:4px; }
-.controls { display:grid; gap:6px; margin-top:10px; }
-.controls button, .finish { background:#1c2e4d; color:white; border:1px solid #456596; border-radius:8px; padding:8px; }
-.controls .active { border-color:#7cc4ff; }
-.watch-final-card { border: 1px solid #3d5378; border-radius: 10px; margin-top: 12px; padding: 10px; background: #13203a; }
-.watch-final-label { text-transform: uppercase; font-size: 11px; letter-spacing: .08em; color: #98b4dd; margin-bottom: 4px; }
-.watch-final-score { display:flex; flex-direction: column; gap:4px; font-size: 15px; font-weight: 800; color: #ecf4ff; }
-.finish { margin-top:10px; width:100%; background:#1d4ed8; font-weight: 800; }
-@media (min-width: 960px) { .watch-main { grid-template-columns: 2fr 1fr; } }
+.sb-flag { font-size:9px; font-weight:800; letter-spacing:.05em; border-radius:999px; padding:2px 6px; background:#1c2f4d; border:1px solid #3d5b88; }
+.sb-flag.redzone { border-color:#8a3e3e; background:#3c1d28; color:#ffb9b9; }
+.sb-flag.clutch { border-color:#8f6f2b; background:#3a2f18; color:#ffe4a3; }
+.sb-flag.overtime { border-color:#5377b0; background:#1c335d; color:#c6ddff; }
+
+/* ── Momentum / jump row ─────────────────────────────────────────────── */
+.momentum { font-size:11px; margin-bottom:7px; padding:5px 8px; border-radius:7px; font-weight:700; }
+.momentum.offense { background:#173b2f; }
+.momentum.defense { background:#3d2527; }
+.momentum.swing { background:#3b2f18; }
+.momentum.neutral { background:#253149; }
+.jump-row { display:flex; gap:5px; overflow-x:auto; padding-bottom:5px; -webkit-overflow-scrolling:touch; }
+.jump-btn { white-space:nowrap; background:#182741; color:#d8e6ff; border:1px solid #37527d; border-radius:999px; padding:5px 10px; font-size:11px; cursor:pointer; flex-shrink:0; }
+
+/* ── Live feed ───────────────────────────────────────────────────────── */
+.live-feed { display:grid; gap:5px; }
+.feed-quarter-marker { font-size:10px; color:#90a7cf; text-transform:uppercase; letter-spacing:.08em; border-top:1px dashed #334866; padding-top:6px; margin-top:2px; }
+.feed-possession-divider { height:1px; background:rgba(61,77,109,.5); margin:2px 0; }
+.feed-row { display:grid; grid-template-columns:42px 1fr; gap:6px; border-left:2px solid #344766; padding:5px 0 5px 7px; border-radius:6px; }
+.feed-row.routine { background:rgba(18,31,53,.4); }
+.feed-row.major { background:rgba(33,54,88,.62); border-left-color:#6ca3df; }
+.feed-row.latest { border-left-color:#7cc4ff; background:#13213a; box-shadow:inset 0 0 0 1px rgba(124,196,255,.2); }
+.feed-time { font-size:10px; color:#9fb4d8; line-height:1.3; }
+.feed-clock { display:block; font-size:9px; color:#6b84aa; }
+.feed-headline { font-size:13px; font-weight:600; line-height:1.35; word-break:break-word; }
+.feed-meta { display:flex; gap:4px; flex-wrap:wrap; font-size:10px; margin-top:3px; align-items:center; }
+.feed-score { font-weight:700; color:#d8e8ff; }
+/* Impact badges */
+.feed-tag { border-radius:999px; padding:1px 6px; font-size:9px; font-weight:800; letter-spacing:.04em; white-space:nowrap; }
+.feed-tag-td { background:rgba(56,161,105,.25); color:#68d391; border:1px solid rgba(56,161,105,.5); }
+.feed-tag-turnover { background:rgba(229,62,62,.2); color:#fc8181; border:1px solid rgba(229,62,62,.45); }
+.feed-tag-sack { background:rgba(214,169,79,.2); color:#fbd38d; border:1px solid rgba(214,169,79,.4); }
+.feed-tag-bigplay { background:rgba(99,179,237,.2); color:#90cdf4; border:1px solid rgba(99,179,237,.4); }
+.feed-tag-redzone { background:rgba(197,48,48,.2); color:#feb2b2; border:1px solid rgba(197,48,48,.4); }
+.feed-tag-clutch { background:rgba(159,122,234,.2); color:#d6bcfa; border:1px solid rgba(159,122,234,.4); }
+.feed-tag-default { background:#1b2f4f; color:#a0aec0; border:1px solid #415d89; }
+
+/* ── Standouts ───────────────────────────────────────────────────────── */
+.watch-side-title { margin:0 0 8px; font-size:13px; font-weight:700; color:#c8d8f5; }
+.standout-list { margin:0; padding:0; list-style:none; display:grid; gap:4px; }
+.standout-list li { display:flex; align-items:baseline; gap:6px; font-size:12px; line-height:1.4; }
+.standout-pos { font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:#6a87b8; min-width:32px; flex-shrink:0; }
+
+/* ── Controls ────────────────────────────────────────────────────────── */
+.controls { margin-top:10px; display:grid; gap:4px; }
+.controls-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#4d6a96; margin-top:4px; }
+.speed-row, .skip-row, .playcall-row { display:flex; gap:4px; flex-wrap:wrap; }
+.ctrl-btn { background:#1c2e4d; color:#c8d8f5; border:1px solid #456596; border-radius:7px; padding:5px 9px; font-size:11px; cursor:pointer; white-space:nowrap; }
+.ctrl-btn.active { border-color:#7cc4ff; color:#b8e0ff; background:#182948; }
+.ctrl-btn:hover { background:#233660; }
+.pause-btn { font-size:13px; padding:5px 8px; }
+
+/* ── Final card ──────────────────────────────────────────────────────── */
+.watch-final-card { border:1px solid #3d5378; border-radius:10px; margin-top:12px; padding:10px; background:#13203a; }
+.watch-final-label { text-transform:uppercase; font-size:10px; letter-spacing:.08em; color:#98b4dd; margin-bottom:4px; }
+.watch-final-score { display:flex; flex-direction:column; gap:4px; font-size:15px; font-weight:800; color:#ecf4ff; }
+.finish { margin-top:10px; width:100%; background:#1d4ed8; color:#fff; font-weight:800; border:none; border-radius:8px; padding:9px; cursor:pointer; font-size:13px; }
 `;
