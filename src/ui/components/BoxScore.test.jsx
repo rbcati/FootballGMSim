@@ -298,6 +298,180 @@ describe('BoxScore player name resolution', () => {
   });
 });
 
+describe('BoxScore mobile condensed hierarchy', () => {
+  const baseLeague = { seasonId: 2031, week: 2, teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] };
+  const gameWithStats = {
+    homeId: 1, awayId: 2, homeScore: 28, awayScore: 17,
+    quarterScores: { home: [7, 7, 7, 7], away: [0, 7, 3, 7] },
+    teamStats: { home: { passYards: 250, totalYards: 380 }, away: { passYards: 180 } },
+    playerStats: {
+      home: { 11: { name: 'Home QB', stats: { passAtt: 30, passComp: 20, passYd: 250, passTD: 3 } } },
+      away: { 22: { name: 'Away RB', stats: { rushAtt: 15, rushYd: 90, rushTD: 1 } } },
+    },
+  };
+  beforeEach(() => { cleanup(); vi.mocked(useStableRouteRequest).mockReturnValue({ data: null }); });
+
+  it('Key Performers card renders when playerStats exists', () => {
+    const { getByTestId } = render(
+      <BoxScore gameId="g-kp" league={{ ...baseLeague, gameById: { 'g-kp': gameWithStats } }} embedded />,
+    );
+    expect(getByTestId('game-book-top-performers')).toBeTruthy();
+    expect(getByTestId('game-book-leader-passing')).toBeTruthy();
+    expect(getByTestId('game-book-leader-rushing')).toBeTruthy();
+  });
+
+  it('Key Performers card appears before Drive Summary in DOM order', () => {
+    const { container } = render(
+      <BoxScore gameId="g-order" league={{ ...baseLeague, gameById: { 'g-order': gameWithStats } }} embedded />,
+    );
+    const allSections = Array.from(container.querySelectorAll('[data-testid]'));
+    const performersIdx = allSections.findIndex((el) => el.dataset.testid === 'game-book-top-performers');
+    const driveIdx = allSections.findIndex((el) => el.dataset.testid === 'game-book-drive-summary');
+    expect(performersIdx).toBeGreaterThanOrEqual(0);
+    expect(driveIdx).toBeGreaterThanOrEqual(0);
+    expect(performersIdx).toBeLessThan(driveIdx);
+  });
+
+  it('Key Performers card appears before player stat tables in DOM order', () => {
+    const { container } = render(
+      <BoxScore gameId="g-order2" league={{ ...baseLeague, gameById: { 'g-order2': gameWithStats } }} embedded />,
+    );
+    const allSections = Array.from(container.querySelectorAll('[data-testid]'));
+    const performersIdx = allSections.findIndex((el) => el.dataset.testid === 'game-book-top-performers');
+    const passingTableIdx = allSections.findIndex((el) => el.dataset.testid === 'game-book-table-passing');
+    expect(performersIdx).toBeGreaterThanOrEqual(0);
+    expect(passingTableIdx).toBeGreaterThanOrEqual(0);
+    expect(performersIdx).toBeLessThan(passingTableIdx);
+  });
+
+  it('player stat table sections start with aria-expanded="false" (collapsed by default)', () => {
+    const { getByTestId } = render(
+      <BoxScore gameId="g-collapsed" league={{ ...baseLeague, gameById: { 'g-collapsed': gameWithStats } }} embedded />,
+    );
+    const passingToggle = getByTestId('game-book-table-toggle-passing');
+    expect(passingToggle.getAttribute('aria-expanded')).toBe('false');
+    const rushingToggle = getByTestId('game-book-table-toggle-rushing');
+    expect(rushingToggle.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('clicking a stat table toggle expands the section (aria-expanded becomes true)', () => {
+    const { getByTestId } = render(
+      <BoxScore gameId="g-expand" league={{ ...baseLeague, gameById: { 'g-expand': gameWithStats } }} embedded />,
+    );
+    const toggle = getByTestId('game-book-table-toggle-passing');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('clicking a stat table toggle twice collapses it back', () => {
+    const { getByTestId } = render(
+      <BoxScore gameId="g-collapse2" league={{ ...baseLeague, gameById: { 'g-collapse2': gameWithStats } }} embedded />,
+    );
+    const toggle = getByTestId('game-book-table-toggle-passing');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('stat table content remains in DOM when collapsed (accessible but CSS-hidden on mobile)', () => {
+    const { container, getByTestId } = render(
+      <BoxScore gameId="g-dom" league={{ ...baseLeague, gameById: { 'g-dom': gameWithStats } }} embedded />,
+    );
+    // Toggle is collapsed (aria-expanded=false) but content is still in the DOM
+    const toggle = getByTestId('game-book-table-toggle-passing');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    // Player name is still in the DOM for accessibility / SSR
+    const section = getByTestId('game-book-table-passing');
+    expect(section.textContent).toContain('Home QB');
+  });
+
+  it('other collapsible sections (drive-summary, play-by-play) start collapsed', () => {
+    const gameWithDrives = {
+      ...gameWithStats,
+      driveSummary: [{ id: 'd1', teamId: 1, quarter: 2, result: 'TD', plays: 9, yards: 80, points: 7 }],
+    };
+    const { getByTestId } = render(
+      <BoxScore gameId="g-coll-sections" league={{ ...baseLeague, gameById: { 'g-coll-sections': gameWithDrives } }} embedded />,
+    );
+    expect(getByTestId('game-book-section-toggle-drive-summary').getAttribute('aria-expanded')).toBe('false');
+    expect(getByTestId('game-book-section-toggle-play-by-play').getAttribute('aria-expanded')).toBe('false');
+    expect(getByTestId('game-book-section-toggle-team-comparison').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('Drive Summary content is still in DOM when collapsed', () => {
+    const gameWithDrives = {
+      ...gameWithStats,
+      driveSummary: [{ id: 'd1', teamId: 1, quarter: 2, result: 'TD', plays: 9, yards: 80, points: 7 }],
+    };
+    const { getByTestId } = render(
+      <BoxScore gameId="g-drive-dom" league={{ ...baseLeague, gameById: { 'g-drive-dom': gameWithDrives } }} embedded />,
+    );
+    const driveSection = getByTestId('game-book-drive-summary');
+    expect(driveSection.textContent).toContain('Drive Summary');
+    // Content is in DOM even when collapsed
+    expect(driveSection.textContent).toContain('TD');
+  });
+
+  it('back label prop controls button text', () => {
+    const onBack = vi.fn();
+    const { getByTestId, getAllByText } = render(
+      <BoxScore gameId="g-label" league={{ ...baseLeague, gameById: { 'g-label': gameWithStats } }} embedded onBack={onBack} backLabel="Back to Result" />,
+    );
+    const backBtn = getByTestId('game-book-back-action');
+    expect(backBtn.textContent).toBe('Back to Result');
+  });
+
+  it('back label shows "Back to Weekly Results" when passed', () => {
+    const onBack = vi.fn();
+    const { getByTestId } = render(
+      <BoxScore gameId="g-wrlabel" league={{ ...baseLeague, gameById: { 'g-wrlabel': gameWithStats } }} embedded onBack={onBack} backLabel="Back to Weekly Results" />,
+    );
+    expect(getByTestId('game-book-back-action').textContent).toBe('Back to Weekly Results');
+  });
+
+  it('default back label is "Back to flow" when no backLabel prop given', () => {
+    const onBack = vi.fn();
+    const { getByTestId } = render(
+      <BoxScore gameId="g-defaultlabel" league={{ ...baseLeague, gameById: { 'g-defaultlabel': gameWithStats } }} embedded onBack={onBack} />,
+    );
+    expect(getByTestId('game-book-back-action').textContent).toBe('Back to flow');
+  });
+
+  it('a bottom back button also appears when embedded with onBack', () => {
+    const onBack = vi.fn();
+    const { getByTestId } = render(
+      <BoxScore gameId="g-bottomback" league={{ ...baseLeague, gameById: { 'g-bottomback': gameWithStats } }} embedded onBack={onBack} backLabel="Back to Result" />,
+    );
+    expect(getByTestId('game-book-bottom-back')).toBeTruthy();
+    fireEvent.click(getByTestId('game-book-bottom-back').querySelector('button'));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('player names from #1548 still resolve in stat tables', () => {
+    const { container } = render(
+      <BoxScore gameId="g-names" league={{ ...baseLeague, gameById: { 'g-names': gameWithStats } }} embedded />,
+    );
+    expect(container.textContent).toContain('Home QB');
+    expect(container.textContent).toContain('Away RB');
+    expect(container.textContent).not.toContain('Unknown');
+    expect(container.textContent).not.toContain('undefined');
+  });
+
+  it('Player #ID fallback remains safe for nameless stat rows', () => {
+    const gameNoNames = {
+      homeId: 1, awayId: 2, homeScore: 14, awayScore: 7,
+      playerStats: { home: { 99: { stats: { passAtt: 15, passYd: 120 } } }, away: {} },
+    };
+    const { container } = render(
+      <BoxScore gameId="g-nonames" league={{ ...baseLeague, gameById: { 'g-nonames': gameNoNames } }} embedded />,
+    );
+    expect(container.textContent).toContain('Player #99');
+    expect(container.textContent).not.toContain('Unknown');
+  });
+});
+
 describe('PlayerButton fallback display', () => {
   beforeEach(() => { cleanup(); });
 

@@ -15,7 +15,7 @@ function findScheduleGame(league, gameId) {
 }
 
 
-export default function GameDetailScreen({ gameId, league, actions, onBack, onPlayerSelect, onTeamSelect, onNavigate }) {
+export default function GameDetailScreen({ gameId, league, actions, onBack, onPlayerSelect, onTeamSelect, onNavigate, backLabel }) {
   const weekFromId = typeof gameId === 'string' ? gameId.match(/_w(\d+)_/i)?.[1] : null;
 
   const scheduleGame = findScheduleGame(league, gameId);
@@ -83,6 +83,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
           onPlayerSelect={onPlayerSelect}
           onTeamSelect={onTeamSelect}
           scheduleGame={scheduleGame}
+          backLabel={backLabel}
         />
       </SectionCard>
     </div>

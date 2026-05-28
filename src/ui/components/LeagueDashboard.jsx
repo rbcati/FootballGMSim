@@ -540,6 +540,8 @@ export default function LeagueDashboard({
   const [weeklyResultsInitialWeek, setWeeklyResultsInitialWeek] = useState(null);
   const [selectedGameId, setSelectedGameId] = useState(null);
   const [lastGameTab, setLastGameTab] = useState("Schedule");
+  // Tracks how the Game Detail screen was opened so we can show the right back label.
+  const [gameDetailOpenSource, setGameDetailOpenSource] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [selectedPlayerContext, setSelectedPlayerContext] = useState(null);
   const handlePlayerSelect = (playerOrId, profileContext = null) => {
@@ -632,11 +634,13 @@ export default function LeagueDashboard({
     }
   }, [league?.phase]);
 
-  // If an external box score request comes from the LiveGame scoreboard,
+  // If an external box score request comes from the LiveGame scoreboard or PostGameScreen,
   // open the dedicated Game Detail screen and consume the request.
   useEffect(() => {
     if (!externalBoxScoreId) return;
     setLastGameTab(activeTab);
+    // External requests (from PostGameScreen etc.) show "Back to Result"
+    setGameDetailOpenSource("postgame");
     setSelectedGameId(externalBoxScoreId);
     setActiveTab("Game Detail");
     onConsumeExternalBoxScore?.();
@@ -696,6 +700,7 @@ export default function LeagueDashboard({
   const openGameDetail = (gameId, sourceTab = activeTab) => {
     if (!gameId) return;
     setLastGameTab(sourceTab);
+    setGameDetailOpenSource(sourceTab === "Weekly Results" ? "weekly-results" : "internal");
     setSelectedGameId(gameId);
     setActiveTab("Game Detail");
   };
@@ -1221,6 +1226,13 @@ export default function LeagueDashboard({
               onNavigate={setActiveTab}
               onPlayerSelect={handlePlayerSelect}
               onTeamSelect={setSelectedTeamId}
+              backLabel={
+                gameDetailOpenSource === "weekly-results"
+                  ? "Back to Weekly Results"
+                  : gameDetailOpenSource === "postgame"
+                    ? "Back to Result"
+                    : undefined
+              }
             />
           </TabErrorBoundary>
         )}
