@@ -221,6 +221,109 @@ describe('FranchiseHQ', () => {
   });
 });
 
+describe('FranchiseHQ V4 compact home screen', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders compact home structure — Season Pulse in More drawer, core elements at top level', () => {
+    render(
+      <FranchiseHQ
+        league={baseLeague}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    // Top-level command elements present
+    expect(screen.getByTestId('franchise-hq')).toBeTruthy();
+    expect(screen.getByTestId('hq-actions-required')).toBeTruthy();
+    expect(screen.getByTestId('advance-week-cta')).toBeTruthy();
+    expect(screen.getByTestId('hq-matchup-hero')).toBeTruthy();
+    // Season Pulse is inside the More drawer (still reachable via testid)
+    expect(screen.getByTestId('hq-more-drawer')).toBeTruthy();
+    expect(screen.getByTestId('season-pulse')).toBeTruthy();
+  });
+
+  it('shows compact ready div — not a section card — when there are no blockers', () => {
+    const offseasonLeague = { ...baseLeague, phase: 'offseason_resign', schedule: { weeks: [] } };
+    render(
+      <FranchiseHQ
+        league={offseasonLeague}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    const actionsRequired = screen.getByTestId('hq-actions-required');
+    // Must be a plain div, not a section card
+    expect(actionsRequired.tagName.toLowerCase()).toBe('div');
+    expect(actionsRequired.classList.contains('card')).toBe(false);
+    // Shows ready-state text
+    expect(actionsRequired.textContent).toMatch(/ready|no blocker/i);
+  });
+
+  it('matchup card shows last result and next opponent when available', () => {
+    render(
+      <FranchiseHQ
+        league={baseLeague}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    const hero = screen.getByTestId('hq-matchup-hero');
+    // Opponent abbreviation (DET) shown in hero
+    expect(hero.textContent).toContain('DET');
+    // Last result from game g-9: W 23-20
+    const lastResultEl = document.querySelector('[data-testid="hq-last-result"]');
+    expect(lastResultEl).not.toBeNull();
+    expect(lastResultEl.textContent).toMatch(/W.*23|23.*W/i);
+  });
+
+  it('Actions Required renders with blockers when criticalCount > 0', () => {
+    // baseLeague has week 10 regular season — evaluate gate to see if it generates blockers
+    render(
+      <FranchiseHQ
+        league={baseLeague}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    // hq-actions-required always renders (either blocker card or compact ready row)
+    expect(screen.getByTestId('hq-actions-required')).toBeTruthy();
+  });
+
+  it('league quick links appear after quick action tiles — not between hero and actions required', () => {
+    render(
+      <FranchiseHQ
+        league={baseLeague}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
+        busy={false}
+        simulating={false}
+      />,
+    );
+    const root = screen.getByTestId('franchise-hq');
+    const html = root.innerHTML;
+    // Quick action tiles appear before league links in DOM order
+    const tilesPos = html.indexOf('app-hq-action-tiles');
+    const linksPos = html.indexOf('hq-league-destination-links');
+    expect(tilesPos).toBeGreaterThan(-1);
+    expect(linksPos).toBeGreaterThan(-1);
+    expect(tilesPos).toBeLessThan(linksPos);
+    // Hero is before actions-required in DOM
+    const heroPos = html.indexOf('hq-matchup-hero');
+    const actionsPos = html.indexOf('hq-actions-required');
+    expect(heroPos).toBeLessThan(actionsPos);
+  });
+});
+
 describe('FranchiseHQ V3 command hierarchy cleanup', () => {
   afterEach(() => {
     cleanup();

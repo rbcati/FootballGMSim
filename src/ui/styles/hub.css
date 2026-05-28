@@ -712,6 +712,51 @@
   margin-top: 4px;
 }
 
+/* Compact ready status — replaces full card when no blockers */
+.hq-ready-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px var(--space-2);
+  margin-bottom: 6px;
+}
+
+/* More drawer — collapsed Season Pulse & secondary context */
+.hq-more-drawer {
+  margin-bottom: 8px;
+}
+
+.hq-more-drawer__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-muted);
+  user-select: none;
+  list-style: none;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.hq-more-drawer__trigger::-webkit-details-marker {
+  display: none;
+}
+
+/* League links row — compact chip bar */
+.hq-league-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
 /* Mobile Adjustments */
 @media (max-width: 768px) {
   .team-summary-nav-card {
@@ -766,7 +811,11 @@
   }
 
   .hq-twin-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr; /* keep 2-col on mobile — tighter summary row */
+  }
+  .hq-twin-card .hq-game-plan-accordion,
+  .hq-twin-card .hq-intel-text--clamp {
+    display: none; /* hide non-essential in compact 2-col mobile view */
   }
 }
 
