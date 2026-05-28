@@ -168,7 +168,7 @@ export function buildPlayerStatSections(playerTables = {}, sortOverrides = {}) {
 
 
 function formatPlayerName(player) {
-  return player?.name ?? player?.playerName ?? 'Unknown player';
+  return player?.name ?? player?.playerName ?? (player?.playerId != null ? `Player #${player.playerId}` : 'Player');
 }
 
 function firstFiniteStat(stats = {}, keys = []) {
@@ -495,7 +495,7 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
   const scoringSummary = normalizeScoringSummary(payload?.scoringSummary);
   const teamStats = payload?.teamStats ?? payload?.stats?.team ?? {};
   const playerStats = payload?.playerStats ?? payload?.stats?.players ?? payload?.stats ?? {};
-  const playerMap = buildLeaguePlayerMap(league);
+  const playerMap = buildLeaguePlayerMap(league, payload);
   const homePlayers = normalizePlayers(playerStats?.home, 'home', homeId, playerMap);
   const awayPlayers = normalizePlayers(playerStats?.away, 'away', awayId, playerMap);
 
