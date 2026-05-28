@@ -542,6 +542,7 @@ export default function LeagueDashboard({
   const [lastGameTab, setLastGameTab] = useState("Schedule");
   // Tracks how the Game Detail screen was opened so we can show the right back label.
   const [gameDetailOpenSource, setGameDetailOpenSource] = useState(null);
+  const [gameDetailModal, setGameDetailModal] = useState({ open: false, gameId: null, source: null });
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [selectedPlayerContext, setSelectedPlayerContext] = useState(null);
   const handlePlayerSelect = (playerOrId, profileContext = null) => {
@@ -638,11 +639,7 @@ export default function LeagueDashboard({
   // open the dedicated Game Detail screen and consume the request.
   useEffect(() => {
     if (!externalBoxScoreId) return;
-    setLastGameTab(activeTab);
-    // External requests (from PostGameScreen etc.) show "Back to Result"
-    setGameDetailOpenSource("postgame");
-    setSelectedGameId(externalBoxScoreId);
-    setActiveTab("Game Detail");
+    setGameDetailModal({ open: true, gameId: externalBoxScoreId, source: "postgame" });
     onConsumeExternalBoxScore?.();
   }, [externalBoxScoreId, onConsumeExternalBoxScore, activeTab]);
 
@@ -699,9 +696,14 @@ export default function LeagueDashboard({
   const teamSummaryNav = () => setActiveTab("Roster Hub");
   const openGameDetail = (gameId, sourceTab = activeTab) => {
     if (!gameId) return;
+    const source = sourceTab === "Weekly Results" ? "weekly-results" : "internal";
     setLastGameTab(sourceTab);
-    setGameDetailOpenSource(sourceTab === "Weekly Results" ? "weekly-results" : "internal");
+    setGameDetailOpenSource(source);
     setSelectedGameId(gameId);
+    if (source === "weekly-results" || source === "postgame") {
+      setGameDetailModal({ open: true, gameId, source });
+      return;
+    }
     setActiveTab("Game Detail");
   };
   const activeSection = getShellSectionForDashboardTab(activeTab);
@@ -1393,6 +1395,33 @@ export default function LeagueDashboard({
         advanceDisabled={advanceDisabled}
         league={league}
       />
+
+
+      {gameDetailModal.open && gameDetailModal.gameId && (
+        <div className="player-profile-modal" role="dialog" aria-modal="true" aria-label="Game Book">
+          <button
+            type="button"
+            className="player-profile-modal-backdrop"
+            onClick={() => setGameDetailModal({ open: false, gameId: null, source: null })}
+            aria-label="Close Game Book"
+          />
+          <div className="player-profile-modal-content" style={{ maxWidth: 'min(1200px, 100vw)', width: '100%', height: '100%', maxHeight: '100dvh' }}>
+            <GameDetailScreen
+              gameId={gameDetailModal.gameId}
+              league={league}
+              actions={actions}
+              onBack={() => {
+                onGameDetailBack?.();
+                setGameDetailModal({ open: false, gameId: null, source: null });
+              }}
+              onNavigate={setActiveTab}
+              onPlayerSelect={handlePlayerSelect}
+              onTeamSelect={setSelectedTeamId}
+              backLabel={gameDetailModal.source === 'weekly-results' ? 'Back to Weekly Results' : 'Back to Result'}
+            />
+          </div>
+        </div>
+      )}
 
       {/* ── Player Profile modal ── */}
       {selectedPlayerId && (

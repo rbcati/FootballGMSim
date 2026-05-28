@@ -50,6 +50,20 @@ describe('league initialization', () => {
     expect(league.schedule.weeks[0].games[0].gameId).toMatch(/^s1_w1_\d+_\d+$/);
   });
 
+
+  it('generated league players have stable ids, non-empty names, and positions', () => {
+    const league = buildDefaultLeague({ userTeamId: 3 });
+    const allPlayers = league.teams.flatMap((team) => (team.roster ?? []).map((player) => ({ player, teamId: team.id })));
+    expect(allPlayers.length).toBeGreaterThan(0);
+    allPlayers.forEach(({ player, teamId }) => {
+      expect(player.id).not.toBeNull();
+      expect(player.id).not.toBeUndefined();
+      expect(String(player.name ?? '').trim().length).toBeGreaterThan(0);
+      expect(String(player.pos ?? '').trim().length).toBeGreaterThan(0);
+      expect(teamId).not.toBeNull();
+    });
+  });
+
   it('uses API league when response is valid', async () => {
     const apiLeague = buildDefaultLeague();
     const fetchMock = vi.fn().mockResolvedValue({
