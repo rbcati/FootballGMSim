@@ -7712,6 +7712,47 @@ details[open] .nav-summary::after {
   .trade-asset-row__name { min-width: 0; }
 }
 
+/* ── Game Book collapsible sections ─────────────────────────────────────── */
+.bs-section-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  padding: 0;
+  font: inherit;
+}
+.bs-section-toggle-btn h4 { margin: 0; flex: 1; }
+.bs-section-chevron {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+  margin-left: auto;
+}
+.bs-key-performers {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--hairline));
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+/* Mobile: stat tables and heavy sections collapsed by default */
+@media (max-width: 768px) {
+  .bs-section-body--collapsible { display: none; }
+  [data-expanded="true"] > .bs-section-body--collapsible { display: block; }
+  .bs-section-back-btn {
+    width: 100%;
+    justify-content: center;
+    margin-bottom: 8px;
+  }
+}
+/* Desktop: always show collapsible bodies */
+@media (min-width: 769px) {
+  .bs-section-body--collapsible { display: block; }
+}
+
 /* Game card presentation system */
 .premium-game-card {
   border: 1px solid var(--hairline);
