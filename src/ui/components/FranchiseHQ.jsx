@@ -142,7 +142,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
   );
   const lastGame = useMemo(() => getLatestUserCompletedGame(league) ?? recentLastGame ?? command.lastGameSummary ?? null, [league, recentLastGame, command.lastGameSummary]);
   const lastGameDisplay = useMemo(() => getLastGameDisplay(lastGame, league?.userTeamId), [lastGame, league?.userTeamId]);
-  const footerDays = Math.max(0, 7 - ((safeNum(league?.week, 1) - 1) % 7));
   const heroMeta = useMemo(() => {
     const homeAwayVerb = command.nextGame?.isHome ? 'vs' : '@';
     const divisionRows = command.divisionMiniStandings ?? [];
@@ -331,12 +330,11 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         onViewAll={() => onNavigate?.('News')}
       />
 
-      <section className="app-hq-matchup-hero card" aria-label="Weekly Hero" aria-live="polite">
+      <section className="app-hq-matchup-hero card" aria-label="Weekly Hero" aria-live="polite" data-testid="hq-matchup-hero">
         <div className="app-hq-matchup-main">
           <div className="app-hq-hero-copy">
-            <span className="app-hq-matchup-hero__eyebrow">Week Command • {command.weekLabel}</span>
             <h1 className="app-hq-hero-title">{heroMeta.operationHeading}</h1>
-            <p>{nextOpponentDisplay.detail} • {heroMeta.nextOppSummary}</p>
+            <p>{nextOpponentDisplay.detail}</p>
           </div>
           <div className="app-hq-team app-hq-team--opp">
             <TeamIdentityBadge team={opponent} size={112} variant="circle" />
@@ -364,18 +362,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           </div>
         </div>
 
-        <p className="app-hq-hero-footnote">Sim to Sunday • {footerDays} days until kickoff</p>
-      </section>
-      <section
-        className="card"
-        style={{ padding: 'var(--space-2)', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}
-        aria-label="League quick links"
-        data-testid="hq-league-destination-links"
-      >
-        <strong style={{ fontSize: '0.85em', opacity: 0.9 }}>League views:</strong>
-        <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('League Leaders')}>View full stats</button>
-        <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Standings')}>Open standings</button>
-        <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('News')}>Open league news</button>
       </section>
 
       {/* ── Actions Required ─────────────────────────────────────────── */}
@@ -422,14 +408,15 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           </div>
         </section>
       ) : (
-        <section
-          className="card app-hq-actions-required tone-ok"
+        <div
+          className="app-hq-actions-required hq-ready-status"
           aria-label="Actions Required"
           data-testid="hq-actions-required"
-          style={{ padding: 'var(--space-2)', marginBottom: 8 }}
+          data-ready="true"
         >
-          <span className="app-hq-intel-item tone-ok" style={{ margin: 0 }}>No blockers — ready to advance.</span>
-        </section>
+          <StatusChip label="Ready" tone="ok" />
+          <span style={{ fontSize: '0.85em', opacity: 0.8 }}>No blockers — ready to advance</span>
+        </div>
       )}
 
       <div
@@ -452,6 +439,18 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
             onClick={tile.onClick}
           />
         ))}
+      </div>
+
+      <div
+        className="hq-league-links"
+        style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', padding: '0 var(--space-2)', marginBottom: 8 }}
+        aria-label="League quick links"
+        data-testid="hq-league-destination-links"
+      >
+        <strong style={{ fontSize: '0.8em', opacity: 0.7 }}>League views:</strong>
+        <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('League Leaders')}>View full stats</button>
+        <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Standings')}>Open standings</button>
+        <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('News')}>Open league news</button>
       </div>
 
       {/* ── Roster Health / Office Status (twin parallel status cards) ─────── */}
@@ -534,6 +533,10 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           {weeklyIntel.length > 1 ? (
             <p className="hq-twin-card__detail hq-intel-text--clamp">{weeklyIntel[1].text}</p>
           ) : null}
+          <p className="hq-twin-card__detail hq-twin-card__divider" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: '0.78em', opacity: 0.65 }}>Culture</span>
+            <StatusChip label={`${culturePulse.label} ${culturePulse.trendIcon}`} tone={culturePulse.tone} />
+          </p>
           <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Front Office')}>
             Front Office
           </button>
@@ -542,6 +545,8 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
 
       {/* Next Action and Coordinator Brief panels removed — data compressed into hq-twin-grid above */}
 
+      <details className="hq-more-drawer" data-testid="hq-more-drawer">
+        <summary className="hq-more-drawer__trigger">Season Pulse &amp; More ▾</summary>
       <SectionCard title="Season Pulse" subtitle="Pressure, form, and roster leverage at a glance." variant="compact">
         <div className="app-hq-pulse-grid" data-testid="season-pulse">
           <article className={`app-hq-pulse-card tone-${seasonPulse.mandateTone}`}>
@@ -609,6 +614,7 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           </article>
         </div>
       </SectionCard>
+      </details>
 
       {lineupToast ? <p className="app-inline-toast" role="status" aria-live="polite">{lineupToast}</p> : null}
 
