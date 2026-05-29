@@ -7,6 +7,7 @@ import { getPlayerProfileId, hasValidPlayerProfileId, openPlayerProfile } from "
 import ReplayableGameFlowViewer from "./ReplayableGameFlowViewer.jsx";
 import AdvancedGameStats from "./AdvancedGameStats.jsx";
 import { buildBroadcastGameNotes } from "../../core/broadcastNarrative.js";
+import { buildReasoningBullets } from "../../core/gameSummary.js";
 
 const QUALITY_BADGE_CLASS = {
   "Full detail": "success",
@@ -84,6 +85,9 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
   }
 
   const storyBullets = buildGameBookStory(vm);
+  // Condensed Executive Summary bullets parsed from the identical
+  // gameReasoningFlags tokens the live FinalOverlay uses (single translator).
+  const reasoningBullets = buildReasoningBullets(vm.gameReasoningFlags ?? game?.gameReasoningFlags ?? []);
   const statLeaderCards = vm.statLeaderCards ?? [];
   const gameContextBase = {
     source: "game-book",
@@ -266,6 +270,21 @@ function BoxScore({ gameId, league, actions, onClose, onBack, onPlayerSelect, on
         </div>
         {vm.detailWarning ? <p>{vm.detailWarning}</p> : null}
       </section>
+
+      {/* 1b. Executive Summary — condensed reasoning diagnostics, near top */}
+      {reasoningBullets.length > 0 && (
+        <section className="bs-section" data-testid="game-book-executive-summary">
+          <div className="bs-section-header">
+            <h4>Executive Summary</h4>
+            <span className="bs-section-count">Why it played out this way</span>
+          </div>
+          <ul className="bs-list">
+            {reasoningBullets.map((bullet) => (
+              <li key={bullet} className="bs-list-item">{bullet}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* 2. Key Performers — always visible near top */}
       <section className="bs-section bs-key-performers" data-testid="game-book-top-performers">

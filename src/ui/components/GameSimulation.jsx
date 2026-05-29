@@ -17,6 +17,7 @@ import React, {
 } from "react";
 import AnimatedField from "./AnimatedField.jsx";
 import PlayerCard, { ovrTier, posColor } from "./PlayerCard.jsx";
+import { buildReasoningBullets } from "../../core/gameSummary.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -639,6 +640,10 @@ export default function GameSimulation({
   userTeamId,
   onComplete,
   offenseScheme = null,  // e.g. "SMASHMOUTH"
+  // Full worker result/summary block (carries gameReasoningFlags). Receiving
+  // the complete object — not just raw play logs — closes the serialization
+  // gap so the post-sim view can render the Executive Summary diagnostics.
+  gameSummary = null,
 }) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
@@ -1042,6 +1047,7 @@ export default function GameSimulation({
           userTeamId={userTeamId}
           onContinue={handleFinish}
           logs={effectiveLogs}
+          gameSummary={gameSummary}
         />
       )}
     </div>
@@ -1050,7 +1056,7 @@ export default function GameSimulation({
 
 // ── Final Score Overlay ───────────────────────────────────────────────────────
 
-function FinalOverlay({ homeTeam, awayTeam, homeScore, awayScore, homeColor, awayColor, userTeamId, onContinue, logs }) {
+function FinalOverlay({ homeTeam, awayTeam, homeScore, awayScore, homeColor, awayColor, userTeamId, onContinue, logs, gameSummary = null }) {
   const homeWon = homeScore > awayScore;
   const tied = homeScore === awayScore;
   const userIsHome = homeTeam?.id === userTeamId;
@@ -1090,6 +1096,14 @@ function FinalOverlay({ homeTeam, awayTeam, homeScore, awayScore, homeColor, awa
     const sorted = Object.values(acc).sort((a, b) => b.score - a.score);
     return sorted[0]?.player || null;
   }, [logs]);
+
+  // Executive Summary — translate the worker's gameReasoningFlags tokens into
+  // polished postgame bullet points through the shared core translator so the
+  // live overlay and the historical Game Book never diverge.
+  const reasoningBullets = useMemo(
+    () => buildReasoningBullets(gameSummary?.gameReasoningFlags ?? []),
+    [gameSummary],
+  );
 
   return (
     <div style={{
@@ -1162,6 +1176,33 @@ function FinalOverlay({ homeTeam, awayTeam, homeScore, awayScore, homeColor, awa
               Game MVP
             </div>
             <PlayerCard player={mvpPlayer} variant="standard" />
+          </div>
+        )}
+
+        {/* Executive Summary — high-density postgame reasoning diagnostics */}
+        {reasoningBullets.length > 0 && (
+          <div
+            data-testid="final-executive-summary"
+            style={{
+              marginBottom: 20,
+              textAlign: "left",
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 12,
+              padding: "12px 14px",
+            }}
+          >
+            <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "var(--text-subtle)",
+              textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>
+              Executive Summary
+            </div>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 6 }}>
+              {reasoningBullets.map((bullet) => (
+                <li key={bullet} style={{ fontSize: "0.8rem", lineHeight: 1.4, color: "rgba(255,255,255,0.88)" }}>
+                  • {bullet}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

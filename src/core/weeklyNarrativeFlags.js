@@ -173,6 +173,129 @@ export function deriveNarrativeFlags(game, teams = [], opts = {}) {
 }
 
 /**
+ * Canonical set of executive postgame diagnostic tokens.
+ *
+ * These are intentionally terse, high-signal tokens (mirroring the boolean
+ * flag philosophy above) that downstream UI surfaces translate into polished
+ * bullet points. Keeping the vocabulary centralized prevents schema drift.
+ */
+export const GAME_REASONING_TOKENS = Object.freeze({
+  TRENCH_DOMINANCE: 'TRENCH_DOMINANCE',
+  RED_ZONE_EFFICIENCY: 'RED_ZONE_EFFICIENCY',
+  TURNOVER_SWING: 'TURNOVER_SWING',
+  SCHEMATIC_EDGE: 'SCHEMATIC_EDGE',
+  DEPTH_COLLAPSE: 'DEPTH_COLLAPSE',
+});
+
+/**
+ * Derive executive postgame diagnostic flags for a single completed game.
+ *
+ * Pure and deterministic: given identical numeric context, it always returns
+ * identical tokens. It performs no RNG and no I/O. Each entry is a compact
+ * descriptor `{ token, teamId, teamAbbr, detail }` so a UI layer can render a
+ * polished, attributed bullet without re-deriving anything.
+ *
+ * The context shape is engine-agnostic so legacy callers that cannot supply a
+ * field simply omit it (the relevant diagnostic is skipped rather than
+ * crashing). All inputs are coerced defensively.
+ *
+ * @param {object} ctx
+ * @param {{id?:number, abbr?:string}} ctx.home
+ * @param {{id?:number, abbr?:string}} ctx.away
+ * @param {number} [ctx.homeScore]
+ * @param {number} [ctx.awayScore]
+ * @param {{homeOL?:number, awayDL?:number, awayOL?:number, homeDL?:number}} [ctx.trenches]
+ * @param {{home?:{trips:number,tds:number}, away?:{trips:number,tds:number}}} [ctx.redZone]
+ * @param {{home?:number, away?:number}} [ctx.turnovers] - turnovers COMMITTED per side
+ * @param {{home?:number, away?:number}} [ctx.strategicEdge] - bounded edge value per side
+ * @param {{home?:boolean, away?:boolean}} [ctx.schematicCounter] - clean hard-counter per side
+ * @param {{home?:{occurred:boolean,gap?:number}, away?:{occurred:boolean,gap?:number}}} [ctx.depth]
+ * @returns {Array<{token:string, teamId:(number|null), teamAbbr:string, detail:string}>}
+ */
+export function deriveGameReasoningFlags(ctx = {}) {
+  const flags = [];
+  const home = ctx?.home ?? {};
+  const away = ctx?.away ?? {};
+  const homeAbbr = home?.abbr ?? 'HOME';
+  const awayAbbr = away?.abbr ?? 'AWAY';
+  const homeId = home?.id ?? null;
+  const awayId = away?.id ?? null;
+
+  const push = (token, side, detail) => {
+    flags.push({
+      token,
+      teamId: side === 'home' ? homeId : awayId,
+      teamAbbr: side === 'home' ? homeAbbr : awayAbbr,
+      detail,
+    });
+  };
+
+  // ── TRENCH_DOMINANCE ──────────────────────────────────────────────────────
+  // One team's OL completely overmatches the opposing front (pass rush / run stops).
+  const tr = ctx?.trenches ?? {};
+  const TRENCH_GAP = 12;
+  const homeTrench = num(tr.homeOL) - num(tr.awayDL);
+  const awayTrench = num(tr.awayOL) - num(tr.homeDL);
+  if (num(tr.homeOL) > 0 && num(tr.awayDL) > 0 && homeTrench >= TRENCH_GAP) {
+    push(GAME_REASONING_TOKENS.TRENCH_DOMINANCE, 'home', `OL graded out ${Math.round(homeTrench)} pts over the front.`);
+  } else if (num(tr.awayOL) > 0 && num(tr.homeDL) > 0 && awayTrench >= TRENCH_GAP) {
+    push(GAME_REASONING_TOKENS.TRENCH_DOMINANCE, 'away', `OL graded out ${Math.round(awayTrench)} pts over the front.`);
+  }
+
+  // ── RED_ZONE_EFFICIENCY ───────────────────────────────────────────────────
+  // A team failed to convert multiple inside-the-20 possessions into touchdowns.
+  const rz = ctx?.redZone ?? {};
+  const rzCheck = (side, data) => {
+    const trips = num(data?.trips);
+    const tds = num(data?.tds);
+    const misfires = trips - tds;
+    if (trips >= 3 && misfires >= 2) {
+      push(GAME_REASONING_TOKENS.RED_ZONE_EFFICIENCY, side, `Settled for points on ${misfires} of ${trips} red-zone trips.`);
+    }
+  };
+  rzCheck('home', rz.home);
+  rzCheck('away', rz.away);
+
+  // ── TURNOVER_SWING ────────────────────────────────────────────────────────
+  // A side finishes -3 or worse in turnover differential; attribute the swing
+  // to the side that gained the +3-or-better advantage (the narrative driver).
+  const to = ctx?.turnovers ?? {};
+  const homeGiveaways = num(to.home);
+  const awayGiveaways = num(to.away);
+  const homeDifferential = awayGiveaways - homeGiveaways; // takeaways - giveaways
+  if (homeDifferential >= 3) {
+    push(GAME_REASONING_TOKENS.TURNOVER_SWING, 'home', `Won the turnover battle +${homeDifferential}.`);
+  } else if (homeDifferential <= -3) {
+    push(GAME_REASONING_TOKENS.TURNOVER_SWING, 'away', `Won the turnover battle +${-homeDifferential}.`);
+  }
+
+  // ── SCHEMATIC_EDGE ────────────────────────────────────────────────────────
+  // A team successfully anticipated and hard-countered the opponent's tendency.
+  const sc = ctx?.schematicCounter ?? {};
+  const edge = ctx?.strategicEdge ?? {};
+  if (sc.home && num(edge.home) > 0) {
+    push(GAME_REASONING_TOKENS.SCHEMATIC_EDGE, 'home', 'Game plan hard-countered the opponent’s tendencies.');
+  }
+  if (sc.away && num(edge.away) > 0) {
+    push(GAME_REASONING_TOKENS.SCHEMATIC_EDGE, 'away', 'Game plan hard-countered the opponent’s tendencies.');
+  }
+
+  // ── DEPTH_COLLAPSE ────────────────────────────────────────────────────────
+  // In-game injuries forced clearly lower-rated backups into high-leverage roles.
+  const depth = ctx?.depth ?? {};
+  if (depth.home?.occurred) {
+    const gap = num(depth.home?.gap);
+    push(GAME_REASONING_TOKENS.DEPTH_COLLAPSE, 'home', gap > 0 ? `Backups (-${Math.round(gap)} OVR) forced into key snaps.` : 'Backups forced into key snaps.');
+  }
+  if (depth.away?.occurred) {
+    const gap = num(depth.away?.gap);
+    push(GAME_REASONING_TOKENS.DEPTH_COLLAPSE, 'away', gap > 0 ? `Backups (-${Math.round(gap)} OVR) forced into key snaps.` : 'Backups forced into key snaps.');
+  }
+
+  return flags;
+}
+
+/**
  * Summarise narrative flags as a short human-readable label array.
  * Used for headline tagging.
  */

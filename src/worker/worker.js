@@ -10836,8 +10836,14 @@ async function handleWatchGame(payload, id) {
     // First flush: persist game result before sending logs to UI
     await flushDirty();
 
-    // Send play-by-play logs to UI so the viewer can render
-    post(toUI.PLAY_LOGS, { logs: res.playLogs || [], liveStats: res.liveStats || {} }, id);
+    // Send play-by-play logs to UI so the viewer can render.
+    // gameReasoningFlags rides along so the live FinalOverlay can render the
+    // Executive Summary without a second round-trip to the worker.
+    post(toUI.PLAY_LOGS, {
+      logs: res.playLogs || [],
+      liveStats: res.liveStats || {},
+      gameReasoningFlags: Array.isArray(res.gameReasoningFlags) ? res.gameReasoningFlags : [],
+    }, id);
 
     // Second flush (belt-and-suspenders): catch any dirty bits set during log building
     try { await flushDirty(); } catch (e) { console.warn('[Worker] secondary flush failed (non-fatal):', e.message); }
