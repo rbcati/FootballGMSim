@@ -1524,3 +1524,39 @@
   min-width: 62px;
   padding-inline: 6px;
 }
+
+/* ── HQ Zero-Scroll triangulation: sync gap/margin reductions ───────────── */
+/* These rules ensure app-mobile.css cannot revert the compressed HQ layout  */
+.hq-matchup-ticker-wrap {
+  padding: 6px 12px;
+  margin-bottom: 6px;
+  max-height: none;
+}
+.hq-twin-grid {
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.hq-nav-pills {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 0 var(--space-2);
+  margin-bottom: 8px;
+}
+.hq-nav-pill {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 11px;
+  width: auto;
+}
+
+@media (max-width: 375px) {
+  .hq-matchup-ticker-wrap {
+    padding: 5px 10px;
+  }
+  .hq-twin-grid {
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+}

@@ -69,7 +69,12 @@ function getLatestUserResultFromRecentResults(lastResults, { league, lastSimWeek
   return null;
 }
 
-export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = null, onNavigate, onAdvanceWeek, busy, simulating }) {
+const HQ_GP_STORAGE_KEY = 'footballgm_gameplan_v1';
+function loadHQStoredPlan() {
+  try { return JSON.parse(localStorage.getItem(HQ_GP_STORAGE_KEY) || 'null'); } catch { return null; }
+}
+
+export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = null, onNavigate, onAdvanceWeek, busy, simulating, actions }) {
   const [lineupToast, setLineupToast] = useState(null);
   const [showGate, setShowGate] = useState(false);
   const command = useMemo(() => selectFranchiseHQViewModel(league), [league]);
@@ -129,11 +134,64 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
     onNavigate?.('Team:Roster / Depth');
   };
 
+  const handleGamePlanTile = () => {
+    markWeeklyPrepStep(league, 'planReviewed', true);
+    // Sync stored game plan into the worker so computeStrategicEdge() sees live inputs
+    if (actions?.send) {
+      const storedPlan = loadHQStoredPlan();
+      const strats = userTeam?.strategies ?? {};
+      actions.send('UPDATE_STRATEGY', {
+        offSchemeId: strats.offSchemeId || 'WEST_COAST',
+        defSchemeId: strats.defSchemeId || 'COVER_2',
+        offPlanId: strats.offPlanId || 'BALANCED',
+        defPlanId: strats.defPlanId || 'BALANCED',
+        riskId: strats.riskId || 'BALANCED',
+        ...(storedPlan ? { gamePlan: storedPlan } : {}),
+      });
+    }
+    onNavigate?.('Game Plan');
+  };
+
+  const handleTrainingTile = () => {
+    // Dispatch current strategy profile so the worker has fresh tactical context
+    if (actions?.send) {
+      const strats = userTeam?.strategies ?? {};
+      if (strats.offPlanId || strats.offSchemeId) {
+        actions.send('UPDATE_STRATEGY', {
+          offSchemeId: strats.offSchemeId || 'WEST_COAST',
+          defSchemeId: strats.defSchemeId || 'COVER_2',
+          offPlanId: strats.offPlanId || 'BALANCED',
+          defPlanId: strats.defPlanId || 'BALANCED',
+          riskId: strats.riskId || 'BALANCED',
+        });
+      }
+    }
+    onNavigate?.('Training');
+  };
+
+  const handleScoutTile = () => {
+    markWeeklyPrepStep(league, 'opponentScouted', true);
+    // Flush strategy state so game-simulator.js reads real inputs on next sim loop
+    if (actions?.send) {
+      const strats = userTeam?.strategies ?? {};
+      if (strats.offPlanId || strats.offSchemeId) {
+        actions.send('UPDATE_STRATEGY', {
+          offSchemeId: strats.offSchemeId || 'WEST_COAST',
+          defSchemeId: strats.defSchemeId || 'COVER_2',
+          offPlanId: strats.offPlanId || 'BALANCED',
+          defPlanId: strats.defPlanId || 'BALANCED',
+          riskId: strats.riskId || 'BALANCED',
+        });
+      }
+    }
+    onNavigate?.('Weekly Prep');
+  };
+
   const actionTiles = [
-    { title: 'Game Plan', icon: <HQIcon name="gamePlan" size={22} />, subtitle: command.actionStatuses.gameplan.subtitle, badge: command.actionStatuses.gameplan.badge || 'Recommended', onClick: () => { markWeeklyPrepStep(league, 'planReviewed', true); onNavigate?.('Game Plan'); } },
+    { title: 'Game Plan', icon: <HQIcon name="gamePlan" size={22} />, subtitle: command.actionStatuses.gameplan.subtitle, badge: command.actionStatuses.gameplan.badge || 'Recommended', onClick: handleGamePlanTile },
     { title: 'Set Lineup', icon: <HQIcon name="lineup" size={22} />, subtitle: command.actionStatuses.lineup.subtitle, badge: command.actionStatuses.lineup.badge, onClick: handleSetLineup },
-    { title: 'Training', icon: <HQIcon name="target" size={22} />, subtitle: 'Adjust weekly player focus', badge: null, onClick: () => onNavigate?.('Training') },
-    { title: 'Scout Opponent', icon: <HQIcon name="scout" size={22} />, subtitle: command.actionStatuses.scouting.subtitle, badge: command.actionStatuses.scouting.badge || 'New report', onClick: () => { markWeeklyPrepStep(league, 'opponentScouted', true); onNavigate?.('Weekly Prep'); } },
+    { title: 'Training', icon: <HQIcon name="target" size={22} />, subtitle: 'Adjust weekly player focus', badge: null, onClick: handleTrainingTile },
+    { title: 'Scout Opponent', icon: <HQIcon name="scout" size={22} />, subtitle: command.actionStatuses.scouting.subtitle, badge: command.actionStatuses.scouting.badge || 'New report', onClick: handleScoutTile },
   ];
 
   const recentLastGame = useMemo(
@@ -330,38 +388,10 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         onViewAll={() => onNavigate?.('News')}
       />
 
-      <section className="app-hq-matchup-hero card" aria-label="Weekly Hero" aria-live="polite" data-testid="hq-matchup-hero">
-        <div className="app-hq-matchup-main">
-          <div className="app-hq-hero-copy">
-            <h1 className="app-hq-hero-title">{heroMeta.operationHeading}</h1>
-            <p>{nextOpponentDisplay.detail}</p>
-          </div>
-          <div className="app-hq-team app-hq-team--opp">
-            <TeamIdentityBadge team={opponent} size={112} variant="circle" />
-            <strong>{nextOpponentDisplay.opponentAbbr}</strong>
-            <span>{formatRecordInline(command.nextOpponentRecord)}</span>
-          </div>
-        </div>
-
-        <div className="app-hq-hero-subcards">
-          <div className="app-hq-hero-subcard">
-            <div className="app-hq-hero-subcard__head">
-              <HQIcon name="lastGame" size={14} />
-              <strong>Last Result</strong>
-            </div>
-            <p className="app-hq-hero-subcard__value">{lastGameDisplay.heroLine}</p>
-            <small>{lastGame ? heroMeta.lastGameStory : 'No final yet. Build your plan and get ready for kickoff.'}</small>
-          </div>
-          <div className="app-hq-hero-subcard">
-            <div className="app-hq-hero-subcard__head">
-              <HQIcon name="standing" size={14} />
-              <strong>Standing</strong>
-            </div>
-            <p className="app-hq-hero-subcard__value">{command.standingSummary}</p>
-            <small>{heroMeta.standingDetail}</small>
-          </div>
-        </div>
-
+      <section className="hq-matchup-ticker-wrap" aria-label="Weekly Matchup" aria-live="polite" data-testid="hq-matchup-hero">
+        <p className="hq-matchup-ticker">
+          🏈 Week {safeNum(league?.week, 1)} {command.nextGame?.isHome ? 'vs' : '@'} {opponent?.abbr ?? command.nextOpponent ?? 'TBD'} ({formatRecordInline(command.nextOpponentRecord)}) • Last: {lastGameDisplay.heroLine}
+        </p>
       </section>
 
       {/* ── Actions Required ─────────────────────────────────────────── */}
@@ -370,9 +400,9 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           className={`card app-hq-actions-required tone-${commandSummary.readinessTone}`}
           aria-label="Actions Required"
           data-testid="hq-actions-required"
-          style={{ padding: 'var(--space-2)', marginBottom: 8 }}
+          style={{ padding: '8px', marginBottom: 6 }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
             <strong>Actions Required</strong>
             <StatusChip
               label={`${commandSummary.criticalCount} open`}
@@ -385,7 +415,7 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
                 key={`req-${idx}`}
                 type="button"
                 className={`app-hq-intel-item tone-${item.tone ?? 'warning'}`}
-                style={{ display: 'flex', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0', textAlign: 'left' }}
+                style={{ display: 'flex', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', textAlign: 'left' }}
                 onClick={() => item.tab && onNavigate?.(item.tab)}
               >
                 <span>
@@ -396,16 +426,9 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
               </button>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Weekly Prep')}>
-              Review weekly prep
-            </button>
-            {commandSummary.readinessTone !== 'ok' ? (
-              <button type="button" className="btn btn-sm" onClick={() => setShowGate(true)}>
-                {commandSummary.readinessLabel}
-              </button>
-            ) : null}
-          </div>
+          <button type="button" className="btn btn-sm" style={{ marginTop: 4 }} onClick={() => onNavigate?.('Weekly Prep')}>
+            Review weekly prep
+          </button>
         </section>
       ) : (
         <div
@@ -441,17 +464,16 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         ))}
       </div>
 
-      <div
-        className="hq-league-links"
-        style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', padding: '0 var(--space-2)', marginBottom: 8 }}
-        aria-label="League quick links"
+      <nav
+        className="hq-nav-pills"
+        aria-label="League quick navigation"
         data-testid="hq-league-destination-links"
       >
-        <strong style={{ fontSize: '0.8em', opacity: 0.7 }}>League views:</strong>
-        <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('League Leaders')}>View full stats</button>
-        <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Standings')}>Open standings</button>
-        <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('News')}>Open league news</button>
-      </div>
+        <button type="button" className="hq-nav-pill" onClick={() => onNavigate?.('League Leaders')}>Stats</button>
+        <button type="button" className="hq-nav-pill" onClick={() => onNavigate?.('Standings')}>Standings</button>
+        <button type="button" className="hq-nav-pill" onClick={() => onNavigate?.('News')}>News</button>
+        <button type="button" className="hq-nav-pill" onClick={() => onNavigate?.('Team:Front Office')}>Ops</button>
+      </nav>
 
       {/* ── Roster Health / Office Status (twin parallel status cards) ─────── */}
       {/* Data from legacy "Next Action" and "Coordinator Brief" panels is     */}

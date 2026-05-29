@@ -887,6 +887,7 @@ export default function LeagueDashboard({
                 onAdvanceWeek={onAdvanceWeek}
                 busy={busy}
                 simulating={simulating}
+                actions={actions}
                 onOpenBoxScore={(gameId) => openGameDetail(gameId, "HQ")}
                 onTeamSelect={setSelectedTeamId}
             />

@@ -254,8 +254,8 @@ describe('FranchiseHQ command center layout', () => {
     // These sections remain as SectionCards (heading preserved) with collapsible inner details
     expect(html).toContain('Operations Snapshot');
     expect(html).not.toContain('League Pulse');
-    expect(html).toContain('League views:');
-    expect(html).toContain('View full stats');
+    expect(html).toContain('hq-nav-pills');
+    expect(html).toContain('Stats');
     // Collapsible summary triggers are present inside section bodies
     expect(html).toContain('app-hq-background-section__inner');
     // Weekly Command Hub and Game Plan Impact pruned — passive deep panels removed from HQ
@@ -341,12 +341,12 @@ describe('FranchiseHQ V3 command hierarchy cleanup — server-render smoke', () 
     expect(html).toContain('Scout Opponent');
   });
 
-  it('League Views compact row renders all three link labels', () => {
+  it('League nav pills compact row renders all four pill labels', () => {
     const html = renderToString(
       <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
     );
-    expect(html).toContain('View full stats');
-    expect(html).toContain('Open standings');
-    expect(html).toContain('Open league news');
+    expect(html).toContain('Stats');
+    expect(html).toContain('Standings');
+    expect(html).toContain('Ops');
   });
 });
