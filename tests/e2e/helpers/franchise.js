@@ -186,6 +186,35 @@ export async function selectScheduleWeekTab(page, weekNumber) {
 export async function simulateSingleWeek(page, options = {}) {
   const { advanceAnyway = false } = options;
   const startWeek = await page.evaluate(() => window?.state?.league?.week ?? 1);
+
+  if (advanceAnyway) {
+    await page.evaluate(() => {
+      try {
+        const PREP_KEY = 'footballgm_weekly_prep_v1';
+        const league = window?.state?.league ?? {};
+        const seasonId = league?.seasonId ?? league?.year ?? 'season';
+        const week = league?.week ?? 1;
+        const userTeamId = league?.userTeamId ?? 'user';
+        const slotKey = `${seasonId}:${week}:${userTeamId}`;
+        const stored = JSON.parse(window.localStorage.getItem(PREP_KEY) ?? '{}');
+        stored[slotKey] = {
+          lineupChecked: true,
+          injuriesReviewed: true,
+          opponentScouted: true,
+          planReviewed: true,
+          ...(stored[slotKey] ?? {}),
+          planReviewed: true,
+        };
+        window.localStorage.setItem(PREP_KEY, JSON.stringify(stored));
+      } catch (_e) { /* non-fatal */ }
+    });
+    // Wait for the button to become enabled if it's rendered
+    const advanceCta = page.getByTestId('advance-week-cta');
+    if (await advanceCta.isVisible().catch(() => false)) {
+      await expect(advanceCta).toBeEnabled({ timeout: 5000 }).catch(() => {});
+    }
+  }
+
   const advanceCta = page.getByTestId('advance-week-cta');
   if (await advanceCta.isVisible().catch(() => false)) {
     await advanceCta.click();

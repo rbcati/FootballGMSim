@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { goToTab, launchFranchise } from './helpers/franchise.js';
+import { launchFranchise, goToTab, ensureLeagueLoaded } from './helpers/franchise.js';
 
 const SMOKE_TIMEOUT = 90000;
 
@@ -223,6 +223,7 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   }
 
   // Season Pulse momentum should update after the game
+  await page.getByTestId('hq-more-drawer').click();
   const seasonPulse = page.getByTestId('season-pulse');
   await expect(seasonPulse).toBeVisible({ timeout: SMOKE_TIMEOUT });
 
@@ -240,6 +241,7 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
 
   // ── Reload: HQ should persist Last Result from IndexedDB ────────────────────
   await page.reload();
+  await ensureLeagueLoaded(page);
   await expect(page.getByTestId('app-bootstrap-loading')).toBeHidden({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
