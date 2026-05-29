@@ -266,6 +266,56 @@ export function summarizeWhyTeamWon({ winnerAbbr, loserAbbr, teamStats, homeId, 
   return `${winnerAbbr} made enough situational plays to outlast ${loserAbbr}.`;
 }
 
+/**
+ * Translate a single executive diagnostic flag into a polished, attributed
+ * postgame clause (no leading bullet glyph). Returns null for unknown tokens
+ * so callers can simply filter them out.
+ *
+ * @param {{token:string, teamAbbr?:string, detail?:string}} flag
+ * @returns {string|null}
+ */
+export function reasoningFlagToClause(flag) {
+  if (!flag || !flag.token) return null;
+  const team = flag.teamAbbr ?? 'The offense';
+  const detail = flag.detail ? ` ${flag.detail}` : '';
+  switch (flag.token) {
+    case 'TRENCH_DOMINANCE':
+      return `${team} dominated the trenches and controlled the line of scrimmage.${detail}`;
+    case 'RED_ZONE_EFFICIENCY':
+      return `${team} stalled in the red zone and left points on the field.${detail}`;
+    case 'TURNOVER_SWING':
+      return `${team} capitalized heavily on a decisive turnover swing.${detail}`;
+    case 'SCHEMATIC_EDGE':
+      return `${team} won the chess match with a sharp tactical counter.${detail}`;
+    case 'DEPTH_COLLAPSE':
+      return `${team} was forced to lean on thin depth after in-game attrition.${detail}`;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Build a deduplicated array of professional postgame bullet strings from a
+ * `gameReasoningFlags` array. Both the live FinalOverlay and the historical
+ * Game Book parse the identical tokens through this single path so the two
+ * surfaces never diverge.
+ *
+ * @param {Array} flags
+ * @returns {string[]}
+ */
+export function buildReasoningBullets(flags = []) {
+  const list = Array.isArray(flags) ? flags : [];
+  const seen = new Set();
+  const bullets = [];
+  for (const flag of list) {
+    const clause = reasoningFlagToClause(flag);
+    if (!clause || seen.has(clause)) continue;
+    seen.add(clause);
+    bullets.push(clause);
+  }
+  return bullets;
+}
+
 export function buildGameNarrativeSummary({ homeTeam, awayTeam, homeScore, awayScore, gameScript, leaders, whyWon, isPlayoff = false, rivalry = false }) {
   const homeWon = homeScore > awayScore;
   const winner = homeWon ? homeTeam : awayTeam;

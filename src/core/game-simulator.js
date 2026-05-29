@@ -7,7 +7,8 @@ import { Utils as U } from './utils.js';
 import { Constants as C } from './constants.js';
 import { calculateGamePerformance, getCoachingMods, getHCMods, getMedicalStaffInjuryMod } from './coach-system.js';
 import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy, calculateMorale } from './player.js';
-import { getStrategyModifiers } from './strategy.js';
+import { getStrategyModifiers, computeStrategicEdge } from './strategy.js';
+import { deriveGameReasoningFlags } from './weeklyNarrativeFlags.js';
 import { getEffectiveRating, canPlayerPlay, generateInjury } from './injury-core.js';
 import { calculateTeamRatingWithSchemeFit } from './scheme-core.js';
 import { TRAITS } from './traits.js';
@@ -126,20 +127,32 @@ function buildDriveBasedSummary({
   homeDef = 75,
   awayDef = 75,
   homeFieldAdv = 0.03,
+  // Bounded ±5% schematic execution edges (per team). Default 0 keeps legacy
+  // save states — which carry no strategy profile — byte-for-byte identical.
+  homeStrategicEdge = 0,
+  awayStrategicEdge = 0,
 }) {
   const seed = hashStringToSeed(`${season}|${week}|${home?.id}|${away?.id}`);
   const rng = mulberry32(seed);
   const randInt = (min, max) => Math.floor(rng() * (max - min + 1)) + min;
   const chance = (p) => rng() < p;
 
+  // Net per-side schematic edge = own leverage minus the opponent's, hard-capped
+  // at ±5 percentage points so roster quality stays the primary driver.
+  const homeNetEdge = U.clamp(homeStrategicEdge - awayStrategicEdge, -0.05, 0.05);
+  const awayNetEdge = U.clamp(awayStrategicEdge - homeStrategicEdge, -0.05, 0.05);
+
   const homeDrives = randInt(10, 14);
   const awayDrives = randInt(10, 14);
   const homeStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0 };
   const awayStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0 };
 
-  const simTeam = (offOvr, defOvr, drives, teamStats, isHome) => {
+  const simTeam = (offOvr, defOvr, drives, teamStats, isHome, netEdge = 0) => {
     let score = 0;
-    const driveSuccessRaw = 0.4 + (offOvr - defOvr) * 0.005 + (isHome ? homeFieldAdv : 0);
+    // The strategic edge nudges drive-conversion probability only; it never
+    // alters the RNG draw count, so a zero edge reproduces prior behavior and
+    // a non-zero edge shifts only the comparison threshold (still deterministic).
+    const driveSuccessRaw = 0.4 + (offOvr - defOvr) * 0.005 + (isHome ? homeFieldAdv : 0) + netEdge;
     const driveSuccess = U.clamp(driveSuccessRaw, 0.15, 0.72);
     for (let i = 0; i < drives; i++) {
       const passHeavy = chance(0.56);
@@ -173,8 +186,8 @@ function buildDriveBasedSummary({
     return score;
   };
 
-  const homeScore = simTeam(homeOff, awayDef, homeDrives, homeStats, true);
-  const awayScore = simTeam(awayOff, homeDef, awayDrives, awayStats, false);
+  const homeScore = simTeam(homeOff, awayDef, homeDrives, homeStats, true, homeNetEdge);
+  const awayScore = simTeam(awayOff, homeDef, awayDrives, awayStats, false, awayNetEdge);
   const homeQbRating = computePasserRating({ comp: homeStats.comp, att: homeStats.passAtt, yds: homeStats.passYds, td: homeStats.passTD, ints: homeStats.INT });
   const awayQbRating = computePasserRating({ comp: awayStats.comp, att: awayStats.passAtt, yds: awayStats.passYds, td: awayStats.passTD, ints: awayStats.INT });
   const homeYpc = homeStats.rushAtt > 0 ? U.round(homeStats.rushYds / homeStats.rushAtt, 2) : null;
@@ -1575,6 +1588,15 @@ export function simGameStats(home, away, options = {}) {
     applyStaffTacticalEdge(home, homeMods);
     applyStaffTacticalEdge(away, awayMods);
 
+    // --- STRATEGIC RESPONSIVENESS (bounded ±5% schematic execution edge) ---
+    // Map each team's weekly tactical inputs against the opponent's strategy
+    // profile into a tightly bounded, fully deterministic execution edge.
+    // Legacy saves without `team.strategies` resolve to a neutral zero edge.
+    const homeStrategicEdge = computeStrategicEdge(home, away);
+    const awayStrategicEdge = computeStrategicEdge(away, home);
+    homeMods.strategicEdge = homeStrategicEdge.edge;
+    awayMods.strategicEdge = awayStrategicEdge.edge;
+
     if (false) console.log(`[SIM-DEBUG] Mods Applied: Home=${JSON.stringify(homeMods)}, Away=${JSON.stringify(awayMods)}`);
     // --- SCHEME FIT IMPACT ---
     let schemeNote = null;
@@ -2010,6 +2032,15 @@ export function simGameStats(home, away, options = {}) {
             }
             // ─────────────────────────────────────────────────────────────
 
+            // ── Strategic Responsiveness: bounded ±5% schematic edge ──────
+            // The offense's schematic leverage minus the defense's, hard-capped
+            // at ±5 percentage points so roster quality stays the primary driver.
+            // Applied AFTER the RNG-free probability build and BEFORE driveRoll
+            // is drawn, so the seeded RNG stream is byte-for-byte unchanged —
+            // only the comparison threshold shifts.
+            const stratEdge = U.clamp((mods.strategicEdge || 0) - (defMods.strategicEdge || 0), -0.05, 0.05);
+            scoreProb = U.clamp(scoreProb + stratEdge, 0.10, 0.65);
+
             const driveRoll = U.random();
 
             // Play-by-play log helper (shared by scoring and non-scoring drives)
@@ -2432,6 +2463,8 @@ export function simGameStats(home, away, options = {}) {
       homeDef: homeDefenseStrength,
       awayDef: awayDefenseStrength,
       homeFieldAdv: 0.03,
+      homeStrategicEdge: homeStrategicEdge.edge,
+      awayStrategicEdge: awayStrategicEdge.edge,
     });
 
     let homeScore = Math.max(0, driveSummary?.homeScore ?? homeRes.score);
@@ -2917,7 +2950,60 @@ export function simGameStats(home, away, options = {}) {
     const driveSummaryRows = buildDriveSummaryFromSimulation(normalizedPlayLogs, summaryContext);
     const quarterScores = buildQuarterScoresFromScoring(scoringSummary, summaryContext);
 
+    // --- EXECUTIVE POSTGAME DIAGNOSTICS (gameReasoningFlags) ---
+    // Detect whether in-game attrition forced a clearly lower-rated backup into
+    // a high-leverage starting role for a given side. Pure & deterministic:
+    // it only reads the already-resolved injury list + position depth charts.
+    const PREMIUM_DEPTH_POS = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
+    const computeDepthImpact = (team, groups) => {
+        const teamInjuries = gameInjuries.filter((inj) => inj && inj.teamId === team.id);
+        if (teamInjuries.length === 0) return { occurred: false, gap: 0 };
+        let maxGap = 0;
+        let forced = false;
+        for (const inj of teamInjuries) {
+            for (const pos of PREMIUM_DEPTH_POS) {
+                const pool = groups[pos] || [];
+                const idx = pool.findIndex((p) => p && String(p.id) === String(inj.playerId));
+                if (idx === -1) continue;
+                const starter = pool[idx];
+                const backup = pool[idx + 1] || null;
+                const gap = backup ? (Number(starter?.ovr ?? 0) - Number(backup?.ovr ?? 0)) : Number(starter?.ovr ?? 0) - 60;
+                if (gap >= 8 || !backup) forced = true;
+                if (gap > maxGap) maxGap = gap;
+                break;
+            }
+        }
+        // Two or more in-game injuries is itself a depth event regardless of gap.
+        if (teamInjuries.length >= 2) forced = true;
+        return { occurred: forced, gap: Math.max(0, maxGap) };
+    };
+
+    const gameReasoningFlags = deriveGameReasoningFlags({
+      home: { id: home?.id, abbr: home?.abbr },
+      away: { id: away?.id, abbr: away?.abbr },
+      homeScore,
+      awayScore,
+      trenches: {
+        homeOL: homeProfile.passBlock,
+        awayDL: awayProfile.passRushStrength,
+        awayOL: awayProfile.passBlock,
+        homeDL: homeProfile.passRushStrength,
+      },
+      redZone: {
+        home: { trips: home.stats?.game?.redZoneTrips ?? 0, tds: home.stats?.game?.redZoneTDs ?? 0 },
+        away: { trips: away.stats?.game?.redZoneTrips ?? 0, tds: away.stats?.game?.redZoneTDs ?? 0 },
+      },
+      turnovers: { home: homeTo, away: awayTo },
+      strategicEdge: { home: homeStrategicEdge.edge, away: awayStrategicEdge.edge },
+      schematicCounter: { home: homeStrategicEdge.countered, away: awayStrategicEdge.countered },
+      depth: {
+        home: computeDepthImpact(home, homeGroups),
+        away: computeDepthImpact(away, awayGroups),
+      },
+    });
+
     return {
+      gameReasoningFlags,
       homeScore, awayScore, schemeNote, injuries: gameInjuries,
       weather: weather.id,
       homeDefTDs: homeRes.defensiveTDs || 0,
@@ -3228,6 +3314,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         quarterScores: gameData.quarterScores || null,
         recapText: gameData.recapText || null,
         simSeed: gameData.simSeed ?? null,
+        gameReasoningFlags: Array.isArray(gameData.gameReasoningFlags) ? gameData.gameReasoningFlags : [],
     };
 
     if (scheduledGame) {
@@ -3242,6 +3329,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         scheduledGame.playLogs = resultObj.playLogs;
         scheduledGame.playLog = resultObj.playLogs;
         scheduledGame.recapText = resultObj.recapText;
+        scheduledGame.gameReasoningFlags = resultObj.gameReasoningFlags;
     }
 
     if (gameData.preGameContext) {
@@ -3642,6 +3730,7 @@ export function simulateBatch(games, options = {}) {
                 pair._quarterScores = gameScores.quarterScores || null;
                 pair._recapText = gameScores.recapText || null;
                 pair._simSeed = gameScores.simSeed ?? null;
+                pair._gameReasoningFlags = Array.isArray(gameScores.gameReasoningFlags) ? gameScores.gameReasoningFlags : [];
 
                 // Capture stats for box score.
                 // Always key by String(player.id) so numeric and string IDs
@@ -3768,6 +3857,7 @@ export function simulateBatch(games, options = {}) {
                 quarterScores: pair._quarterScores || null,
                 recapText: pair._recapText || null,
                 simSeed: pair._simSeed ?? null,
+                gameReasoningFlags: pair._gameReasoningFlags || [],
             };
 
             let resultObj;
@@ -3801,6 +3891,7 @@ export function simulateBatch(games, options = {}) {
                     quarterScores: pair._quarterScores || null,
                     recapText: pair._recapText || null,
                     simSeed: pair._simSeed ?? null,
+                    gameReasoningFlags: pair._gameReasoningFlags || [],
                 };
             }
             if (resultObj) {

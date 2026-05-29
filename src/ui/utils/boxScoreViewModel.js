@@ -578,6 +578,7 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
       injuries: hasInjuries,
     },
     gameFlowSummary: buildGameFlowSummary(payload),
+    gameReasoningFlags: Array.isArray(payload?.gameReasoningFlags) ? payload.gameReasoningFlags : [],
     prepImpact: Array.isArray(payload?.prepImpact) ? payload.prepImpact : (payload?.prepImpact ? [String(payload.prepImpact)] : []),
     advancedAttribution: normalizeAdvancedAttribution(payload?.advancedAttribution ?? game?.advancedAttribution),
     detailWarning,

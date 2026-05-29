@@ -202,6 +202,7 @@ export function normalizeArchivedGamePayload(rawGame) {
     eventLog: Array.isArray(rawGame?.eventLog) ? rawGame.eventLog : playLog,
     notablePerformances: Array.isArray(rawGame?.notablePerformances) ? rawGame.notablePerformances : [],
     injuries: Array.isArray(rawGame?.injuries) ? rawGame.injuries : [],
+    gameReasoningFlags: Array.isArray(rawGame?.gameReasoningFlags) ? rawGame.gameReasoningFlags : [],
     archiveQuality: rawGame?.archiveQuality,
     // legacy compatibility fields
     stats: legacyStats ?? (playerStats ? { ...playerStats, playLogs: playLog } : null),

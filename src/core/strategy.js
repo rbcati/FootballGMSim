@@ -162,6 +162,92 @@ export const RISK_PROFILES = {
 };
 
 /**
+ * Strategic counter matrix (offense perspective).
+ *
+ * Maps how a chosen OFFENSIVE plan fares against the opponent's DEFENSIVE plan.
+ * +1 => the call is a clean schematic counter (well leveraged); -1 => the
+ * opponent's look smothers the call. Anything absent is neutral (0).
+ *
+ * These values are intentionally coarse "schematic leverage" units; they are
+ * scaled into a tightly bounded execution modifier by computeStrategicEdge().
+ */
+export const STRATEGIC_OFF_VS_DEF = {
+    AGGRESSIVE_PASSING: { BLITZ_HEAVY: 1, SELL_OUT_RUN: 1, TWO_HIGH_SAFE: -1, DISGUISE_COVERAGE: -1 },
+    BALL_CONTROL:       { TWO_HIGH_SAFE: 1, DISGUISE_COVERAGE: 1, SELL_OUT_RUN: -1, BLITZ_HEAVY: -1 },
+    PROTECT_QB:         { BLITZ_HEAVY: 1, DISGUISE_COVERAGE: 1, SELL_OUT_RUN: -1 },
+    FEED_STAR:          { SELL_OUT_RUN: 1, DISGUISE_COVERAGE: -1, TWO_HIGH_SAFE: -1 },
+    BALANCED:           {},
+};
+
+/**
+ * Strategic counter matrix (defense perspective).
+ *
+ * Maps how a chosen DEFENSIVE plan fares against the opponent's OFFENSIVE plan.
+ * +1 => the defensive call hard-counters the opponent's offensive tendency;
+ * -1 => the offensive tendency exploits the look. Absent => neutral (0).
+ */
+export const STRATEGIC_DEF_VS_OFF = {
+    SELL_OUT_RUN:      { BALL_CONTROL: 1, FEED_STAR: 1, AGGRESSIVE_PASSING: -1 },
+    BLITZ_HEAVY:       { BALL_CONTROL: 1, FEED_STAR: 1, AGGRESSIVE_PASSING: -1, PROTECT_QB: -1 },
+    TWO_HIGH_SAFE:     { AGGRESSIVE_PASSING: 1, FEED_STAR: 1, BALL_CONTROL: -1 },
+    DISGUISE_COVERAGE: { AGGRESSIVE_PASSING: 1, FEED_STAR: 1, BALL_CONTROL: -1 },
+    BALANCED:          {},
+};
+
+// One schematic-leverage unit is worth this much execution probability.
+// Two clean counters (the practical maximum) therefore land exactly on the
+// ±0.05 hard ceiling required by the strategic-responsiveness contract.
+const STRATEGIC_UNIT = 0.02;
+const STRATEGIC_EDGE_CAP = 0.05;
+
+/**
+ * Evaluate a team's weekly tactical inputs against the opponent's strategy
+ * profile and return a tightly bounded, fully deterministic execution edge.
+ *
+ * The edge is derived purely from the selected plan identifiers (no RNG), so
+ * identical setups always yield identical edges. Magnitude is hard-capped at
+ * ±5% so that raw roster quality remains the primary driver of outcomes.
+ *
+ * Legacy save states that predate dynamic strategies (no `team.strategies`)
+ * fall back to a neutral zero edge — callers can treat the result as a no-op.
+ *
+ * @param {object} team      - Team whose game plan is being evaluated.
+ * @param {object} opponent  - Opposing team (for tendency lookup).
+ * @returns {{ edge: number, offCounter: number, defCounter: number, countered: boolean }}
+ */
+export function computeStrategicEdge(team, opponent) {
+    const ts = team?.strategies;
+    const os = opponent?.strategies;
+    // Legacy / unset strategies → neutral, harmless fallback.
+    if (!ts || !ts.offPlanId) {
+        return { edge: 0, offCounter: 0, defCounter: 0, countered: false };
+    }
+
+    const offPlan = ts.offPlanId || 'BALANCED';
+    const defPlan = ts.defPlanId || 'BALANCED';
+    const riskId  = ts.riskId || 'BALANCED';
+    const oppOff  = os?.offPlanId || 'BALANCED';
+    const oppDef  = os?.defPlanId || 'BALANCED';
+
+    const offCounter = (STRATEGIC_OFF_VS_DEF[offPlan] || {})[oppDef] || 0;
+    const defCounter = (STRATEGIC_DEF_VS_OFF[defPlan] || {})[oppOff] || 0;
+
+    // Aggressive risk amplifies the swing (boom/bust); conservative dampens it.
+    const riskMult = riskId === 'AGGRESSIVE' ? 1.25 : riskId === 'CONSERVATIVE' ? 0.8 : 1.0;
+
+    const raw = (offCounter + defCounter) * STRATEGIC_UNIT * riskMult;
+    const edge = Math.max(-STRATEGIC_EDGE_CAP, Math.min(STRATEGIC_EDGE_CAP, raw));
+
+    return {
+        edge,
+        offCounter,
+        defCounter,
+        // A "schematic edge" is a clearly anticipated, hard counter (>= 2 units net).
+        countered: (offCounter + defCounter) >= 2,
+    };
+}
+
+/**
  * Get the combined modifiers for a given game plan and risk profile.
  * @param {string} offPlanId
  * @param {string} defPlanId
@@ -256,6 +342,9 @@ export default {
     DEFENSIVE_PLANS,
     GAME_PLANS,
     RISK_PROFILES,
+    STRATEGIC_OFF_VS_DEF,
+    STRATEGIC_DEF_VS_OFF,
     getStrategyModifiers,
+    computeStrategicEdge,
     updateWeeklyStrategy
 };

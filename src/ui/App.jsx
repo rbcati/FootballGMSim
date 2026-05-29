@@ -169,6 +169,7 @@ function AppContent() {
     promptUserGame,
     userGameLogs,
     userGameLiveStats,
+    userGameReasoningFlags,
     lastWorkerMessageType,
   } = state;
 
@@ -1656,6 +1657,13 @@ function AppContent() {
               awayTeam={awayTeam}
               initialMode={watchMode}
               userTendency={userTendency}
+              gameSummary={{
+                gameReasoningFlags: userGameReasoningFlags || [],
+                homeId: homeTeam?.id,
+                awayId: awayTeam?.id,
+                homeAbbr: homeTeam?.abbr,
+                awayAbbr: awayTeam?.abbr,
+              }}
               onComplete={(scores) => {
                 try {
                   // Belt-and-suspenders save immediately on game completion
@@ -1671,6 +1679,7 @@ function AppContent() {
                     phase: league?.phase,
                     logs: userGameLogs || [],
                     liveStats: userGameLiveStats || null,
+                    gameReasoningFlags: userGameReasoningFlags || [],
                     seasonId: league?.seasonId,
                     gameId: buildCanonicalGameId({
                       seasonId: league?.seasonId,
