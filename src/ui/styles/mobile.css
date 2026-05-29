@@ -776,6 +776,35 @@ html, body {
     padding: var(--space-3);
     border-radius: var(--radius-sm);
   }
+
+  /* ── HQ Zero-Scroll guards: prevent reversion of compressed layouts ─────── */
+  /* .hq-matchup-ticker-wrap does NOT use .card, so this block is a safety net */
+  .hq-matchup-ticker-wrap {
+    padding: 6px 12px;
+    margin-bottom: 6px;
+  }
+  .hq-twin-grid {
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .hq-nav-pills {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 6px;
+    max-height: none;
+    overflow-x: auto;
+    position: static;
+    background: transparent;
+    border-top: none;
+    box-shadow: none;
+    padding: 0 var(--space-2);
+  }
+  .hq-nav-pill {
+    width: auto;
+    flex-shrink: 0;
+    padding: 4px 10px;
+    font-size: 11px;
+  }
 }
 
 /* ============================================================================

@@ -626,8 +626,8 @@
 .hq-twin-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 4px;
+  margin-bottom: 8px;
   padding: 0 var(--space-2);
 }
 
@@ -826,8 +826,8 @@
     gap: 2px;
   }
   .hq-twin-grid {
-    gap: 6px;
-    margin-bottom: 8px;
+    gap: 4px;
+    margin-bottom: 6px;
   }
   .hq-twin-card__head {
     margin-bottom: 1px;
@@ -837,5 +837,87 @@
   }
   .hq-game-plan-accordion__trigger {
     padding: 2px 0;
+  }
+  .hq-matchup-ticker-wrap {
+    padding: 5px 10px;
+  }
+  .hq-nav-pills {
+    gap: 4px;
+    padding: 0 var(--space-1);
+  }
+}
+
+/* ── Matchup Ticker — replaces bulky hero graphic ──────────────────────── */
+.hq-matchup-ticker-wrap {
+  padding: 6px 12px;
+  margin-bottom: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.hq-matchup-ticker {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+/* ── Horizontal navigation pills — replaces vertical link stack ─────────── */
+.hq-nav-pills {
+  display: flex;
+  gap: 6px;
+  padding: 0 var(--space-2);
+  margin-bottom: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.hq-nav-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.hq-nav-pill {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 26px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s ease, color .12s ease;
+}
+
+.hq-nav-pill:hover,
+.hq-nav-pill:focus-visible {
+  background: var(--surface-elevated);
+  color: var(--text);
+}
+
+.hq-nav-pill:active {
+  opacity: 0.75;
+}
+
+/* Mobile guard — prevent mobile.css `.card` padding from reverting ticker */
+@media (max-width: 768px) {
+  .hq-matchup-ticker-wrap {
+    padding: 6px 12px;
+  }
+  .hq-twin-grid {
+    gap: 4px;
+  }
+  .hq-nav-pills {
+    gap: 6px;
   }
 }

@@ -57,7 +57,8 @@ describe('FranchiseHQ', () => {
   it('renders visible weekly command center essentials and one primary advance CTA', () => {
     render(<FranchiseHQ league={baseLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
 
-    expect(screen.getByRole('heading', { name: /week 10/i })).toBeTruthy();
+    // Week label is visible — topbar strong and matchup ticker both contain "week 10"
+    expect(screen.getAllByText(/week 10/i).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /advance week/i })).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /advance week/i })).toHaveLength(1);
     // Weekly Command Hub and Game Plan Impact pruned from HQ command deck
@@ -71,11 +72,12 @@ describe('FranchiseHQ', () => {
     expect(seasonPulse.getByText(/momentum/i)).toBeTruthy();
     expect(seasonPulse.getByText(/roster lever/i)).toBeTruthy();
     expect(seasonPulse.getByText(/film room/i)).toBeTruthy();
-    // League Views quick links present
+    // League Views nav pills present
     const linkRow = screen.getByTestId('hq-league-destination-links');
-    expect(within(linkRow).getByRole('button', { name: /view full stats/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /open standings/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /open league news/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /^stats$/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /^standings$/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /^news$/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /^ops$/i })).toBeTruthy();
   });
 
   it('does not render pruned Weekly Command Hub or Game Plan Impact sections', () => {
@@ -131,10 +133,10 @@ describe('FranchiseHQ', () => {
 
     expect(screen.queryByRole('heading', { name: /league pulse/i })).toBeNull();
     const linkRow = screen.getByTestId('hq-league-destination-links');
-    expect(within(linkRow).getByRole('button', { name: /view full stats/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /open standings/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /open league news/i })).toBeTruthy();
-    fireEvent.click(within(linkRow).getByRole('button', { name: /open league news/i }));
+    expect(within(linkRow).getByRole('button', { name: /^stats$/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /^standings$/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /^news$/i })).toBeTruthy();
+    fireEvent.click(within(linkRow).getByRole('button', { name: /^news$/i }));
     expect(onNavigate).toHaveBeenCalledWith('News');
   });
 
@@ -217,7 +219,8 @@ describe('FranchiseHQ', () => {
     // Game Plan Impact pruned — no longer rendered on HQ
     expect(screen.queryByRole('heading', { name: /game plan impact/i })).toBeNull();
     expect(screen.getByText(/no future games on file/i)).toBeTruthy();
-    expect(screen.getAllByText(/0-0 · 0 0/i).length).toBeGreaterThan(0);
+    // Matchup ticker replaces the old hero subcards — record is shown via the HQ topbar
+    expect(screen.getByTestId('hq-matchup-hero')).toBeTruthy();
   });
 });
 
@@ -404,7 +407,7 @@ describe('FranchiseHQ V3 command hierarchy cleanup', () => {
     expect(screen.getByTestId('hq-actions-required')).toBeTruthy();
   });
 
-  it('League Views links still render in the compact row', () => {
+  it('League nav pills still render in the compact horizontal row', () => {
     render(
       <FranchiseHQ
         league={baseLeague}
@@ -415,9 +418,10 @@ describe('FranchiseHQ V3 command hierarchy cleanup', () => {
       />,
     );
     const linkRow = screen.getByTestId('hq-league-destination-links');
-    expect(within(linkRow).getByRole('button', { name: /view full stats/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /open standings/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /open league news/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /^stats$/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /^standings$/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /^news$/i })).toBeTruthy();
+    expect(within(linkRow).getByRole('button', { name: /^ops$/i })).toBeTruthy();
   });
 
   it('Decision Review section is present but body is collapsed by default', () => {
