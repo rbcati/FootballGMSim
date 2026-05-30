@@ -25,7 +25,7 @@ import { buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
  * on iOS Safari/mobile Chrome; scheme fit updates live and feels meaningful.
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, useSortable, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -445,6 +445,273 @@ function OvrBadge({ ovr }) {
   );
 }
 
+function fmtDeadCap(player) {
+  const fin = derivePlayerContractFinancials(player);
+  return formatMoneyM(fin.deadCapHit ?? fin.deadCap ?? 0);
+}
+
+const MOBILE_POSITION_ORDER = ["QB", "RB", "WR", "TE", "OL", "DL", "LB", "CB", "S"];
+
+function OvrBadgeWithTrend({ ovr, delta = 0 }) {
+  const col = ovrColor(ovr);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+      <Badge
+        variant="outline"
+        style={{
+          display: "inline-block",
+          minWidth: 32,
+          padding: "2px 4px",
+          borderRadius: "var(--radius-pill)",
+          background: col + "22",
+          color: col,
+          fontWeight: 800,
+          fontSize: "var(--text-xs)",
+          textAlign: "center",
+        }}
+      >
+        {ovr}
+      </Badge>
+      {delta > 0 && (
+        <span style={{ fontSize: 10, color: "var(--success)", fontWeight: 700, lineHeight: 1 }}>▲</span>
+      )}
+      {delta < 0 && (
+        <span style={{ fontSize: 10, color: "var(--danger)", fontWeight: 700, lineHeight: 1 }}>▼</span>
+      )}
+    </div>
+  );
+}
+
+function ActionSheetDrawer({ player, onClose, setExtending, openReleasePreview, handleTradeBlockToggle, toggleCompare }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  const close = useCallback(() => {
+    setVisible(false);
+    window.setTimeout(onClose, 210);
+  }, [onClose]);
+
+  if (!player) return null;
+
+  const sheetActions = [
+    { label: "Extend Contract", handler: () => { setExtending(player); close(); }, color: "var(--success)" },
+    { label: "Release Player", handler: () => { openReleasePreview(player); close(); }, color: "var(--danger)" },
+    { label: "Toggle Trade Block", handler: () => { handleTradeBlockToggle(player.id); close(); }, color: "var(--text)" },
+    { label: "Compare Player", handler: () => { toggleCompare(player); close(); }, color: "var(--accent)" },
+  ];
+
+  return (
+    <>
+      <div
+        onClick={close}
+        style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+          zIndex: 3999, opacity: visible ? 1 : 0, transition: "opacity 200ms ease-out",
+        }}
+      />
+      <div
+        style={{
+          position: "fixed", bottom: 0, left: 0, right: 0,
+          background: "#1c1c1e", borderRadius: "16px 16px 0 0",
+          zIndex: 4000, padding: "16px", maxHeight: "60vh", overflowY: "auto",
+          transform: visible ? "translateY(0)" : "translateY(100%)",
+          transition: "transform 200ms ease-out",
+        }}
+      >
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12,
+          marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid var(--hairline)",
+        }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>{player.name}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+              <span>{player.pos}</span>
+              <OvrBadgeWithTrend ovr={player.ovr ?? 70} delta={player.progressionDelta ?? 0} />
+            </div>
+          </div>
+        </div>
+        {sheetActions.map((action, idx) => (
+          <React.Fragment key={action.label}>
+            {idx > 0 && <div style={{ height: 1, background: "var(--hairline)" }} />}
+            <button
+              onClick={action.handler}
+              style={{
+                display: "block", width: "100%", height: 52,
+                background: "none", border: "none", color: action.color,
+                fontSize: 16, fontWeight: 600, cursor: "pointer",
+                textAlign: "left", padding: "0 4px",
+                WebkitTapHighlightColor: "transparent",
+              }}
+            >
+              {action.label}
+            </button>
+          </React.Fragment>
+        ))}
+        <div style={{ height: 1, background: "var(--hairline)" }} />
+        <button
+          onClick={close}
+          style={{
+            display: "block", width: "100%", height: 52,
+            background: "none", border: "none", color: "var(--danger)",
+            fontSize: 16, fontWeight: 600, cursor: "pointer",
+            textAlign: "left", padding: "0 4px",
+            WebkitTapHighlightColor: "transparent",
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </>
+  );
+}
+
+function MobileGroupedRosterList({
+  displayed, bulkMode, bulkSelectedIds, toggleBulkPlayer,
+  onPlayerSelect, setActionSheetPlayer,
+}) {
+  const longPressTimers = useRef({});
+
+  const grouped = useMemo(() => {
+    const map = {};
+    MOBILE_POSITION_ORDER.forEach(pos => { map[pos] = []; });
+    displayed.forEach(player => {
+      const pos = player.pos ?? player.position ?? "";
+      if (Object.prototype.hasOwnProperty.call(map, pos)) {
+        map[pos].push(player);
+      } else {
+        if (!map.__other) map.__other = [];
+        map.__other.push(player);
+      }
+    });
+    const result = MOBILE_POSITION_ORDER
+      .filter(pos => map[pos] && map[pos].length > 0)
+      .map(pos => ({ pos, players: map[pos] }));
+    if (map.__other && map.__other.length > 0) {
+      result.push({ pos: "Other", players: map.__other });
+    }
+    return result;
+  }, [displayed]);
+
+  const handlePointerDown = useCallback((player) => {
+    longPressTimers.current[player.id] = window.setTimeout(() => {
+      setActionSheetPlayer(player);
+      delete longPressTimers.current[player.id];
+    }, 500);
+  }, [setActionSheetPlayer]);
+
+  const handlePointerUp = useCallback((player) => {
+    if (longPressTimers.current[player.id]) {
+      window.clearTimeout(longPressTimers.current[player.id]);
+      delete longPressTimers.current[player.id];
+    }
+  }, []);
+
+  if (displayed.length === 0) {
+    return (
+      <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
+        No players match this filter
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: "var(--space-2)" }}>
+      {grouped.map(({ pos, players }) => (
+        <div key={pos}>
+          <div
+            style={{
+              position: "sticky", top: 0, zIndex: 10,
+              background: "#1a1a1a", height: 36,
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "0 12px", borderBottom: "1px solid var(--hairline)",
+            }}
+          >
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+              {pos}
+            </span>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              {players.length} {players.length === 1 ? "player" : "players"}
+            </span>
+          </div>
+          {players.map((player, idx) => {
+            const fin = derivePlayerContractFinancials(player);
+            const annualValue = fin.annualSalary ?? player.contract?.annualValue ?? 0;
+            const posColor = getPositionColor(player.pos);
+            const isSelected = bulkSelectedIds.includes(player.id);
+            const initials = (player.name || "?").split(" ").map(n => n[0]).filter(Boolean).slice(0, 2).join("");
+            return (
+              <div
+                key={player.id}
+                onClick={() => onPlayerSelect && onPlayerSelect(player.id)}
+                onPointerDown={() => handlePointerDown(player)}
+                onPointerUp={() => handlePointerUp(player)}
+                onPointerCancel={() => handlePointerUp(player)}
+                onContextMenu={(e) => e.preventDefault()}
+                style={{
+                  display: "flex", alignItems: "center", height: 56,
+                  padding: "0 12px", gap: 8, cursor: "pointer",
+                  borderBottom: idx < players.length - 1 ? "1px solid var(--hairline)" : "none",
+                  background: isSelected ? "rgba(10,132,255,0.08)" : "transparent",
+                  WebkitTapHighlightColor: "transparent",
+                  userSelect: "none", WebkitUserSelect: "none",
+                }}
+              >
+                <div style={{ width: 28, flexShrink: 0, textAlign: "center" }}>
+                  {bulkMode ? (
+                    <input
+                      aria-label={`Select ${player.name}`}
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => { e.stopPropagation(); toggleBulkPlayer(player.id); }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: 18, height: 18 }}
+                    />
+                  ) : (
+                    <span style={{ fontSize: 11, color: "var(--text-subtle)", fontWeight: 700 }}>
+                      {player.jerseyNumber ?? player.jersey ?? ""}
+                    </span>
+                  )}
+                </div>
+                <div
+                  style={{
+                    width: 32, height: 32, borderRadius: "50%",
+                    background: `${posColor}33`, border: `1px solid ${posColor}66`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 11, fontWeight: 800, color: posColor, flexShrink: 0,
+                  }}
+                >
+                  {initials}
+                </div>
+                <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+                  <div style={{
+                    fontSize: 14, fontWeight: 700, color: "var(--text)",
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>
+                    {player.name}
+                  </div>
+                  <div style={{
+                    fontSize: 11, color: "var(--text-muted)", marginTop: 1,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>
+                    Dead Cap: {fmtDeadCap(player)} · {fmtSalary(annualValue)} · {fmtYears(player.contract)}
+                  </div>
+                </div>
+                <div style={{ flexShrink: 0 }}>
+                  <OvrBadgeWithTrend ovr={player.ovr ?? 70} delta={player.progressionDelta ?? 0} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PosBadge({ pos }) {
   const posColor = getPositionColor(pos);
   return (
@@ -498,6 +765,9 @@ function RosterTable({
   const [advancedFilters, setAdvancedFilters] = useState([]);
   const [search, setSearch] = useState("");
   const [evaluationMode, setEvaluationMode] = useState(true);
+  const [isMobileView, setIsMobileView] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
+  const [mobileViewOverride, setMobileViewOverride] = useState(null);
+  const [actionSheetPlayer, setActionSheetPlayer] = useState(null);
   const {
     compareIds,
     setCompareIds,
@@ -541,6 +811,14 @@ function RosterTable({
       setPosFilter(prev => (prev === initialFilter ? prev : initialFilter));
     }
   }, [initialFilter]);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobileView(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const showMobileView = mobileViewOverride === null ? isMobileView : mobileViewOverride === "list";
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -662,6 +940,16 @@ function RosterTable({
         onOpenCompare={() => setShowComparison(true)}
         onClear={() => setCompareIds([])}
       />
+      {actionSheetPlayer && (
+        <ActionSheetDrawer
+          player={actionSheetPlayer}
+          onClose={() => setActionSheetPlayer(null)}
+          setExtending={setExtending}
+          openReleasePreview={openReleasePreview}
+          handleTradeBlockToggle={handleTradeBlockToggle}
+          toggleCompare={toggleCompare}
+        />
+      )}
       {/* Position filter pills */}
       {isResignPhase && (
         <div style={{
@@ -673,10 +961,10 @@ function RosterTable({
           color: "var(--text-muted)",
         }}>
           <span><strong style={{ color: "var(--success)" }}>{decisionSummary.priority_resign}</strong> priority re-signs</span>
-          <span><strong style={{ color: "#64D2FF" }}>{decisionSummary.resign_if_price}</strong> price-sensitive</span>
-          <span><strong style={{ color: "var(--warning)" }}>{decisionSummary.replaceable_depth}</strong> replaceable depth</span>
+          {!showMobileView && <span><strong style={{ color: "#64D2FF" }}>{decisionSummary.resign_if_price}</strong> price-sensitive</span>}
+          {!showMobileView && <span><strong style={{ color: "var(--warning)" }}>{decisionSummary.replaceable_depth}</strong> replaceable depth</span>}
           <span><strong style={{ color: "var(--danger)" }}>{decisionSummary.let_walk}</strong> let walk</span>
-          <span><strong style={{ color: "#BF5AF2" }}>{decisionSummary.trade_or_tag}</strong> tag/trade calls</span>
+          {!showMobileView && <span><strong style={{ color: "#BF5AF2" }}>{decisionSummary.trade_or_tag}</strong> tag/trade calls</span>}
         </div>
       )}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: "var(--space-3)" }}>
@@ -689,8 +977,17 @@ function RosterTable({
         />
         <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{buildShowingLabel(displayed.length, players.length, "player")}</span>
         {hasActiveFilters ? <Button type="button" variant="outline" onClick={resetBrowseFilters}>Reset filters</Button> : null}
+        <Button
+          type="button"
+          variant="outline"
+          title={showMobileView ? "Switch to Table view" : "Switch to List view"}
+          onClick={() => setMobileViewOverride(showMobileView ? "table" : "list")}
+          style={{ fontSize: 12, padding: "4px 10px", flexShrink: 0 }}
+        >
+          {showMobileView ? "⊞ Table" : "☰ List"}
+        </Button>
       </div>
-      <div className="roster-filter-bar" style={{ marginBottom: "var(--space-4)" }}>
+      <div className="roster-filter-bar" style={{ marginBottom: "var(--space-4)", overflowX: "auto", whiteSpace: "nowrap", WebkitOverflowScrolling: "touch" }}>
 
         {activeFilters.map((pos) => (
           <Button
@@ -710,30 +1007,44 @@ function RosterTable({
           </Button>
         ))}
       </div>
-      <AdvancedPlayerSearch
-        filters={advancedFilters}
-        onChange={setAdvancedFilters}
-        title="Advanced player search (AND)"
-      />
-      <div style={{ marginBottom: 8 }}>
-        <Button variant={evaluationMode ? "default" : "outline"} onClick={() => setEvaluationMode((v) => !v)}>
-          {evaluationMode ? "Evaluation view on" : "Evaluation view off"}
-        </Button>
-        <Button variant={bulkMode ? "default" : "outline"} onClick={() => { setBulkMode((v) => !v); if (bulkMode) setBulkSelectedIds([]); }} style={{ marginLeft: 8 }}>
-          {bulkMode ? "Bulk cut mode on" : "Bulk cut mode off"}
-        </Button>
-        {bulkMode && (
-          <>
-            <Button variant="outline" onClick={() => setBulkSelectedIds(displayed.map((p) => p.id))} style={{ marginLeft: 8 }}>Select visible</Button>
-            <Button variant="outline" onClick={() => setBulkSelectedIds([])} style={{ marginLeft: 8 }}>Clear</Button>
-            <Button variant="destructive" onClick={() => setBulkPreviewOpen(true)} disabled={bulkSelectedIds.length === 0} style={{ marginLeft: 8 }}>
-              Preview bulk release ({bulkSelectedIds.length})
-            </Button>
-          </>
-        )}
-      </div>
+      {!showMobileView && (
+        <AdvancedPlayerSearch
+          filters={advancedFilters}
+          onChange={setAdvancedFilters}
+          title="Advanced player search (AND)"
+        />
+      )}
+      {!showMobileView && (
+        <div style={{ marginBottom: 8 }}>
+          <Button variant={evaluationMode ? "default" : "outline"} onClick={() => setEvaluationMode((v) => !v)}>
+            {evaluationMode ? "Evaluation view on" : "Evaluation view off"}
+          </Button>
+          <Button variant={bulkMode ? "default" : "outline"} onClick={() => { setBulkMode((v) => !v); if (bulkMode) setBulkSelectedIds([]); }} style={{ marginLeft: 8 }}>
+            {bulkMode ? "Bulk cut mode on" : "Bulk cut mode off"}
+          </Button>
+          {bulkMode && (
+            <>
+              <Button variant="outline" onClick={() => setBulkSelectedIds(displayed.map((p) => p.id))} style={{ marginLeft: 8 }}>Select visible</Button>
+              <Button variant="outline" onClick={() => setBulkSelectedIds([])} style={{ marginLeft: 8 }}>Clear</Button>
+              <Button variant="destructive" onClick={() => setBulkPreviewOpen(true)} disabled={bulkSelectedIds.length === 0} style={{ marginLeft: 8 }}>
+                Preview bulk release ({bulkSelectedIds.length})
+              </Button>
+            </>
+          )}
+        </div>
+      )}
 
-      {/* Table */}
+      {/* Mobile list / Desktop table */}
+      {showMobileView ? (
+        <MobileGroupedRosterList
+          displayed={displayed}
+          bulkMode={bulkMode}
+          bulkSelectedIds={bulkSelectedIds}
+          toggleBulkPlayer={toggleBulkPlayer}
+          onPlayerSelect={onPlayerSelect}
+          setActionSheetPlayer={setActionSheetPlayer}
+        />
+      ) : (
       <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}><CardContent style={{ padding: 0 }}>
         <div
           className="table-wrapper"
@@ -1267,6 +1578,7 @@ function RosterTable({
           </Table>
         </div>
       </CardContent></Card>
+      )}
     </>
   );
 }
