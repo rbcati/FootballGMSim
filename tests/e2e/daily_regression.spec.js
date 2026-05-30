@@ -181,11 +181,8 @@ test.describe('Daily Regression Pass', () => {
             page.on('dialog', d => d.accept());
 
             await page.evaluate(() => {
-                const rows = document.querySelectorAll('.standings-table tbody tr, table tbody tr');
-                for(let row of rows) {
-                    const confirmBtn = Array.from(row.querySelectorAll('button')).find(b => b.innerText === 'Confirm');
-                    if (confirmBtn) { confirmBtn.click(); break; }
-                }
+                const confirmBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText === 'Confirm Release');
+                if (confirmBtn) { confirmBtn.click(); }
             });
 
             // Wait for release to process
