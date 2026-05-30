@@ -921,3 +921,344 @@
     gap: 6px;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COMPACT HQ LAYOUT — ZenGM-style zero-scroll viewport on 390px screens
+   All spacing: max 8px row gaps, 12px horizontal padding.
+   Target: every item visible in 100dvh without scroll.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Outer container adjustments */
+.hq-compact-layout {
+  padding: 0;
+  gap: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Compact top bar — single ~40px line ─────────────────────────────────── */
+.hq-compact-topbar {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  height: 40px;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  margin: 0 0 6px;
+  overflow: hidden;
+}
+
+.hq-topbar-seg {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--hairline);
+  cursor: pointer;
+  min-height: 40px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(10, 132, 255, 0.18);
+  transition: background .12s ease;
+  text-align: center;
+  min-width: 0;
+}
+
+.hq-topbar-seg:last-child {
+  border-right: none;
+}
+
+.hq-topbar-seg:hover,
+.hq-topbar-seg:focus-visible {
+  background: rgba(10, 132, 255, 0.08);
+  outline: none;
+}
+
+.hq-topbar-seg:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.hq-topbar-seg__primary {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1.1;
+}
+
+.hq-topbar-seg__secondary {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1.1;
+}
+
+/* ── Single-line status rows (last result / next game) ───────────────────── */
+.hq-status-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 12px;
+  background: var(--surface);
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text);
+  min-height: 34px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s ease;
+  margin-bottom: 0;
+}
+
+.hq-status-row:hover,
+.hq-status-row:focus-visible {
+  background: rgba(10, 132, 255, 0.06);
+}
+
+.hq-status-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.hq-status-row--result[data-tone="ok"] {
+  border-left: 3px solid rgba(52, 199, 89, 0.7);
+}
+.hq-status-row--result[data-tone="danger"] {
+  border-left: 3px solid rgba(255, 69, 58, 0.7);
+}
+.hq-status-row--result[data-tone="info"] {
+  border-left: 3px solid rgba(10, 132, 255, 0.7);
+}
+
+.hq-wl-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 900;
+  flex-shrink: 0;
+  letter-spacing: 0;
+}
+
+.hq-wl-badge--ok {
+  background: rgba(52, 199, 89, 0.22);
+  color: #34C759;
+  border: 1px solid rgba(52, 199, 89, 0.45);
+}
+
+.hq-wl-badge--danger {
+  background: rgba(255, 69, 58, 0.22);
+  color: #FF453A;
+  border: 1px solid rgba(255, 69, 58, 0.45);
+}
+
+.hq-wl-badge--info {
+  background: rgba(10, 132, 255, 0.18);
+  color: #0A84FF;
+  border: 1px solid rgba(10, 132, 255, 0.4);
+}
+
+.hq-next-badge {
+  font-size: 13px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.hq-status-row__text {
+  flex: 1;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hq-status-row__muted {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.hq-status-row__chevron {
+  font-size: 13px;
+  color: var(--text-subtle);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* ── Division standings mini-table — 4 rows max ──────────────────────────── */
+.hq-standings-mini {
+  margin: 4px 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.hq-standings-mini__header {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-subtle);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.hq-standings-mini__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text);
+  min-height: 30px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s ease;
+  align-items: center;
+}
+
+.hq-standings-mini__row:last-child {
+  border-bottom: none;
+}
+
+.hq-standings-mini__row.is-user {
+  background: rgba(10, 132, 255, 0.07);
+  font-weight: 700;
+}
+
+.hq-standings-mini__row.is-user .hq-standings-mini__abbr {
+  color: var(--accent);
+}
+
+.hq-standings-mini__row:hover,
+.hq-standings-mini__row:focus-visible {
+  background: rgba(10, 132, 255, 0.05);
+}
+
+.hq-standings-mini__abbr {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.hq-standings-mini__record {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  min-width: 36px;
+}
+
+.hq-standings-mini__gb {
+  font-size: 11px;
+  color: var(--text-subtle);
+  text-align: right;
+  min-width: 24px;
+}
+
+/* ── Alerts row — single line ────────────────────────────────────────────── */
+.hq-alerts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: 1px solid;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 34px;
+  margin: 4px 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s ease;
+}
+
+.hq-alerts-row--danger {
+  background: rgba(255, 69, 58, 0.07);
+  border-color: rgba(255, 69, 58, 0.38);
+  color: #FF453A;
+}
+
+.hq-alerts-row--warning {
+  background: rgba(255, 159, 10, 0.07);
+  border-color: rgba(255, 159, 10, 0.38);
+  color: #FF9F0A;
+}
+
+.hq-alerts-row--info {
+  background: rgba(10, 132, 255, 0.06);
+  border-color: rgba(10, 132, 255, 0.32);
+  color: var(--accent);
+}
+
+.hq-alerts-row__chevron {
+  font-size: 13px;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+/* ── Ready row — no blockers state ──────────────────────────────────────── */
+.hq-ready-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  margin: 4px 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Compact action grid — tighter tiles ─────────────────────────────────── */
+.hq-compact-layout .app-hq-action-tiles {
+  margin-bottom: 6px;
+}
+
+/* Reduce tile min-height on compact layout to save vertical space */
+.hq-compact-layout .app-action-tile {
+  min-height: 96px;
+}
+
+/* ── Ensure more-drawer trigger is tappable and compact ─────────────────── */
+.hq-compact-layout .hq-more-drawer {
+  margin: 4px 0 6px;
+}
+
+/* ── Horizontal padding guard for all direct rows ────────────────────────── */
+.hq-compact-layout .hq-standings-mini,
+.hq-compact-layout .hq-alerts-row,
+.hq-compact-layout .hq-ready-row {
+  margin-left: 0;
+  margin-right: 0;
+}

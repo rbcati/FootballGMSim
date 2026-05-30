@@ -221,7 +221,8 @@ describe('FranchiseHQ command center layout', () => {
     const html = renderToString(
       <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
     );
-    expect(html).toContain('Actions Required');
+    // Compact design renders "X actions required" (lowercase) in the alerts row
+    expect(html).toContain('actions required');
   });
 
   it('renders advance week CTA', () => {

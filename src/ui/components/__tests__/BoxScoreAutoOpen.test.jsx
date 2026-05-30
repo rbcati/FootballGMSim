@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import BoxScore from '../BoxScore.jsx';
 
 vi.mock('../../hooks/useStableRouteRequest.js', () => ({ default: vi.fn(() => ({ data: null })) }));
@@ -12,8 +12,6 @@ const baseLeague = {
   teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }],
 };
 
-// Game with scoringSummary so buildGameFlowSummary produces a non-null gfs,
-// which is required for the replay section to render at all.
 const gameWithFlow = {
   homeId: 1,
   awayId: 2,
@@ -25,19 +23,16 @@ const gameWithFlow = {
   ],
 };
 
-// Fake timers prevent the ReplayableGameFlowViewer setInterval (started when
-// initialMode="playing") from firing real ticks and causing act() warnings.
+// Replay viewer, advanced stats, and broadcast notes sections were removed in the
+// compact bottom-sheet redesign. These tests verify the new compact behavior and
+// confirm removed sections are truly absent.
 describe('BoxScore – opt-in auto-open replay gate', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
   afterEach(() => {
-    vi.useRealTimers();
     cleanup();
   });
 
   it('auto-opens the replay panel on mount when isManualSimRun is true', () => {
-    const { getByTestId } = render(
+    const { getByTestId, queryByTestId } = render(
       <BoxScore
         gameId="g-manual"
         league={{ ...baseLeague, gameById: { 'g-manual': gameWithFlow } }}
@@ -45,8 +40,10 @@ describe('BoxScore – opt-in auto-open replay gate', () => {
         embedded
       />,
     );
-    expect(getByTestId('rgfv-root')).toBeTruthy();
-    expect(getByTestId('game-book-replay-toggle').textContent).toBe('Hide');
+    // Compact sheet shows score hero; replay viewer has been removed
+    expect(getByTestId('game-book-score-hero')).toBeTruthy();
+    expect(queryByTestId('rgfv-root')).toBeNull();
+    expect(queryByTestId('game-book-replay-toggle')).toBeNull();
   });
 
   it('defaults to collapsed replay panel for standard history / archive loads', () => {
@@ -57,8 +54,10 @@ describe('BoxScore – opt-in auto-open replay gate', () => {
         embedded
       />,
     );
+    // Compact sheet: no replay panel in any mode
+    expect(getByTestId('game-book-score-hero')).toBeTruthy();
     expect(queryByTestId('rgfv-root')).toBeNull();
-    expect(getByTestId('game-book-replay-toggle').textContent).toBe('Replay');
+    expect(queryByTestId('game-book-replay-toggle')).toBeNull();
   });
 
   it('clicking Instant Skip to Box Score immediately collapses the viewer', () => {
@@ -70,12 +69,10 @@ describe('BoxScore – opt-in auto-open replay gate', () => {
         embedded
       />,
     );
-    expect(getByTestId('rgfv-root')).toBeTruthy();
-
-    fireEvent.click(getByTestId('game-book-skip-to-box-score'));
-
+    // Skip button and replay viewer have been removed; score hero and tabs always present
+    expect(getByTestId('game-book-score-hero')).toBeTruthy();
     expect(queryByTestId('rgfv-root')).toBeNull();
-    expect(getByTestId('game-book-replay-toggle').textContent).toBe('Replay');
+    expect(queryByTestId('game-book-skip-to-box-score')).toBeNull();
   });
 
   it('skip button is absent when replay was opened via the manual toggle (not auto-opened)', () => {
@@ -86,15 +83,14 @@ describe('BoxScore – opt-in auto-open replay gate', () => {
         embedded
       />,
     );
-    // Manually expand the replay section via the toggle
-    fireEvent.click(getByTestId('game-book-replay-toggle'));
-    expect(getByTestId('rgfv-root')).toBeTruthy();
-    // Skip button should NOT be present when isManualSimRun is false
+    // Replay toggle and skip button have been removed; stat tabs are the navigation mechanism
+    expect(getByTestId('game-book-stat-tabs')).toBeTruthy();
+    expect(queryByTestId('game-book-replay-toggle')).toBeNull();
     expect(queryByTestId('game-book-skip-to-box-score')).toBeNull();
   });
 
   it('passes initialMode="playing" to the viewer on manual sim launch', () => {
-    const { getByTestId } = render(
+    const { getByTestId, queryByTestId } = render(
       <BoxScore
         gameId="g-autoplay"
         league={{ ...baseLeague, gameById: { 'g-autoplay': gameWithFlow } }}
@@ -102,10 +98,12 @@ describe('BoxScore – opt-in auto-open replay gate', () => {
         embedded
       />,
     );
-    // The viewer renders in playing state — progress label reads "Playing…"
-    expect(getByTestId('rgfv-progress').textContent).toBe('Playing…');
+    // Viewer initialMode prop no longer exists; stat tabs are shown instead
+    expect(getByTestId('game-book-tab-passing')).toBeTruthy();
+    expect(getByTestId('game-book-tab-rushing')).toBeTruthy();
+    expect(getByTestId('game-book-tab-defense')).toBeTruthy();
+    expect(queryByTestId('rgfv-progress')).toBeNull();
   });
-
 
   it('renders advanced game stats section when advancedAttribution exists', () => {
     const gameWithAdvanced = {
@@ -118,17 +116,17 @@ describe('BoxScore – opt-in auto-open replay gate', () => {
         home: {},
       },
     };
-    const { getByTestId, getByText } = render(
+    const { queryByTestId, getByTestId } = render(
       <BoxScore
         gameId="g-advanced"
         league={{ ...baseLeague, gameById: { 'g-advanced': gameWithAdvanced } }}
         embedded
       />,
     );
-
-    expect(getByTestId('game-book-advanced-stats')).toBeTruthy();
-    expect(getByText('Advanced Game Stats')).toBeTruthy();
-    expect(getByTestId('game-book-team-comparison')).toBeTruthy();
+    // Advanced stats section has been removed from compact sheet; score hero still shown
+    expect(getByTestId('game-book-score-hero')).toBeTruthy();
+    expect(queryByTestId('game-book-advanced-stats')).toBeNull();
+    expect(queryByTestId('game-book-team-comparison')).toBeNull();
   });
 
   it('does not render advanced game stats for legacy games without advancedAttribution', () => {
@@ -139,22 +137,23 @@ describe('BoxScore – opt-in auto-open replay gate', () => {
         embedded
       />,
     );
-
+    // Team comparison and advanced stats have been removed
+    expect(getByTestId('game-book-score-hero')).toBeTruthy();
     expect(queryByTestId('game-book-advanced-stats')).toBeNull();
-    expect(getByTestId('game-book-team-comparison')).toBeTruthy();
+    expect(queryByTestId('game-book-team-comparison')).toBeNull();
   });
 
   it('passes initialMode="paused" when viewer opened manually via toggle', () => {
-    const { getByTestId } = render(
+    const { getByTestId, queryByTestId } = render(
       <BoxScore
         gameId="g-paused"
         league={{ ...baseLeague, gameById: { 'g-paused': gameWithFlow } }}
         embedded
       />,
     );
-    fireEvent.click(getByTestId('game-book-replay-toggle'));
-    // Without isManualSimRun the viewer starts paused
-    expect(getByTestId('rgfv-progress').textContent).toBe('Paused');
+    // Replay toggle and viewer removed; stat tabs present instead
+    expect(getByTestId('game-book-stat-tabs')).toBeTruthy();
+    expect(queryByTestId('game-book-replay-toggle')).toBeNull();
   });
 
   it('renders Broadcast Notes when deterministic notes exist', () => {
@@ -164,12 +163,12 @@ describe('BoxScore – opt-in auto-open replay gate', () => {
         7: { sacksAllowed: 6, drops: 3 },
       },
     };
-    const { getByTestId, getByText, container } = render(
+    const { queryByTestId, getByTestId } = render(
       <BoxScore gameId="g-broadcast" league={{ ...baseLeague, gameById: { 'g-broadcast': gameWithBroadcast } }} embedded />,
     );
-    expect(getByTestId('game-book-broadcast-notes')).toBeTruthy();
-    expect(getByText('Broadcast Notes')).toBeTruthy();
-    expect(container.querySelector('.bs-broadcast-notes')).toBeTruthy();
+    // Broadcast notes have been removed; score hero and stat tabs present
+    expect(getByTestId('game-book-score-hero')).toBeTruthy();
+    expect(queryByTestId('game-book-broadcast-notes')).toBeNull();
   });
 
   it('does not render Broadcast Notes for legacy games without note signals', () => {
@@ -178,5 +177,4 @@ describe('BoxScore – opt-in auto-open replay gate', () => {
     );
     expect(queryByTestId('game-book-broadcast-notes')).toBeNull();
   });
-
 });
