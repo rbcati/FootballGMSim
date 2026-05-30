@@ -40,6 +40,14 @@ import { buildPlayerAdvancedStatsView } from "../utils/playerAdvancedStatsViewMo
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
+// Sentinel guard: rejects null, undefined, NaN, __missing_player__, and empty strings
+// so that worker fetch calls are never issued for invalid player IDs.
+function isValidPlayerId(id) {
+  if (id == null) return false;
+  const s = String(id).trim();
+  return s !== '' && s !== 'NaN' && s !== '__missing_player__' && s !== 'undefined';
+}
+
 const CAREER_TIMELINE_LIMIT = 8;
 const ADVANCED_ANALYTICS_EMPTY_TEXT = "Advanced tracking begins with newly simulated rich games.";
 
@@ -595,7 +603,7 @@ export default function PlayerProfile({
   } = useStableRouteRequest({
     requestKey,
     cacheScopeKey,
-    enabled: playerId != null,
+    enabled: isValidPlayerId(playerId),
     fetcher: fetchProfileData,
     warnLabel: 'PlayerProfile',
     clearDataOnLoad: false,
@@ -609,7 +617,7 @@ export default function PlayerProfile({
 
   useEffect(() => {
     let cancelled = false;
-    if (!actions?.getAllSeasons || playerId == null) {
+    if (!actions?.getAllSeasons || !isValidPlayerId(playerId)) {
       setArchivedSeasons([]);
       return () => { cancelled = true; };
     }
@@ -629,7 +637,7 @@ export default function PlayerProfile({
 
   useEffect(() => {
     let cancelled = false;
-    if (!actions?.getPlayerDraftContext || playerId == null) {
+    if (!actions?.getPlayerDraftContext || !isValidPlayerId(playerId)) {
       setDraftContext(null);
       return () => {
         cancelled = true;
@@ -651,7 +659,7 @@ export default function PlayerProfile({
 
   useEffect(() => {
     let cancelled = false;
-    if (!actions?.getRecords || playerId == null) {
+    if (!actions?.getRecords || !isValidPlayerId(playerId)) {
       setRecordBook(null);
       return () => { cancelled = true; };
     }
@@ -673,7 +681,7 @@ export default function PlayerProfile({
 
   useEffect(() => {
     let cancelled = false;
-    if (!actions?.getTransactions || playerId == null) {
+    if (!actions?.getTransactions || !isValidPlayerId(playerId)) {
       setCareerTransactions([]);
       return () => { cancelled = true; };
     }
@@ -725,7 +733,7 @@ export default function PlayerProfile({
     if (legacyReport.recommendation === "induct") return "Qualified résumé (enshrinement tracked in league history)";
     return "Not in Hall of Fame — keep watching accolades and records";
   }, [legacyReport, playerView]);
-  const playerMissing = !loading && !effectivePlayer;
+  const playerMissing = !isValidPlayerId(playerId) || (!loading && !effectivePlayer);
   const loadErrorMessage = requestError?.message || data?.error || null;
   const userTeam = useMemo(() => teams.find((t) => t.id === data?.meta?.userTeamId || t.id === player?.teamId), [teams, data?.meta?.userTeamId, player?.teamId]);
   const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: data?.meta?.week ?? 1 }), [userTeam, data?.meta?.week]);
