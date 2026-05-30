@@ -42,7 +42,11 @@ export function validateLeagueTeamLegality({
   for (const team of teams) {
     const teamId = Number(team?.id);
     const roster = byTeam.get(teamId) ?? [];
-    const rosterIds = roster.map((p) => Number(p?.id)).filter(Number.isFinite);
+    const rosterIds = roster.reduce((acc, p) => {
+      const id = Number(p?.id);
+      if (Number.isFinite(id)) acc.push(id);
+      return acc;
+    }, []);
     const uniqueIds = new Set(rosterIds);
 
     if (roster.length > rosterLimit) {

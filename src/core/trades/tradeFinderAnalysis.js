@@ -308,7 +308,11 @@ function buildIdea({ need, target, outgoingAssets, targetTeam, cap, packageType,
     targetPlayerId: target.id, targetPlayerName: target.name, targetTeamId: target.teamId,
     targetTeamAbbr: targetTeam?.abbr ?? `T${target.teamId}`,
     targetPos: target.pos, targetAge: target.age, targetOVR: target.ovr, targetPotential: target.potential ?? target.ovr,
-    outgoingAssets, outgoingPlayerIds: outgoingAssets.filter((a) => a.assetType === 'player').map((a) => a.playerId), outgoingPickIds: outgoingAssets.filter((a) => a.assetType === 'pick').map((a) => a.pickId),
+    outgoingAssets, ...outgoingAssets.reduce((acc, a) => {
+      if (a.assetType === 'player') acc.outgoingPlayerIds.push(a.playerId);
+      else if (a.assetType === 'pick') acc.outgoingPickIds.push(a.pickId);
+      return acc;
+    }, { outgoingPlayerIds: [], outgoingPickIds: [] }),
     outgoingSummary: buildOutgoingAssetSummary(outgoingAssets), outgoingValue, valueDelta, valueDeltaLabel: buildValueDeltaLabel(valueDelta), valueMatch, valueMatchDetail: classifyValueMatchDetail(valueDelta),
     packageType: classifyPackageType(packageType, outgoingAssets), packageAssetCount: outgoingAssets.length,
     confidence, confidenceReasons: confidenceReasons.length ? confidenceReasons : ['Exploratory package only.'], warnings,
@@ -349,7 +353,11 @@ export function buildTradeFinderAnalysis({ userTeam, league = {}, teams = [], us
   const targetContextByTeam = new Map();
   const targetNeeds = Object.values(buildNeedMap(userRoster, footballConfig, userRosterByPosition)).sort((a, b) => b.needScore - a.needScore).slice(0, 6);
   const { userSurplus, chipPool, nonStarterIds } = buildUserSurplus(userRoster, footballConfig, userRosterByPosition);
-  const userPickChips = getTeamDraftPicks(userTeam, league).map((p) => buildDraftPickChip(p, userTeamId, currentSeason)).filter((p) => p?.pickId).sort((a,b)=>b.valueScore-a.valueScore);
+  const userPickChips = getTeamDraftPicks(userTeam, league).reduce((acc, p) => {
+    const chip = buildDraftPickChip(p, userTeamId, currentSeason);
+    if (chip?.pickId) acc.push(chip);
+    return acc;
+  }, []).sort((a, b) => b.valueScore - a.valueScore);
   const userAssets = [...chipPool, ...userPickChips];
   const ideas = [];
   for (const need of targetNeeds.slice(0, 4)) {
