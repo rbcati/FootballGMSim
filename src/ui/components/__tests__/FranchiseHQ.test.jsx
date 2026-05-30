@@ -57,8 +57,8 @@ describe('FranchiseHQ', () => {
   it('renders visible weekly command center essentials and one primary advance CTA', () => {
     render(<FranchiseHQ league={baseLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
 
-    // Week label is visible — topbar strong and matchup ticker both contain "week 10"
-    expect(screen.getAllByText(/week 10/i).length).toBeGreaterThan(0);
+    // Week label is visible — compact topbar renders "Wk 10" (abbreviated)
+    expect(document.querySelector('[aria-label*="Week 10"]')).not.toBeNull();
     expect(screen.getByRole('button', { name: /advance week/i })).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /advance week/i })).toHaveLength(1);
     // Weekly Command Hub and Game Plan Impact pruned from HQ command deck

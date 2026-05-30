@@ -136,7 +136,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
 
   const handleGamePlanTile = () => {
     markWeeklyPrepStep(league, 'planReviewed', true);
-    // Sync stored game plan into the worker so computeStrategicEdge() sees live inputs
     if (actions?.send) {
       const storedPlan = loadHQStoredPlan();
       const strats = userTeam?.strategies ?? {};
@@ -153,7 +152,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
   };
 
   const handleTrainingTile = () => {
-    // Dispatch current strategy profile so the worker has fresh tactical context
     if (actions?.send) {
       const strats = userTeam?.strategies ?? {};
       if (strats.offPlanId || strats.offSchemeId) {
@@ -171,7 +169,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
 
   const handleScoutTile = () => {
     markWeeklyPrepStep(league, 'opponentScouted', true);
-    // Flush strategy state so game-simulator.js reads real inputs on next sim loop
     if (actions?.send) {
       const strats = userTeam?.strategies ?? {};
       if (strats.offPlanId || strats.offSchemeId) {
@@ -200,27 +197,45 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
   );
   const lastGame = useMemo(() => getLatestUserCompletedGame(league) ?? recentLastGame ?? command.lastGameSummary ?? null, [league, recentLastGame, command.lastGameSummary]);
   const lastGameDisplay = useMemo(() => getLastGameDisplay(lastGame, league?.userTeamId), [lastGame, league?.userTeamId]);
-  const heroMeta = useMemo(() => {
-    const homeAwayVerb = command.nextGame?.isHome ? 'vs' : '@';
-    const divisionRows = command.divisionMiniStandings ?? [];
-    const divisionLeader = divisionRows[0] ?? null;
-    const userRow = divisionRows.find((row) => row?.isUser) ?? null;
-    const leaderWins = safeNum(divisionLeader?.record?.split('-')?.[0]);
-    const userWins = safeNum(userRow?.record?.split('-')?.[0]);
-    const gamesBehind = Math.max(0, leaderWins - userWins);
-    const standingDetail = divisionLeader && !divisionLeader?.isUser ? `${gamesBehind || 1} GB behind ${divisionLeader?.abbr ?? 'division lead'}` : 'Leads division race';
 
-    const lastTwo = Array.isArray(userTeam?.recentResults) ? userTeam.recentResults.slice(-2).map((r) => String(r).toUpperCase()) : [];
-    const hasTwoWins = lastTwo.length === 2 && lastTwo.every((result) => result === 'W');
-    const hasTwoLosses = lastTwo.length === 2 && lastTwo.every((result) => result === 'L');
-    const lastGameStory = hasTwoWins ? 'Won 2 straight heading into kickoff' : hasTwoLosses ? 'Need division response this week' : (lastGameDisplay.heroLine.startsWith('W') ? 'Carrying momentum from last win' : 'Rebound spot after last result');
+  // Compact last result row data
+  const lastResultRow = useMemo(() => {
+    if (!lastGame) return null;
+    const homeId = Number(lastGame.homeId);
+    const awayId = Number(lastGame.awayId);
+    const userId = Number(league?.userTeamId);
+    const homeScore = safeNum(lastGame.homeScore ?? lastGame.score?.home);
+    const awayScore = safeNum(lastGame.awayScore ?? lastGame.score?.away);
+    const userIsHome = homeId === userId;
+    const homeWon = homeScore > awayScore;
+    const tied = homeScore === awayScore;
+    const userWon = !tied && ((userIsHome && homeWon) || (!userIsHome && !homeWon));
+    const userScore = userIsHome ? homeScore : awayScore;
+    const oppScore = userIsHome ? awayScore : homeScore;
+    const oppAbbr = userIsHome
+      ? (lastGame.awayAbbr ?? lastGame.away?.abbr ?? 'OPP')
+      : (lastGame.homeAbbr ?? lastGame.home?.abbr ?? 'OPP');
+    const gameId = lastGame.gameId ?? lastGame.id ?? null;
+    const weekNum = safeNum(lastGame.week);
+    return {
+      label: tied ? 'T' : userWon ? 'W' : 'L',
+      tone: tied ? 'info' : userWon ? 'ok' : 'danger',
+      text: `${userScore}–${oppScore} vs ${oppAbbr}${weekNum ? ` · Wk${weekNum}` : ''}`,
+      gameId,
+    };
+  }, [lastGame, league?.userTeamId]);
 
-    const operationHeading = `WEEK ${safeNum(league?.week, 1)} ${homeAwayVerb} ${opponent?.abbr ?? command.nextOpponent ?? 'TBD'}`.toUpperCase();
-    const matchupLine = [`${homeAwayVerb} ${opponent?.abbr ?? command.nextOpponent ?? 'TBD'}`, formatRecordInline(command.nextOpponentRecord), `Week ${safeNum(league?.week, 1)}`].join(' • ');
-    const trendLine = hasTwoWins ? 'Win streak 2' : hasTwoLosses ? 'Loss streak 2' : 'Momentum balanced';
-    const nextOppSummary = [command.standingSummary, matchupLine, trendLine].filter(Boolean).join(' • ');
-    return { standingDetail, lastGameStory, operationHeading, nextOppSummary };
-  }, [command.divisionMiniStandings, command.nextGame?.isHome, command.nextOpponent, command.nextOpponentRecord, command.standingSummary, lastGameDisplay.heroLine, league?.week, opponent?.abbr, userTeam?.recentResults]);
+  // Division standings for mini-table (max 4 rows)
+  const divisionRows = useMemo(() => {
+    const rows = command.divisionMiniStandings ?? [];
+    if (!rows.length) return [];
+    const leaderWins = safeNum((rows[0]?.record ?? '0-0').split('-')[0]);
+    return rows.slice(0, 4).map((row) => {
+      const rowWins = safeNum((row.record ?? '0-0').split('-')[0]);
+      const gb = leaderWins - rowWins;
+      return { ...row, gbDisplay: gb === 0 ? '—' : String(gb) };
+    });
+  }, [command.divisionMiniStandings]);
 
   const capSpace = command.teamOverview?.find((item) => item.label === 'Cap Space')?.value ?? '—';
   const weeklyIntel = useMemo(() => command.weeklyIntelligence?.insights ?? [], [command.weeklyIntelligence?.insights]);
@@ -368,88 +383,139 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
     description.setAttribute('content', 'Manage weekly prep, review your last result, and advance your franchise one week at a time.');
   }, [command.weekLabel]);
 
+  const teamDisplayName = userTeam?.name ?? userTeam?.abbr ?? 'My Team';
+
   return (
-    <div className="app-screen-stack franchise-hq franchise-command-center" data-testid="franchise-hq" role="main" aria-label="Franchise HQ weekly command center">
-      <section className="app-hq-topbar card" aria-label="Franchise HQ top bar">
-        <div className="app-hq-topbar__left">
-          <span>{command.seasonLabel}</span>
-          <strong>{command.weekLabel.toUpperCase()}</strong>
-        </div>
-        <div className="app-hq-topbar__team">
-          <span>{formatRecordInline(command.teamRecord)}</span>
-          <strong>{capSpace} cap</strong>
-        </div>
-      </section>
-
-      <ChronicleHeadlineBanner
-        headlines={Array.isArray(league?.weeklyHeadlines) ? league.weeklyHeadlines : []}
-        currentWeek={safeNum(league?.week, 1)}
-        currentYear={safeNum(league?.year, 0)}
-        onViewAll={() => onNavigate?.('News')}
-      />
-
-      <section className="hq-matchup-ticker-wrap" aria-label="Weekly Matchup" aria-live="polite" data-testid="hq-matchup-hero">
-        <p className="hq-matchup-ticker">
-          🏈 Week {safeNum(league?.week, 1)} {command.nextGame?.isHome ? 'vs' : '@'} {opponent?.abbr ?? command.nextOpponent ?? 'TBD'} ({formatRecordInline(command.nextOpponentRecord)}) • Last: {lastGameDisplay.heroLine}
-        </p>
-      </section>
-
-      {/* ── Actions Required ─────────────────────────────────────────── */}
-      {commandSummary.criticalCount > 0 ? (
-        <section
-          className={`card app-hq-actions-required tone-${commandSummary.readinessTone}`}
-          aria-label="Actions Required"
-          data-testid="hq-actions-required"
-          style={{ padding: '8px', marginBottom: 6 }}
+    <div
+      className="app-screen-stack franchise-hq franchise-command-center hq-compact-layout"
+      data-testid="franchise-hq"
+      role="main"
+      aria-label="Franchise HQ weekly command center"
+    >
+      {/* ── COMPACT TOP BAR — single line, ~40px, 4 tappable segments ─────── */}
+      <header className="hq-compact-topbar" aria-label="Franchise HQ top bar">
+        <button
+          type="button"
+          className="hq-topbar-seg hq-topbar-seg--team"
+          onClick={() => onNavigate?.('Team:Overview')}
+          aria-label={`Team: ${teamDisplayName}, record ${formatRecordInline(command.teamRecord)}`}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <strong>Actions Required</strong>
-            <StatusChip
-              label={`${commandSummary.criticalCount} open`}
-              tone={commandSummary.readinessTone === 'danger' ? 'warning' : 'info'}
-            />
+          <strong className="hq-topbar-seg__primary">{teamDisplayName}</strong>
+          <span className="hq-topbar-seg__secondary">{formatRecordInline(command.teamRecord)}</span>
+        </button>
+        <button
+          type="button"
+          className="hq-topbar-seg hq-topbar-seg--week"
+          onClick={() => onNavigate?.('Game Plan')}
+          aria-label={`Week ${safeNum(league?.week, 1)}`}
+        >
+          <strong className="hq-topbar-seg__primary">Wk {safeNum(league?.week, 1)}</strong>
+        </button>
+        <button
+          type="button"
+          className="hq-topbar-seg hq-topbar-seg--cap"
+          onClick={() => onNavigate?.('Team:Front Office')}
+          aria-label={`Cap space: ${capSpace}`}
+        >
+          <span className="hq-topbar-seg__secondary">{capSpace} cap</span>
+        </button>
+        <button
+          type="button"
+          className="hq-topbar-seg hq-topbar-seg--season"
+          onClick={() => onNavigate?.('Standings')}
+          aria-label={command.seasonLabel}
+        >
+          <span className="hq-topbar-seg__secondary">{command.seasonLabel}</span>
+        </button>
+      </header>
+
+      {/* ── LAST RESULT ROW — single line, tappable → box score ─────────── */}
+      {lastResultRow && (
+        <button
+          type="button"
+          className={`hq-status-row hq-status-row--result`}
+          data-tone={lastResultRow.tone}
+          aria-label={`Last result: ${lastResultRow.text}. Tap to view box score.`}
+          onClick={() => lastResultRow.gameId && onNavigate?.(buildGameBookDestination(lastResultRow.gameId))}
+        >
+          <span className={`hq-wl-badge hq-wl-badge--${lastResultRow.tone}`}>{lastResultRow.label}</span>
+          <span className="hq-status-row__text">{lastResultRow.text}</span>
+          <span className="hq-status-row__chevron" aria-hidden="true">›</span>
+        </button>
+      )}
+
+      {/* ── NEXT GAME ROW — single line, tappable → Game Plan ───────────── */}
+      <button
+        type="button"
+        className="hq-status-row hq-status-row--next"
+        aria-label={`Next game: Week ${safeNum(league?.week, 1)} ${nextOpponentDisplay.isHome ? 'vs' : 'at'} ${nextOpponentDisplay.opponentAbbr ?? opponent?.abbr ?? 'TBD'}. Tap to open Game Plan.`}
+        onClick={() => onNavigate?.('Game Plan')}
+        data-testid="hq-matchup-hero"
+      >
+        <span className="hq-next-badge" aria-hidden="true">🏈</span>
+        <span className="hq-status-row__text">
+          Wk{safeNum(league?.week, 1)} {nextOpponentDisplay.isHome ? 'vs' : '@'} {nextOpponentDisplay.opponentAbbr ?? opponent?.abbr ?? command.nextOpponent ?? 'TBD'}
+        </span>
+        <span className="hq-status-row__muted">{formatRecordInline(command.nextOpponentRecord)}</span>
+        <span className="hq-status-row__chevron" aria-hidden="true">›</span>
+      </button>
+
+      {/* ── STANDINGS MINI-TABLE — division only, 4 rows max ────────────── */}
+      {divisionRows.length > 0 && (
+        <section className="hq-standings-mini" aria-label="Division standings">
+          <div className="hq-standings-mini__header" aria-hidden="true">
+            <span>Division</span>
+            <span>W-L</span>
+            <span>GB</span>
           </div>
-          <div className="app-hq-intel-list">
-            {commandSummary.primaryActions.map((item, idx) => (
-              <button
-                key={`req-${idx}`}
-                type="button"
-                className={`app-hq-intel-item tone-${item.tone ?? 'warning'}`}
-                style={{ display: 'flex', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', textAlign: 'left' }}
-                onClick={() => item.tab && onNavigate?.(item.tab)}
-              >
-                <span>
-                  <strong style={{ display: 'block' }}>{item.label}</strong>
-                  <small>{item.detail}</small>
-                </span>
-                <span aria-hidden>›</span>
-              </button>
-            ))}
-          </div>
-          <button type="button" className="btn btn-sm" style={{ marginTop: 4 }} onClick={() => onNavigate?.('Weekly Prep')}>
-            Review weekly prep
-          </button>
+          {divisionRows.map((row, i) => (
+            <button
+              key={row.id ?? row.abbr ?? i}
+              type="button"
+              className={`hq-standings-mini__row${row.isUser ? ' is-user' : ''}`}
+              onClick={() => onNavigate?.('Standings')}
+              aria-label={`${row.abbr ?? row.name ?? '—'} ${row.record ?? ''}${row.isUser ? ' (your team)' : ''}`}
+            >
+              <span className="hq-standings-mini__abbr">{row.abbr ?? row.name ?? '—'}</span>
+              <span className="hq-standings-mini__record">{row.record ?? '—'}</span>
+              <span className="hq-standings-mini__gb">{row.gbDisplay}</span>
+            </button>
+          ))}
         </section>
+      )}
+
+      {/* ── ALERTS ROW — single line, only if actions exist ─────────────── */}
+      {commandSummary.criticalCount > 0 ? (
+        <button
+          type="button"
+          className={`hq-alerts-row hq-alerts-row--${commandSummary.readinessTone}`}
+          data-testid="hq-actions-required"
+          aria-label={`${commandSummary.criticalCount} action${commandSummary.criticalCount !== 1 ? 's' : ''} required. Tap to review.`}
+          onClick={() => setShowGate(true)}
+        >
+          <span>⚠ {commandSummary.criticalCount} action{commandSummary.criticalCount !== 1 ? 's' : ''} required</span>
+          <span className="hq-alerts-row__chevron" aria-hidden="true">›</span>
+        </button>
       ) : (
         <div
-          className="app-hq-actions-required hq-ready-status"
-          aria-label="Actions Required"
+          className="hq-ready-row"
           data-testid="hq-actions-required"
           data-ready="true"
+          aria-label="No actions required"
         >
           <StatusChip label="Ready" tone="ok" />
-          <span style={{ fontSize: '0.85em', opacity: 0.8 }}>No blockers — ready to advance</span>
+          <span>No blockers — ready to advance</span>
         </div>
       )}
 
+      {/* ── QUICK ACTION GRID 2×2 ────────────────────────────────────────── */}
       <div
         className="app-hq-action-tiles"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-          gap: 8,
-          marginBottom: 12,
-          padding: '0 var(--space-2)',
+          gap: 6,
+          padding: '0 12px',
         }}
       >
         {actionTiles.map((tile) => (
@@ -464,234 +530,235 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         ))}
       </div>
 
-      <nav
-        className="hq-nav-pills"
-        aria-label="League quick navigation"
-        data-testid="hq-league-destination-links"
-      >
-        <button type="button" className="hq-nav-pill" onClick={() => onNavigate?.('League Leaders')}>Stats</button>
-        <button type="button" className="hq-nav-pill" onClick={() => onNavigate?.('Standings')}>Standings</button>
-        <button type="button" className="hq-nav-pill" onClick={() => onNavigate?.('News')}>News</button>
-        <button type="button" className="hq-nav-pill" onClick={() => onNavigate?.('Team:Front Office')}>Ops</button>
-      </nav>
-
-      {/* ── Roster Health / Office Status (twin parallel status cards) ─────── */}
-      {/* Data from legacy "Next Action" and "Coordinator Brief" panels is     */}
-      {/* compressed inline here — those single-column sections are removed.   */}
-      <div className="hq-twin-grid" aria-label="Team status overview" data-testid="hq-twin-status-grid">
-        <article
-          className={`hq-twin-card card tone-${rosterHealthBadge.tone}`}
-          data-testid="roster-health-card"
-          aria-label="Roster Health"
-        >
-          <div className="hq-twin-card__head">
-            <strong>Roster Health</strong>
-            <StatusChip label={rosterHealthBadge.label} tone={rosterHealthBadge.tone} />
-          </div>
-          <p className="hq-twin-card__stat">
-            {hqTeamBuilder.biggestNeed !== 'Needs more data' ? `Need: ${hqTeamBuilder.biggestNeed}` : 'Balanced'}
-          </p>
-          <p className="hq-twin-card__detail">{hqTeamBuilder.nextAction}</p>
-          {/* Last result + record — replaces the removed Next Action panel */}
-          {lastGame ? (
-            <p className="hq-twin-card__detail hq-twin-card__divider" data-testid="hq-last-result">
-              {lastGameDisplay.heroLine} · {formatRecordInline(command.teamRecord)}
-            </p>
-          ) : null}
-          {/* Top coordinator intel item — replaces the removed Coordinator Brief */}
-          {weeklyIntel.length > 0 ? (
-            <p className="hq-twin-card__detail hq-intel-text--clamp">{weeklyIntel[0].text}</p>
-          ) : null}
-          {/* Compact game-plan accordion with 2-column button grid */}
-          {(command.weeklyAgenda ?? []).length > 0 ? (
-            <details className="hq-game-plan-accordion">
-              <summary className="hq-game-plan-accordion__trigger">
-                Plan ({(command.weeklyAgenda ?? []).length}) ▾
-              </summary>
-              <div className="hq-game-plan-accordion__grid">
-                {(command.weeklyAgenda ?? []).slice(0, 4).map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="btn btn-sm"
-                    onClick={() => item.targetRoute && onNavigate?.(item.targetRoute)}
-                    disabled={!item.targetRoute}
-                    aria-label={`${item.title}: ${item.ctaLabel}`}
-                  >
-                    {item.title}
-                  </button>
-                ))}
-              </div>
-            </details>
-          ) : null}
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
-            <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Roster / Team Builder')}>
-              Team Builder
-            </button>
-            {hqNextAction.route ? (
-              <button type="button" className="btn btn-sm" onClick={() => onNavigate?.(hqNextAction.route)}>
-                {hqNextAction.label}
-              </button>
-            ) : null}
-          </div>
-        </article>
-
-        <article
-          className={`hq-twin-card card tone-${seasonPulse.mandateTone}`}
-          data-testid="office-status-card"
-          aria-label="Office Status"
-        >
-          <div className="hq-twin-card__head">
-            <strong>Office Status</strong>
-            <StatusChip label={`${seasonPulse.approval}%`} tone={seasonPulse.mandateTone} />
-          </div>
-          <p className="hq-twin-card__stat">{seasonPulse.capLabel} cap</p>
-          <p className="hq-twin-card__detail">{seasonPulse.pressureSummary}</p>
-          {/* Next opponent + record — replaces the removed Next Action panel */}
-          <p className="hq-twin-card__detail hq-twin-card__divider">
-            Next: {postAdvanceNote.nextOpponent} · {formatRecordInline(command.teamRecord)}
-          </p>
-          {/* Second coordinator intel item — replaces the removed Coordinator Brief */}
-          {weeklyIntel.length > 1 ? (
-            <p className="hq-twin-card__detail hq-intel-text--clamp">{weeklyIntel[1].text}</p>
-          ) : null}
-          <p className="hq-twin-card__detail hq-twin-card__divider" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ fontSize: '0.78em', opacity: 0.65 }}>Culture</span>
-            <StatusChip label={`${culturePulse.label} ${culturePulse.trendIcon}`} tone={culturePulse.tone} />
-          </p>
-          <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Front Office')}>
-            Front Office
-          </button>
-        </article>
-      </div>
-
-      {/* Next Action and Coordinator Brief panels removed — data compressed into hq-twin-grid above */}
-
+      {/* ── COLLAPSED DRAWER: secondary content ─────────────────────────── */}
       <details className="hq-more-drawer" data-testid="hq-more-drawer">
         <summary className="hq-more-drawer__trigger">Season Pulse &amp; More ▾</summary>
-      <SectionCard title="Season Pulse" subtitle="Pressure, form, and roster leverage at a glance." variant="compact">
-        <div className="app-hq-pulse-grid" data-testid="season-pulse">
-          <article className={`app-hq-pulse-card tone-${seasonPulse.mandateTone}`}>
-            <div className="app-hq-pulse-card__head">
-              <span>Owner Mandate</span>
-              <StatusChip label={`${seasonPulse.approval}%`} tone={seasonPulse.mandateTone} />
-            </div>
-            <strong>{seasonPulse.pressureSummary}</strong>
-            <div className="app-mandate-meter" aria-hidden="true">
-              <span className="app-mandate-meter__segment tone-danger" />
-              <span className="app-mandate-meter__segment tone-warning" />
-              <span className="app-mandate-meter__segment tone-ok" />
-              <span className="app-mandate-meter__needle" style={{ left: `${seasonPulse.approval}%` }} />
-            </div>
-          </article>
 
-          <article className="app-hq-pulse-card tone-info">
-            <div className="app-hq-pulse-card__head">
-              <span>Momentum</span>
-              <StatusChip label={formatRecordInline(command.teamRecord)} tone="info" />
-            </div>
-            <strong>{seasonPulse.momentumLabel}</strong>
-            <p>{seasonPulse.filmLabel}</p>
-          </article>
+        <ChronicleHeadlineBanner
+          headlines={Array.isArray(league?.weeklyHeadlines) ? league.weeklyHeadlines : []}
+          currentWeek={safeNum(league?.week, 1)}
+          currentYear={safeNum(league?.year, 0)}
+          onViewAll={() => onNavigate?.('News')}
+        />
 
-          <article className={`app-hq-pulse-card tone-${seasonPulse.capTone}`}>
-            <div className="app-hq-pulse-card__head">
-              <span>Roster Lever</span>
-              <StatusChip label={seasonPulse.rosterNeed} tone={seasonPulse.capTone} />
+        {/* Twin status cards */}
+        <div className="hq-twin-grid" aria-label="Team status overview" data-testid="hq-twin-status-grid">
+          <article
+            className={`hq-twin-card card tone-${rosterHealthBadge.tone}`}
+            data-testid="roster-health-card"
+            aria-label="Roster Health"
+          >
+            <div className="hq-twin-card__head">
+              <strong>Roster Health</strong>
+              <StatusChip label={rosterHealthBadge.label} tone={rosterHealthBadge.tone} />
             </div>
-            <strong>{seasonPulse.capLabel} cap room</strong>
-            <p>{seasonPulse.rosterDetail}</p>
-            <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Roster / Team Builder')}>
-              Open Team Builder
-            </button>
-          </article>
-
-          <article className="app-hq-pulse-card tone-ok">
-            <div className="app-hq-pulse-card__head">
-              <span>Film Room</span>
-              <StatusChip label={lastGame ? 'Postgame' : 'Pregame'} tone={lastGame ? 'ok' : 'warning'} />
+            <p className="hq-twin-card__stat">
+              {hqTeamBuilder.biggestNeed !== 'Needs more data' ? `Need: ${hqTeamBuilder.biggestNeed}` : 'Balanced'}
+            </p>
+            <p className="hq-twin-card__detail">{hqTeamBuilder.nextAction}</p>
+            {lastGame ? (
+              <p className="hq-twin-card__detail hq-twin-card__divider" data-testid="hq-last-result">
+                {lastGameDisplay.heroLine} · {formatRecordInline(command.teamRecord)}
+              </p>
+            ) : null}
+            {weeklyIntel.length > 0 ? (
+              <p className="hq-twin-card__detail hq-intel-text--clamp">{weeklyIntel[0].text}</p>
+            ) : null}
+            {(command.weeklyAgenda ?? []).length > 0 ? (
+              <details className="hq-game-plan-accordion">
+                <summary className="hq-game-plan-accordion__trigger">
+                  Plan ({(command.weeklyAgenda ?? []).length}) ▾
+                </summary>
+                <div className="hq-game-plan-accordion__grid">
+                  {(command.weeklyAgenda ?? []).slice(0, 4).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => item.targetRoute && onNavigate?.(item.targetRoute)}
+                      disabled={!item.targetRoute}
+                      aria-label={`${item.title}: ${item.ctaLabel}`}
+                    >
+                      {item.title}
+                    </button>
+                  ))}
+                </div>
+              </details>
+            ) : null}
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
+              <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Roster / Team Builder')}>
+                Team Builder
+              </button>
+              {hqNextAction.route ? (
+                <button type="button" className="btn btn-sm" onClick={() => onNavigate?.(hqNextAction.route)}>
+                  {hqNextAction.label}
+                </button>
+              ) : null}
             </div>
-            <strong>{seasonPulse.filmCta}</strong>
-            <p>{seasonPulse.filmDetail}</p>
-            <button type="button" className="btn btn-sm" onClick={() => onNavigate?.(seasonPulse.filmRoute)}>
-              {seasonPulse.filmCta}
-            </button>
           </article>
 
           <article
-            className={`app-hq-pulse-card tone-${culturePulse.tone}`}
-            style={{ gridColumn: '1 / -1' }}
-            data-testid="culture-pulse-card"
-            aria-label="Team Culture"
+            className={`hq-twin-card card tone-${seasonPulse.mandateTone}`}
+            data-testid="office-status-card"
+            aria-label="Office Status"
           >
-            <div className="app-hq-pulse-card__head">
-              <span>Team Culture</span>
-              <StatusChip label={`${culturePulse.score.toFixed(0)} ${culturePulse.trendIcon}`} tone={culturePulse.tone} />
+            <div className="hq-twin-card__head">
+              <strong>Office Status</strong>
+              <StatusChip label={`${seasonPulse.approval}%`} tone={seasonPulse.mandateTone} />
             </div>
-            <strong>{culturePulse.label}</strong>
-            <p style={{ margin: '2px 0 0', fontSize: '0.85em', opacity: 0.9 }}>{culturePulse.narrative}</p>
-            {culturePulse.recentEventHeadline ? (
-              <p style={{ margin: '3px 0 0', fontSize: '0.8em', opacity: 0.7 }} data-testid="culture-recent-event">{culturePulse.recentEventHeadline}</p>
+            <p className="hq-twin-card__stat">{seasonPulse.capLabel} cap</p>
+            <p className="hq-twin-card__detail">{seasonPulse.pressureSummary}</p>
+            <p className="hq-twin-card__detail hq-twin-card__divider">
+              Next: {postAdvanceNote.nextOpponent} · {formatRecordInline(command.teamRecord)}
+            </p>
+            {weeklyIntel.length > 1 ? (
+              <p className="hq-twin-card__detail hq-intel-text--clamp">{weeklyIntel[1].text}</p>
             ) : null}
+            <p className="hq-twin-card__detail hq-twin-card__divider" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: '0.78em', opacity: 0.65 }}>Culture</span>
+              <StatusChip label={`${culturePulse.label} ${culturePulse.trendIcon}`} tone={culturePulse.tone} />
+            </p>
+            <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Front Office')}>
+              Front Office
+            </button>
           </article>
         </div>
-      </SectionCard>
+
+        {/* League quick navigation */}
+        <nav
+          className="hq-nav-pills"
+          aria-label="League quick navigation"
+          data-testid="hq-league-destination-links"
+        >
+          <button type="button" className="hq-nav-pill" onClick={() => onNavigate?.('League Leaders')}>Stats</button>
+          <button type="button" className="hq-nav-pill" onClick={() => onNavigate?.('Standings')}>Standings</button>
+          <button type="button" className="hq-nav-pill" onClick={() => onNavigate?.('News')}>News</button>
+          <button type="button" className="hq-nav-pill" onClick={() => onNavigate?.('Team:Front Office')}>Ops</button>
+        </nav>
+
+        <SectionCard title="Season Pulse" subtitle="Pressure, form, and roster leverage at a glance." variant="compact">
+          <div className="app-hq-pulse-grid" data-testid="season-pulse">
+            <article className={`app-hq-pulse-card tone-${seasonPulse.mandateTone}`}>
+              <div className="app-hq-pulse-card__head">
+                <span>Owner Mandate</span>
+                <StatusChip label={`${seasonPulse.approval}%`} tone={seasonPulse.mandateTone} />
+              </div>
+              <strong>{seasonPulse.pressureSummary}</strong>
+              <div className="app-mandate-meter" aria-hidden="true">
+                <span className="app-mandate-meter__segment tone-danger" />
+                <span className="app-mandate-meter__segment tone-warning" />
+                <span className="app-mandate-meter__segment tone-ok" />
+                <span className="app-mandate-meter__needle" style={{ left: `${seasonPulse.approval}%` }} />
+              </div>
+            </article>
+
+            <article className="app-hq-pulse-card tone-info">
+              <div className="app-hq-pulse-card__head">
+                <span>Momentum</span>
+                <StatusChip label={formatRecordInline(command.teamRecord)} tone="info" />
+              </div>
+              <strong>{seasonPulse.momentumLabel}</strong>
+              <p>{seasonPulse.filmLabel}</p>
+            </article>
+
+            <article className={`app-hq-pulse-card tone-${seasonPulse.capTone}`}>
+              <div className="app-hq-pulse-card__head">
+                <span>Roster Lever</span>
+                <StatusChip label={seasonPulse.rosterNeed} tone={seasonPulse.capTone} />
+              </div>
+              <strong>{seasonPulse.capLabel} cap room</strong>
+              <p>{seasonPulse.rosterDetail}</p>
+              <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Roster / Team Builder')}>
+                Open Team Builder
+              </button>
+            </article>
+
+            <article className="app-hq-pulse-card tone-ok">
+              <div className="app-hq-pulse-card__head">
+                <span>Film Room</span>
+                <StatusChip label={lastGame ? 'Postgame' : 'Pregame'} tone={lastGame ? 'ok' : 'warning'} />
+              </div>
+              <strong>{seasonPulse.filmCta}</strong>
+              <p>{seasonPulse.filmDetail}</p>
+              <button type="button" className="btn btn-sm" onClick={() => onNavigate?.(seasonPulse.filmRoute)}>
+                {seasonPulse.filmCta}
+              </button>
+            </article>
+
+            <article
+              className={`app-hq-pulse-card tone-${culturePulse.tone}`}
+              style={{ gridColumn: '1 / -1' }}
+              data-testid="culture-pulse-card"
+              aria-label="Team Culture"
+            >
+              <div className="app-hq-pulse-card__head">
+                <span>Team Culture</span>
+                <StatusChip label={`${culturePulse.score.toFixed(0)} ${culturePulse.trendIcon}`} tone={culturePulse.tone} />
+              </div>
+              <strong>{culturePulse.label}</strong>
+              <p style={{ margin: '2px 0 0', fontSize: '0.85em', opacity: 0.9 }}>{culturePulse.narrative}</p>
+              {culturePulse.recentEventHeadline ? (
+                <p style={{ margin: '3px 0 0', fontSize: '0.8em', opacity: 0.7 }} data-testid="culture-recent-event">{culturePulse.recentEventHeadline}</p>
+              ) : null}
+            </article>
+          </div>
+        </SectionCard>
+
+        {/* Decision Review */}
+        <SectionCard
+          title={decisionReview?.heading ?? 'What Mattered Last Week'}
+          subtitle={decisionReview?.resultSummary ?? 'Run a completed game to unlock a weekly decision review.'}
+          variant="compact"
+        >
+          <details className="app-hq-background-section__inner">
+            <summary className="app-hq-section-expand">Show decision recap ▾</summary>
+            <div className="app-hq-intel-list" role="list" aria-label="Weekly decision impact recap">
+              {(decisionReview?.bullets ?? []).slice(0, 4).map((bullet, idx) => (
+                <p key={`decision-${idx}`} role="listitem" className="app-hq-intel-item tone-info">{bullet}</p>
+              ))}
+            </div>
+            {decisionReview?.recommendedAction ? (
+              <div className="app-hq-impact-card tone-info" style={{ marginTop: 10 }}>
+                <div className="app-hq-impact-card__head">
+                  <strong>Recommended next action</strong>
+                  <StatusChip label={decisionReview.recommendedAction.label} tone="info" />
+                </div>
+                <p>{decisionReview.recommendedAction.reason}</p>
+                <button
+                  type="button"
+                  className="btn btn-sm app-hq-impact-card__cta"
+                  onClick={() => onNavigate?.(decisionReview.recommendedAction.route)}
+                  aria-label={`Decision review: ${decisionReview.recommendedAction.label}`}
+                >
+                  {decisionReview.recommendedAction.label}
+                </button>
+              </div>
+            ) : null}
+          </details>
+        </SectionCard>
+
+        {/* Operations Snapshot */}
+        <SectionCard title="Operations Snapshot" subtitle="Last result, standing, and upcoming slate." variant="compact">
+          <details className="app-hq-background-section__inner">
+            <summary className="app-hq-section-expand">Show snapshot ▾</summary>
+            <div className="app-hq-team-overview">
+              <div><span>{postAdvanceNote.heading}</span><strong>{postAdvanceNote.result}</strong></div>
+              <div><span>Key Takeaway</span><strong>{postAdvanceNote.takeaway}</strong></div>
+              <div><span>Next Action</span><strong>{postAdvanceNote.nextAction}</strong></div>
+              <div><span>Record Update</span><strong>{postAdvanceNote.recordDelta}</strong></div>
+              <div><span>Next Opponent</span><strong>{postAdvanceNote.nextOpponent}</strong></div>
+              <div><span>News Note</span><strong>{postAdvanceNote.note}</strong></div>
+              <div><span>Review Routes</span><div className="app-hq-opponent-chips">{postAdvanceNote.actions.length ? postAdvanceNote.actions.map((action) => <button key={action.targetRoute} type="button" onClick={() => onNavigate?.(action.targetRoute)}>{action.label}</button>) : <em>No review actions</em>}</div></div>
+              <div><span>Next 3</span><div className="app-hq-opponent-chips">{nextOpponents.length ? nextOpponents.map((chip) => <em key={chip}>{chip}</em>) : <em>No future games on file</em>}</div></div>
+            </div>
+          </details>
+        </SectionCard>
       </details>
 
       {lineupToast ? <p className="app-inline-toast" role="status" aria-live="polite">{lineupToast}</p> : null}
 
-      {/* ── Decision Review (background context, collapsed) ────────────── */}
-      <SectionCard
-        title={decisionReview?.heading ?? 'What Mattered Last Week'}
-        subtitle={decisionReview?.resultSummary ?? 'Run a completed game to unlock a weekly decision review.'}
-        variant="compact"
-      >
-        <details className="app-hq-background-section__inner">
-          <summary className="app-hq-section-expand">Show decision recap ▾</summary>
-          <div className="app-hq-intel-list" role="list" aria-label="Weekly decision impact recap">
-            {(decisionReview?.bullets ?? []).slice(0, 4).map((bullet, idx) => (
-              <p key={`decision-${idx}`} role="listitem" className="app-hq-intel-item tone-info">{bullet}</p>
-            ))}
-          </div>
-          {decisionReview?.recommendedAction ? (
-            <div className="app-hq-impact-card tone-info" style={{ marginTop: 10 }}>
-              <div className="app-hq-impact-card__head">
-                <strong>Recommended next action</strong>
-                <StatusChip label={decisionReview.recommendedAction.label} tone="info" />
-              </div>
-              <p>{decisionReview.recommendedAction.reason}</p>
-              <button
-                type="button"
-                className="btn btn-sm app-hq-impact-card__cta"
-                onClick={() => onNavigate?.(decisionReview.recommendedAction.route)}
-                aria-label={`Decision review: ${decisionReview.recommendedAction.label}`}
-              >
-                {decisionReview.recommendedAction.label}
-              </button>
-            </div>
-          ) : null}
-        </details>
-      </SectionCard>
-
-      {/* ── Operations Snapshot (background context, collapsed) ────────── */}
-      <SectionCard title="Operations Snapshot" subtitle="Last result, standing, and upcoming slate." variant="compact">
-        <details className="app-hq-background-section__inner">
-          <summary className="app-hq-section-expand">Show snapshot ▾</summary>
-          <div className="app-hq-team-overview">
-            <div><span>{postAdvanceNote.heading}</span><strong>{postAdvanceNote.result}</strong></div>
-            <div><span>Key Takeaway</span><strong>{postAdvanceNote.takeaway}</strong></div>
-            <div><span>Next Action</span><strong>{postAdvanceNote.nextAction}</strong></div>
-            <div><span>Record Update</span><strong>{postAdvanceNote.recordDelta}</strong></div>
-            <div><span>Next Opponent</span><strong>{postAdvanceNote.nextOpponent}</strong></div>
-            <div><span>News Note</span><strong>{postAdvanceNote.note}</strong></div>
-            <div><span>Review Routes</span><div className="app-hq-opponent-chips">{postAdvanceNote.actions.length ? postAdvanceNote.actions.map((action) => <button key={action.targetRoute} type="button" onClick={() => onNavigate?.(action.targetRoute)}>{action.label}</button>) : <em>No review actions</em>}</div></div>
-            <div><span>Next 3</span><div className="app-hq-opponent-chips">{nextOpponents.length ? nextOpponents.map((chip) => <em key={chip}>{chip}</em>) : <em>No future games on file</em>}</div></div>
-          </div>
-        </details>
-      </SectionCard>
-
       {showGate ? (
-        <div style={{ padding: '0 var(--space-2)', marginBottom: 8 }}>
+        <div style={{ padding: '0 12px', marginBottom: 8 }}>
           <AdvanceReadinessGate
             gate={gate}
             onAdvanceAnyway={handleGateAdvanceAnyway}
@@ -700,6 +767,8 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           />
         </div>
       ) : null}
+
+      {/* ── ADVANCE WEEK BUTTON — full-width, always visible without scroll ── */}
       <div className="app-hq-sticky-advance">
         <Button
           className="app-command-advance app-command-advance-gold"

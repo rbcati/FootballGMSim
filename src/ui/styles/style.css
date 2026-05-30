@@ -7869,3 +7869,300 @@ details[open] .nav-summary::after {
 .linked-game-summary__subtitle { font-size: 12px; color: var(--text-muted); }
 .linked-game-summary__cta { font-size: 11px; color: var(--accent); }
 .bs-final-context { font-size: 11px; color: var(--text-muted); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BOXSCORE COMPACT BOTTOM SHEET
+   ESPN-style: score hero + tab-switched stats, no internal scroll.
+   Container: position fixed, bottom 0, 85dvh max, overflow hidden.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.bs-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-height: 85dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #1e1e2e);
+  border-top: 1px solid var(--hairline, #333);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 9500;
+  /* No internal scroll — sheet is non-scrolling by design */
+}
+
+/* Embedded variant: rendered inside a parent container, not fixed */
+.bs-sheet--embedded {
+  position: static;
+  max-height: none;
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--hairline, #333);
+  box-shadow: none;
+}
+
+/* ── Single ✕ dismiss — top-right ──────────────────────────────────────── */
+.bs-sheet-dismiss {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-muted, #999);
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s ease, color .12s ease;
+}
+
+.bs-sheet-dismiss:hover,
+.bs-sheet-dismiss:focus-visible {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text, #fff);
+  outline: 2px solid var(--accent, #0A84FF);
+  outline-offset: 2px;
+}
+
+/* ── Score hero ~60px ───────────────────────────────────────────────────── */
+.bs-sheet-hero {
+  padding: 14px 48px 10px 16px; /* right padding clears the ✕ button */
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--hairline, #333);
+}
+
+.bs-sheet-score-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
+.bs-sheet-abbr {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted, #999);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bs-sheet-pts {
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--text, #fff);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.bs-sheet-sep {
+  font-size: 18px;
+  color: var(--text-subtle, #666);
+  font-weight: 400;
+  margin: 0 2px;
+}
+
+.bs-sheet-wl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 900;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.bs-sheet-wl--ok {
+  background: rgba(52, 199, 89, 0.22);
+  color: #34C759;
+  border: 1px solid rgba(52, 199, 89, 0.5);
+}
+
+.bs-sheet-wl--danger {
+  background: rgba(255, 69, 58, 0.22);
+  color: #FF453A;
+  border: 1px solid rgba(255, 69, 58, 0.5);
+}
+
+.bs-sheet-wl--info {
+  background: rgba(10, 132, 255, 0.18);
+  color: #0A84FF;
+  border: 1px solid rgba(10, 132, 255, 0.4);
+}
+
+.bs-sheet-meta {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-subtle, #666);
+  font-weight: 500;
+}
+
+/* Screen-reader / test-accessible final score line */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Executive summary — inline bullets, ~40px total ────────────────────── */
+.bs-sheet-exec {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--hairline, #333);
+  flex-shrink: 0;
+}
+
+.bs-sheet-exec-bullet {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted, #999);
+}
+
+/* ── Stat tab pill row ───────────────────────────────────────────────────── */
+.bs-sheet-tab-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--hairline, #333);
+}
+
+.bs-sheet-tab {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--hairline, #333);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted, #999);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  text-transform: capitalize;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+  min-height: 30px;
+  letter-spacing: 0.02em;
+}
+
+.bs-sheet-tab.is-active {
+  background: var(--accent, #0A84FF);
+  border-color: var(--accent, #0A84FF);
+  color: #fff;
+}
+
+.bs-sheet-tab:hover:not(.is-active) {
+  background: rgba(10, 132, 255, 0.08);
+  border-color: rgba(10, 132, 255, 0.4);
+  color: var(--text, #fff);
+}
+
+.bs-sheet-tab:focus-visible {
+  outline: 2px solid var(--accent, #0A84FF);
+  outline-offset: 2px;
+}
+
+/* ── Dense stat table body ───────────────────────────────────────────────── */
+.bs-sheet-stat-body {
+  flex: 1;
+  overflow: hidden; /* no scroll inside sheet */
+  padding: 0 12px 12px;
+}
+
+.bs-sheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.bs-sheet-table thead tr {
+  border-bottom: 1px solid var(--hairline, #333);
+}
+
+.bs-sheet-table th {
+  padding: 6px 4px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-subtle, #666);
+  white-space: nowrap;
+}
+
+.bs-sheet-table th:first-child {
+  width: 40%;
+}
+
+.bs-sheet-table td {
+  padding: 5px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text-muted, #999);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.bs-sheet-table td:first-child {
+  color: var(--text, #fff);
+  font-weight: 600;
+}
+
+.bs-sheet-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Truncate player names at ~14ch */
+.bs-sheet-player-cell {
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bs-sheet-player-cell .btn-link {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+/* No-stats fallback */
+.bs-sheet-no-stats {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--text-subtle, #666);
+  font-style: italic;
+}
+
+/* Unavailable state */
+.bs-sheet-unavailable {
+  padding: 24px 16px;
+  font-size: 13px;
+  color: var(--text-muted, #999);
+  text-align: center;
+}
