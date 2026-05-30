@@ -1122,24 +1122,28 @@ function AppContent() {
             {soundEnabled ? "🔊" : "🔇"}
           </button>
           <ThemeToggle compact />
-          <button
-            className="btn btn-primary app-advance-btn app-action-primary"
-            onClick={handleAdvanceWeek}
-            disabled={busy || simulating || isCutdownRequired || isBatchSimBlocking || !!promptUserGame}
-            title={isCutdownRequired ? "You must cut your roster to 53 players before advancing." : ""}
-          >
-            {getAdvanceLabel()}
-          </button>
-          {topSecondaryAction && !isBatchSimBlocking && (
+          <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
             <button
-              className="btn app-sim-btn app-action-secondary"
-              onClick={topSecondaryAction.onClick}
-              disabled={topSecondaryAction.disabled}
-              title={topSecondaryAction.title}
+              className="btn btn-primary app-advance-btn app-action-primary"
+              onClick={handleAdvanceWeek}
+              disabled={busy || simulating || isCutdownRequired || isBatchSimBlocking || !!promptUserGame}
+              title={isCutdownRequired ? "You must cut your roster to 53 players before advancing." : ""}
+              style={{ flex: 2 }}
             >
-              {topSecondaryAction.label}
+              {getAdvanceLabel()}
             </button>
-          )}
+            {topSecondaryAction && !isBatchSimBlocking && (
+              <button
+                className="btn app-sim-btn app-action-secondary"
+                onClick={topSecondaryAction.onClick}
+                disabled={topSecondaryAction.disabled}
+                title={topSecondaryAction.title}
+                style={{ flex: 1 }}
+              >
+                {topSecondaryAction.label}
+              </button>
+            )}
+          </div>
           <details className="app-overflow-menu">
             <summary className="btn app-overflow-trigger" aria-label="Action menu">
               {ACTION_LABELS.more}
@@ -1712,6 +1716,7 @@ function AppContent() {
           week={postGameResult.week}
           phase={postGameResult.phase}
           logs={postGameResult.logs || []}
+          gameReasoningFlags={postGameResult.gameReasoningFlags || []}
           boxScoreGameId={postGameResult.gameId}
           onOpenBoxScore={(gameId) => {
             if (!gameId) return;

@@ -1100,6 +1100,7 @@ function FinalOverlay({ homeTeam, awayTeam, homeScore, awayScore, homeColor, awa
   // Executive Summary — translate the worker's gameReasoningFlags tokens into
   // polished postgame bullet points through the shared core translator so the
   // live overlay and the historical Game Book never diverge.
+  console.debug('[PostGame] gameReasoningFlags length:', gameSummary?.gameReasoningFlags?.length ?? 0);
   const reasoningBullets = useMemo(
     () => buildReasoningBullets(gameSummary?.gameReasoningFlags ?? []),
     [gameSummary],
@@ -1180,22 +1181,22 @@ function FinalOverlay({ homeTeam, awayTeam, homeScore, awayScore, homeColor, awa
         )}
 
         {/* Executive Summary — high-density postgame reasoning diagnostics */}
-        {reasoningBullets.length > 0 && (
-          <div
-            data-testid="final-executive-summary"
-            style={{
-              marginBottom: 20,
-              textAlign: "left",
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: 12,
-              padding: "12px 14px",
-            }}
-          >
-            <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "var(--text-subtle)",
-              textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>
-              Executive Summary
-            </div>
+        <div
+          data-testid="final-executive-summary"
+          style={{
+            marginBottom: 20,
+            textAlign: "left",
+            background: "rgba(255,255,255,0.05)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 12,
+            padding: "12px 14px",
+          }}
+        >
+          <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "var(--text-subtle)",
+            textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>
+            Executive Summary
+          </div>
+          {reasoningBullets.length > 0 ? (
             <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 6 }}>
               {reasoningBullets.map((bullet) => (
                 <li key={bullet} style={{ fontSize: "0.8rem", lineHeight: 1.4, color: "rgba(255,255,255,0.88)" }}>
@@ -1203,8 +1204,12 @@ function FinalOverlay({ homeTeam, awayTeam, homeScore, awayScore, homeColor, awa
                 </li>
               ))}
             </ul>
-          </div>
-        )}
+          ) : (
+            <div style={{ fontSize: "0.8rem", lineHeight: 1.4, color: "var(--text-muted)", fontStyle: "italic" }}>
+              No tactical signals detected — set a Game Plan before kickoff to unlock postgame diagnostics.
+            </div>
+          )}
+        </div>
 
         <button
           onClick={onContinue}

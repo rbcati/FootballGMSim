@@ -14,6 +14,7 @@ import React, { useMemo, useState, Component } from "react";
 import PlayerCard from "./PlayerCard.jsx";
 import AdvancedStats from "./AdvancedStats.jsx";
 import { buildGameFlowSummary } from "../../core/sim/gameFlowSummary.js";
+import { buildReasoningBullets } from "../../core/gameSummary.js";
 import ReplayableGameFlowViewer from "./ReplayableGameFlowViewer.jsx";
 
 // ── Error boundary so a crash here never freezes the whole app ────────────────
@@ -281,6 +282,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
   mvpPlayer,          // optional player object (legacy)
   stats = {},         // { totalYards, passYards, rushYards, turnovers }
   logs = [],          // play-by-play logs for deriving leaders
+  gameReasoningFlags = [],
   boxScoreGameId,
   onOpenBoxScore,
   onContinue,
@@ -341,6 +343,12 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
     : null;
 
   const showLeaders = qb || receiver || rusher || defender;
+
+  console.debug('[PostGameScreen] gameReasoningFlags length:', gameReasoningFlags?.length ?? 0);
+  const reasoningBullets = useMemo(
+    () => buildReasoningBullets(gameReasoningFlags ?? []),
+    [gameReasoningFlags],
+  );
   const archiveSavedRef = React.useRef(false);
   React.useEffect(() => {
     if (archiveSavedRef.current || !boxScoreGameId || typeof onArchiveReady !== "function") return;
@@ -639,6 +647,37 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
               <PlayerCard player={mvpPlayer} variant="standard" />
             </div>
           )}
+
+          {/* Executive Summary — high-density postgame reasoning diagnostics */}
+          <div
+            data-testid="postgame-executive-summary"
+            style={{
+              marginBottom: 20,
+              textAlign: "left",
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 12,
+              padding: "12px 14px",
+            }}
+          >
+            <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "var(--text-subtle)",
+              textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>
+              Executive Summary
+            </div>
+            {reasoningBullets.length > 0 ? (
+              <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 6 }}>
+                {reasoningBullets.map((bullet) => (
+                  <li key={bullet} style={{ fontSize: "0.8rem", lineHeight: 1.4, color: "var(--text)" }}>
+                    • {bullet}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ fontSize: "0.8rem", lineHeight: 1.4, color: "var(--text-muted)", fontStyle: "italic" }}>
+                No tactical signals detected — set a Game Plan before kickoff to unlock postgame diagnostics.
+              </div>
+            )}
+          </div>
 
           {/* Continue button */}
           <button
