@@ -6,7 +6,9 @@ export function getPlayerProfileId(playerOrId) {
 
 export function hasValidPlayerProfileId(playerOrId) {
   const id = getPlayerProfileId(playerOrId);
-  return id != null && String(id).trim() !== '' && String(id) !== 'NaN';
+  if (id == null) return false;
+  const s = String(id).trim();
+  return s !== '' && s !== 'NaN' && s !== '__missing_player__' && s !== 'undefined';
 }
 
 export function buildPlayerProfileContext(source, context = {}) {

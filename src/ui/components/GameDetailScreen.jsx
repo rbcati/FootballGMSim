@@ -4,6 +4,7 @@ import { EmptyState, ScreenHeader, SectionCard } from './ScreenSystem.jsx';
 import { buildWeeklyDecisionImpact } from '../utils/weeklyDecisionImpact.js';
 import { buildBoxScoreViewModel, unwrapBoxScoreResponse } from '../utils/boxScoreViewModel.js';
 import useStableRouteRequest from '../hooks/useStableRouteRequest.js';
+import { resolveCanonicalCompletedGame } from '../utils/canonicalCompletedGame.js';
 
 function findScheduleGame(league, gameId) {
   for (const week of league?.schedule?.weeks ?? []) {
@@ -29,7 +30,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
     warnLabel: 'GameDetailScreen',
   });
   const archivedGame = unwrapBoxScoreResponse(archiveResponse);
-  const canonicalGame = archivedGame ?? scheduleGame ?? league?.gameById?.[gameId] ?? null;
+  const canonicalGame = resolveCanonicalCompletedGame({ league, gameId, scheduleGame, archivedGame });
   const userTeam = (league?.teams ?? []).find((team) => Number(team?.id) === Number(league?.userTeamId));
   const prepContext = buildWeeklyDecisionImpact({ league, userTeam, lastGame: scheduleGame });
   const detailVm = useMemo(

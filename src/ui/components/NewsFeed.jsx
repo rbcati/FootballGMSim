@@ -39,8 +39,10 @@ function resolveNewsPlayer(playerOrId, league) {
 
 function resolveNewsTeam(teamOrId, league) {
   const teamId = typeof teamOrId === 'object' ? teamOrId?.id ?? teamOrId?.teamId : teamOrId;
-  if (teamId == null || String(teamId).trim() === '' || String(teamId) === 'NaN') return { teamId: null, team: null, available: false };
-  const team = (league?.teams ?? []).find((t) => String(t?.id) === String(teamId)) ?? null;
+  if (teamId == null) return { teamId: null, team: null, available: false };
+  const s = String(teamId).trim();
+  if (s === '' || s === 'NaN' || s === '__missing_team__' || s === 'undefined') return { teamId: null, team: null, available: false };
+  const team = (league?.teams ?? []).find((t) => String(t?.id) === s) ?? null;
   return { teamId, team, available: Boolean(team) };
 }
 

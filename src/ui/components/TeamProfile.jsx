@@ -110,6 +110,14 @@ function StatBox({ label, value, sub }) {
   );
 }
 
+// Sentinel guard: rejects null, undefined, NaN, __missing_team__, and empty strings
+// so that worker fetch calls are never issued for invalid team IDs.
+function isValidTeamId(id) {
+  if (id == null) return false;
+  const s = String(id).trim();
+  return s !== '' && s !== 'NaN' && s !== '__missing_team__' && s !== 'undefined';
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, onNavigate = null, league = null }) {
@@ -123,7 +131,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
   const { data, loading, error } = useStableRouteRequest({
     requestKey,
     cacheScopeKey,
-    enabled: teamId != null,
+    enabled: isValidTeamId(teamId),
     fetcher: fetchTeamProfile,
     warnLabel: "TeamProfile",
     clearDataOnLoad: true,
@@ -135,7 +143,20 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
     }
   }, [error]);
 
-  if (teamId == null) return null;
+  if (!isValidTeamId(teamId)) {
+    return (
+      <div
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      >
+        <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(520px, 100%)', borderRadius: 12, border: '1px solid var(--hairline)', background: 'var(--surface)', padding: 18 }}>
+          <h2 style={{ margin: '0 0 8px', fontSize: '1.1rem' }}>Team unavailable</h2>
+          <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: 13 }}>This team reference is no longer available in the loaded franchise data.</p>
+          <Button onClick={onClose}>Close</Button>
+        </div>
+      </div>
+    );
+  }
 
   const fallbackTeam = (league?.teams ?? []).find((t) => String(t?.id) === String(teamId)) ?? null;
   const team = data?.team ?? fallbackTeam;
