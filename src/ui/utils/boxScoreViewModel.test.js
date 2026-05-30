@@ -82,11 +82,11 @@ describe('buildBoxScoreViewModel', () => {
     expect(vm.teamComparisonRows.find((row) => row.key === 'turnovers')?.winner).toBe('away');
   });
 
-  it('uses the completed schedule result as score source of truth over stale archive scores', () => {
+  it('uses archived final score as source of truth over stale completed schedule scores', () => {
     const vm = buildBoxScoreViewModel({
       league: { teams: [{ id: 1, abbr: 'PIT' }, { id: 2, abbr: 'MIN' }] },
-      game: { gameId: '2031_w4_1_2', homeId: 1, awayId: 2, homeScore: 0, awayScore: 0, playerStats: { home: {}, away: {} } },
-      scheduleGame: { gameId: '2031_w4_1_2', home: { id: 1, abbr: 'PIT' }, away: { id: 2, abbr: 'MIN' }, homeScore: 13, awayScore: 24, played: true, week: 4 },
+      game: { gameId: '2031_w4_1_2', homeId: 1, awayId: 2, homeScore: 13, awayScore: 24, playerStats: { home: {}, away: {} } },
+      scheduleGame: { gameId: '2031_w4_1_2', home: { id: 1, abbr: 'PIT' }, away: { id: 2, abbr: 'MIN' }, homeScore: 0, awayScore: 0, played: true, week: 4 },
     });
     expect(vm.finalScore).toEqual({ home: 13, away: 24 });
     expect(vm.finalScoreLine).toBe('MIN 24 - 13 PIT');

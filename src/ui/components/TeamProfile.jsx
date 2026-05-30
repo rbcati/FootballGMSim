@@ -137,9 +137,10 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
 
   if (teamId == null) return null;
 
-  const team = data?.team;
+  const fallbackTeam = (league?.teams ?? []).find((t) => String(t?.id) === String(teamId)) ?? null;
+  const team = data?.team ?? fallbackTeam;
   const franchise = data?.franchise;
-  const players = data?.currentPlayers ?? [];
+  const players = data?.currentPlayers ?? (Array.isArray(team?.roster) ? team.roster : []);
   const color = teamColor(team?.abbr ?? "");
   const capSnapshot = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
   const gp = toFiniteNumber(team?.wins, 0) + toFiniteNumber(team?.losses, 0) + toFiniteNumber(team?.ties, 0);
@@ -154,6 +155,21 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
   const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity({ ...team, roster: players }, { intel: teamIntel, direction: teamIntel?.direction }), [team, players, teamIntel]);
   const chemistry = useMemo(() => buildTeamChemistrySummary({ ...team, roster: players }, { week: data?.meta?.week ?? 1, direction: teamIntel?.direction }), [team, players, data?.meta?.week, teamIntel]);
   const investments = useMemo(() => franchiseInvestmentSummary(team), [team]);
+
+  if (!loading && !team) {
+    return (
+      <div
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      >
+        <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(520px, 100%)', borderRadius: 12, border: '1px solid var(--hairline)', background: 'var(--surface)', padding: 18 }}>
+          <h2 style={{ margin: '0 0 8px', fontSize: '1.1rem' }}>Team unavailable</h2>
+          <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: 13 }}>This team reference is no longer available in the loaded franchise data.</p>
+          <Button onClick={onClose}>Close</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

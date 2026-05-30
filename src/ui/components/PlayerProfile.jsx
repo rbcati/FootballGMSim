@@ -1445,7 +1445,7 @@ export default function PlayerProfile({
               </div>
             </div>
           ) : (
-            <div style={{ color: "var(--text-muted)" }}>Player not found</div>
+            <div data-testid="player-profile-unavailable" style={{ color: "var(--text-muted)", display: "grid", gap: 6 }}><strong>Player unavailable</strong><span>This player reference is no longer available in the loaded franchise data.</span></div>
           )}
 
           <Button

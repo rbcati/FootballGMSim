@@ -40,9 +40,9 @@ export default class PlayerProfileModalBoundary extends Component {
             display: "grid",
             gap: 10,
           }}>
-            <strong>We couldn’t open this player profile.</strong>
+            <strong>Player unavailable</strong>
             <div style={{ color: "var(--text-muted)", fontSize: 13 }}>
-              Try closing and reopening the profile. If this keeps happening, save and reload the franchise.
+              This player reference could not be resolved from the loaded franchise data. You can close this panel and keep playing.
             </div>
             <div>
               <button className="btn" onClick={this.props.onClose}>Close</button>

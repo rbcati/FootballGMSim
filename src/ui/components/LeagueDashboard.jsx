@@ -93,6 +93,7 @@ import {
   normalizeShellSectionId,
 } from "../utils/shellNavigation.js";
 import { usePhaseRouteHydration } from "../hooks/usePhaseRouteHydration.js";
+import { getPlayerProfileId, hasValidPlayerProfileId } from "../utils/playerProfileNavigation.js";
 
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
@@ -546,10 +547,15 @@ export default function LeagueDashboard({
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [selectedPlayerContext, setSelectedPlayerContext] = useState(null);
   const handlePlayerSelect = (playerOrId, profileContext = null) => {
-    setSelectedPlayerId(playerOrId?.id ?? playerOrId);
-    setSelectedPlayerContext(profileContext ?? null);
+    const playerId = getPlayerProfileId(playerOrId);
+    setSelectedPlayerId(hasValidPlayerProfileId(playerId) ? playerId : '__missing_player__');
+    setSelectedPlayerContext(profileContext ?? { source: 'unknown', missingEntity: true });
   };
   const [selectedTeamId, setSelectedTeamId] = useState(null);
+  const handleTeamSelect = (teamOrId) => {
+    const teamId = typeof teamOrId === 'object' ? teamOrId?.id ?? teamOrId?.teamId : teamOrId;
+    setSelectedTeamId(teamId != null && String(teamId).trim() !== '' && String(teamId) !== 'NaN' ? teamId : '__missing_team__');
+  };
   const [comparePlayerId, setComparePlayerId] = useState(null);
   const [tradeInitialView, setTradeInitialView] = useState("Finder");
   const [tradeSeedPartnerId, setTradeSeedPartnerId] = useState(null);
@@ -889,7 +895,7 @@ export default function LeagueDashboard({
                 simulating={simulating}
                 actions={actions}
                 onOpenBoxScore={(gameId) => openGameDetail(gameId, "HQ")}
-                onTeamSelect={setSelectedTeamId}
+                onTeamSelect={handleTeamSelect}
             />
           </TabErrorBoundary>
         )}
@@ -899,7 +905,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={handlePlayerSelect}
-              onTeamSelect={setSelectedTeamId}
+              onTeamSelect={handleTeamSelect}
               onOpenGameDetail={openGameDetail}
               onNavigate={setActiveTab}
               initialSection={teamInitialSection}
@@ -930,7 +936,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={handlePlayerSelect}
-              onTeamSelect={setSelectedTeamId}
+              onTeamSelect={handleTeamSelect}
               onNavigateTrade={(teamId = null) => {
                 setTradeInitialView("Finder");
                 setTradeSeedPartnerId(teamId != null ? Number(teamId) : null);
@@ -968,7 +974,7 @@ export default function LeagueDashboard({
                 <StandingsCenter
                   teams={safeStandingsRows}
                   userTeamId={league.userTeamId}
-                  onTeamSelect={setSelectedTeamId}
+                  onTeamSelect={handleTeamSelect}
                   leagueSettings={league.settings}
                   standingsContext={standingsContext}
                 />
@@ -990,7 +996,7 @@ export default function LeagueDashboard({
               league={league}
               mode="full"
               segment={newsSubtab.toLowerCase()}
-              onTeamSelect={setSelectedTeamId}
+              onTeamSelect={handleTeamSelect}
               onPlayerSelect={handlePlayerSelect}
               onOpenBoxScore={(gameId) => openGameDetail(gameId, "News")}
               onNavigate={setActiveTab}
@@ -1007,7 +1013,7 @@ export default function LeagueDashboard({
             <StandingsCenter
               teams={safeStandingsRows}
               userTeamId={league.userTeamId}
-              onTeamSelect={setSelectedTeamId}
+              onTeamSelect={handleTeamSelect}
               leagueSettings={league.settings}
               standingsContext={standingsContext}
             />
@@ -1025,7 +1031,7 @@ export default function LeagueDashboard({
               onGameSelect={(gameId) => openGameDetail(gameId, "Schedule")}
               playoffSeeds={league.playoffSeeds}
               onTeamRoster={(teamId) => {
-                setSelectedTeamId(teamId);
+                handleTeamSelect(teamId);
               }}
               league={league}
               onPlayerSelect={handlePlayerSelect}
@@ -1050,7 +1056,7 @@ export default function LeagueDashboard({
             <LeagueStats
               league={league}
               onPlayerSelect={handlePlayerSelect}
-              onTeamSelect={setSelectedTeamId}
+              onTeamSelect={handleTeamSelect}
             />
           </TabErrorBoundary>
         )}
@@ -1196,7 +1202,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={handlePlayerSelect}
-              onTeamSelect={setSelectedTeamId}
+              onTeamSelect={handleTeamSelect}
               onNavigate={setActiveTab}
               initialView={tradeInitialView}
               initialPartnerTeamId={tradeSeedPartnerId}
@@ -1208,7 +1214,7 @@ export default function LeagueDashboard({
             <NewsFeed
               league={league}
               mode="full"
-              onTeamSelect={setSelectedTeamId}
+              onTeamSelect={handleTeamSelect}
               onPlayerSelect={handlePlayerSelect}
               onOpenBoxScore={(gameId) => openGameDetail(gameId, "News")}
               onNavigate={setActiveTab}
@@ -1228,7 +1234,7 @@ export default function LeagueDashboard({
               }}
               onNavigate={setActiveTab}
               onPlayerSelect={handlePlayerSelect}
-              onTeamSelect={setSelectedTeamId}
+              onTeamSelect={handleTeamSelect}
               backLabel={
                 gameDetailOpenSource === "weekly-results"
                   ? "Back to Weekly Results"
@@ -1292,7 +1298,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Awards & Records" && (
           <TabErrorBoundary label="Awards & Records">
-            <AwardsRecordsScreen actions={actions} league={league} onPlayerSelect={handlePlayerSelect} onTeamSelect={setSelectedTeamId} onBack={() => setActiveTab("History Hub")} />
+            <AwardsRecordsScreen actions={actions} league={league} onPlayerSelect={handlePlayerSelect} onTeamSelect={handleTeamSelect} onBack={() => setActiveTab("History Hub")} />
           </TabErrorBoundary>
         )}
         {activeTab === "Postseason" && (
@@ -1349,7 +1355,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={handlePlayerSelect}
-              onTeamSelect={setSelectedTeamId}
+              onTeamSelect={handleTeamSelect}
               onNavigate={setActiveTab}
             />
           </TabErrorBoundary>
@@ -1364,7 +1370,7 @@ export default function LeagueDashboard({
             <SeasonRecap
               league={league}
               onPlayerSelect={handlePlayerSelect}
-              onTeamSelect={setSelectedTeamId}
+              onTeamSelect={handleTeamSelect}
               onNavigate={setActiveTab}
               onOpenBoxScore={(gameId) => openGameDetail(gameId, "Season Recap")}
             />
@@ -1417,7 +1423,7 @@ export default function LeagueDashboard({
               }}
               onNavigate={setActiveTab}
               onPlayerSelect={handlePlayerSelect}
-              onTeamSelect={setSelectedTeamId}
+              onTeamSelect={handleTeamSelect}
               backLabel={gameDetailModal.source === 'weekly-results' ? 'Back to Weekly Results' : 'Back to Result'}
             />
           </div>
@@ -1454,7 +1460,7 @@ export default function LeagueDashboard({
             onClose={() => setSelectedTeamId(null)}
             onPlayerSelect={(id) => {
               setSelectedTeamId(null);
-              setSelectedPlayerId(id);
+              handlePlayerSelect(id);
             }}
             actions={actions}
             league={league}

@@ -1,9 +1,65 @@
+/** @vitest-environment jsdom */
 import React from 'react';
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
+import { cleanup, render } from '@testing-library/react';
 import GameDetailScreen from './GameDetailScreen.jsx';
 
-describe('GameDetailScreen canonical title', () => {
+vi.mock('../hooks/useStableRouteRequest.js', () => ({ default: vi.fn(() => ({ data: null, loading: false, error: null })) }));
+import useStableRouteRequest from '../hooks/useStableRouteRequest.js';
+
+const league = {
+  id: 'league-test',
+  seasonId: 2031,
+  week: 4,
+  userTeamId: 1,
+  teams: [
+    { id: 1, abbr: 'PIT', name: 'Pittsburgh' },
+    { id: 2, abbr: 'CLE', name: 'Cleveland' },
+  ],
+  schedule: {
+    weeks: [
+      {
+        week: 3,
+        games: [
+          {
+            gameId: '2031_w3_1_2',
+            id: '2031_w3_1_2',
+            homeId: 1,
+            awayId: 2,
+            homeScore: 0,
+            awayScore: 0,
+            played: true,
+          },
+        ],
+      },
+    ],
+  },
+};
+
+const archiveGame = {
+  gameId: '2031_w3_1_2',
+  id: '2031_w3_1_2',
+  seasonId: 2031,
+  week: 3,
+  homeId: 1,
+  awayId: 2,
+  homeScore: 27,
+  awayScore: 10,
+  played: true,
+  teamStats: { home: { passYards: 250 }, away: { passYards: 180 } },
+  playerStats: {
+    home: { 11: { name: 'PIT QB', stats: { passAtt: 30, passYd: 250, passTD: 2 } } },
+    away: { 22: { name: 'CLE QB', stats: { passAtt: 28, passYd: 180, passTD: 1 } } },
+  },
+};
+
+
+describe('GameDetailScreen canonical title and prep context', () => {
+  beforeEach(() => {
+    vi.mocked(useStableRouteRequest).mockReturnValue({ data: null, loading: false, error: null });
+  });
+
   it('uses a single Game Book destination title', () => {
     const html = renderToString(
       <GameDetailScreen
@@ -17,8 +73,6 @@ describe('GameDetailScreen canonical title', () => {
     expect(html).toContain('Week');
     expect(html).not.toContain('Completed Game Detail');
   });
-
-
 
   it('renders preparation context strip with non-causal copy when markers are present', () => {
     const html = renderToString(
@@ -57,5 +111,29 @@ describe('GameDetailScreen canonical title', () => {
 
     expect(html).toContain('No completed game selected yet.');
     expect(html).toContain('No game selected');
+  });
+});
+
+describe('GameDetailScreen score source of truth', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.mocked(useStableRouteRequest).mockReturnValue({ data: archiveGame, loading: false, error: null });
+  });
+
+  it('uses the archived final score for both header summary and Game Book detail when schedule state is stale', () => {
+    const { getByTestId, container } = render(
+      <GameDetailScreen
+        gameId="2031_w3_1_2"
+        league={league}
+        actions={{ getBoxScore: vi.fn() }}
+        onBack={vi.fn()}
+      />,
+    );
+
+    expect(container.textContent).toContain('PIT defeated CLE by 17');
+    expect(container.textContent).toContain('CLE 10 - 27 PIT');
+    expect(getByTestId('game-book-final-score').textContent).toBe('CLE 10 - 27 PIT');
+    expect(container.textContent).not.toContain('CLE 0 - 0 PIT');
+    expect(container.textContent).not.toContain('finished tied');
   });
 });

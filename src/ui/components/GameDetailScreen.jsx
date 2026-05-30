@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import BoxScorePanel from './BoxScorePanel.jsx';
 import { EmptyState, ScreenHeader, SectionCard } from './ScreenSystem.jsx';
 import { buildWeeklyDecisionImpact } from '../utils/weeklyDecisionImpact.js';
-import { buildBoxScoreViewModel } from '../utils/boxScoreViewModel.js';
+import { buildBoxScoreViewModel, unwrapBoxScoreResponse } from '../utils/boxScoreViewModel.js';
+import useStableRouteRequest from '../hooks/useStableRouteRequest.js';
 
 function findScheduleGame(league, gameId) {
   for (const week of league?.schedule?.weeks ?? []) {
@@ -19,9 +20,28 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
   const weekFromId = typeof gameId === 'string' ? gameId.match(/_w(\d+)_/i)?.[1] : null;
 
   const scheduleGame = findScheduleGame(league, gameId);
+  const canLoadArchive = Boolean(gameId && typeof actions?.getBoxScore === 'function');
+  const { data: archiveResponse } = useStableRouteRequest({
+    requestKey: canLoadArchive ? `boxscore:${gameId}` : null,
+    enabled: canLoadArchive,
+    cacheScopeKey: league?.id ?? league?.leagueId ?? 'global',
+    fetcher: () => actions.getBoxScore(gameId),
+    warnLabel: 'GameDetailScreen',
+  });
+  const archivedGame = unwrapBoxScoreResponse(archiveResponse);
+  const canonicalGame = archivedGame ?? scheduleGame ?? league?.gameById?.[gameId] ?? null;
   const userTeam = (league?.teams ?? []).find((team) => Number(team?.id) === Number(league?.userTeamId));
   const prepContext = buildWeeklyDecisionImpact({ league, userTeam, lastGame: scheduleGame });
-  const detailVm = buildBoxScoreViewModel({ league, game: scheduleGame ?? league?.gameById?.[gameId], gameId, scheduleGame, context: { season: league?.seasonId, week: weekFromId ?? league?.week } });
+  const detailVm = useMemo(
+    () => buildBoxScoreViewModel({
+      league,
+      game: canonicalGame,
+      gameId,
+      scheduleGame,
+      context: { season: league?.seasonId, week: weekFromId ?? league?.week },
+    }),
+    [league, canonicalGame, gameId, scheduleGame, weekFromId],
+  );
   const screenTitle = detailVm?.availableData?.finalScore ? detailVm.headlineSummary : 'Game Book';
   const screenSubtitle = detailVm?.availableData?.finalScore
     ? `${detailVm.finalScoreLine} · Game Book sections show only data recorded for this final.`
@@ -82,7 +102,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
           onBack={onBack}
           onPlayerSelect={onPlayerSelect}
           onTeamSelect={onTeamSelect}
-          scheduleGame={scheduleGame}
+          scheduleGame={canonicalGame ?? scheduleGame}
           backLabel={backLabel}
         />
       </SectionCard>

@@ -6,7 +6,7 @@ import NewsFeed from './NewsFeed.jsx';
 const league = {
   week: 7,
   userTeamId: 10,
-  teams: [{ id: 10, name: 'Portland', wins: 4, losses: 2 }],
+  teams: [{ id: 10, name: 'Portland', wins: 4, losses: 2, roster: [{ id: 55, name: 'Rookie WR', pos: 'WR' }] }],
   standings: [{ id: 10, wins: 4, losses: 2, ties: 0, pointsFor: 150, pointsAgainst: 140 }],
   newsItems: [
     { id: 'n1', headline: 'Big upset in prime time', body: 'The underdog won late.', priority: 'high', week: 7, phase: 'regular', gameId: '2026_w7_1_2', category: 'major_result' },
@@ -37,6 +37,30 @@ describe('NewsFeed', () => {
     expect(html).toContain('Team Desk');
     expect(html).toContain('League Pulse');
     expect(html).toContain('Use filters to keep this desk focused by context.');
+  });
+
+
+
+  it('renders recoverable unavailable actions for stale player and team references', () => {
+    const html = renderToString(
+      <NewsFeed
+        league={{
+          ...league,
+          newsItems: [
+            { id: 'stale-player', headline: 'Injury update', body: 'A player reference is stale.', priority: 'low', week: 7, phase: 'regular', playerId: 999, category: 'injury' },
+            { id: 'stale-team', headline: 'Trade request', body: 'A team reference is stale.', priority: 'medium', week: 7, phase: 'regular', teamId: 999, category: 'trade_request' },
+          ],
+        }}
+        onTeamSelect={() => {}}
+        onOpenBoxScore={() => {}}
+        onPlayerSelect={() => {}}
+        onNavigate={() => {}}
+      />,
+    );
+
+    expect(html).toContain('Player unavailable');
+    expect(html).toContain('Team unavailable');
+    expect(html).not.toContain('We couldn');
   });
 
   it('renders an empty state safely when there are no stories', () => {

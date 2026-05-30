@@ -33,10 +33,10 @@ describe('gameArchive helpers', () => {
     expect(reloaded.recap).toBe('Home team won late.');
   });
 
-  it('reconciles stale archive scores with the completed schedule source of truth', () => {
+  it('preserves archived final scores when merging stale completed schedule metadata', () => {
     const merged = mergeArchivedGameWithScheduleResult(
-      { id: '2031_w4_1_2', seasonId: '2031', week: 4, homeId: 1, awayId: 2, homeScore: 0, awayScore: 0, playerStats: { home: { 10: { stats: { passYd: 200 } } }, away: {} } },
-      { gameId: '2031_w4_1_2', seasonId: '2031', week: 4, home: { id: 1, abbr: 'PIT' }, away: { id: 2, abbr: 'MIN' }, homeScore: 13, awayScore: 24, played: true },
+      { id: '2031_w4_1_2', seasonId: '2031', week: 4, homeId: 1, awayId: 2, homeScore: 13, awayScore: 24, playerStats: { home: { 10: { stats: { passYd: 200 } } }, away: {} } },
+      { gameId: '2031_w4_1_2', seasonId: '2031', week: 4, home: { id: 1, abbr: 'PIT' }, away: { id: 2, abbr: 'MIN' }, homeScore: 0, awayScore: 0, played: true },
     );
     expect(merged.homeScore).toBe(13);
     expect(merged.awayScore).toBe(24);
