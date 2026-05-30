@@ -13,6 +13,7 @@ import {
   StatusChip,
 } from './ScreenSystem.jsx';
 import { HQIcon } from './HQVisuals.jsx';
+import { getPlayerProfileId, hasValidPlayerProfileId, openPlayerProfile } from '../utils/playerProfileNavigation.js';
 
 const tickerColor = {
   high: '#f59e0b',
@@ -26,19 +27,41 @@ const priorityTone = {
   low: 'league',
 };
 
-function StoryActions({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect, compact = false }) {
-  return (
-    <CtaRow
-      actions={[
-        item?.gameId ? { label: 'Open game', compact, onClick: () => onOpenBoxScore?.(item.gameId) } : null,
-        item?.teamId != null ? { label: 'Open team', compact, onClick: () => onTeamSelect?.(item.teamId) } : null,
-        item?.playerId != null ? { label: 'Open player', compact, onClick: () => onPlayerSelect?.(item.playerId) } : null,
-      ].filter(Boolean)}
-    />
-  );
+function resolveNewsPlayer(playerOrId, league) {
+  const playerId = getPlayerProfileId(playerOrId);
+  if (!hasValidPlayerProfileId(playerId)) return { playerId: null, player: null, available: false };
+  const id = String(playerId);
+  const rosters = (league?.teams ?? []).flatMap((team) => Array.isArray(team?.roster) ? team.roster : []);
+  const pools = [rosters, league?.freeAgents, league?.draftClass].filter(Array.isArray);
+  const player = pools.flat().find((p) => String(p?.id ?? p?.playerId ?? p?.prospectId) === id) ?? null;
+  return { playerId, player, available: Boolean(player) };
 }
 
-function LeadStory({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect }) {
+function resolveNewsTeam(teamOrId, league) {
+  const teamId = typeof teamOrId === 'object' ? teamOrId?.id ?? teamOrId?.teamId : teamOrId;
+  if (teamId == null || String(teamId).trim() === '' || String(teamId) === 'NaN') return { teamId: null, team: null, available: false };
+  const team = (league?.teams ?? []).find((t) => String(t?.id) === String(teamId)) ?? null;
+  return { teamId, team, available: Boolean(team) };
+}
+
+function StoryActions({ item, league, onTeamSelect, onOpenBoxScore, onPlayerSelect, compact = false }) {
+  const playerRef = resolveNewsPlayer(item?.playerId ?? item?.player, league);
+  const teamRef = resolveNewsTeam(item?.teamId ?? item?.team, league);
+  const actions = [
+    item?.gameId ? { label: 'Open game', compact, onClick: () => onOpenBoxScore?.(item.gameId) } : null,
+    teamRef.teamId != null && teamRef.available ? { label: 'Open team', compact, onClick: () => onTeamSelect?.(teamRef.teamId) } : null,
+    teamRef.teamId != null && !teamRef.available ? { label: 'Team unavailable', compact, disabled: true } : null,
+    playerRef.playerId != null && playerRef.available ? {
+      label: 'Open player',
+      compact,
+      onClick: () => openPlayerProfile(playerRef.playerId, onPlayerSelect, { source: 'news', item, player: playerRef.player }),
+    } : null,
+    playerRef.playerId != null && !playerRef.available ? { label: 'Player unavailable', compact, disabled: true } : null,
+  ].filter(Boolean);
+  return <CtaRow actions={actions} />;
+}
+
+function LeadStory({ item, league, onTeamSelect, onOpenBoxScore, onPlayerSelect }) {
   if (!item) return null;
   return (
     <SectionCard
@@ -53,12 +76,12 @@ function LeadStory({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect }) {
       )}
     >
       <p className="app-news-story-body">{item?.body}</p>
-      <StoryActions item={item} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+      <StoryActions item={item} league={league} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
     </SectionCard>
   );
 }
 
-function StoryRow({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect }) {
+function StoryRow({ item, league, onTeamSelect, onOpenBoxScore, onPlayerSelect }) {
   if (!item) return null;
   return (
     <CompactListRow
@@ -74,17 +97,17 @@ function StoryRow({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect }) {
         </div>
       )}
     >
-      <StoryActions item={item} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} compact />
+      <StoryActions item={item} league={league} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} compact />
     </CompactListRow>
   );
 }
 
-function NewsSection({ title, subtitle, stories, ...handlers }) {
+function NewsSection({ title, subtitle, stories, league, ...handlers }) {
   if (!stories?.length) return null;
   return (
     <SectionCard title={title} subtitle={subtitle} variant="compact">
       <div className="app-screen-stack">
-        {stories.map((item, idx) => <StoryRow key={item?.id ?? `${title}-${idx}`} item={item} {...handlers} />)}
+        {stories.map((item, idx) => <StoryRow key={item?.id ?? `${title}-${idx}`} item={item} league={league} {...handlers} />)}
       </div>
     </SectionCard>
   );
@@ -167,7 +190,7 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all', onTea
       {desk.featured ? (
         <section className="app-screen-stack">
           <SectionHeader title="Featured Lead Story" subtitle="Highest leverage headline for this segment." />
-          <LeadStory item={desk.featured} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+          <LeadStory item={desk.featured} league={league} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
         </section>
       ) : <EmptyState title="No news yet." body="Stories will appear as league updates and narratives are generated." />}
 
@@ -175,6 +198,7 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all', onTea
         title={`News Feed (${desk.filtered.length})`}
         subtitle="Live story wire for this desk segment."
         stories={desk.filtered.slice(1, 13)}
+        league={league}
         onTeamSelect={onTeamSelect}
         onOpenBoxScore={onOpenBoxScore}
         onPlayerSelect={onPlayerSelect}
@@ -199,8 +223,8 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all', onTea
 
       {filter === 'all' ? (
         <div className="app-news-aux-grid">
-          <NewsSection title="Team Desk" subtitle="Your-team relevant stories" stories={desk.teamStories.slice(0, 3)} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
-          <NewsSection title="League Pulse" subtitle="Race, result, and pressure context" stories={((desk.pulseStories && desk.pulseStories.length > 0) ? desk.pulseStories : (desk.recap || [])).slice(0, 3)} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+          <NewsSection title="Team Desk" subtitle="Your-team relevant stories" stories={desk.teamStories.slice(0, 3)} league={league} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+          <NewsSection title="League Pulse" subtitle="Race, result, and pressure context" stories={((desk.pulseStories && desk.pulseStories.length > 0) ? desk.pulseStories : (desk.recap || [])).slice(0, 3)} league={league} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
         </div>
       ) : null}
 
