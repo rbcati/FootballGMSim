@@ -18,9 +18,6 @@
  *
  * Boosts are display-only runtime adjustments — base player stats in IndexedDB
  * are NEVER mutated.
- *
- * Game no longer freezes; all buttons (including Watch/Simulate modal) are responsive;
- * scheme boosts are cached and performant on mobile/desktop.
  */
 
 // ── Scheme Definitions ───────────────────────────────────────────────────────
@@ -425,4 +422,3 @@ export function recalcTeamSchemeFit(team) {
   return fit;
 }
 
-// Game is now 100% stable with no freezing; all modal buttons respond instantly on iOS Safari/mobile Chrome; scheme fit updates live and feels meaningful.
