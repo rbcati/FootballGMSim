@@ -6,6 +6,7 @@
 import { Utils as U } from './utils.js';
 import { Constants as C } from './constants.js';
 import { calculateGamePerformance, getCoachingMods, getHCMods, getMedicalStaffInjuryMod } from './coach-system.js';
+import { applyCoachingModifiers } from './coaching-philosophy-effects.js';
 import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy, calculateMorale } from './player.js';
 import { getStrategyModifiers, computeStrategicEdge } from './strategy.js';
 import { deriveGameReasoningFlags } from './weeklyNarrativeFlags.js';
@@ -1285,6 +1286,7 @@ function generateDBStats(db, offenseStrength, U, modifiers = {}) {
 
   let intChance = (coverage + awareness) / 200;
   if (modifiers.intChance) intChance *= modifiers.intChance;
+  if (modifiers.defIntChance) intChance *= modifiers.defIntChance;
   if (db.traits && db.traits.includes(TRAITS.BALLHAWK.id)) intChance *= 1.25;
 
   const interceptions = Math.max(0, Math.min(3, Math.round(intChance * 2 + U.rand(-0.5, 1.5))));
@@ -1316,7 +1318,7 @@ function generateDLStats(defender, offenseStrength, U, modifiers = {}) {
   const ratings = defender.ratings || {};
   const passRushPower = ratings.passRushPower || 70;
   const passRushSpeed = ratings.passRushSpeed || 70;
-  const runStop = ratings.runStop || 70;
+  const runStop = Math.min(99, (ratings.runStop || 70) * (modifiers.runStop ?? 1));
   const awareness = ratings.awareness || 70;
 
   // Performance variance - defensive players can have monster games too
@@ -1564,8 +1566,11 @@ export function simGameStats(home, away, options = {}) {
     awayDefenseStrength = applySchemePenalty(away, awayDefenseStrength, awayGroups);
 
     // --- STAFF PERKS & STRATEGY INTEGRATION ---
-    const homeMods = getCoachingMods(home.staff);
-    const awayMods = getCoachingMods(away.staff);
+    // getCoachingMods builds skill-tree mods (archetype/level based).
+    // applyCoachingModifiers layers HC/OC/DC philosophy and staff traits on top
+    // — single callsite per team, no philosophy logic scattered below.
+    const homeMods = applyCoachingModifiers(getCoachingMods(home.staff), home.staff?.headCoach, home.staff);
+    const awayMods = applyCoachingModifiers(getCoachingMods(away.staff), away.staff?.headCoach, away.staff);
 
     // --- HEAD COACH ARCHETYPE MODIFIERS ---
     const homeHCMods = getHCMods(home.staff?.headCoach);
@@ -2069,6 +2074,7 @@ export function simGameStats(home, away, options = {}) {
             let tdShare = 0.55 + rzFactor;
             if (mods.passVolume && mods.passVolume > 1.1) tdShare += 0.05;
             if (mods.runVolume && mods.runVolume > 1.1) tdShare -= 0.05;
+            if (mods.redZoneMod && mods.redZoneMod !== 1.0) tdShare *= mods.redZoneMod;
             tdShare = U.clamp(tdShare, 0.35, 0.75);
 
             // ── User Tendency: marginal drive-level influence ─────────────

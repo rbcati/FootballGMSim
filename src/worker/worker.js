@@ -112,6 +112,7 @@ import { parseWeeklyHeadlines } from '../core/history/NewsEngine.ts';
 import { calculateAwardRaces } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
+import { getDevelopmentRateModifier } from '../core/coaching-philosophy-effects.js';
 import { processOffseasonEvolution, processWeeklyEvolution } from '../core/progression/evolutionEngine.ts';
 import { buildTeamDevelopmentFocusMap as buildCanonicalDevelopmentFocusMap } from './developmentFocus.js';
 import { derivePlayerVisibleRatingsPatch } from './playerDerivedRatings.js';
@@ -9126,6 +9127,12 @@ async function handleAdvanceOffseason(payload, id) {
   const attrPlayers = allPlayers.filter((player) => !!player?.attributesV2);
   const legacyPlayers = allPlayers.filter((player) => !player?.attributesV2);
 
+  // Build coaching staff lookup early so both attributesV2 and legacy progression paths can use it
+  const teamCoaches = {};
+  for (const team of allTeams) {
+    if (team.staff) teamCoaches[Number(team.id)] = team.staff;
+  }
+
   const offseasonEvolution = processOffseasonEvolution({
     players: attrPlayers,
     seasonId: Number(meta?.year ?? 2025),
@@ -9136,10 +9143,27 @@ async function handleAdvanceOffseason(payload, id) {
   for (const update of offseasonEvolution.updates) {
     const player = cache.getPlayer(update.playerId);
     if (!player) continue;
+    // Apply coaching philosophy dev modifier to positive attribute deltas (attributesV2 path)
+    let attrV2 = update.attributesV2;
+    const evoStaff = teamCoaches[Number(player.teamId)];
+    if (evoStaff && player.attributesV2) {
+      const coachMult = getDevelopmentRateModifier(player.pos, evoStaff.headCoach ?? null, evoStaff);
+      if (coachMult !== 1.0) {
+        const patched = {};
+        for (const key of Object.keys(attrV2)) {
+          const base = player.attributesV2[key] ?? attrV2[key];
+          const delta = attrV2[key] - base;
+          patched[key] = delta > 0
+            ? Math.min(99, Math.max(25, Math.round(base + delta * coachMult)))
+            : attrV2[key];
+        }
+        attrV2 = patched;
+      }
+    }
     const history = Array.isArray(player?.growthHistory) ? player.growthHistory : [];
-    const visibleRatingsPatch = derivePlayerVisibleRatingsPatch(player, update.attributesV2);
+    const visibleRatingsPatch = derivePlayerVisibleRatingsPatch(player, attrV2);
     cache.updatePlayer(update.playerId, {
-      attributesV2: update.attributesV2,
+      attributesV2: attrV2,
       attributeXp: update.attributeXp,
       growthHistory: [...history.slice(-23), update.growthHistoryEntry],
       lastEvolutionWeek: offseasonEvolution.stamp,
@@ -9208,7 +9232,7 @@ async function handleAdvanceOffseason(payload, id) {
       teamRosters[teamId] = playersByTeamId.get(teamId) || [];
     }
     for (const player of legacyPlayers) player.season = Number(meta?.year ?? 2025);
-    legacyProgression = processPlayerProgression(legacyPlayers, { teamEnvironments, teamRosters });
+    legacyProgression = processPlayerProgression(legacyPlayers, { teamEnvironments, teamRosters, teamCoaches });
   }
 
   const evolvedLeaders = summarizeOffseasonEvolutionLeaders(offseasonEvolution, playersById);
