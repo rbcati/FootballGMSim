@@ -76,24 +76,33 @@ function clamp(v) {
  */
 function readOffPhil(member) {
   if (!member) return OFF.BALANCED;
+  // Prefer explicit normalized field (staffPhilosophy.js output)
   const raw = String(
-    member.offensivePhilosophy ??
-    member.offensePhilosophy ??
-    member.offScheme ??
-    ''
+    member.offensivePhilosophy ?? member.offensePhilosophy ?? ''
   ).toUpperCase();
-  return OFF[raw] ?? OFF.BALANCED;
+  if (OFF[raw]) return raw;
+  // Fall back to schemePreference (staffFoundation.js) and offScheme (makeCoach)
+  const pref = String(member.schemePreference ?? member.offScheme ?? '').toLowerCase();
+  if (pref.includes('west'))                                    return OFF.WEST_COAST;
+  if (pref.includes('spread'))                                  return OFF.SPREAD;
+  if (pref.includes('vertical'))                                return OFF.VERTICAL;
+  if (pref.includes('smash') || pref.includes('power') || pref.includes('run')) return OFF.POWER_RUN;
+  return OFF.BALANCED;
 }
 
 function readDefPhil(member) {
   if (!member) return DEF.BALANCED;
   const raw = String(
-    member.defensivePhilosophy ??
-    member.defensePhilosophy ??
-    member.defScheme ??
-    ''
+    member.defensivePhilosophy ?? member.defensePhilosophy ?? ''
   ).toUpperCase();
-  return DEF[raw] ?? DEF.BALANCED;
+  if (DEF[raw]) return raw;
+  const pref = String(member.schemePreference ?? member.defScheme ?? '').toLowerCase();
+  if (pref.includes('blitz'))                                    return DEF.BLITZ_HEAVY;
+  if (pref.includes('cover 2') || pref.includes('cover2'))      return DEF.COVER_2;
+  if (pref.includes('man'))                                      return DEF.MAN_COVERAGE;
+  if (pref.includes('3-4') || pref.includes('4-3') ||
+      pref.includes('hybrid') || pref.includes('multiple'))      return DEF.HYBRID;
+  return DEF.BALANCED;
 }
 
 function readTraits(member) {
@@ -347,6 +356,7 @@ export function applyCoachingModifiers(teamRatings, coach, staff) {
     passVolume:   (base.passVolume   ?? 1) * offMods.passingMod,
     runVolume:    (base.runVolume    ?? 1) * offMods.rushingMod,
     passAccuracy: (base.passAccuracy ?? 1) * offMods.tempoMod,
+    redZoneMod:   (base.redZoneMod   ?? 1) * offMods.redZoneMod,
     sackChance:   (base.sackChance   ?? 1) * defMods.pressureMod,
     intChance:    (base.intChance    ?? 1) * defMods.coverageMod,
     runStop:      (base.runStop      ?? 1) * defMods.runStopMod,

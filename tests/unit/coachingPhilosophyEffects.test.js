@@ -326,6 +326,7 @@ describe('applyCoachingModifiers', () => {
     expect(result.passVolume).toBeCloseTo(1.0, 5);
     expect(result.runVolume).toBeCloseTo(1.0, 5);
     expect(result.passAccuracy).toBeCloseTo(1.0, 5);
+    expect(result.redZoneMod).toBeCloseTo(1.0, 5);
     expect(result.sackChance).toBeCloseTo(1.0, 5);
     expect(result.intChance).toBeCloseTo(1.0, 5);
     expect(result.runStop).toBeCloseTo(1.0, 5);
@@ -334,10 +335,28 @@ describe('applyCoachingModifiers', () => {
   it('full staff stack stays within [0.85, 1.15] on all output keys', () => {
     const staff = makeStaff('POWER_RUN', 'BLITZ_HEAVY', ['DISCIPLINARIAN', 'SCHEME_TEACHER'], 'POWER_RUN', 'BLITZ_HEAVY');
     const result = applyCoachingModifiers({}, staff.headCoach, staff);
-    for (const key of ['passVolume', 'runVolume', 'passAccuracy', 'sackChance', 'intChance', 'runStop']) {
+    for (const key of ['passVolume', 'runVolume', 'passAccuracy', 'redZoneMod', 'sackChance', 'intChance', 'runStop']) {
       expect(result[key]).toBeGreaterThanOrEqual(0.85);
       expect(result[key]).toBeLessThanOrEqual(1.15);
     }
+  });
+
+  it('POWER_RUN philosophy read from schemePreference (staffFoundation path)', () => {
+    // staffFoundation.js stores the scheme in schemePreference, not offensivePhilosophy
+    const staffViaSchemePreference = {
+      headCoach:      { schemePreference: 'power run', traits: [] },
+      offCoordinator: { schemePreference: 'power run' },
+      defCoordinator: { schemePreference: 'blitz' },
+    };
+    const result = applyCoachingModifiers({}, staffViaSchemePreference.headCoach, staffViaSchemePreference);
+    expect(result.runVolume).toBeGreaterThan(1.0);    // POWER_RUN → runVolume up
+    expect(result.passVolume).toBeLessThan(1.0);      // POWER_RUN → passVolume down
+    expect(result.sackChance).toBeGreaterThan(1.0);   // BLITZ_HEAVY DC → sackChance up
+  });
+
+  it('VERTICAL and DISCIPLINARIAN → redZoneMod > 1.0', () => {
+    const result = applyCoachingModifiers({}, makeHC('VERTICAL', 'BALANCED', ['DISCIPLINARIAN']), null);
+    expect(result.redZoneMod).toBeGreaterThan(1.0);
   });
 });
 
