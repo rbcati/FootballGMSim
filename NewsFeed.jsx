@@ -133,11 +133,18 @@ function NewsItem({ item, onPlayerSelect, onTeamSelect }) {
 
 export default function NewsFeed({ league, onPlayerSelect, onTeamSelect }) {
   const [news, setNews] = useState([]);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (league?.id) {
       configureActiveLeague(league.id);
-      News.getRecent(10).then(setNews).catch(console.error);
+      News.getRecent(10)
+        .then((items) => { setNews(items); setError(null); })
+        .catch((err) => {
+          // Surface the failure to the user instead of swallowing it; still log.
+          console.error("[NewsFeed] Failed to load news:", err);
+          setError("Unable to load news");
+        });
     }
   }, []);
 
@@ -181,6 +188,21 @@ export default function NewsFeed({ league, onPlayerSelect, onTeamSelect }) {
       >
         League News
       </h3>
+      {error ? (
+        <div
+          role="alert"
+          style={{
+            background: "#dc2626",
+            color: "#ffffff",
+            padding: "8px 12px",
+            borderRadius: 6,
+            fontWeight: 600,
+            marginBottom: 8,
+          }}
+        >
+          {error}
+        </div>
+      ) : null}
       {displayNews.length === 0 ? (
         <div
           style={{
