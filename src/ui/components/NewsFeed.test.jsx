@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { act, cleanup, render } from '@testing-library/react';
 import NewsFeed, { NEWS_ICON, resolveNewsIcon } from './NewsFeed.jsx';
@@ -18,7 +18,7 @@ const league = {
   ],
 };
 
-beforeEach(() => {
+afterEach(() => {
   cleanup();
 });
 
@@ -128,6 +128,34 @@ describe('NewsFeed worker-news refresh', () => {
 
     expect(getNews).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain('Fresh after advance');
+  });
+
+  it('refetches when newsItems length stays 1 but item at index 0 is replaced', async () => {
+    const itemA = { id: 'id-a', headline: 'Story Alpha', body: 'Alpha body.', priority: 'high', week: 7, phase: 'regular', category: 'major_result' };
+    const itemB = { id: 'id-b', headline: 'Story Beta',  body: 'Beta body.',  priority: 'high', week: 7, phase: 'regular', category: 'major_result' };
+
+    const getNews = vi.fn()
+      .mockResolvedValueOnce([itemA])
+      .mockResolvedValueOnce([itemB]);
+
+    const { rerender, container } = render(
+      <NewsFeed league={{ ...league, newsItems: [itemA] }} actions={{ getNews }} onNavigate={() => {}} />,
+    );
+    await act(async () => {});
+    expect(container.textContent).toContain('Story Alpha');
+
+    await act(async () => {
+      rerender(
+        <NewsFeed
+          league={{ ...league, newsItems: [itemB] }}
+          actions={{ getNews }}
+          onNavigate={() => {}}
+        />,
+      );
+    });
+
+    expect(getNews).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('Story Beta');
   });
 
   it('shows league.newsItems when workerNews snapshot is not yet available', () => {

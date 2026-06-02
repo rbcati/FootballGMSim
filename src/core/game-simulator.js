@@ -38,6 +38,22 @@ export class SimulationError extends Error {
  * the root cause (e.g. all-zero ratings, empty roster) is visible in logs and in
  * the error payload forwarded to the UI.
  */
+/**
+ * Throws SimulationError when gameScores is null or both scores are 0.
+ * Pure helper so tests can verify the guard independently of simulateBatch mocking.
+ */
+export function assertGameProducedScoring(gameScores, context = {}) {
+  if (!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) {
+    const homeAbbr = context.home?.abbr ?? '?';
+    const awayAbbr = context.away?.abbr ?? '?';
+    const week = context.week ?? '?';
+    throw new SimulationError(
+      `Game produced no scoring for ${homeAbbr} vs ${awayAbbr} in week ${week}. Check team ratings and roster validity.`,
+      context,
+    );
+  }
+}
+
 function buildTeamRatingsSnapshot(team) {
   const roster = Array.isArray(team?.roster) ? team.roster : [];
   const ovrs = roster.map((p) => Number(p?.ovr) || 0);
@@ -3747,9 +3763,6 @@ export function simulateBatch(games, options = {}) {
                 } while ((!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) && attempts < 3);
 
                 if (!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) {
-                    // No random fallback — surface the root cause so it can be fixed
-                    // (bad ratings, empty/invalid roster) instead of hidden behind a
-                    // fabricated score. Log a full ratings snapshot to aid debugging.
                     const ratingsSnapshot = {
                         week: league?.week ?? null,
                         attempts,
@@ -3760,10 +3773,7 @@ export function simulateBatch(games, options = {}) {
                         `[SimulationError] Game produced no scoring for ${home.abbr} vs ${away.abbr} (week ${ratingsSnapshot.week}). Team ratings snapshot:`,
                         ratingsSnapshot
                     );
-                    throw new SimulationError(
-                        `Game produced no scoring for ${home.abbr} vs ${away.abbr} in week ${ratingsSnapshot.week ?? '?'}. Check team ratings and roster validity.`,
-                        ratingsSnapshot
-                    );
+                    assertGameProducedScoring(gameScores, ratingsSnapshot);
                 }
 
                 sH = gameScores.homeScore;

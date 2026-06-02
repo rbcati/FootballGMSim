@@ -158,6 +158,13 @@ export default function NewsFeed({ league, actions, mode = 'full', segment = 'al
   const [newsLoading, setNewsLoading] = useState(false);
   const [newsError, setNewsError] = useState(null);
 
+  const latestNewsFingerprint =
+    league?.newsItems?.[0]?.id
+    ?? league?.newsItems?.[0]?.createdAt
+    ?? league?.newsItems?.[0]?.timestamp
+    ?? league?.newsItems?.[0]?.headline
+    ?? null;
+
   useEffect(() => {
     if (typeof actions?.getNews !== 'function') return undefined;
     let cancelled = false;
@@ -177,7 +184,7 @@ export default function NewsFeed({ league, actions, mode = 'full', segment = 'al
         if (!cancelled) setNewsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [actions, leagueId, league?.week, league?.phase, league?.season, league?.newsItems?.length]);
+  }, [actions, leagueId, league?.week, league?.phase, league?.season, league?.newsItems?.length, latestNewsFingerprint]);
 
   // Prefer worker-sourced news when available; otherwise fall back to the league
   // view-model slice already provided by the worker (keeps tests/ticker working).
