@@ -2163,9 +2163,11 @@ async function handleNewLeague(payload, id) {
       year:            league.year,
       season:          league.season ?? 1,
       phase:           'regular',
-      // Persist the per-save RNG entropy generated at league creation so it
-      // survives save/load and keeps game outcomes unique per playthrough.
-      globalSeed:      (Number(league.globalSeed) || (Math.floor(Math.random() * 0xFFFFFFFF) >>> 0)),
+      // Persist the per-save RNG entropy generated at league creation (in
+      // makeLeague) so it survives save/load and keeps game outcomes unique per
+      // playthrough. Fallback derives from wall-clock time (never Math.random,
+      // which the deterministic-sim audit forbids in the worker).
+      globalSeed:      (Number(league.globalSeed) || (Date.now() >>> 0)),
       difficulty:      options.difficulty ?? 'Normal',
       settings:        normalizeLeagueSettings({
         ...resolvedSettings,
