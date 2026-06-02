@@ -103,7 +103,7 @@ import { summarizePlayerMood } from '../core/mood/playerMood.js';
 import { getFreeAgencyDecisionState } from '../core/freeAgency/decisionState.js';
 import {
   calculateOffensiveSchemeFit, calculateDefensiveSchemeFit,
-  computeTeamSchemeFits, schemeOvrBonus,
+  computeTeamSchemeFits, schemeOvrBonus, recalcTeamSchemeFit,
   OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES,
 } from '../core/scheme-core.js';
 import AiLogic from '../core/ai-logic.js';
@@ -2163,6 +2163,9 @@ async function handleNewLeague(payload, id) {
       year:            league.year,
       season:          league.season ?? 1,
       phase:           'regular',
+      // Persist the per-save RNG entropy generated at league creation so it
+      // survives save/load and keeps game outcomes unique per playthrough.
+      globalSeed:      (Number(league.globalSeed) || (Math.floor(Math.random() * 0xFFFFFFFF) >>> 0)),
       difficulty:      options.difficulty ?? 'Normal',
       settings:        normalizeLeagueSettings({
         ...resolvedSettings,
@@ -3358,6 +3361,8 @@ function buildLeagueForSim(schedule, week, seasonId) {
     year:        meta.year,
     season:      meta.season,
     userTeamId:  meta.userTeamId,
+    // Per-save entropy threaded through so game RNG seeds differ across saves.
+    globalSeed:  Number(meta.globalSeed) || 0,
     schedule,
     _weekGames:  weekGames,
   };
@@ -3467,6 +3472,14 @@ async function simulateWeekLegacy({ gamesToSim, league, meta, id }) {
         overtimeFormat: getLeagueSetting('overtimeFormat', 'nfl'),
       });
     } catch (simErr) {
+      // A SimulationError means a game produced no scoring (bad ratings / invalid
+      // roster). Surface the root cause to the UI as an error response instead of
+      // hiding it behind an empty batch or a fabricated score.
+      if (simErr?.name === 'SimulationError') {
+        console.error('[Worker] SimulationError during week sim:', simErr.message, simErr.details);
+        post(toUI.ERROR, { message: simErr.message, details: simErr.details ?? null, stack: simErr.stack }, id);
+        throw simErr;
+      }
       console.error(`[Worker] simulateBatch crashed for batch starting at game ${i}:`, simErr);
       batchResults = [];
     }
@@ -5745,6 +5758,7 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
     week: meta.currentWeek ?? 1,
   };
 
+  recalcSchemeFitForTeams(resolvedTeamId);
   await flushDirty();
   post(toUI.STATE_UPDATE, { roster: buildRosterView(resolvedTeamId), ...buildViewState(), freeAgentSigning: completedSigning }, id);
 }
@@ -6162,11 +6176,33 @@ async function releasePlayerWithValidation({ playerId, teamId }) {
   return { ok: true, playerId: player.id };
 }
 
+/**
+ * Recalculate (and thereby invalidate) the cached scheme OVR bonus for one or
+ * more teams after a roster change (trade / signing / release / injury). Keeps
+ * scheme bonuses from going stale between the change and the next simulation.
+ */
+function recalcSchemeFitForTeams(...teamIds) {
+  const seen = new Set();
+  for (const rawId of teamIds.flat()) {
+    if (rawId == null) continue;
+    const numId = Number(rawId);
+    const key = Number.isFinite(numId) ? numId : rawId;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const team = cache.getTeam(numId) ?? cache.getTeam(rawId);
+    if (!team) continue;
+    const roster = cache.getPlayersByTeam(team.id);
+    const fit = recalcTeamSchemeFit({ ...team, roster });
+    if (fit) cache.updateTeam(team.id, { schemeFit: fit });
+  }
+}
+
 async function handleReleasePlayer({ playerId, teamId }, id) {
   let player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   await releasePlayerWithValidation({ playerId, teamId });
+  recalcSchemeFitForTeams(teamId);
   await flushDirty();
   post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
 }
@@ -6184,12 +6220,27 @@ async function handleBulkReleasePlayers({ teamId, playerIds }, id) {
     }
     released.push(playerId);
   }
+  recalcSchemeFitForTeams(teamId);
   await flushDirty();
   post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
   post(toUI.SUCCESS, { ok: true, released }, id);
 }
 
 // ── Handler: GET_ROSTER ───────────────────────────────────────────────────────
+
+async function handleGetNews({ limit } = {}, id) {
+  // The worker is the single source of truth for news. The UI reads news through
+  // this handler instead of touching IndexedDB directly.
+  try {
+    const max = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.floor(Number(limit)) : 10;
+    const meta = cache.getMeta() ?? {};
+    const items = Array.isArray(meta.newsItems) ? meta.newsItems : [];
+    post(toUI.NEWS_DATA, { news: items.slice(0, max) }, id);
+  } catch (err) {
+    console.error('[Worker] GET_NEWS error:', err);
+    post(toUI.NEWS_DATA, { news: [], error: err?.message || 'Failed to load news' }, id);
+  }
+}
 
 async function handleGetRoster({ teamId }, id) {
   const numId = Number(teamId);
@@ -7298,6 +7349,8 @@ async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving 
 
   recalculateTeamCap(Number(fromTeamId));
   recalculateTeamCap(Number(toTeamId));
+  // Rosters just changed on both sides — invalidate/recalculate cached scheme fits.
+  recalcSchemeFitForTeams(Number(fromTeamId), Number(toTeamId));
   const tradeIssues = runLegalityValidation({ stage: 'post-trade', teamIds: [Number(fromTeamId), Number(toTeamId)] }).issues.filter((issue) => issue.severity === 'error');
   if (tradeIssues.length > 0) {
     throw new Error(tradeIssues[0].message);
@@ -10675,6 +10728,7 @@ async function handleMessage(event) {
       case toWorker.UPDATE_SETTINGS:    return await handleUpdateSettings(payload, id);
       case toWorker.TOGGLE_COMMISSIONER_MODE: return await handleToggleCommissionerMode(payload, id);
       case toWorker.APPLY_COMMISSIONER_ACTIONS: return await handleApplyCommissionerActions(payload, id);
+      case toWorker.GET_NEWS:           return await handleGetNews(payload, id);
       case toWorker.GET_ROSTER:         return await handleGetRoster(payload, id);
       case toWorker.GET_FREE_AGENTS:    return await handleGetFreeAgents(payload, id);
       case toWorker.GET_AVAILABLE_COACHES: return await handleGetAvailableCoaches(payload, id);
