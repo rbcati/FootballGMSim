@@ -19,6 +19,38 @@ import {
   buildScoringSummaryFromSimulation,
 } from './gameSummary.js';
 
+/**
+ * SimulationError — thrown when a game cannot produce a valid (non-zero) result
+ * after the allotted retries. Surfaces the root cause instead of papering over
+ * it with a random fallback score. Carries a structured `details` payload so the
+ * worker can forward team-ratings context to the UI.
+ */
+export class SimulationError extends Error {
+  constructor(message, details = {}) {
+    super(message);
+    this.name = 'SimulationError';
+    this.details = details;
+  }
+}
+
+/**
+ * Captures a compact ratings snapshot for a team at simulation-failure time so
+ * the root cause (e.g. all-zero ratings, empty roster) is visible in logs and in
+ * the error payload forwarded to the UI.
+ */
+function buildTeamRatingsSnapshot(team) {
+  const roster = Array.isArray(team?.roster) ? team.roster : [];
+  const ovrs = roster.map((p) => Number(p?.ovr) || 0);
+  const avgOvr = ovrs.length ? ovrs.reduce((a, b) => a + b, 0) / ovrs.length : 0;
+  return {
+    id: team?.id ?? null,
+    abbr: team?.abbr ?? null,
+    rosterSize: roster.length,
+    avgOvr: Math.round(avgOvr * 10) / 10,
+    players: roster.slice(0, 25).map((p) => ({ name: p?.name, pos: p?.pos, ovr: Number(p?.ovr) || 0 })),
+  };
+}
+
 function hashStringToSeed(input = '') {
   let hash = 2166136261;
   for (let i = 0; i < input.length; i++) {
@@ -131,8 +163,13 @@ function buildDriveBasedSummary({
   // save states — which carry no strategy profile — byte-for-byte identical.
   homeStrategicEdge = 0,
   awayStrategicEdge = 0,
+  // Per-save entropy. Mixed into the deterministic seed so the same teams in the
+  // same week produce different outcomes across different saves/playthroughs.
+  // Defaults to 0 so legacy saves (which carry no globalSeed) stay byte-identical.
+  globalSeed = 0,
 }) {
-  const seed = hashStringToSeed(`${season}|${week}|${home?.id}|${away?.id}`);
+  const baseSeed = hashStringToSeed(`${season}|${week}|${home?.id}|${away?.id}`);
+  const seed = (baseSeed ^ (globalSeed >>> 0)) >>> 0;
   const rng = mulberry32(seed);
   const randInt = (min, max) => Math.floor(rng() * (max - min + 1)) + min;
   const chance = (p) => rng() < p;
@@ -2465,6 +2502,7 @@ export function simGameStats(home, away, options = {}) {
       homeFieldAdv: 0.03,
       homeStrategicEdge: homeStrategicEdge.edge,
       awayStrategicEdge: awayStrategicEdge.edge,
+      globalSeed: Number(options?.league?.globalSeed) || 0,
     });
 
     let homeScore = Math.max(0, driveSummary?.homeScore ?? homeRes.score);
@@ -3709,8 +3747,23 @@ export function simulateBatch(games, options = {}) {
                 } while ((!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) && attempts < 3);
 
                 if (!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) {
-                    if (verbose) console.warn(`simulateMatchup failed or 0-0 after ${attempts} attempts for ${away.abbr} @ ${home.abbr}, forcing fallback score.`);
-                    gameScores = { homeScore: U.rand(10, 35), awayScore: U.rand(7, 28) };
+                    // No random fallback — surface the root cause so it can be fixed
+                    // (bad ratings, empty/invalid roster) instead of hidden behind a
+                    // fabricated score. Log a full ratings snapshot to aid debugging.
+                    const ratingsSnapshot = {
+                        week: league?.week ?? null,
+                        attempts,
+                        home: buildTeamRatingsSnapshot(home),
+                        away: buildTeamRatingsSnapshot(away),
+                    };
+                    console.error(
+                        `[SimulationError] Game produced no scoring for ${home.abbr} vs ${away.abbr} (week ${ratingsSnapshot.week}). Team ratings snapshot:`,
+                        ratingsSnapshot
+                    );
+                    throw new SimulationError(
+                        `Game produced no scoring for ${home.abbr} vs ${away.abbr} in week ${ratingsSnapshot.week ?? '?'}. Check team ratings and roster validity.`,
+                        ratingsSnapshot
+                    );
                 }
 
                 sH = gameScores.homeScore;
@@ -3904,6 +3957,10 @@ export function simulateBatch(games, options = {}) {
             }
 
         } catch (error) {
+            // A SimulationError signals an unrecoverable root cause (bad ratings /
+            // invalid roster) — propagate it so the worker can report it to the UI
+            // instead of silently dropping the game.
+            if (error instanceof SimulationError) throw error;
             console.error(`[SIM] Error simulating game ${index} (${pair?.home?.abbr ?? '?'} vs ${pair?.away?.abbr ?? '?'}):`, error?.message, error?.stack);
         }
     });

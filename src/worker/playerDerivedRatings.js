@@ -62,29 +62,33 @@ const POSITION_ATTRIBUTE_WEIGHTS = {
     ['decisionMaking', 0.2],
     ['pressCoverage', 0.15],
   ],
+  // DE: edge defender — pass rush, block shedding (strength), motor (pursuit).
   DE: [
-    ['passRush', 0.45],
-    ['passBlockStrength', 0.2],
-    ['decisionMaking', 0.2],
-    ['pressCoverage', 0.15],
+    ['passRush', 0.40],
+    ['passBlockStrength', 0.28],
+    ['decisionMaking', 0.20],
+    ['pressCoverage', 0.12],
   ],
+  // DT: interior run stopper — block shedding/strength/tackle anchor with some push.
   DT: [
-    ['passRush', 0.45],
-    ['passBlockStrength', 0.2],
-    ['decisionMaking', 0.2],
-    ['pressCoverage', 0.15],
+    ['passBlockStrength', 0.40],
+    ['passRush', 0.30],
+    ['decisionMaking', 0.20],
+    ['pressCoverage', 0.10],
   ],
+  // NT: nose tackle — heavy strength/run-stop/tackle anchor, low speed/pass rush.
   NT: [
-    ['passRush', 0.45],
-    ['passBlockStrength', 0.2],
-    ['decisionMaking', 0.2],
-    ['pressCoverage', 0.15],
+    ['passBlockStrength', 0.55],
+    ['decisionMaking', 0.25],
+    ['passRush', 0.12],
+    ['pressCoverage', 0.08],
   ],
+  // EDGE: speed rusher — pass rush, burst/motor, moderate run stop.
   EDGE: [
-    ['passRush', 0.45],
-    ['passBlockStrength', 0.2],
-    ['decisionMaking', 0.2],
-    ['pressCoverage', 0.15],
+    ['passRush', 0.50],
+    ['decisionMaking', 0.22],
+    ['passBlockStrength', 0.16],
+    ['pressCoverage', 0.12],
   ],
   LB: [
     ['passRush', 0.27],

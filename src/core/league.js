@@ -172,6 +172,10 @@ function makeLeague(teams, options = {}, dependencies = {}) {
             year: leagueYear,
             season: 1,
             week: 1, // Default to week 1; offseason flag handles phase logic
+            // Per-save entropy generated once at creation and persisted in the save.
+            // Mixed into per-game RNG seeds so identical teams/weeks produce different
+            // outcomes across different playthroughs (prevents deterministic exploits).
+            globalSeed: (Math.floor(Math.random() * 0xFFFFFFFF) >>> 0),
             offseason: startPoint === 'offseason',
             schedule: null,
             resultsByWeek: [],

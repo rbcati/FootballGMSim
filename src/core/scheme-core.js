@@ -401,4 +401,28 @@ export function calculateTeamRatingWithSchemeFit(team) {
   };
 }
 
+/**
+ * Invalidate and recalculate a team's cached scheme fit/OVR bonus.
+ *
+ * The per-batch sim cache (`team._cachedSchemeFit`) can go stale the moment a
+ * roster changes (trade / signing / release / injury). Call this after any such
+ * mutation so the next consumer reads a fresh value instead of a stale bonus.
+ *
+ * Returns the freshly computed scheme-fit object (also stored on the team as
+ * `_cachedSchemeFit` and `schemeFit`).
+ *
+ * @param {Object} team - Team object. Must have `roster` attached.
+ */
+export function recalcTeamSchemeFit(team) {
+  if (!team) return null;
+  // Drop stale caches first so nothing reads the old bonus mid-recompute.
+  delete team._cachedSchemeFit;
+  delete team._cachedMorale;
+  if (!Array.isArray(team.roster)) return null;
+  const fit = calculateTeamRatingWithSchemeFit(team);
+  team._cachedSchemeFit = fit;
+  team.schemeFit = fit;
+  return fit;
+}
+
 // Game is now 100% stable with no freezing; all modal buttons respond instantly on iOS Safari/mobile Chrome; scheme fit updates live and feels meaningful.

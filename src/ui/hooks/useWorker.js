@@ -504,6 +504,14 @@ export function useWorker() {
         }
         dispatch({ type: 'ERROR', message: `Request timed out: ${type}. Please retry.` });
       }, effectiveTimeout);
+      // Message IDs must be unique. If an id collision is somehow observed, warn
+      // and skip rather than clobbering an in-flight request's resolver.
+      if (pendingRef.current.has(msg.id)) {
+        clearTimeout(timeoutId);
+        console.warn(`[useWorker] Duplicate worker message id "${msg.id}" for ${type} — skipping to avoid collision.`);
+        reject(new Error(`Duplicate worker message id: ${msg.id}`));
+        return;
+      }
       pendingRef.current.set(msg.id, { resolve, reject, silent, timeoutId });
       if (!silent) dispatch({ type: 'BUSY' });
       workerRef.current.postMessage(msg);
@@ -752,6 +760,16 @@ export function useWorker() {
     /** Fetch mid-season award races & All-Pro projections (returns a Promise). */
     getAwardRaces: () =>
       request(toWorker.GET_AWARD_RACES, {}, { silent: true }),
+
+    /**
+     * Fetch recent league news through the worker (UI never reads IndexedDB
+     * directly). Resolves to an array of news items; rejects on worker error.
+     */
+    getNews: (limit = 10) =>
+      request(toWorker.GET_NEWS, { limit }, { silent: true }).then((res) => {
+        if (res?.payload?.error) throw new Error(res.payload.error);
+        return Array.isArray(res?.payload?.news) ? res.payload.news : [];
+      }),
 
     // ── Draft & Offseason ────────────────────────────────────────────────────
 

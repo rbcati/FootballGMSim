@@ -160,6 +160,9 @@ export const toWorker = Object.freeze({
   GET_DRAFT_CLASS:      'GET_DRAFT_CLASS',      // { seasonId } — full redraft model for one class
   GET_PLAYER_DRAFT_CONTEXT: 'GET_PLAYER_DRAFT_CONTEXT', // { playerId } — profile strip + optional class hook
 
+  /** League news (read-through the worker; UI never touches IndexedDB directly) */
+  GET_NEWS:           'GET_NEWS',           // { limit?: number } — recent news items
+
   /** Recovery */
   REQUEST_FULL_STATE: 'REQUEST_FULL_STATE', // {} — force full hydration snapshot
 });
@@ -265,6 +268,9 @@ export const toUI = Object.freeze({
   LEAGUE_CONFIG_EXPORT: 'LEAGUE_CONFIG_EXPORT', // { data }
   LEAGUE_FILE_EXPORT: 'LEAGUE_FILE_EXPORT', // { data }
   MOD_IMPORT_RESULT: 'MOD_IMPORT_RESULT', // { ok, kind, message }
+
+  /** League news response */
+  NEWS_DATA:          'NEWS_DATA',           // { news: [], error?: string }
 
   /**
    * IndexedDB version conflict / blocked event — the UI must reload the page

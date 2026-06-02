@@ -28,7 +28,20 @@ import { ensurePersonalityProfile, mentorshipBonusForPlayer } from './developmen
 // ── Progression probability constants (Task 10) ───────────────────────────────
 // Defined here so they can be tuned without hunting for magic numbers inline.
 const GROWTH_BREAKOUT_PROB = 0.08;   // 8% chance per year (was 10%)
-const GROWTH_BUST_PROB     = 0.20;   // 20% chance per year (was 5%)
+const GROWTH_BUST_PROB     = 0.10;   // 10% chance per year (tuned down from 20%)
+
+// ── Age-cliff probability by position (Age 30+) ───────────────────────────────
+// Different positions age differently: specialists hang on, skill players fall
+// off fast. Returns the per-offseason probability of a hard "age cliff" event.
+function ageCliffProbability(pos) {
+  const p = String(pos ?? '').toUpperCase();
+  if (p === 'K' || p === 'P') return 0.10;                         // Kickers/Punters
+  if (p === 'QB') return 0.15;                                     // Quarterbacks
+  if (['OL', 'C', 'G', 'T', 'LT', 'RT', 'LG', 'RG', 'OT', 'OG',
+       'DL', 'DT', 'NT'].includes(p)) return 0.20;                 // OL / interior DL
+  if (['WR', 'RB', 'HB', 'CB', 'DB'].includes(p)) return 0.25;     // Skill positions
+  return 0.20;                                                     // Default
+}
 
 // ── "Hitting the Wall" thresholds ──────────────────────────────────────────
 // RBs hit the wall earlier (28) due to the physical toll of the position.
@@ -251,7 +264,7 @@ export function processPlayerProgression(players, options = {}) {
     else if (!breakoutEvent && age >= 30) {
       const roll = Utils.random();
 
-      if (roll < 0.15) {
+      if (roll < ageCliffProbability(player.pos)) {
         // Age Cliff: physical traits plummet (primary drop)
         const physDrop = -Utils.rand(5, 8);
         const traits = PHYSICAL_TRAITS[player.pos] ?? PHYSICAL_TRAITS.QB;

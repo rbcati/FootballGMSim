@@ -994,6 +994,7 @@ export default function LeagueDashboard({
             <SectionSubnav items={["All", "Team", "League", "Pulse", "Transactions"]} activeItem={newsSubtab} onChange={setNewsSubtab} />
             <NewsFeed
               league={league}
+              actions={actions}
               mode="full"
               segment={newsSubtab.toLowerCase()}
               onTeamSelect={handleTeamSelect}
@@ -1150,6 +1151,7 @@ export default function LeagueDashboard({
             <Draft
               league={league}
               actions={actions}
+              busy={busy}
               onNavigate={setActiveTab}
               onPlayerSelect={handlePlayerSelect}
             />
@@ -1213,6 +1215,7 @@ export default function LeagueDashboard({
           <TabErrorBoundary label="News">
             <NewsFeed
               league={league}
+              actions={actions}
               mode="full"
               onTeamSelect={handleTeamSelect}
               onPlayerSelect={handlePlayerSelect}
