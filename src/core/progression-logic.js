@@ -24,6 +24,7 @@ import { Utils } from './utils.js';
 import { calculateOvr } from './player.js';
 import { Constants } from './constants.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer } from './development/personalitySystem.js';
+import { getDevelopmentRateModifier } from './coaching-philosophy-effects.js';
 
 // ── Progression probability constants (Task 10) ───────────────────────────────
 // Defined here so they can be tuned without hunting for magic numbers inline.
@@ -170,6 +171,8 @@ function applyCliffCognitiveDrop(player, secondaryDrop) {
 export function processPlayerProgression(players, options = {}) {
   const teamEnvironments = options?.teamEnvironments ?? {};
   const teamRosters = options?.teamRosters ?? {};
+  // teamCoaches: map of teamId → team.staff (for coaching philosophy dev modifier)
+  const teamCoaches = options?.teamCoaches ?? {};
   const gainers    = []; // players with progressionDelta >= +4
   const regressors = []; // players with progressionDelta <= -3
   const breakouts  = []; // explicit Breakout Season events (for news)
@@ -286,6 +289,17 @@ export function processPlayerProgression(players, options = {}) {
     const mentorship = mentorshipBonusForPlayer(player, roster);
     if (mentorship.applied && age <= 25 && ovrDelta > 0) {
       ovrDelta += Math.max(1, Math.round(ovrDelta * mentorship.development));
+    }
+
+    // ── Coaching philosophy development modifier ───────────────────────────────
+    // Multiplies positive growth deltas only; never amplifies busts or regressions.
+    // Missing coach/staff → getDevelopmentRateModifier returns 1.0 (no-op).
+    if (ovrDelta > 0 && !bustEvent) {
+      const teamStaff = teamCoaches[player.teamId] ?? null;
+      if (teamStaff) {
+        const coachDevMod = getDevelopmentRateModifier(player.pos, teamStaff.headCoach ?? null, teamStaff);
+        ovrDelta = Math.round(ovrDelta * coachDevMod);
+      }
     }
 
     // ── Apply non-cliff, non-wall deltas via position-specific rating nudges (Task 6)

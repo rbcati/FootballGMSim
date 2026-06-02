@@ -9203,12 +9203,14 @@ async function handleAdvanceOffseason(payload, id) {
       teamEnvironments[team.id] = { youngGrowthBonus, volatilityDampener, rookieAdaptation, trainingFocus, staffDevelopmentModifier: staffBonuses.developmentDelta ?? 0 };
     }
     const teamRosters = {};
+    const teamCoaches = {};
     for (const team of allTeams) {
       const teamId = Number(team.id);
       teamRosters[teamId] = playersByTeamId.get(teamId) || [];
+      if (team.staff) teamCoaches[teamId] = team.staff;
     }
     for (const player of legacyPlayers) player.season = Number(meta?.year ?? 2025);
-    legacyProgression = processPlayerProgression(legacyPlayers, { teamEnvironments, teamRosters });
+    legacyProgression = processPlayerProgression(legacyPlayers, { teamEnvironments, teamRosters, teamCoaches });
   }
 
   const evolvedLeaders = summarizeOffseasonEvolutionLeaders(offseasonEvolution, playersById);

@@ -6,6 +6,7 @@
 import { Utils as U } from './utils.js';
 import { Constants as C } from './constants.js';
 import { calculateGamePerformance, getCoachingMods, getHCMods, getMedicalStaffInjuryMod } from './coach-system.js';
+import { applyCoachingModifiers } from './coaching-philosophy-effects.js';
 import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy, calculateMorale } from './player.js';
 import { getStrategyModifiers, computeStrategicEdge } from './strategy.js';
 import { deriveGameReasoningFlags } from './weeklyNarrativeFlags.js';
@@ -1564,8 +1565,11 @@ export function simGameStats(home, away, options = {}) {
     awayDefenseStrength = applySchemePenalty(away, awayDefenseStrength, awayGroups);
 
     // --- STAFF PERKS & STRATEGY INTEGRATION ---
-    const homeMods = getCoachingMods(home.staff);
-    const awayMods = getCoachingMods(away.staff);
+    // getCoachingMods builds skill-tree mods (archetype/level based).
+    // applyCoachingModifiers layers HC/OC/DC philosophy and staff traits on top
+    // — single callsite per team, no philosophy logic scattered below.
+    const homeMods = applyCoachingModifiers(getCoachingMods(home.staff), home.staff?.headCoach, home.staff);
+    const awayMods = applyCoachingModifiers(getCoachingMods(away.staff), away.staff?.headCoach, away.staff);
 
     // --- HEAD COACH ARCHETYPE MODIFIERS ---
     const homeHCMods = getHCMods(home.staff?.headCoach);
