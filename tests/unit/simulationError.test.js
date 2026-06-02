@@ -3,13 +3,15 @@
  *
  * Covers:
  *  1. SimulationError class structure — name, message, details
- *  2. The 0-0 guard in simulateBatch re-throws SimulationError (not swallowed)
- *  3. simulateBatch does not return a fabricated score after 3 failed attempts
- *  4. Worker reducer: toUI.ERROR clears busy and simulating state
+ *  2. assertGameProducedScoring helper — throws on null / 0-0 scores
+ *  3. simulateBatch integration — never silently returns 0-0
+ *  4. Worker reducer: real workerReducer handles ERROR correctly
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SimulationError } from '../../src/core/game-simulator.js';
+import { describe, it, expect } from 'vitest';
+import { SimulationError, assertGameProducedScoring, simulateBatch } from '../../src/core/game-simulator.js';
+import { workerReducer, INITIAL_WORKER_STATE } from '../../src/ui/hooks/useWorker.js';
+import { toUI } from '../../src/worker/protocol.js';
 
 // ── 1. SimulationError class ──────────────────────────────────────────────────
 
@@ -43,163 +45,147 @@ describe('SimulationError', () => {
   });
 });
 
-// ── 2–3. simulateBatch 0-0 guard ─────────────────────────────────────────────
-// We cannot trigger 0-0 scores through empty rosters alone (the engine has base
-// scoring rates).  Instead, verify the guard logic by mocking the module-level
-// simulateMatchup via vi.doMock so that it always returns {homeScore:0, awayScore:0}.
+// ── 2. assertGameProducedScoring — direct tests against the exported helper ───
 
-describe('simulateBatch — 0-0 guard throws SimulationError', () => {
-  beforeEach(() => {
-    vi.resetModules();
-  });
-  afterEach(() => {
-    vi.restoreAllMocks();
+describe('assertGameProducedScoring', () => {
+  it('throws SimulationError when gameScores is null', () => {
+    expect(() =>
+      assertGameProducedScoring(null, { home: { abbr: 'HOM' }, away: { abbr: 'AWY' }, week: 1 }),
+    ).toThrow(SimulationError);
   });
 
-  it('throws SimulationError when simulateMatchup always produces 0-0', async () => {
-    // Patch the matchup function by replacing the module resolver.
-    // We import the module fresh so the mock takes effect.
-    vi.doMock('../../src/core/game-simulator.js', async (importOriginal) => {
-      const original = await importOriginal();
-
-      // Wrap simulateBatch so that its internal simulateMatchup is replaced.
-      // We do this by re-exporting a version that uses the patched scoring path.
-      const patchedSimulateBatch = (games, options) => {
-        // Replicate only the 0-0 guard from the real code using a fixed 0-0 result.
-        const { SimulationError: SE } = original;
-        for (const pair of games) {
-          const { home, away } = pair;
-          if (!home || !away) continue;
-          const attempts = 3;
-          const gameScores = { homeScore: 0, awayScore: 0 };
-          if (gameScores.homeScore === 0 && gameScores.awayScore === 0) {
-            throw new SE(
-              `Game produced no scoring for ${home.abbr} vs ${away.abbr} in week ${options?.league?.week ?? '?'}. Check team ratings and roster validity.`,
-              { week: options?.league?.week ?? null, attempts, home: { abbr: home.abbr }, away: { abbr: away.abbr } },
-            );
-          }
-        }
-        return [];
-      };
-
-      return { ...original, simulateBatch: patchedSimulateBatch };
-    });
-
-    const { simulateBatch: patched, SimulationError: SE } = await import('../../src/core/game-simulator.js');
-
-    const home = { id: 1, abbr: 'HOM', roster: [] };
-    const away = { id: 2, abbr: 'AWY', roster: [] };
-    const league = { id: 'l', week: 3, teams: [home, away] };
-
-    expect(() => patched([{ home, away }], { league })).toThrow(SE);
+  it('throws SimulationError when homeScore and awayScore are both 0', () => {
+    expect(() =>
+      assertGameProducedScoring(
+        { homeScore: 0, awayScore: 0 },
+        { home: { abbr: 'HOM' }, away: { abbr: 'AWY' }, week: 1 },
+      ),
+    ).toThrow(SimulationError);
   });
 
-  it('thrown error includes team abbreviations and week in message', async () => {
-    vi.doMock('../../src/core/game-simulator.js', async (importOriginal) => {
-      const original = await importOriginal();
-      const patchedSimulateBatch = (games, options) => {
-        const { SimulationError: SE } = original;
-        for (const { home, away } of games) {
-          throw new SE(
-            `Game produced no scoring for ${home.abbr} vs ${away.abbr} in week ${options?.league?.week}.`,
-            { week: options?.league?.week, home: { abbr: home.abbr }, away: { abbr: away.abbr } },
-          );
-        }
-        return [];
-      };
-      return { ...original, simulateBatch: patchedSimulateBatch };
-    });
-
-    const { simulateBatch: patched, SimulationError: SE } = await import('../../src/core/game-simulator.js');
-    const home = { id: 1, abbr: 'AAA' };
-    const away = { id: 2, abbr: 'BBB' };
-
+  it('error message contains team abbreviations and week', () => {
     let caught;
     try {
-      patched([{ home, away }], { league: { week: 5 } });
+      assertGameProducedScoring(
+        { homeScore: 0, awayScore: 0 },
+        { home: { abbr: 'AAA' }, away: { abbr: 'BBB' }, week: 5 },
+      );
     } catch (err) {
       caught = err;
     }
-
-    expect(caught).toBeInstanceOf(SE);
+    expect(caught).toBeInstanceOf(SimulationError);
     expect(caught.message).toContain('AAA');
     expect(caught.message).toContain('BBB');
     expect(caught.message).toContain('5');
   });
 
-  it('SimulationError details carry team abbreviations', async () => {
-    vi.doMock('../../src/core/game-simulator.js', async (importOriginal) => {
-      const original = await importOriginal();
-      const patchedSimulateBatch = (games, options) => {
-        const { SimulationError: SE } = original;
-        const [{ home, away }] = games;
-        throw new SE('no scoring', {
-          week: options?.league?.week,
-          home: { abbr: home.abbr, rosterSize: 0, avgOvr: 0 },
-          away: { abbr: away.abbr, rosterSize: 0, avgOvr: 0 },
-        });
-      };
-      return { ...original, simulateBatch: patchedSimulateBatch };
-    });
-
-    const { simulateBatch: patched, SimulationError: SE } = await import('../../src/core/game-simulator.js');
-    const home = { id: 1, abbr: 'HOM' };
-    const away = { id: 2, abbr: 'AWY' };
-
+  it('error details carry structured team snapshot', () => {
     let caught;
     try {
-      patched([{ home, away }], { league: { week: 1 } });
+      assertGameProducedScoring(
+        { homeScore: 0, awayScore: 0 },
+        { home: { abbr: 'HOM', rosterSize: 0, avgOvr: 0 }, away: { abbr: 'AWY', rosterSize: 0, avgOvr: 0 }, week: 1 },
+      );
     } catch (err) {
       caught = err;
     }
-
     expect(caught.details.home.abbr).toBe('HOM');
     expect(caught.details.away.abbr).toBe('AWY');
     expect(typeof caught.details.home.rosterSize).toBe('number');
   });
-});
 
-// ── 4. Worker reducer: toUI.ERROR clears busy state ──────────────────────────
-
-describe('Worker reducer: toUI.ERROR clears busy state', () => {
-  it('busy and simulating become false when toUI.ERROR is dispatched', async () => {
-    const { toUI } = await import('../../src/worker/protocol.js');
-
-    // Mirror the useWorker reducer case for toUI.ERROR
-    function reduce(state, action) {
-      if (action.type === toUI.ERROR) {
-        return { ...state, busy: false, simulating: false, error: action.message };
-      }
-      return state;
-    }
-
-    const state = { busy: true, simulating: true, error: null };
-    const next = reduce(state, {
-      type: toUI.ERROR,
-      message: 'Game produced no scoring for HOM vs AWY in week 1.',
-    });
-
-    expect(next.busy).toBe(false);
-    expect(next.simulating).toBe(false);
-    expect(next.error).toContain('HOM');
+  it('does not throw when homeScore > 0', () => {
+    expect(() => assertGameProducedScoring({ homeScore: 21, awayScore: 14 }, {})).not.toThrow();
   });
 
-  it('user can retry after error (busy is false, not stuck)', async () => {
-    const { toUI } = await import('../../src/worker/protocol.js');
+  it('does not throw when only awayScore > 0', () => {
+    expect(() => assertGameProducedScoring({ homeScore: 0, awayScore: 7 }, {})).not.toThrow();
+  });
+});
 
-    function reduce(state, action) {
-      if (action.type === toUI.ERROR) return { ...state, busy: false, simulating: false, error: action.message };
-      if (action.type === 'RETRY_ADVANCE') return { ...state, busy: true, error: null };
-      return state;
+// ── 3. simulateBatch integration — real production code, no mocks ─────────────
+
+describe('simulateBatch — integration (no mocks)', () => {
+  it('never silently returns homeScore: 0, awayScore: 0', () => {
+    const home = { id: 'h1', abbr: 'HOM', roster: [] };
+    const away = { id: 'a1', abbr: 'AWY', roster: [] };
+    const leagueFixture = { id: 'test-league', week: 1, teams: [home, away] };
+
+    let result;
+    try {
+      result = simulateBatch([{ home, away }], { league: leagueFixture });
+    } catch (err) {
+      // SimulationError is the only acceptable non-return path
+      expect(err).toBeInstanceOf(SimulationError);
+      return;
     }
 
-    let state = { busy: true, simulating: true, error: null };
-    state = reduce(state, { type: toUI.ERROR, message: 'sim error' });
-    expect(state.busy).toBe(false);
+    // If it returned, the score must not be fabricated 0-0
+    expect(Array.isArray(result)).toBe(true);
+    const game = result[0];
+    expect(game.homeScore === 0 && game.awayScore === 0).toBe(false);
+  });
+});
 
-    // User triggers a retry — busy goes back to true, error clears
-    state = reduce(state, { type: 'RETRY_ADVANCE' });
-    expect(state.busy).toBe(true);
-    expect(state.error).toBeNull();
+// ── 4. Worker reducer: real workerReducer handles ERROR correctly ──────────────
+
+describe('Worker reducer: toUI.ERROR clears busy state', () => {
+  it('ERROR action sets busy to false', () => {
+    const next = workerReducer(
+      { ...INITIAL_WORKER_STATE, busy: true },
+      { type: toUI.ERROR, message: 'Game produced no scoring for HOM vs AWY in week 1.' },
+    );
+    expect(next.busy).toBe(false);
+  });
+
+  it('ERROR action sets simulating to false', () => {
+    const next = workerReducer(
+      { ...INITIAL_WORKER_STATE, simulating: true },
+      { type: toUI.ERROR, message: 'sim error' },
+    );
+    expect(next.simulating).toBe(false);
+  });
+
+  it('ERROR action sets error to the message string', () => {
+    const msg = 'Game produced no scoring for HOM vs AWY in week 1.';
+    const next = workerReducer(INITIAL_WORKER_STATE, { type: toUI.ERROR, message: msg });
+    expect(next.error).toBe(msg);
+  });
+
+  it('ERROR action with messageType updates lastWorkerMessageType', () => {
+    const next = workerReducer(INITIAL_WORKER_STATE, {
+      type: toUI.ERROR,
+      message: 'error',
+      messageType: 'ADVANCE_WEEK',
+    });
+    expect(next.lastWorkerMessageType).toBe('ADVANCE_WEEK');
+  });
+
+  it('FULL_STATE after ERROR clears busy and simulating (app not stuck)', () => {
+    const afterError = workerReducer(
+      { ...INITIAL_WORKER_STATE, busy: true, simulating: true },
+      { type: toUI.ERROR, message: 'sim error' },
+    );
+    expect(afterError.busy).toBe(false);
+    expect(afterError.simulating).toBe(false);
+
+    const recovered = workerReducer(afterError, {
+      type: toUI.FULL_STATE,
+      payload: { week: 2, teams: [] },
+    });
+    expect(recovered.busy).toBe(false);
+    expect(recovered.simulating).toBe(false);
+  });
+
+  it('STATE_UPDATE after ERROR clears busy (app not stuck)', () => {
+    const afterError = workerReducer(
+      { ...INITIAL_WORKER_STATE, busy: true, simulating: true },
+      { type: toUI.ERROR, message: 'sim error' },
+    );
+    const recovered = workerReducer(afterError, {
+      type: toUI.STATE_UPDATE,
+      payload: { week: 2 },
+    });
+    expect(recovered.busy).toBe(false);
   });
 });
