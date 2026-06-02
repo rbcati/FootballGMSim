@@ -296,10 +296,10 @@ describe('applyCoachingModifiers', () => {
     expect(result.sackChance).toBeGreaterThan(input.sackChance);
   });
 
-  it('COVER_2 HC → intChance is higher than input', () => {
-    const input  = { intChance: 1.0 };
+  it('COVER_2 HC → defIntChance is higher than input', () => {
+    const input  = { defIntChance: 1.0 };
     const result = applyCoachingModifiers(input, makeHC('BALANCED', 'COVER_2'), null);
-    expect(result.intChance).toBeGreaterThan(input.intChance);
+    expect(result.defIntChance).toBeGreaterThan(input.defIntChance);
   });
 
   it('preserves pre-existing non-philosophy mod keys', () => {
@@ -328,14 +328,14 @@ describe('applyCoachingModifiers', () => {
     expect(result.passAccuracy).toBeCloseTo(1.0, 5);
     expect(result.redZoneMod).toBeCloseTo(1.0, 5);
     expect(result.sackChance).toBeCloseTo(1.0, 5);
-    expect(result.intChance).toBeCloseTo(1.0, 5);
+    expect(result.defIntChance).toBeCloseTo(1.0, 5);
     expect(result.runStop).toBeCloseTo(1.0, 5);
   });
 
   it('full staff stack stays within [0.85, 1.15] on all output keys', () => {
     const staff = makeStaff('POWER_RUN', 'BLITZ_HEAVY', ['DISCIPLINARIAN', 'SCHEME_TEACHER'], 'POWER_RUN', 'BLITZ_HEAVY');
     const result = applyCoachingModifiers({}, staff.headCoach, staff);
-    for (const key of ['passVolume', 'runVolume', 'passAccuracy', 'redZoneMod', 'sackChance', 'intChance', 'runStop']) {
+    for (const key of ['passVolume', 'runVolume', 'passAccuracy', 'redZoneMod', 'sackChance', 'defIntChance', 'runStop']) {
       expect(result[key]).toBeGreaterThanOrEqual(0.85);
       expect(result[key]).toBeLessThanOrEqual(1.15);
     }
@@ -375,7 +375,7 @@ describe('coaching modifiers integration — modifier divergence test', () => {
    * that varies between the two teams.
    */
   it('run-first team mods have higher runVolume than pass-first team mods', () => {
-    const baseRatings = { passVolume: 1.0, runVolume: 1.0, passAccuracy: 1.0, sackChance: 1.0, intChance: 1.0 };
+    const baseRatings = { passVolume: 1.0, runVolume: 1.0, passAccuracy: 1.0, sackChance: 1.0, defIntChance: 1.0 };
 
     const runFirstStaff  = makeStaff('POWER_RUN', 'BALANCED', [], 'POWER_RUN');
     const passFirstStaff = makeStaff('SPREAD',    'BALANCED', [], 'SPREAD');
@@ -399,16 +399,16 @@ describe('coaching modifiers integration — modifier divergence test', () => {
   });
 
   it('defensive-minded team mods have higher sackChance than neutral team', () => {
-    const base = { sackChance: 1.0, intChance: 1.0 };
+    const base = { sackChance: 1.0, defIntChance: 1.0 };
     const blitzMods   = applyCoachingModifiers({ ...base }, makeHC('BALANCED', 'BLITZ_HEAVY'), null);
     const neutralMods = applyCoachingModifiers({ ...base }, makeHC('BALANCED', 'BALANCED'),   null);
     expect(blitzMods.sackChance).toBeGreaterThan(neutralMods.sackChance);
   });
 
-  it('coverage-heavy team mods have higher intChance than neutral team', () => {
-    const base = { intChance: 1.0 };
+  it('coverage-heavy team mods have higher defIntChance than neutral team', () => {
+    const base = { defIntChance: 1.0 };
     const coverageMods = applyCoachingModifiers({ ...base }, makeHC('BALANCED', 'COVER_2'), null);
     const neutralMods  = applyCoachingModifiers({ ...base }, makeHC('BALANCED', 'BALANCED'), null);
-    expect(coverageMods.intChance).toBeGreaterThan(neutralMods.intChance);
+    expect(coverageMods.defIntChance).toBeGreaterThan(neutralMods.defIntChance);
   });
 });

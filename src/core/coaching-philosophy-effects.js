@@ -328,12 +328,13 @@ export function getDevelopmentRateModifier(position, coach, staff) {
  * Does not mutate the original — returns a new object.
  *
  * Modifier key mapping:
- *   rushingMod  → mods.runVolume  (consumed by generateRBStats)
- *   passingMod  → mods.passVolume (consumed by generateQBStats)
+ *   rushingMod  → mods.runVolume    (consumed by generateRBStats)
+ *   passingMod  → mods.passVolume   (consumed by generateQBStats)
  *   tempoMod    → mods.passAccuracy (WEST_COAST / SCHEME_TEACHER tempo lift)
- *   pressureMod → mods.sackChance  (consumed by generateDLStats)
- *   coverageMod → mods.intChance   (consumed by generateDBStats)
- *   runStopMod  → mods.runStop     (stored for future DL run-stop math)
+ *   pressureMod → mods.sackChance   (consumed by generateDLStats)
+ *   coverageMod → mods.defIntChance (DB interceptions via generateDBStats;
+ *                                    drive turnovers via defMods.defIntChance)
+ *   runStopMod  → mods.runStop      (consumed by generateDLStats run-stop math)
  *
  * @param {object} teamRatings - the mods snapshot built by getCoachingMods()
  * @param {object} coach - HC object (team.staff.headCoach or team.coach)
@@ -357,8 +358,8 @@ export function applyCoachingModifiers(teamRatings, coach, staff) {
     runVolume:    (base.runVolume    ?? 1) * offMods.rushingMod,
     passAccuracy: (base.passAccuracy ?? 1) * offMods.tempoMod,
     redZoneMod:   (base.redZoneMod   ?? 1) * offMods.redZoneMod,
-    sackChance:   (base.sackChance   ?? 1) * defMods.pressureMod,
-    intChance:    (base.intChance    ?? 1) * defMods.coverageMod,
+    sackChance:   (base.sackChance    ?? 1) * defMods.pressureMod,
+    defIntChance: (base.defIntChance ?? 1) * defMods.coverageMod,
     runStop:      (base.runStop      ?? 1) * defMods.runStopMod,
   };
 }

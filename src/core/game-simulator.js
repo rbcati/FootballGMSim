@@ -1286,6 +1286,7 @@ function generateDBStats(db, offenseStrength, U, modifiers = {}) {
 
   let intChance = (coverage + awareness) / 200;
   if (modifiers.intChance) intChance *= modifiers.intChance;
+  if (modifiers.defIntChance) intChance *= modifiers.defIntChance;
   if (db.traits && db.traits.includes(TRAITS.BALLHAWK.id)) intChance *= 1.25;
 
   const interceptions = Math.max(0, Math.min(3, Math.round(intChance * 2 + U.rand(-0.5, 1.5))));
@@ -1317,7 +1318,7 @@ function generateDLStats(defender, offenseStrength, U, modifiers = {}) {
   const ratings = defender.ratings || {};
   const passRushPower = ratings.passRushPower || 70;
   const passRushSpeed = ratings.passRushSpeed || 70;
-  const runStop = ratings.runStop || 70;
+  const runStop = Math.min(99, (ratings.runStop || 70) * (modifiers.runStop ?? 1));
   const awareness = ratings.awareness || 70;
 
   // Performance variance - defensive players can have monster games too
