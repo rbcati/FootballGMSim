@@ -1035,7 +1035,7 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
   // NFL average: ~1.4 pass TD/game. Roughly 1 TD per ~150 passing yards.
   // Also factor in red zone efficiency
   const redZoneEff = (awareness + throwAccuracy) / 200;
-  const baseTDs = yards / 150 * (0.8 + redZoneEff * 0.6) * (modifiers.redZoneMod ?? 1.0);
+  const baseTDs = yards / 150 * (0.8 + redZoneEff * 0.6);
   const touchdowns = Math.max(0, Math.min(6,
     Math.round(baseTDs + U.rand(-0.5, 1.0))
   ));
@@ -1149,7 +1149,7 @@ function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers 
 
   // TDs: derived from rushing production, not from team score
   // NFL average: ~0.6 rush TD/game for lead back. ~1 TD per 80 rushing yards.
-  const rushTdRate = rushYd / 80 * (0.4 + (trucking - 50) * 0.005) * (modifiers.redZoneMod ?? 1.0);
+  const rushTdRate = rushYd / 80 * (0.4 + (trucking - 50) * 0.005);
   const touchdowns = Math.max(0, Math.min(4,
     Math.round(rushTdRate + U.rand(-0.3, 0.8))
   ));
@@ -2074,6 +2074,7 @@ export function simGameStats(home, away, options = {}) {
             let tdShare = 0.55 + rzFactor;
             if (mods.passVolume && mods.passVolume > 1.1) tdShare += 0.05;
             if (mods.runVolume && mods.runVolume > 1.1) tdShare -= 0.05;
+            if (mods.redZoneMod && mods.redZoneMod !== 1.0) tdShare *= mods.redZoneMod;
             tdShare = U.clamp(tdShare, 0.35, 0.75);
 
             // ── User Tendency: marginal drive-level influence ─────────────
