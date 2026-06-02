@@ -27,6 +27,39 @@ const priorityTone = {
   low: 'league',
 };
 
+// Every news type maps to a non-blank icon (with an accessible label).
+const NEWS_ICON = {
+  injury:    { icon: '🏥', label: 'injury' },
+  trade:     { icon: '🔄', label: 'trade' },
+  signing:   { icon: '✍️', label: 'signing' },
+  release:   { icon: '🚪', label: 'release' },
+  award:     { icon: '🏆', label: 'award' },
+  milestone: { icon: '⭐', label: 'milestone' },
+  narrative: { icon: '📰', label: 'narrative' },
+  default:   { icon: '📋', label: 'news' },
+};
+
+function resolveNewsIcon(item) {
+  const raw = String(item?.type ?? item?.category ?? '').toLowerCase();
+  if (raw.includes('injury')) return NEWS_ICON.injury;
+  if (raw.includes('trade')) return NEWS_ICON.trade;
+  if (raw.includes('sign')) return NEWS_ICON.signing;
+  if (raw.includes('release') || raw.includes('cut')) return NEWS_ICON.release;
+  if (raw.includes('award') || raw.includes('mvp') || raw.includes('pro_bowl') || raw.includes('honor')) return NEWS_ICON.award;
+  if (raw.includes('milestone') || raw.includes('record') || raw.includes('feat')) return NEWS_ICON.milestone;
+  if (raw.includes('narrative') || raw.includes('story') || raw.includes('result') || raw.includes('recap')) return NEWS_ICON.narrative;
+  return NEWS_ICON.default;
+}
+
+function NewsIcon({ item }) {
+  const { icon, label } = resolveNewsIcon(item);
+  return (
+    <span className="app-news-icon" role="img" aria-label={label} style={{ marginRight: 6 }}>
+      {icon}
+    </span>
+  );
+}
+
 function resolveNewsPlayer(playerOrId, league) {
   const playerId = getPlayerProfileId(playerOrId);
   if (!hasValidPlayerProfileId(playerId)) return { playerId: null, player: null, available: false };
@@ -67,7 +100,7 @@ function LeadStory({ item, league, onTeamSelect, onOpenBoxScore, onPlayerSelect 
   if (!item) return null;
   return (
     <SectionCard
-      title={item?.headline}
+      title={<><NewsIcon item={item} />{item?.headline}</>}
       subtitle={`Week ${item?.week ?? '-'} · ${item?.phase ?? 'season'}${item?._teamRelevant ? ' · Your team context' : ''}`}
       variant="info"
       actions={(
@@ -87,7 +120,7 @@ function StoryRow({ item, league, onTeamSelect, onOpenBoxScore, onPlayerSelect }
   if (!item) return null;
   return (
     <CompactListRow
-      title={item?.headline}
+      title={<><NewsIcon item={item} />{item?.headline}</>}
       subtitle={item?.body}
       meta={(
         <div className="app-news-row-meta">
@@ -115,10 +148,44 @@ function NewsSection({ title, subtitle, stories, league, ...handlers }) {
   );
 }
 
-export default function NewsFeed({ league, mode = 'full', segment = 'all', onTeamSelect, onOpenBoxScore, onPlayerSelect, onNavigate }) {
+export default function NewsFeed({ league, actions, mode = 'full', segment = 'all', onTeamSelect, onOpenBoxScore, onPlayerSelect, onNavigate }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [filter, setFilter] = useState(segment);
-  const desk = useMemo(() => buildNewsDeskModel(league, { segment: filter }), [league, filter]);
+
+  // News is read through the worker (the UI never touches IndexedDB directly).
+  const leagueId = league?.id ?? league?.seasonId ?? league?.year ?? null;
+  const [workerNews, setWorkerNews] = useState(null);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [newsError, setNewsError] = useState(null);
+
+  useEffect(() => {
+    if (typeof actions?.getNews !== 'function') return undefined;
+    let cancelled = false;
+    setNewsLoading(true);
+    setNewsError(null);
+    actions.getNews(10)
+      .then((items) => {
+        if (cancelled) return;
+        setWorkerNews(Array.isArray(items) ? items : []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('[NewsFeed] getNews failed:', err);
+        setNewsError('Unable to load news');
+      })
+      .finally(() => {
+        if (!cancelled) setNewsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [actions, leagueId]);
+
+  // Prefer worker-sourced news when available; otherwise fall back to the league
+  // view-model slice already provided by the worker (keeps tests/ticker working).
+  const deskLeague = useMemo(
+    () => (workerNews ? { ...league, newsItems: workerNews } : league),
+    [league, workerNews],
+  );
+  const desk = useMemo(() => buildNewsDeskModel(deskLeague, { segment: filter }), [deskLeague, filter]);
   const userTeam = league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
   const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
   const pressure = useMemo(() => deriveFranchisePressure(league, { intel: teamIntel }), [league, teamIntel]);
@@ -157,6 +224,24 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all', onTea
 
   return (
     <div className="app-screen-stack">
+      {newsError ? (
+        <div
+          role="alert"
+          style={{ background: '#dc2626', color: '#ffffff', padding: '10px 14px', borderRadius: 8, fontWeight: 600 }}
+        >
+          {newsError}
+        </div>
+      ) : null}
+      {newsLoading && !workerNews ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
+          <span
+            className="animate-spin"
+            role="status"
+            aria-label="Loading news"
+            style={{ width: 28, height: 28, border: '3px solid #334155', borderTopColor: '#f59e0b', borderRadius: '50%', display: 'inline-block' }}
+          />
+        </div>
+      ) : null}
       <HeroCard
         eyebrow="Weekly Intelligence"
         title="News & Injuries"
