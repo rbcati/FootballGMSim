@@ -1151,6 +1151,7 @@ export default function LeagueDashboard({
             <Draft
               league={league}
               actions={actions}
+              busy={busy}
               onNavigate={setActiveTab}
               onPlayerSelect={handlePlayerSelect}
             />
