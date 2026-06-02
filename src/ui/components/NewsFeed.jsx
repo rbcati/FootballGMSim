@@ -28,7 +28,7 @@ const priorityTone = {
 };
 
 // Every news type maps to a non-blank icon (with an accessible label).
-const NEWS_ICON = {
+export const NEWS_ICON = {
   injury:    { icon: '🏥', label: 'injury' },
   trade:     { icon: '🔄', label: 'trade' },
   signing:   { icon: '✍️', label: 'signing' },
@@ -39,7 +39,7 @@ const NEWS_ICON = {
   default:   { icon: '📋', label: 'news' },
 };
 
-function resolveNewsIcon(item) {
+export function resolveNewsIcon(item) {
   const raw = String(item?.type ?? item?.category ?? '').toLowerCase();
   if (raw.includes('injury')) return NEWS_ICON.injury;
   if (raw.includes('trade')) return NEWS_ICON.trade;
@@ -177,7 +177,7 @@ export default function NewsFeed({ league, actions, mode = 'full', segment = 'al
         if (!cancelled) setNewsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [actions, leagueId]);
+  }, [actions, leagueId, league?.week, league?.phase, league?.season, league?.newsItems?.length]);
 
   // Prefer worker-sourced news when available; otherwise fall back to the league
   // view-model slice already provided by the worker (keeps tests/ticker working).

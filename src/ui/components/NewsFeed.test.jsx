@@ -1,7 +1,9 @@
+/** @vitest-environment jsdom */
 import React from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
-import NewsFeed from './NewsFeed.jsx';
+import { act, cleanup, render } from '@testing-library/react';
+import NewsFeed, { NEWS_ICON, resolveNewsIcon } from './NewsFeed.jsx';
 
 const league = {
   week: 7,
@@ -15,6 +17,10 @@ const league = {
     { id: 'n4', headline: 'Rookie on injury report', body: 'Day-to-day with hamstring tightness.', priority: 'low', week: 7, phase: 'regular', playerId: 55, category: 'injury' },
   ],
 };
+
+beforeEach(() => {
+  cleanup();
+});
 
 describe('NewsFeed', () => {
   it('renders premium desk sections with featured story and CTA buttons', () => {
@@ -75,5 +81,124 @@ describe('NewsFeed', () => {
     );
 
     expect(html).toContain('No news yet.');
+  });
+});
+
+// ── Worker-news regression tests ─────────────────────────────────────────────
+
+describe('NewsFeed worker-news refresh', () => {
+  const workerItem = { id: 'wn1', headline: 'Worker headline', body: 'From worker.', priority: 'high', week: 7, phase: 'regular', category: 'major_result' };
+  const freshItem  = { id: 'wn2', headline: 'Fresh after advance', body: 'New week.', priority: 'medium', week: 8, phase: 'regular', category: 'major_result' };
+
+  it('renders worker-fetched news on initial mount', async () => {
+    const getNews = vi.fn().mockResolvedValue([workerItem]);
+
+    const { container } = render(
+      <NewsFeed league={{ ...league, newsItems: [] }} actions={{ getNews }} onNavigate={() => {}} />,
+    );
+
+    await act(async () => {});
+
+    expect(getNews).toHaveBeenCalledWith(10);
+    expect(container.textContent).toContain('Worker headline');
+  });
+
+  it('refetches and shows updated headlines when league.week advances', async () => {
+    const getNews = vi.fn()
+      .mockResolvedValueOnce([workerItem])
+      .mockResolvedValueOnce([freshItem]);
+
+    const baseLeague = { ...league, week: 7, newsItems: [workerItem] };
+
+    const { rerender, container } = render(
+      <NewsFeed league={baseLeague} actions={{ getNews }} onNavigate={() => {}} />,
+    );
+    await act(async () => {});
+    expect(container.textContent).toContain('Worker headline');
+
+    await act(async () => {
+      rerender(
+        <NewsFeed
+          league={{ ...baseLeague, week: 8, newsItems: [workerItem, freshItem] }}
+          actions={{ getNews }}
+          onNavigate={() => {}}
+        />,
+      );
+    });
+
+    expect(getNews).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('Fresh after advance');
+  });
+
+  it('shows league.newsItems when workerNews snapshot is not yet available', () => {
+    // No actions prop → workerNews stays null → league.newsItems surface immediately.
+    const leagueItem = { id: 'li1', headline: 'League-state headline', body: '.', priority: 'medium', week: 7, phase: 'regular', category: 'team' };
+    const html = renderToString(
+      <NewsFeed league={{ ...league, newsItems: [leagueItem] }} onNavigate={() => {}} />,
+    );
+    expect(html).toContain('League-state headline');
+  });
+
+  it('renders loading spinner while getNews is pending', async () => {
+    let resolveGetNews;
+    const getNews = vi.fn(() => new Promise((r) => { resolveGetNews = r; }));
+
+    const { getByRole } = render(
+      <NewsFeed league={{ ...league, newsItems: [] }} actions={{ getNews }} onNavigate={() => {}} />,
+    );
+
+    // Spinner should be visible before the fetch resolves
+    expect(getByRole('status')).toBeTruthy();
+
+    await act(async () => { resolveGetNews([]); });
+  });
+
+  it('renders error banner when getNews rejects', async () => {
+    const getNews = vi.fn().mockRejectedValue(new Error('Network error'));
+
+    const { getByRole } = render(
+      <NewsFeed league={{ ...league, newsItems: [] }} actions={{ getNews }} onNavigate={() => {}} />,
+    );
+
+    await act(async () => {});
+
+    const alert = getByRole('alert');
+    expect(alert).toBeTruthy();
+    expect(alert.textContent).toContain('Unable to load news');
+  });
+});
+
+// ── NEWS_ICON / resolveNewsIcon unit tests ────────────────────────────────────
+
+describe('resolveNewsIcon', () => {
+  it('every built-in type maps to a non-empty icon string with a label', () => {
+    const supported = ['injury', 'trade', 'signing', 'release', 'award', 'milestone', 'narrative', 'default'];
+    for (const key of supported) {
+      const { icon, label } = NEWS_ICON[key];
+      expect(icon.trim()).not.toBe('');
+      expect(label.trim()).not.toBe('');
+    }
+  });
+
+  it('resolves injury type items to the injury icon', () => {
+    expect(resolveNewsIcon({ type: 'injury' })).toBe(NEWS_ICON.injury);
+    expect(resolveNewsIcon({ category: 'player_injury' })).toBe(NEWS_ICON.injury);
+  });
+
+  it('resolves trade type items to the trade icon', () => {
+    expect(resolveNewsIcon({ type: 'trade_completed' })).toBe(NEWS_ICON.trade);
+  });
+
+  it('resolves signing/release/award/milestone/narrative types correctly', () => {
+    expect(resolveNewsIcon({ type: 'signing' })).toBe(NEWS_ICON.signing);
+    expect(resolveNewsIcon({ type: 'release' })).toBe(NEWS_ICON.release);
+    expect(resolveNewsIcon({ type: 'award' })).toBe(NEWS_ICON.award);
+    expect(resolveNewsIcon({ type: 'milestone' })).toBe(NEWS_ICON.milestone);
+    expect(resolveNewsIcon({ type: 'narrative' })).toBe(NEWS_ICON.narrative);
+  });
+
+  it('falls back to the default icon for unknown types', () => {
+    expect(resolveNewsIcon({ type: 'unknown_xyz' })).toBe(NEWS_ICON.default);
+    expect(resolveNewsIcon(null)).toBe(NEWS_ICON.default);
   });
 });
