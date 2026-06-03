@@ -37,7 +37,9 @@ const actions = {
 
 describe('PlayerProfile', () => {
   beforeEach(() => {
-    global.IntersectionObserver = vi.fn(() => ({ observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() }));
+    // vitest 4: Mock now calls `new impl()` for constructor mocks; arrow functions
+    // cannot be constructors, so use a regular function here.
+    global.IntersectionObserver = vi.fn(function () { return { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() }; });
   });
   afterEach(() => cleanup());
   it('renders safe unavailable state when no player id is provided', () => {
