@@ -15,6 +15,7 @@ import PlayerProfileModalBoundary from "./PlayerProfileModalBoundary.jsx";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
+import { prepareDraftView } from "../../views/draftView.js";
 import { useDraftState } from "../draft/useDraftState.js";
 import DraftControls from "../draft/DraftControls.jsx";
 import ProspectTable from "../draft/ProspectTable.jsx";
@@ -43,6 +44,10 @@ export default function Draft({ league, actions, onNavigate = null, busy = false
     handleDraftPlayer,
   } = useDraftState({ league, actions });
 
+  // Views layer: the screen consumes a prepared view-model instead of reading
+  // raw league state directly (ZenGM worker/views pattern).
+  const draftView = prepareDraftView(league);
+
   const actionsDisabled = isLoading || busy;
 
   return (
@@ -59,7 +64,7 @@ export default function Draft({ league, actions, onNavigate = null, busy = false
       />
 
       {/* Pre-draft: no draft started yet */}
-      {!isLoading && !draftState && league?.phase !== "draft" && (
+      {!isLoading && !draftState && !draftView.isDraftPhase && (
         <PreDraftPanel
           league={league}
           actions={actions}
@@ -69,21 +74,21 @@ export default function Draft({ league, actions, onNavigate = null, busy = false
       )}
 
       {/* Draft phase recovery: entered draft but state is missing/unhydrated */}
-      {!isLoading && !draftState && league?.phase === "draft" && (
+      {!isLoading && !draftState && draftView.isDraftPhase && (
         <Card className="card-premium">
           <CardHeader>
             <CardTitle>Draft data is still initializing</CardTitle>
           </CardHeader>
           <CardContent style={{ display: "grid", gap: "var(--space-3)" }}>
             <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
-              {league?.draftLifecycleStatus === "not_generated"
+              {draftView.isDraftGenerationPending
                 ? "Draft generation is pending. Starting draft setup now."
                 : "The draft is active, but board data has not been hydrated yet. Retry loading or return to League HQ."}
             </div>
             <div style={{ display: "flex", gap: "var(--space-2)" }}>
               <Button className="btn" disabled={actionsDisabled} onClick={loadDraftState}>Retry Draft Load</Button>
-              <Button className="btn btn-secondary" onClick={() => onNavigate?.(league?.phase === "draft" ? "HQ" : "League")}>
-                Return to {league?.phase === "draft" ? "HQ" : "League"}
+              <Button className="btn btn-secondary" onClick={() => onNavigate?.(draftView.returnDestination)}>
+                Return to {draftView.returnLabel}
               </Button>
             </div>
           </CardContent>
@@ -94,7 +99,7 @@ export default function Draft({ league, actions, onNavigate = null, busy = false
       {!isLoading && draftState && !draftState.isDraftComplete && (
         <ProspectTable
           draftState={enrichedDraftState}
-          userTeamId={league?.userTeamId}
+          userTeamId={draftView.userTeamId}
           onSimToMyPick={handleSimToMyPick}
           onDraftPlayer={handleDraftPlayer}
           onPlayerClick={setProfilePlayerId}
