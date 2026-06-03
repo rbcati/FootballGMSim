@@ -5,6 +5,7 @@ import {
   getQuarterClockMinutes,
   isHalfExpired,
   isOvertimeGameOver,
+  decideLateGameSequence,
 } from '../../simulation/clockManager.js';
 
 describe('clockManager clock/half logic', () => {
@@ -21,6 +22,18 @@ describe('clockManager clock/half logic', () => {
     expect(computeQuarter(lastDriveOfHalf, totalDrives)).toBe(2);
     expect(isHalfExpired(lastDriveOfHalf, totalDrives)).toBe(true);
     expect(isHalfExpired(0, totalDrives)).toBe(false);
+  });
+
+  it('go-for-2 triggers inside 2 minutes when down 2, not at 600s', () => {
+    const base = { quarter: 4, scoreDiff: -2, down: 1, distance: 10, yardLine: 50, timeouts: 3 };
+    // 600s (10 min left) — should NOT go for 2; the old threshold was wrong
+    expect(decideLateGameSequence({ ...base, clockSeconds: 600 }).goForTwo).toBe(false);
+    // 90s (inside 2 min) — should go for 2
+    expect(decideLateGameSequence({ ...base, clockSeconds: 90 }).goForTwo).toBe(true);
+    // Exactly at the threshold boundary (120s) — should go for 2
+    expect(decideLateGameSequence({ ...base, clockSeconds: 119 }).goForTwo).toBe(true);
+    // Just above the threshold — should NOT go for 2
+    expect(decideLateGameSequence({ ...base, clockSeconds: 120 }).goForTwo).toBe(false);
   });
 
   it('decides end-of-game from overtime possession pairs', () => {
