@@ -19,7 +19,14 @@
 import { useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
 import { __invalidateStableRouteRequestCache } from "./useStableRouteRequest.js";
 import { buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
-import { toWorker, toUI, send as buildMsg } from '../../worker/protocol.js';
+import {
+  toWorker,
+  toUI,
+  buildMessage as buildMsg,
+  WorkerMessages,
+  withRequestId,
+  handleWorkerMessage,
+} from '../../worker/workerApi.js';
 import { applyLeagueDelta } from '../../worker/serialization.js';
 
 const WORKER_REQUEST_TIMEOUT_MS = 20000;
@@ -303,11 +310,15 @@ export function useWorker() {
 
       dispatch({ type: 'WORKER_MESSAGE', messageType: type });
 
-      // Then update React state
+      // Result-routing for straightforward result messages is owned by workerApi.
+      // Stateful messages (epoch/boot-scope guards, manifest persistence, reload)
+      // fall through to the switch below.
+      if (handleWorkerMessage({ type, payload, requestId: id }, dispatch)) {
+        return;
+      }
+
+      // Then update React state (stateful cases only)
       switch (type) {
-        case toUI.READY:
-          dispatch({ type: 'WORKER_READY', hasSave: payload.hasSave, messageType: type });
-          break;
         case toUI.FULL_STATE:
           if (!shouldAcceptBootScopedPayload(payload, activeBootRequestIdRef.current, ignoredBootRequestIdsRef.current)) {
             break;
@@ -326,93 +337,29 @@ export function useWorker() {
           break;
         case toUI.STATE_UPDATE: {
           if (!hasFullStateBaselineRef.current) {
-            worker.postMessage(buildMsg(toWorker.REQUEST_FULL_STATE));
+            worker.postMessage(withRequestId(buildMsg(toWorker.REQUEST_FULL_STATE)));
             break;
           }
           // Stale-epoch guard: drop STATE_UPDATE packets whose epoch pre-dates the
           // last accepted FULL_STATE baseline.  Triggers a fresh-state request so
           // the UI recovers to a consistent snapshot without any rollback risk.
           if (!shouldAcceptStateUpdate(payload, lastAcceptedEpochRef.current)) {
-            worker.postMessage(buildMsg(toWorker.REQUEST_FULL_STATE));
+            worker.postMessage(withRequestId(buildMsg(toWorker.REQUEST_FULL_STATE)));
             break;
           }
           const merged = applyLeagueDelta(leagueRef.current ?? {}, payload);
           if (merged?._requiresFullState) {
-            worker.postMessage(buildMsg(toWorker.REQUEST_FULL_STATE));
+            worker.postMessage(withRequestId(buildMsg(toWorker.REQUEST_FULL_STATE)));
             break;
           }
           dispatch({ type: 'STATE_UPDATE', payload: merged, messageType: type });
           break;
         }
-        case toUI.PROMPT_USER_GAME:
-          dispatch({ type: 'PROMPT_USER_GAME' });
-          break;
-        case toUI.PLAY_LOGS:
-          dispatch({ type: 'PLAY_LOGS', logs: payload.logs, liveStats: payload.liveStats, gameReasoningFlags: payload.gameReasoningFlags });
-          break;
-        case toUI.SIM_PROGRESS:
-          dispatch({ type: 'SIM_PROGRESS', done: payload.done, total: payload.total });
-          break;
-        case toUI.WEEK_COMPLETE:
-          dispatch({
-            type:       'WEEK_COMPLETE',
-            week:       payload.week,
-            results:    payload.results,
-            nextWeek:   payload.nextWeek,
-            phase:      payload.phase,
-            standings:  payload.standings,
-          });
-          break;
-        case toUI.OFFSEASON_PHASE:
-          // Phase-change signal (e.g. offseason_resign→FA, FA→draft).
-          // Merge the new phase into league state so the UI can gate on it.
-          if (payload.phase) {
-            dispatch({ type: 'STATE_UPDATE', payload: { phase: payload.phase } });
-          }
-          dispatch({ type: 'CLEAR_RESULTS' });
-          if (payload.message) {
-            dispatch({ type: 'NOTIFY', level: 'info', message: payload.message });
-          }
-          break;
-        case toUI.SEASON_START:
-          // Force the league state to reflect the new season.
-          // The FULL_STATE that follows will have the complete data,
-          // but this ensures the UI immediately recognises the phase change
-          // and can switch tabs (e.g. back to Standings).
-          dispatch({
-            type: 'STATE_UPDATE',
-            payload: {
-              week:  payload.week  ?? 1,
-              phase: payload.phase ?? 'preseason',
-              year:  payload.year,
-            },
-          });
-          dispatch({ type: 'CLEAR_RESULTS' });
-          break;
-        case toUI.DRAFT_TRADE_OFFER:
-          // AI trade-up proposal during draft — store in state for Draft UI to show
-          dispatch({ type: 'DRAFT_TRADE_OFFER', proposal: payload.proposal });
-          break;
-        case toUI.SAVED:
-          dispatch({ type: 'IDLE' });
-          break;
         case toUI.ERROR:
           if (!shouldAcceptBootScopedPayload(payload, activeBootRequestIdRef.current, ignoredBootRequestIdsRef.current)) {
             break;
           }
           dispatch({ type: 'ERROR', message: payload.message, messageType: type });
-          break;
-        case toUI.SIM_BATCH_PROGRESS:
-          dispatch({ type: 'BATCH_SIM_PROGRESS', currentWeek: payload.currentWeek, phase: payload.phase });
-          break;
-        case toUI.SIM_BATCH_STATUS:
-          dispatch({ type: 'BATCH_SIM_STATUS', status: payload.status, targetPhase: payload.targetPhase, stage: payload.stage });
-          break;
-        case toUI.GAME_EVENT:
-          dispatch({ type: 'GAME_EVENT', event: payload });
-          break;
-        case toUI.NOTIFICATION:
-          dispatch({ type: 'NOTIFY', level: payload.level, message: payload.message, retryable: payload.retryable ?? false });
           break;
         case toUI.RELOAD_REQUIRED:
           // The IDB was blocked or version-changed — a page reload is the only
@@ -422,7 +369,7 @@ export function useWorker() {
           dispatch({ type: 'NOTIFY', level: 'warn', message: 'Database conflict detected — reloading to recover…' });
           setTimeout(() => window.location.reload(), 2000);
           break;
-        case 'SAVE_MANIFEST_UPDATE':
+        case WorkerMessages.SAVE_MANIFEST_UPDATE:
           // Mirror save metadata to localStorage so iOS Safari can recover the
           // save list even if IndexedDB is wiped while the app is backgrounded.
           try {
@@ -433,7 +380,7 @@ export function useWorker() {
             localStorage.setItem('gmsim_save_manifest', JSON.stringify(existing));
           } catch (_e) { /* non-fatal */ }
           break;
-        case 'SAVE_MANIFEST_REMOVE':
+        case WorkerMessages.SAVE_MANIFEST_REMOVE:
           try {
             const existing = JSON.parse(localStorage.getItem('gmsim_save_manifest') || '[]');
             localStorage.setItem(
@@ -442,7 +389,7 @@ export function useWorker() {
             );
           } catch (_e) { /* non-fatal */ }
           break;
-        case 'SAVE_MANIFEST_REPLACE':
+        case WorkerMessages.SAVE_MANIFEST_REPLACE:
           try {
             const next = Array.isArray(payload?.saves) ? payload.saves : [];
             localStorage.setItem('gmsim_save_manifest', JSON.stringify(next));
@@ -461,7 +408,7 @@ export function useWorker() {
     };
 
     // Kick off initialization
-    worker.postMessage(buildMsg(toWorker.INIT));
+    worker.postMessage(withRequestId(buildMsg(toWorker.INIT)));
 
     return () => {
       const depthSave = depthChartSaveRef.current;
@@ -479,7 +426,7 @@ export function useWorker() {
   const send = useCallback((type, payload = {}) => {
     if (!workerRef.current) return;
     dispatch({ type: 'BUSY' });
-    workerRef.current.postMessage(buildMsg(type, payload));
+    workerRef.current.postMessage(withRequestId(buildMsg(type, payload)));
   }, []);
 
   // ── request (returns a Promise resolved on worker reply) ──────────────────
@@ -491,7 +438,7 @@ export function useWorker() {
         reject(new Error('Worker not ready'));
         return;
       }
-      const msg = buildMsg(type, payload);
+      const msg = withRequestId(buildMsg(type, payload));
       const effectiveTimeout = Number(timeoutMs) || WORKER_TIMEOUT_BY_TYPE[type] || WORKER_REQUEST_TIMEOUT_MS;
       const timeoutId = setTimeout(() => {
         if (!pendingRef.current.has(msg.id)) return;
@@ -585,7 +532,7 @@ export function useWorker() {
     /** Simulate the current week. */
     advanceWeek: (options = {}) => {
       dispatch({ type: 'SIM_START' });
-      send(toWorker.ADVANCE_WEEK, options);
+      send(WorkerMessages.ADVANCE_WEEK, options);
     },
 
     /** Fast-forward to a specific week. */

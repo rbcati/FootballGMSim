@@ -48,15 +48,16 @@ export function getQuarterClockMinutes(driveInQuarter, drivesInQuarter) {
 }
 
 /**
- * True when the half has run out of clock for the given drive — i.e. the last
- * drive of quarter 2 or quarter 4 has the quarter clock at zero.
+ * True when the given drive is the final drive of a half — i.e. the last drive
+ * of quarter 2 or quarter 4, when the quarter clock has wound down to its
+ * minimum. (Per-drive clock derivation reaches its low on the last in-quarter
+ * drive; it hits exactly 0 only at the quarter boundary.)
  */
 export function isHalfExpired(driveIndex, totalDrives) {
   const quarter = computeQuarter(driveIndex, totalDrives);
   if (quarter !== 2 && quarter !== 4) return false;
   const perQtr = drivesPerQuarter(totalDrives);
-  const driveInQuarter = driveIndex % perQtr;
-  return getQuarterClockMinutes(driveInQuarter, perQtr) === 0;
+  return (driveIndex % perQtr) === perQtr - 1;
 }
 
 export function calculateMomentumSwing({
