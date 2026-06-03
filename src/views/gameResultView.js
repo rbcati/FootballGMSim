@@ -48,13 +48,18 @@ function highlightsFor(rows, teamAbbr) {
 /**
  * @param {object} state - a committed game-result object
  * @returns {{
- *   gameId: any, isPlayoff: boolean, week: any, year: any,
- *   home: object, away: object,
- *   boxScore: { home: Array, away: Array },
+ *   gameId: any,
+ *   isPlayoff: boolean,
+ *   week: any,
+ *   year: any,
+ *   home: { id:any, name:string|null, abbr:string, score:number, won:boolean },
+ *   away: { id:any, name:string|null, abbr:string, score:number, won:boolean },
+ *   boxScore: { home: Array<{playerId:any, name:string, pos:string, stats:object}>, away: Array<{playerId:any, name:string, pos:string, stats:object}> },
  *   teamStats: object|null,
  *   playLog: Array,
  *   scoringSummary: Array,
- *   highlights: Array,
+ *   quarterScores: object|null,
+ *   highlights: Array<{playerId:any, name:string, teamAbbr:string, line:string}>,
  *   recapText: string|null,
  * }}
  */

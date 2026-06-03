@@ -46,9 +46,9 @@ const byRecord = (a, b) => {
  *   otherwise `teams`)
  * @returns {{
  *   userTeamId: any,
- *   divisions: Array<{ conf:any, div:any, teams:Array }>,
- *   conferences: Array<{ conf:any, teams:Array }>,
- *   playoffPicture: Array<{ conf:any, seeds:Array }>,
+ *   divisions: Array<{ conf:any, div:any, teams:Array<object> }>,     // sorted by win% → pointDiff → ptsFor
+ *   conferences: Array<{ conf:any, teams:Array<object> }>,           // full conference standings
+ *   playoffPicture: Array<{ conf:any, seeds:Array<object> }>,        // up to 7 seeds per conf, division winners first
  * }}
  */
 export function prepareStandingsView(state) {

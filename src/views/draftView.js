@@ -12,13 +12,13 @@
 /**
  * @param {object} state - the raw league state (or relevant slice)
  * @returns {{
- *   phase: string|null,
- *   isDraftPhase: boolean,
- *   draftLifecycleStatus: string|null,
- *   isDraftGenerationPending: boolean,
- *   userTeamId: (number|string|null),
- *   returnDestination: ('HQ'|'League'),
- *   returnLabel: ('HQ'|'League'),
+ *   phase: string|null,                        // current league phase key
+ *   isDraftPhase: boolean,                     // true when phase === 'draft'
+ *   draftLifecycleStatus: string|null,         // 'not_generated' | 'generated' | null
+ *   isDraftGenerationPending: boolean,         // true when status === 'not_generated'
+ *   userTeamId: (number|string|null),          // id of the human-controlled team
+ *   returnDestination: ('HQ'|'League'),        // target for the back-navigation button
+ *   returnLabel: ('HQ'|'League'),              // display label matching returnDestination
  * }}
  */
 export function prepareDraftView(state) {
