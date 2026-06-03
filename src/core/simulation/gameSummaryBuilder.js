@@ -4,21 +4,11 @@
  * Owns the assembly of presentation-shaped game data: per-player box scores,
  * canonical team-side stat totals, the box-score stat normalizer (alias
  * resolution + derived fields), and post-game narrative callbacks.
- *
- * Self-contained: a private passer-rating helper keeps it from importing a
- * sibling module. All functions are pure (return new objects).
+ * All functions are pure (return new objects).
  */
 
 import { Utils as U } from '../utils.js';
-
-function passerRating({ comp = 0, att = 0, yds = 0, td = 0, ints = 0 } = {}) {
-  if (att <= 0) return 0;
-  const a = U.clamp(((comp / att) - 0.3) * 5, 0, 2.375);
-  const b = U.clamp(((yds / att) - 3) * 0.25, 0, 2.375);
-  const c = U.clamp((td / att) * 20, 0, 2.375);
-  const d = U.clamp(2.375 - ((ints / att) * 25), 0, 2.375);
-  return U.round(((a + b + c + d) / 6) * 100, 1);
-}
+import { passerRating } from './mathHelpers.js';
 
 /**
  * Generates post-game narrative callbacks from pre-game context + actual stats.
