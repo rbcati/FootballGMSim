@@ -89,7 +89,7 @@ export function decideLateGameSequence({
   const trailing = scoreDiff < 0;
   const leading = scoreDiff > 0;
 
-  const goForTwo = inLateGame && ((scoreDiff === -2 && clockSeconds < 600) || (insideTwoMinutes && Math.abs(scoreDiff) === 1));
+  const goForTwo = inLateGame && ((scoreDiff === -2 && clockSeconds < 120) || (insideTwoMinutes && Math.abs(scoreDiff) === 1));
   const conservativeTimeout = timeouts > 0 && leading && quarter >= 4 && clockSeconds < 80;
   const aggressiveTimeout = timeouts > 0 && trailing && quarter >= 4 && clockSeconds < 180;
 

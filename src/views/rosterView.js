@@ -28,9 +28,9 @@ function depthOrder(player) {
  * @returns {{
  *   teamId: (number|string|null),
  *   teamName: string|null,
- *   players: Array,
- *   depthChart: Object<string, Array>,
- *   positionCounts: Object<string, number>,
+ *   players: Array<{id:any, name:string, pos:string, ovr:number, age:number, capHit:number, injured:boolean, depthOrder:number}>,
+ *   depthChart: Object<string, Array>,         // position → players sorted by depthOrder then OVR
+ *   positionCounts: Object<string, number>,   // position → player count
  *   capSummary: { capTotal:number, capUsed:number, capSpace:number, contractCount:number },
  * }}
  */

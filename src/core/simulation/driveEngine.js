@@ -5,12 +5,14 @@
  * drive-level score generator (`buildDriveBasedSummary`) that produces the
  * authoritative homeScore / awayScore for a game.
  *
- * Self-contained: the seeded RNG (mulberry32) and passer-rating helper are kept
- * private to this module so it never imports a sibling module and the
- * deterministic seed stream is reproduced byte-for-byte.
+ * The seeded RNG (mulberry32) is kept private to this module so no import can
+ * disturb the deterministic PRNG stream. passerRating is imported from
+ * mathHelpers.js — it is called only after all rng() draws complete, so the
+ * stream is unaffected.
  */
 
 import { Utils as U } from '../utils.js';
+import { passerRating } from './mathHelpers.js';
 
 function hashStringToSeed(input = '') {
   let hash = 2166136261;
@@ -29,15 +31,6 @@ function mulberry32(seed) {
     r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
     return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function passerRating({ comp = 0, att = 0, yds = 0, td = 0, ints = 0 } = {}) {
-  if (att <= 0) return null;
-  const a = U.clamp(((comp / att) - 0.3) * 5, 0, 2.375);
-  const b = U.clamp(((yds / att) - 3) * 0.25, 0, 2.375);
-  const c = U.clamp((td / att) * 20, 0, 2.375);
-  const d = U.clamp(2.375 - ((ints / att) * 25), 0, 2.375);
-  return U.round(((a + b + c + d) / 6) * 100, 1);
 }
 
 /**
@@ -109,8 +102,9 @@ export function buildDriveBasedSummary({
   const homeNetEdge = U.clamp(homeStrategicEdge - awayStrategicEdge, -0.05, 0.05);
   const awayNetEdge = U.clamp(awayStrategicEdge - homeStrategicEdge, -0.05, 0.05);
 
-  const homeDrives = randInt(10, 14);
-  const awayDrives = randInt(10, 14);
+  const totalDrives = randInt(20, 26);
+  const homeDrives = Math.round(totalDrives / 2) + randInt(-1, 1);
+  const awayDrives = totalDrives - homeDrives;
   const homeStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0 };
   const awayStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0 };
 
@@ -160,6 +154,8 @@ export function buildDriveBasedSummary({
     seed,
     homeScore,
     awayScore,
+    homeDrives,
+    awayDrives,
     homeStats: { ...homeStats, qbRating: homeQbRating, rushYPC: homeYpc },
     awayStats: { ...awayStats, qbRating: awayQbRating, rushYPC: awayYpc },
   };
