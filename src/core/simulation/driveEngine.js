@@ -1,0 +1,166 @@
+/*
+ * Drive Engine Domain Module
+ * ──────────────────────────
+ * Owns the down-and-distance state machine and the deterministic, seeded
+ * drive-level score generator (`buildDriveBasedSummary`) that produces the
+ * authoritative homeScore / awayScore for a game.
+ *
+ * Self-contained: the seeded RNG (mulberry32) and passer-rating helper are kept
+ * private to this module so it never imports a sibling module and the
+ * deterministic seed stream is reproduced byte-for-byte.
+ */
+
+import { Utils as U } from '../utils.js';
+
+function hashStringToSeed(input = '') {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function mulberry32(seed) {
+  let t = seed >>> 0;
+  return () => {
+    t = (t + 0x6D2B79F5) | 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function passerRating({ comp = 0, att = 0, yds = 0, td = 0, ints = 0 } = {}) {
+  if (att <= 0) return null;
+  const a = U.clamp(((comp / att) - 0.3) * 5, 0, 2.375);
+  const b = U.clamp(((yds / att) - 3) * 0.25, 0, 2.375);
+  const c = U.clamp((td / att) * 20, 0, 2.375);
+  const d = U.clamp(2.375 - ((ints / att) * 25), 0, 2.375);
+  return U.round(((a + b + c + d) / 6) * 100, 1);
+}
+
+/**
+ * Advance the down-and-distance state by a single play's net gain.
+ *
+ * Pure: returns a NEW state object plus terminal flags; the caller decides what
+ * to do with a turnover-on-downs or touchdown. Mirrors the legacy inline logic
+ * (`yardsToGo -= max(0,gain)`; first down resets down/distance) used inside the
+ * live play-by-play loop, with the field-position clamp applied identically.
+ *
+ * @param {{down:number, distance:number, yardLine:number}} state
+ * @param {number} gain - net yards on the play
+ * @returns {{down:number, distance:number, yardLine:number,
+ *            firstDown:boolean, touchdown:boolean, turnoverOnDowns:boolean}}
+ */
+export function advanceDownDistance(state, gain) {
+  const prevDown = state.down ?? 1;
+  const prevDistance = state.distance ?? 10;
+  const prevYardLine = state.yardLine ?? 20;
+
+  const advance = Math.max(0, gain);
+  const yardLine = U.clamp(prevYardLine + advance, 1, 99);
+  const touchdown = prevYardLine + advance >= 100;
+
+  let distance = prevDistance - advance;
+  let down = prevDown;
+  let firstDown = false;
+  let turnoverOnDowns = false;
+
+  if (distance <= 0) {
+    firstDown = true;
+    down = 1;
+    distance = 10;
+  } else {
+    down = prevDown + 1;
+    if (down > 4) {
+      // Failed to convert on 4th down → possession changes.
+      turnoverOnDowns = true;
+    }
+  }
+
+  return { down, distance, yardLine, firstDown, touchdown, turnoverOnDowns };
+}
+
+/**
+ * Deterministic, seeded drive-level game summary. The authoritative source of
+ * homeScore / awayScore for a simulated game. Same seed + inputs → same result.
+ */
+export function buildDriveBasedSummary({
+  season = 0,
+  week = 1,
+  home,
+  away,
+  homeOff = 75,
+  awayOff = 75,
+  homeDef = 75,
+  awayDef = 75,
+  homeFieldAdv = 0.03,
+  homeStrategicEdge = 0,
+  awayStrategicEdge = 0,
+  globalSeed = 0,
+}) {
+  const baseSeed = hashStringToSeed(`${season}|${week}|${home?.id}|${away?.id}`);
+  const seed = (baseSeed ^ (globalSeed >>> 0)) >>> 0;
+  const rng = mulberry32(seed);
+  const randInt = (min, max) => Math.floor(rng() * (max - min + 1)) + min;
+  const chance = (p) => rng() < p;
+
+  const homeNetEdge = U.clamp(homeStrategicEdge - awayStrategicEdge, -0.05, 0.05);
+  const awayNetEdge = U.clamp(awayStrategicEdge - homeStrategicEdge, -0.05, 0.05);
+
+  const homeDrives = randInt(10, 14);
+  const awayDrives = randInt(10, 14);
+  const homeStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0 };
+  const awayStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0 };
+
+  const simTeam = (offOvr, defOvr, drives, teamStats, isHome, netEdge = 0) => {
+    let score = 0;
+    const driveSuccessRaw = 0.4 + (offOvr - defOvr) * 0.005 + (isHome ? homeFieldAdv : 0) + netEdge;
+    const driveSuccess = U.clamp(driveSuccessRaw, 0.15, 0.72);
+    for (let i = 0; i < drives; i++) {
+      const passHeavy = chance(0.56);
+      const passAtt = randInt(passHeavy ? 3 : 1, passHeavy ? 7 : 4);
+      const comp = Math.min(passAtt, randInt(Math.max(0, passAtt - 3), passAtt));
+      const passYds = randInt(comp * 4, comp * 13);
+      const rushAtt = randInt(passHeavy ? 1 : 2, passHeavy ? 4 : 6);
+      const rushYds = randInt(Math.max(0, rushAtt * 2), rushAtt * 7);
+      teamStats.passAtt += passAtt;
+      teamStats.comp += comp;
+      teamStats.passYds += passYds;
+      teamStats.rushAtt += rushAtt;
+      teamStats.rushYds += rushYds;
+      if (chance(U.clamp(0.17 + (defOvr - offOvr) * 0.0025, 0.08, 0.34))) {
+        teamStats.sacks += 1;
+      }
+      if (chance(U.clamp(0.08 + (defOvr - offOvr) * 0.002, 0.03, 0.2))) {
+        teamStats.turnovers += 1;
+        if (chance(0.7)) teamStats.INT += 1;
+      }
+      const convertedDrive = chance(driveSuccess);
+      if (convertedDrive) {
+        if (chance(0.67)) {
+          score += 7;
+          if (chance(0.58)) teamStats.passTD += 1;
+        } else {
+          score += 3;
+        }
+      }
+    }
+    return score;
+  };
+
+  const homeScore = simTeam(homeOff, awayDef, homeDrives, homeStats, true, homeNetEdge);
+  const awayScore = simTeam(awayOff, homeDef, awayDrives, awayStats, false, awayNetEdge);
+  const homeQbRating = passerRating({ comp: homeStats.comp, att: homeStats.passAtt, yds: homeStats.passYds, td: homeStats.passTD, ints: homeStats.INT });
+  const awayQbRating = passerRating({ comp: awayStats.comp, att: awayStats.passAtt, yds: awayStats.passYds, td: awayStats.passTD, ints: awayStats.INT });
+  const homeYpc = homeStats.rushAtt > 0 ? U.round(homeStats.rushYds / homeStats.rushAtt, 2) : null;
+  const awayYpc = awayStats.rushAtt > 0 ? U.round(awayStats.rushYds / awayStats.rushAtt, 2) : null;
+  return {
+    seed,
+    homeScore,
+    awayScore,
+    homeStats: { ...homeStats, qbRating: homeQbRating, rushYPC: homeYpc },
+    awayStats: { ...awayStats, qbRating: awayQbRating, rushYPC: awayYpc },
+  };
+}
