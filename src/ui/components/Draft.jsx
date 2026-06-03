@@ -9,7 +9,7 @@
  * Receives { league, actions } from LeagueDashboard (same shape as other tabs).
  */
 
-import React from "react";
+import React, { useMemo } from "react";
 import PlayerProfile from "./PlayerProfile";
 import PlayerProfileModalBoundary from "./PlayerProfileModalBoundary.jsx";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -44,9 +44,8 @@ export default function Draft({ league, actions, onNavigate = null, busy = false
     handleDraftPlayer,
   } = useDraftState({ league, actions });
 
-  // Views layer: the screen consumes a prepared view-model instead of reading
-  // raw league state directly (ZenGM worker/views pattern).
-  const draftView = prepareDraftView(league);
+  // prepareDraftView is expensive — memoized to prevent re-running on unrelated re-renders
+  const draftView = useMemo(() => prepareDraftView(league), [league]);
 
   const actionsDisabled = isLoading || busy;
 
