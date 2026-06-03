@@ -1,4 +1,5 @@
 import React from "react";
+import { Badge } from "@/components/ui/badge";
 import { ovrColor } from "./draftShared.js";
 
 export function OvrBadge({ ovr }) {
