@@ -27,17 +27,33 @@ describe('driveEngine.advanceDownDistance', () => {
 });
 
 describe('driveEngine.buildDriveBasedSummary', () => {
+  const BASE_ARGS = {
+    season: 2025, week: 3,
+    home: { id: 1 }, away: { id: 2 },
+    homeOff: 80, awayOff: 78, homeDef: 76, awayDef: 75,
+    globalSeed: 42,
+  };
+
   it('is deterministic for the same season/week/teams/seed', () => {
-    const args = {
-      season: 2025, week: 3,
-      home: { id: 1 }, away: { id: 2 },
-      homeOff: 80, awayOff: 78, homeDef: 76, awayDef: 75,
-      globalSeed: 42,
-    };
-    const a = buildDriveBasedSummary(args);
-    const b = buildDriveBasedSummary(args);
+    const a = buildDriveBasedSummary(BASE_ARGS);
+    const b = buildDriveBasedSummary(BASE_ARGS);
     expect(a.homeScore).toBe(b.homeScore);
     expect(a.awayScore).toBe(b.awayScore);
     expect(a.seed).toBe(b.seed);
+    // Pin the specific seed-42 output so regressions to the PRNG stream are caught.
+    expect(a.homeScore).toBe(57);
+    expect(a.awayScore).toBe(30);
+  });
+
+  it('keeps possession counts correlated (|homeDrives - awayDrives| ≤ 3) for 100 seeded runs', () => {
+    // The correlated split formula guarantees max |diff| = 3 (odd totalDrives + offset +1).
+    for (let seed = 1; seed <= 100; seed++) {
+      const { homeDrives, awayDrives } = buildDriveBasedSummary({
+        season: 2025, week: 1,
+        home: { id: 10 }, away: { id: 20 },
+        globalSeed: seed,
+      });
+      expect(Math.abs(homeDrives - awayDrives)).toBeLessThanOrEqual(3);
+    }
   });
 });

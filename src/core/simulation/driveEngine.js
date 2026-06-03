@@ -102,8 +102,9 @@ export function buildDriveBasedSummary({
   const homeNetEdge = U.clamp(homeStrategicEdge - awayStrategicEdge, -0.05, 0.05);
   const awayNetEdge = U.clamp(awayStrategicEdge - homeStrategicEdge, -0.05, 0.05);
 
-  const homeDrives = randInt(10, 14);
-  const awayDrives = randInt(10, 14);
+  const totalDrives = randInt(20, 26);
+  const homeDrives = Math.round(totalDrives / 2) + randInt(-1, 1);
+  const awayDrives = totalDrives - homeDrives;
   const homeStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0 };
   const awayStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0 };
 
@@ -153,6 +154,8 @@ export function buildDriveBasedSummary({
     seed,
     homeScore,
     awayScore,
+    homeDrives,
+    awayDrives,
     homeStats: { ...homeStats, qbRating: homeQbRating, rushYPC: homeYpc },
     awayStats: { ...awayStats, qbRating: awayQbRating, rushYPC: awayYpc },
   };
