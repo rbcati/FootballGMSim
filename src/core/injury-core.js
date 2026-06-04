@@ -87,22 +87,20 @@ export function getEffectiveRating(player) {
 }
 
 /**
- * Check if player can play (considers injury severity)
+ * Canonical player-availability predicate. This is the SINGLE source of truth
+ * for whether a player may appear in a lineup, used by every simulation path.
+ *
+ * Contract: `player.injured === true` ⇒ unavailable, no exceptions. A flagged
+ * player never plays, regardless of how many weeks remain on any individual
+ * injury entry. This eliminates the prior split where one path let a player
+ * suit up in his final injury week while another excluded him outright.
+ *
  * @param {Object} player - Player object
- * @returns {boolean} Can play
+ * @returns {boolean} Whether the player is available to play
  */
 export function canPlayerPlay(player) {
-    if (!player || !player.injured) return true;
-
-    // Can't play with season-ending injury
+    if (!player) return true;
+    if (player.injured === true) return false;
     if (player.seasonEndingInjury) return false;
-
-    // Can't play if any injury has more than 1 week remaining
-    if (player.injuries && player.injuries.length > 0) {
-        const hasActiveInjury = player.injuries.some(inj => inj.weeksRemaining > 1);
-        if (hasActiveInjury) return false;
-    }
-
-    // Can play but at reduced effectiveness (minor injuries in final week)
     return true;
 }

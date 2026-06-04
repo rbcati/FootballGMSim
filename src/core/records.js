@@ -28,6 +28,18 @@
  *   }
  */
 
+import { getCareerStats } from './recordBookV1.js';
+
+// Maps this engine's category statKey → the canonical RECORD_KEYS key returned
+// by the shared getCareerStats aggregator (recordBookV1.js).
+const CATEGORY_TO_RECORD_KEY = {
+  passYd: 'passingYards',
+  rushYd: 'rushingYards',
+  recYd: 'receivingYards',
+  passTD: 'passingTD',
+  sacks: 'sacks',
+};
+
 const RECORD_CATEGORIES = [
   { key: 'passYd', label: 'Passing Yards',    statKey: 'passYd' },
   { key: 'rushYd', label: 'Rushing Yards',    statKey: 'rushYd' },
@@ -63,7 +75,7 @@ export function createEmptyRecords() {
  * @param {Object}   teamAbbrMap     - Map of teamId → abbreviation
  * @returns {{ records: Object, broken: Object[] }} Updated records and list of newly broken records
  */
-export function processSeasonRecords(existingRecords, seasonStats, allPlayers, year, teamAbbrMap) {
+export function processSeasonRecords(existingRecords, seasonStats, allPlayers, year, teamAbbrMap, leagueHistory = []) {
   const records = existingRecords ? structuredClone(existingRecords) : createEmptyRecords();
   if (!records.history) records.history = [];
   const broken = [];
@@ -107,28 +119,26 @@ export function processSeasonRecords(existingRecords, seasonStats, allPlayers, y
   }
 
   // ── All-Time Career Records ───────────────────────────────────────────────
-  // Scan all players' careerStats arrays to compute career totals.
-  // This is O(players × seasons) but typically < 2000 players × ~20 seasons = fast.
+  // Career totals come from the single shared aggregator (getCareerStats), which
+  // merges live careerStats with archive-only season lines — so an archive-only
+  // player (no live careerStats) is no longer invisible to the all-time board.
+  const careerTotalsCache = new Map();
+  const totalsFor = (player) => {
+    const id = player?.id ?? player?.playerId;
+    if (id != null && careerTotalsCache.has(id)) return careerTotalsCache.get(id);
+    const totals = getCareerStats(player, leagueHistory);
+    if (id != null) careerTotalsCache.set(id, totals);
+    return totals;
+  };
+
   for (const cat of RECORD_CATEGORIES) {
     let best = null;
     let bestValue = 0;
+    const recordKey = CATEGORY_TO_RECORD_KEY[cat.statKey] ?? cat.statKey;
 
     for (const player of allPlayers) {
-      if (!Array.isArray(player.careerStats) || player.careerStats.length === 0) continue;
-
-      let careerTotal = 0;
-      // Map careerStats field names to the stat keys we track
-      const fieldMap = {
-        passYd: 'passYds',
-        rushYd: 'rushYds',
-        recYd: 'recYds',
-        passTD: 'passTDs',
-        sacks: 'sacks',
-      };
-      const field = fieldMap[cat.statKey];
-      for (const line of player.careerStats) {
-        careerTotal += line[field] ?? 0;
-      }
+      const totals = totalsFor(player);
+      const careerTotal = Number(totals?.[recordKey] ?? 0);
 
       if (careerTotal > bestValue) {
         bestValue = careerTotal;

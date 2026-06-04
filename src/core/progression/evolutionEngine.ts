@@ -1,4 +1,5 @@
 import type { AttributesV2 } from '../../types/player.ts';
+import { Constants } from '../constants.js';
 
 export interface EvolutionPlayer {
   id: string | number;
@@ -120,17 +121,27 @@ function emptyXp(): Partial<Record<keyof AttributesV2, number>> {
   }, {} as Partial<Record<keyof AttributesV2, number>>);
 }
 
-function getAgeCurve(ageRaw: unknown) {
+function peakAgeFor(posRaw: unknown): number {
+  const peakAges = (Constants as any)?.PLAYER_CONFIG?.PEAK_AGES ?? {};
+  return Number(peakAges[String(posRaw ?? '').toUpperCase()] ?? 27);
+}
+
+// Age curve boundaries are derived from the position's peak age (PEAK_AGES) so
+// each position ages on its own curve rather than a single 25–28 prime window
+// applied to everyone. (For an average peak of 27 the boundaries reproduce the
+// previous 24/28/31/34 thresholds.)
+function getAgeCurve(ageRaw: unknown, posRaw?: unknown) {
   const age = Math.round(num(ageRaw) || 25);
-  // 20–24: strongest growth potential
-  if (age <= 24) return { growth: 1.45, maintenancePressure: 0.01, regressionRisk: 0.02 };
-  // 25–28: consolidation / selective growth
-  if (age <= 28) return { growth: 1.1, maintenancePressure: 0.06, regressionRisk: 0.08 };
-  // 29–31: plateau / maintenance
-  if (age <= 31) return { growth: 0.85, maintenancePressure: 0.18, regressionRisk: 0.25 };
-  // 32–34: regression pressure
-  if (age <= 34) return { growth: 0.65, maintenancePressure: 0.4, regressionRisk: 0.55 };
-  // 35+: heavy regression
+  const peak = peakAgeFor(posRaw);
+  // strongest growth potential (up to peak − 3)
+  if (age <= peak - 3) return { growth: 1.45, maintenancePressure: 0.01, regressionRisk: 0.02 };
+  // consolidation / selective growth (up to peak + 1)
+  if (age <= peak + 1) return { growth: 1.1, maintenancePressure: 0.06, regressionRisk: 0.08 };
+  // plateau / maintenance (up to peak + 4)
+  if (age <= peak + 4) return { growth: 0.85, maintenancePressure: 0.18, regressionRisk: 0.25 };
+  // regression pressure (up to peak + 7)
+  if (age <= peak + 7) return { growth: 0.65, maintenancePressure: 0.4, regressionRisk: 0.55 };
+  // heavy regression
   return { growth: 0.45, maintenancePressure: 0.7, regressionRisk: 0.9 };
 }
 
@@ -362,7 +373,7 @@ export function processWeeklyEvolution(input: WeeklyEvolutionInput): WeeklyEvolu
   for (const [playerId, acc] of accumulators.entries()) {
     const player = playersById.get(playerId);
     if (!player?.attributesV2) continue;
-    const ageCurve = getAgeCurve(player.age);
+    const ageCurve = getAgeCurve(player.age, player.pos);
     const productionSoftener = clamp(acc.production * 0.05, 0, 0.65);
 
     // Medical quality reduces regression pressure
@@ -413,7 +424,7 @@ export function processWeeklyEvolution(input: WeeklyEvolutionInput): WeeklyEvolu
 
     const acc = accumulators.get(playerId);
     const nextXp: Partial<Record<keyof AttributesV2, number>> = { ...(player.attributeXp ?? {}) };
-    const ageCurve = getAgeCurve(player.age);
+    const ageCurve = getAgeCurve(player.age, player.pos);
     for (const key of ATTRIBUTE_KEYS) {
       const raw = num(player.attributeXp?.[key]) + num(acc?.xp[key]) * ageCurve.growth;
       const consumed = num(deltas[key]) * 12;
@@ -480,7 +491,7 @@ export function processOffseasonEvolution(input: OffseasonEvolutionInput): Weekl
   for (const player of input.players) {
     if (!player?.attributesV2) continue;
 
-    const ageCurve = getAgeCurve(player.age);
+    const ageCurve = getAgeCurve(player.age, player.pos);
     const nextAttributes = { ...player.attributesV2 };
     const deltas: Partial<Record<keyof AttributesV2, number>> = {};
     let totalDelta = 0;

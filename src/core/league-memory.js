@@ -444,6 +444,7 @@ function buildPlayerStatLeaders(seasonStats = []) {
         const value = defensiveInterceptionsSeasonValue(top);
         byKey[label] = {
           playerId: top.playerId,
+          playerGuid: top.playerGuid ?? null,
           playerName: top.name,
           teamId: top.teamId,
           teamAbbr: top.teamAbbr ?? null,
@@ -460,6 +461,7 @@ function buildPlayerStatLeaders(seasonStats = []) {
     if (top) {
       byKey[label] = {
         playerId: top.playerId,
+        playerGuid: top.playerGuid ?? null,
         playerName: top.name,
         teamId: top.teamId,
         teamAbbr: top.teamAbbr ?? null,

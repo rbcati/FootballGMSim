@@ -59,8 +59,30 @@ class AiLogic {
     }
 
     /**
+     * Dead-money grace below zero. A team may sit at most this far below the
+     * hard cap to absorb dead cap from cuts; any transaction that would drive
+     * capRoom below `-DEAD_CAP_ALLOWANCE` must be rejected by the caller.
+     */
+    static DEAD_CAP_ALLOWANCE = 20;
+
+    /**
+     * Single salary-cap authority. Reads the live league economy cap, falling
+     * back to the constant hard cap. Replaces the old `?? 255` magic number.
+     */
+    static _getSalaryCap() {
+        const meta = cache.getMeta();
+        const economyCap = Number(meta?.economy?.currentSalaryCap);
+        if (Number.isFinite(economyCap) && economyCap > 0) return economyCap;
+        return Constants.SALARY_CAP.HARD_CAP;
+    }
+
+    /**
      * Update a team's cap space based on current contracts.
      * Mirrors logic in worker.js but available for AI moves.
+     *
+     * @returns {{ok:boolean, capRoom:number, capUsed:number, floor:number, error?:string}}
+     *   `ok` is false when the recomputed capRoom is below the dead-cap floor;
+     *   callers committing a transaction must treat `ok === false` as a rejection.
      */
     static updateTeamCap(teamId) {
         const players = cache.getPlayersByTeam(teamId);
@@ -72,14 +94,42 @@ class AiLogic {
         }, 0);
 
         const team = cache.getTeam(teamId);
-        if (!team) return;
+        if (!team) return { ok: false, capRoom: 0, capUsed: 0, floor: -AiLogic.DEAD_CAP_ALLOWANCE, error: 'Team not found' };
 
-        const capTotal = team.capTotal ?? 255;
+        const capTotal = team.capTotal ?? AiLogic._getSalaryCap();
         const deadCap  = team.deadCap  ?? 0;
+        const capRoom = Math.round((capTotal - capUsed - deadCap) * 100) / 100;
+        const floor = -AiLogic.DEAD_CAP_ALLOWANCE;
         cache.updateTeam(teamId, {
             capUsed: Math.round(capUsed * 100) / 100,
-            capRoom: Math.round((capTotal - capUsed - deadCap) * 100) / 100,
+            capRoom,
         });
+
+        if (capRoom < floor) {
+            console.warn(`[AiLogic] Team ${teamId} capRoom ${capRoom} is below dead-cap floor ${floor}.`);
+            return { ok: false, capRoom, capUsed, floor, error: 'Salary cap exceeded' };
+        }
+        return { ok: true, capRoom, capUsed, floor };
+    }
+
+    /**
+     * Minimum players to keep at each position during AI cutdowns so a team can
+     * never cut its only kicker/punter (or its QB/OL depth) purely on score.
+     */
+    static POSITION_FLOOR = Object.freeze({
+        QB: 2, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1,
+    });
+
+    /**
+     * True if cutting `player` would drop the team to (or below) the minimum
+     * number of players at his position, given the current roster.
+     */
+    static isLastAtPosition(roster, player) {
+        const pos = player?.pos;
+        if (!pos) return false;
+        const floor = AiLogic.POSITION_FLOOR[pos] ?? 1;
+        const count = (roster ?? []).filter((p) => p?.pos === pos).length;
+        return count <= floor;
     }
 
     /**
@@ -110,7 +160,37 @@ class AiLogic {
             scoredPlayers.sort((a, b) => a._cutScore - b._cutScore);
 
             const cutCount = roster.length - limit;
-            const toCut = scoredPlayers.slice(0, cutCount);
+
+            // Track live per-position counts so cutting never drops a position
+            // below its floor. First pass respects floors; a last-resort pass
+            // only triggers if floors alone can't reach the hard roster limit
+            // (and even then never leaves a position empty).
+            const posCounts = {};
+            for (const p of roster) posCounts[p.pos] = (posCounts[p.pos] ?? 0) + 1;
+
+            const toCut = [];
+            const cutIds = new Set();
+            for (const p of scoredPlayers) {
+                if (toCut.length >= cutCount) break;
+                if ((posCounts[p.pos] ?? 0) > (AiLogic.POSITION_FLOOR[p.pos] ?? 1)) {
+                    toCut.push(p);
+                    cutIds.add(p.id);
+                    posCounts[p.pos] -= 1;
+                }
+            }
+            // Last resort: roster still over the hard limit — allow protected
+            // cuts (lowest score first) but never leave 0 players at a position.
+            if (toCut.length < cutCount) {
+                for (const p of scoredPlayers) {
+                    if (toCut.length >= cutCount) break;
+                    if (cutIds.has(p.id)) continue;
+                    if ((posCounts[p.pos] ?? 0) > 1) {
+                        toCut.push(p);
+                        cutIds.add(p.id);
+                        posCounts[p.pos] -= 1;
+                    }
+                }
+            }
 
             for (const p of toCut) {
                 // Calculate Dead Cap (post-June 1 rules for preseason)
@@ -872,12 +952,29 @@ class AiLogic {
 
                 if (team && team.capRoom >= capHit) {
                     const oldTeamId = player.teamId;
+                    const priorContract = player.contract;
+                    const priorTeamId = player.teamId;
+                    const priorStatus = player.status;
                     cache.updatePlayer(player.id, {
                         teamId,
                         status: 'active',
                         contract: offer.contract,
                         offers: [] // Clear offers
                     });
+
+                    // Enforce the dead-cap floor: if committing this signing pushed
+                    // the team below the floor, roll the signing back and skip it.
+                    const capResult = AiLogic.updateTeamCap(teamId);
+                    if (!capResult.ok) {
+                        cache.updatePlayer(player.id, {
+                            teamId: priorTeamId,
+                            status: priorStatus,
+                            contract: priorContract,
+                        });
+                        AiLogic.updateTeamCap(teamId);
+                        player.offers = (player.offers || []).filter(o => o.teamId !== teamId);
+                        continue;
+                    }
 
                     const metaSnapshot = cache.getMeta() ?? {};
                     if (metaSnapshot.phase === 'free_agency' && oldTeamId != null && Number(oldTeamId) !== Number(teamId)) {

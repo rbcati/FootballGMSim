@@ -174,6 +174,22 @@ function PickSelector({ side, picks, onChange, availablePicks = [] }) {
 
 function TradeResult({ result, onDismiss }) {
   if (!result) return null;
+  // Hard-failure path (e.g. engine threw): surface a clear, assertive error.
+  if (result.error) {
+    return (
+      <div
+        role="alert"
+        style={{ borderRadius: "var(--radius-md)", border: "1.5px solid var(--danger)", background: "rgba(255,69,58,0.08)", padding: "var(--space-4) var(--space-5)", display: "flex", alignItems: "center", gap: "var(--space-4)" }}
+      >
+        <div style={{ fontSize: "1.8rem" }}>⚠️</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 800, fontSize: "var(--text-base)", color: "var(--danger)" }}>Trade Failed</div>
+          <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>{result.error}</div>
+        </div>
+        {onDismiss && <Button size="sm" variant="outline" onClick={onDismiss}>Dismiss</Button>}
+      </div>
+    );
+  }
   const valueDiff = (result.receiveValue ?? 0) - (result.offerValue ?? 0);
   const reasonText = String(result?.reason ?? "").toLowerCase();
   const reasonType = result?.rejectionType
@@ -347,6 +363,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
 
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [isAccepting, setIsAccepting] = useState(false);
   const [tradeResult, setTradeResult] = useState(null);
   const [counterOfferId, setCounterOfferId] = useState(null);
   const [previewPlayer, setPreviewPlayer] = useState(null);
@@ -553,28 +570,38 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
 
   const handleAcceptIncomingTrade = async (offer) => {
     if (!offer?.id || tradeLocked || !actions?.acceptIncomingTrade) return;
-    const resp = await actions.acceptIncomingTrade(offer.id);
-    if (resp?.payload?.accepted) {
-      const partnerTeam = league?.teams?.find((team) => Number(team?.id) === Number(offer.offeringTeamId)) ?? { id: offer.offeringTeamId, abbr: offer.offeringTeamAbbr };
-      const incomingPlayerIds = offer?.offering?.playerIds ?? [offer?.offeringPlayerId].filter(Boolean);
-      const outgoingPlayerIds = offer?.receiving?.playerIds ?? [offer?.receivingPlayerId].filter(Boolean);
-      logCompletedTradeAction(league, {
-        id: `trade-${league?.seasonId ?? league?.year}-wk${league?.week ?? 1}-incoming-${offer.id}`,
-        fromTeamId: myTeamId,
-        toTeamId: offer.offeringTeamId,
-        userTeam: liveMyTeam,
-        partnerTeam,
-        incomingPlayers: incomingPlayerIds.map((playerId) => findLeaguePlayer(league, playerId)).filter(Boolean),
-        outgoingPlayers: outgoingPlayerIds.map((playerId) => findLeaguePlayer(league, playerId)).filter(Boolean),
-        incomingPicks: (offer?.offering?.pickIds ?? []).map((id) => theirAvailablePicksMap.get(String(id)) ?? { id }),
-        outgoingPicks: (offer?.receiving?.pickIds ?? []).map((id) => myAvailablePicksMap.get(String(id)) ?? { id }),
-        source: 'incoming_trade',
-      });
-      await persistFranchiseChronicle(actions, league);
-      await fetchRosters(Number(offer.offeringTeamId));
-      setShowSavedToast(true);
+    // Submit-lock prevents a double-fire on rapid taps.
+    if (isAccepting) return;
+    setIsAccepting(true);
+    try {
+      const resp = await actions.acceptIncomingTrade(offer.id);
+      if (resp?.payload?.accepted) {
+        const partnerTeam = league?.teams?.find((team) => Number(team?.id) === Number(offer.offeringTeamId)) ?? { id: offer.offeringTeamId, abbr: offer.offeringTeamAbbr };
+        const incomingPlayerIds = offer?.offering?.playerIds ?? [offer?.offeringPlayerId].filter(Boolean);
+        const outgoingPlayerIds = offer?.receiving?.playerIds ?? [offer?.receivingPlayerId].filter(Boolean);
+        logCompletedTradeAction(league, {
+          id: `trade-${league?.seasonId ?? league?.year}-wk${league?.week ?? 1}-incoming-${offer.id}`,
+          fromTeamId: myTeamId,
+          toTeamId: offer.offeringTeamId,
+          userTeam: liveMyTeam,
+          partnerTeam,
+          incomingPlayers: incomingPlayerIds.map((playerId) => findLeaguePlayer(league, playerId)).filter(Boolean),
+          outgoingPlayers: outgoingPlayerIds.map((playerId) => findLeaguePlayer(league, playerId)).filter(Boolean),
+          incomingPicks: (offer?.offering?.pickIds ?? []).map((id) => theirAvailablePicksMap.get(String(id)) ?? { id }),
+          outgoingPicks: (offer?.receiving?.pickIds ?? []).map((id) => myAvailablePicksMap.get(String(id)) ?? { id }),
+          source: 'incoming_trade',
+        });
+        await persistFranchiseChronicle(actions, league);
+        await fetchRosters(Number(offer.offeringTeamId));
+        setShowSavedToast(true);
+      }
+      if (resp?.payload) setTradeResult(resp.payload);
+    } catch (e) {
+      console.error(e);
+      setTradeResult({ accepted: false, error: 'Trade could not be completed. Please try again.' });
+    } finally {
+      setIsAccepting(false);
     }
-    if (resp?.payload) setTradeResult(resp.payload);
   };
 
   const handleTradeBlockRemove = async (playerId) => {
@@ -701,7 +728,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
                       </div>
                     ) : null}
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Button size="sm" disabled={tradeLocked} onClick={() => handleAcceptIncomingTrade(offer)}>Accept</Button>
+                      <Button size="sm" disabled={tradeLocked || isAccepting} onClick={() => handleAcceptIncomingTrade(offer)}>{isAccepting ? "Accepting…" : "Accept"}</Button>
                       <Button size="sm" variant="secondary" disabled={tradeLocked} onClick={() => actions?.rejectIncomingTrade?.(offer.id)}>Reject</Button>
                       <Button size="sm" variant="outline" disabled={tradeLocked} onClick={() => startCounterOffer(offer)}>Counter</Button>
                       <Button size="sm" variant="outline" onClick={() => setTargetId(Number(offer.offeringTeamId))}>Open Team</Button>

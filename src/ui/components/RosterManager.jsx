@@ -155,6 +155,7 @@ export default function RosterManager({ league, actions }) {
   const [sortKey, setSortKey] = useState("ovr");
   const [sortDir, setSortDir] = useState("desc");
   const [releasing, setReleasing] = useState(null); // playerId pending confirm
+  const [error, setError] = useState(null);
 
   const fetchRoster = useCallback(async () => {
     if (teamId == null || !actions?.getRoster) return;
@@ -165,8 +166,10 @@ export default function RosterManager({ league, actions }) {
         setTeam(resp.payload.team);
         setPlayers(resp.payload.players ?? []);
       }
+      setError(null);
     } catch (e) {
       console.error("getRoster failed:", e);
+      setError(e?.message ?? "Could not load the roster. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -205,9 +208,17 @@ export default function RosterManager({ league, actions }) {
     }
     // second click: execute
     setReleasing(null);
-    actions.releasePlayer(player.id, teamId);
-    // Optimistic update
-    setPlayers((prev) => prev.filter((p) => p.id !== player.id));
+    try {
+      await actions.releasePlayer(player.id, teamId);
+      // Optimistic update only after the release actually succeeds.
+      setPlayers((prev) => prev.filter((p) => p.id !== player.id));
+      setError(null);
+    } catch (e) {
+      console.error("releasePlayer failed:", e);
+      setError(e?.message ?? `Could not release ${player?.name ?? "player"}. Please try again.`);
+      // Re-sync so the optimistic removal can't leave a stale roster on screen.
+      fetchRoster();
+    }
   };
 
   if (teamId == null) {
@@ -230,6 +241,20 @@ export default function RosterManager({ league, actions }) {
 
   return (
     <div>
+      {error && (
+        <div
+          role="alert"
+          className="card"
+          style={{
+            marginBottom: "var(--space-4)",
+            padding: "var(--space-3) var(--space-4)",
+            border: "1.5px solid var(--danger)",
+            color: "var(--danger)",
+          }}
+        >
+          {error}
+        </div>
+      )}
       {/* Team cap header */}
       <div
         className="card"

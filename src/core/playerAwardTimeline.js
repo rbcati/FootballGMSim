@@ -88,14 +88,21 @@ function collectAllProArchiveRows(awards, year) {
  * @param {any[]} teams for abbr lookup
  */
 export function buildMergedPlayerAwardTimeline(playerId, accolades, archivedSeasons, teams) {
+  // `accolades` are already this player's own honors, so we always process them.
+  // `pid` is only needed to match archive-derived awards; if it's missing we
+  // simply contribute nothing from the archive rather than dropping everything.
   const pid = playerId != null ? String(playerId) : '';
-  if (!pid) return { rows: [], dedupeKeys: new Set() };
 
   const byKey = new Map();
+  const pendingYearless = [];
 
   const addRow = (year, canonical, label, teamId, source) => {
     const y = Number(year);
-    if (!Number.isFinite(y) || y <= 0) return;
+    if (!Number.isFinite(y) || y <= 0) {
+      // Don't drop year-less accolades — defer them for year inference below.
+      pendingYearless.push({ canonical, label, teamId: teamId ?? null, source });
+      return;
+    }
     const key = dedupeKeyForCanonical(y, canonical);
     if (byKey.has(key)) return;
     const teamAbbr = teamAbbrFromId(teamId, teams);
@@ -137,7 +144,37 @@ export function buildMergedPlayerAwardTimeline(playerId, accolades, archivedSeas
     }
   }
 
-  const rows = [...byKey.values()].sort((a, b) => b.year - a.year);
+  // Resolve year-less accolades: infer the most recent season this player was
+  // active (proxy = newest dated award year, else newest archived season), and
+  // dedupe by canonical so a year-less entry never duplicates an award we
+  // already have dated. If no year can be inferred, keep it with year 'unknown'.
+  const datedYears = [...byKey.values()].map((r) => r.year).filter((y) => Number.isFinite(y) && y > 0);
+  const archiveYears = (Array.isArray(archivedSeasons) ? archivedSeasons : [])
+    .map((s) => Number(s?.year)).filter((y) => Number.isFinite(y) && y > 0);
+  const inferredYear = datedYears.length
+    ? Math.max(...datedYears)
+    : archiveYears.length
+      ? Math.max(...archiveYears)
+      : null;
+
+  for (const p of pendingYearless) {
+    const alreadyHasCanonical = [...byKey.values()].some((r) => r.canonical === p.canonical);
+    if (alreadyHasCanonical) continue;
+    const year = inferredYear ?? 'unknown';
+    const key = `${p.canonical}_${year}`;
+    if (byKey.has(key)) continue;
+    const teamAbbr = teamAbbrFromId(p.teamId, teams);
+    byKey.set(key, {
+      year, canonical: p.canonical, label: p.label, teamAbbr,
+      teamId: p.teamId ?? null, source: p.source, inferredYear: year !== 'unknown',
+    });
+  }
+
+  const rows = [...byKey.values()].sort((a, b) => {
+    const ay = Number.isFinite(a.year) ? a.year : -Infinity;
+    const by = Number.isFinite(b.year) ? b.year : -Infinity;
+    return by - ay;
+  });
   return { rows, dedupeKeys: new Set(byKey.keys()) };
 }
 

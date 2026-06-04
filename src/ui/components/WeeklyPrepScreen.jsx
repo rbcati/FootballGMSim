@@ -251,6 +251,10 @@ export default function WeeklyPrepScreen({ league, onNavigate, onOpenBoxScore })
   // Tracks the auto-mark from useEffect so checklist and readiness update on first render.
   const [localOpponentScouted, setLocalOpponentScouted] = useState(false);
 
+  // Safe: this resets per-week prep state exactly when the matchup changes
+  // (season/week/team). `league` and `prep` are read fresh inside; keying on
+  // their full identity would re-fire this reset on unrelated league/prep
+  // mutations and wipe the user's in-progress plan mid-week.
   useEffect(() => {
     markWeeklyPrepStep(league, 'opponentScouted', true);
     setLocalOpponentScouted(true);

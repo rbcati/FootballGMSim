@@ -710,8 +710,8 @@ export default function PlayerProfile({
   const effectivePlayer = player;
   const playerView = effectivePlayer;
   const recordBookLines = useMemo(
-    () => buildPlayerRecordContext(recordBook, effectivePlayer?.id ?? playerId),
-    [recordBook, effectivePlayer?.id, playerId],
+    () => buildPlayerRecordContext(recordBook, effectivePlayer ?? { id: playerId }),
+    [recordBook, effectivePlayer, playerId],
   );
   const legacyReport = useMemo(() => {
     if (!effectivePlayer) return null;

@@ -116,7 +116,13 @@ const API_TAB_MAP = Object.freeze({
 function AdvancedLeadersPanel({ league, onPlayerSelect }) {
   const [selectedMetric, setSelectedMetric] = useState(ADVANCED_LEADER_DEFS[0].statKey);
 
-  const archive = league?.playerSeasonStatsArchive ?? league?.meta?.playerSeasonStatsArchive ?? {};
+  // Memoize archive so its identity is stable across renders (the `{}` fallback
+  // otherwise created a new object every render, defeating the view memo below
+  // and forcing buildAdvancedStatsLeadersView to recompute on every render).
+  const archive = useMemo(
+    () => league?.playerSeasonStatsArchive ?? league?.meta?.playerSeasonStatsArchive ?? {},
+    [league?.playerSeasonStatsArchive, league?.meta?.playerSeasonStatsArchive],
+  );
   const teams = useMemo(() => (Array.isArray(league?.teams) ? league.teams : []), [league?.teams]);
   const allPlayers = useMemo(
     () => teams.flatMap((t) => (Array.isArray(t?.roster) ? t.roster : []).map((p) => ({ ...p, teamId: p.teamId ?? t.id, teamAbbr: p.teamAbbr ?? t.abbr }))),
@@ -125,7 +131,6 @@ function AdvancedLeadersPanel({ league, onPlayerSelect }) {
 
   const view = useMemo(
     () => buildAdvancedStatsLeadersView({ archive, players: allPlayers, teams }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [archive, allPlayers, teams],
   );
 
