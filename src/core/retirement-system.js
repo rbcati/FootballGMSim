@@ -38,7 +38,8 @@ export function evaluateRetirements(players) {
     const age = player.age ?? 22;
     const ovr = player.ovr ?? 60;
     const traits = player.personality?.traits ?? [];
-    const injuryWeeks = player.injuryWeeks ?? 0;
+    // Runtime writes injuryWeeksRemaining (the old injuryWeeks field was never set).
+    const injuryWeeks = player.injuryWeeksRemaining ?? player.injuryWeeks ?? 0;
     const progressionDelta = player.progressionDelta ?? 0;
 
     let willRetire = false;
@@ -91,6 +92,13 @@ export function evaluateRetirements(players) {
       // Physical regression accelerates retirement
       if (progressionDelta <= -5) {
         retireChance += 0.10;
+      }
+
+      // Low-OVR term: a washed-up veteran retires even before the age cliff,
+      // so rosters don't clog with 50-OVR 32-year-olds. Scales with how far
+      // below replacement level the player is (caps naturally as OVR → 0).
+      if (ovr < 60 && age >= 30) {
+        retireChance += (60 - ovr) * 0.02;
       }
 
       // Cap at 90%

@@ -3,7 +3,24 @@
  * Does not mutate the player object.
  */
 
+import { Constants } from './constants.js';
+
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+/**
+ * Derive position-specific development-stage boundaries from PEAK_AGES so each
+ * position ages on its own curve (RB 25, QB 28, OL 29) instead of a single
+ * hardcoded 26–29 prime window applied to everyone.
+ */
+function getDevStageWindows(pos) {
+  const peak = Number(Constants?.PLAYER_CONFIG?.PEAK_AGES?.[String(pos ?? '').toUpperCase()] ?? 27);
+  return {
+    growthEnd: peak - 2,       // end of the "developing" window
+    primeEnd: peak + 2,        // end of the prime window
+    latePrimeEnd: peak + 6,    // end of late-prime / maintenance
+    decliningEnd: peak + 10,   // end of the declining band before veteran depth
+  };
+}
 
 function toNum(v, fb = 0) {
   const n = Number(v);
@@ -70,19 +87,20 @@ export function buildPlayerDevelopmentModel(player = null, context = {}) {
 
   /** @type {'rookie'|'developing'|'prime'|'late_prime'|'declining'|'veteran_depth'|'unknown'} */
   let devStage = 'unknown';
+  const stageWindows = getDevStageWindows(pos);
   if (age <= 22) {
     devStage = 'rookie';
     reasons.push(`Age ${age}: early-career profile.`);
-  } else if (age <= 25) {
+  } else if (age <= stageWindows.growthEnd) {
     devStage = 'developing';
     reasons.push(`Age ${age}: typical development window.`);
-  } else if (age <= 29) {
+  } else if (age <= stageWindows.primeEnd) {
     devStage = 'prime';
-    reasons.push(`Age ${age}: prime window for most positions.`);
-  } else if (age <= 33) {
+    reasons.push(`Age ${age}: prime window for ${pos ?? 'this position'}.`);
+  } else if (age <= stageWindows.latePrimeEnd) {
     devStage = 'late_prime';
     reasons.push(`Age ${age}: late-prime / maintenance phase.`);
-  } else if (age <= 37) {
+  } else if (age <= stageWindows.decliningEnd) {
     devStage = 'declining';
     reasons.push(`Age ${age}: regression risk rises without ideal usage.`);
   } else {

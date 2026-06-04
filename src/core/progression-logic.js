@@ -44,6 +44,22 @@ function ageCliffProbability(pos) {
   return 0.20;                                                     // Default
 }
 
+// ── Position-specific age windows derived from PEAK_AGES ───────────────────────
+// Previously every position shared the same hardcoded growth (21–25) / prime
+// (26–29) / cliff (30+) windows, contradicting the PEAK_AGES constants (RB 25,
+// QB 28, OL 29). All phase boundaries are now derived from the position's peak
+// age so linemen really do age later than skill players.
+function getAgeWindows(pos) {
+  const peakAges = Constants?.PLAYER_CONFIG?.PEAK_AGES ?? {};
+  const peak = Number(peakAges[String(pos ?? '').toUpperCase()] ?? 27);
+  return {
+    peak,
+    growthEnd: peak - 2,    // growth runs up to (peak − 2)
+    primeEnd: peak + 2,     // prime runs (peak − 1)…(peak + 2)
+    declineStart: peak + 3, // cliff/decline begins at (peak + 3)
+  };
+}
+
 // ── "Hitting the Wall" thresholds ──────────────────────────────────────────
 // RBs hit the wall earlier (28) due to the physical toll of the position.
 // All other positions hit the wall at 31.
@@ -78,14 +94,32 @@ const PHYSICAL_TRAITS = {
   P:   ['kickPower'],
 };
 
+// Physical traits that may decay below the normal 40 floor once a player is
+// deep into his decline phase. Mental traits (awareness, route running, etc.)
+// always retain the 40 floor — an old player loses a step, not his football IQ.
+const AGE_FLOOR_TRAITS = new Set(['speed', 'acceleration', 'agility', 'jumping']);
+
 /**
- * Adjust individual rating fields by `delta`, clamped to [40, 99].
+ * Build a per-trait minimum-rating function for a player's age. For physical
+ * traits in the decline phase the floor drops linearly with age:
+ *   ageFloor = clamp(40 − (age − (peak + 3)) * 2, 25, 40)
+ * so e.g. a 35-year-old WR's speed can fall to 30, not stay pinned at 40.
+ */
+function buildTraitFloor(pos, age) {
+  const peakEnd = (Constants?.PLAYER_CONFIG?.PEAK_AGES?.[String(pos ?? '').toUpperCase()] ?? 27) + 3;
+  const ageFloor = Math.min(40, Math.max(25, 40 - (age - peakEnd) * 2));
+  return (trait) => (AGE_FLOOR_TRAITS.has(trait) ? ageFloor : 40);
+}
+
+/**
+ * Adjust individual rating fields by `delta`, clamped to [floor, 99].
+ * `floorForTrait` returns the per-trait minimum (defaults to 40 for everything).
  * Touches only traits present in the player's ratings object.
  */
-function applyRatingDelta(ratings, traits, delta) {
+function applyRatingDelta(ratings, traits, delta, floorForTrait = () => 40) {
   for (const key of traits) {
     if (ratings[key] !== undefined) {
-      ratings[key] = Utils.clamp(Math.round(ratings[key] + delta), 40, 99);
+      ratings[key] = Utils.clamp(Math.round(ratings[key] + delta), floorForTrait(key), 99);
     }
   }
 }
@@ -233,12 +267,14 @@ export function processPlayerProgression(players, options = {}) {
     if (!breakoutEvent && age >= wallAge && Utils.random() < WALL_PROBABILITY) {
       const physTraits = PHYSICAL_TRAITS[player.pos] ?? PHYSICAL_TRAITS.QB;
       const wallDrop = -Utils.rand(2, 5);
-      applyRatingDelta(player.ratings, physTraits, wallDrop);
+      applyRatingDelta(player.ratings, physTraits, wallDrop, buildTraitFloor(player.pos, age));
       wallEvent = true;
     }
 
-    // ── Age 21–25: Growth phase ────────────────────────────────────────────
-    if (!breakoutEvent && age >= 21 && age <= 25) {
+    const ageWindows = getAgeWindows(player.pos);
+
+    // ── Growth phase (up to peak − 2) ──────────────────────────────────────
+    if (!breakoutEvent && age <= ageWindows.growthEnd) {
       const roll = Utils.random();
 
       if (roll < effectiveBreakoutProb) {
@@ -257,21 +293,21 @@ export function processPlayerProgression(players, options = {}) {
       }
     }
 
-    // ── Age 26–29: Prime phase ─────────────────────────────────────────────
-    else if (!breakoutEvent && age >= 26 && age <= 29) {
+    // ── Prime phase ((peak − 1)…(peak + 2)) ────────────────────────────────
+    else if (!breakoutEvent && age <= ageWindows.primeEnd) {
       // High stability — small fluctuation ±1 (dev trait has minor dampening)
       ovrDelta = Utils.rand(-1, 1);
     }
 
-    // ── Age 30+: Cliff phase ───────────────────────────────────────────────
-    else if (!breakoutEvent && age >= 30) {
+    // ── Cliff/decline phase (peak + 3 and beyond) ──────────────────────────
+    else if (!breakoutEvent && age >= ageWindows.declineStart) {
       const roll = Utils.random();
 
       if (roll < ageCliffProbability(player.pos)) {
         // Age Cliff: physical traits plummet (primary drop)
         const physDrop = -Utils.rand(5, 8);
         const traits = PHYSICAL_TRAITS[player.pos] ?? PHYSICAL_TRAITS.QB;
-        applyRatingDelta(player.ratings, traits, physDrop);
+        applyRatingDelta(player.ratings, traits, physDrop, buildTraitFloor(player.pos, age));
 
         // Secondary cognitive drop on top 2 non-physical OVR traits (Task 11)
         const cognitiveDrop = -Utils.rand(2, 4);
