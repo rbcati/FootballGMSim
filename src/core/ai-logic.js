@@ -113,6 +113,26 @@ class AiLogic {
     }
 
     /**
+     * Minimum players to keep at each position during AI cutdowns so a team can
+     * never cut its only kicker/punter (or its QB/OL depth) purely on score.
+     */
+    static POSITION_FLOOR = Object.freeze({
+        QB: 2, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1,
+    });
+
+    /**
+     * True if cutting `player` would drop the team to (or below) the minimum
+     * number of players at his position, given the current roster.
+     */
+    static isLastAtPosition(roster, player) {
+        const pos = player?.pos;
+        if (!pos) return false;
+        const floor = AiLogic.POSITION_FLOOR[pos] ?? 1;
+        const count = (roster ?? []).filter((p) => p?.pos === pos).length;
+        return count <= floor;
+    }
+
+    /**
      * Execute AI Roster Cutdowns for Preseason.
      * Forces all AI teams to cut down to 53 players.
      */
@@ -140,7 +160,37 @@ class AiLogic {
             scoredPlayers.sort((a, b) => a._cutScore - b._cutScore);
 
             const cutCount = roster.length - limit;
-            const toCut = scoredPlayers.slice(0, cutCount);
+
+            // Track live per-position counts so cutting never drops a position
+            // below its floor. First pass respects floors; a last-resort pass
+            // only triggers if floors alone can't reach the hard roster limit
+            // (and even then never leaves a position empty).
+            const posCounts = {};
+            for (const p of roster) posCounts[p.pos] = (posCounts[p.pos] ?? 0) + 1;
+
+            const toCut = [];
+            const cutIds = new Set();
+            for (const p of scoredPlayers) {
+                if (toCut.length >= cutCount) break;
+                if ((posCounts[p.pos] ?? 0) > (AiLogic.POSITION_FLOOR[p.pos] ?? 1)) {
+                    toCut.push(p);
+                    cutIds.add(p.id);
+                    posCounts[p.pos] -= 1;
+                }
+            }
+            // Last resort: roster still over the hard limit — allow protected
+            // cuts (lowest score first) but never leave 0 players at a position.
+            if (toCut.length < cutCount) {
+                for (const p of scoredPlayers) {
+                    if (toCut.length >= cutCount) break;
+                    if (cutIds.has(p.id)) continue;
+                    if ((posCounts[p.pos] ?? 0) > 1) {
+                        toCut.push(p);
+                        cutIds.add(p.id);
+                        posCounts[p.pos] -= 1;
+                    }
+                }
+            }
 
             for (const p of toCut) {
                 // Calculate Dead Cap (post-June 1 rules for preseason)

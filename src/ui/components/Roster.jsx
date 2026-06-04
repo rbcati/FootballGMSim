@@ -768,6 +768,7 @@ function RosterTable({
   const [isMobileView, setIsMobileView] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
   const [mobileViewOverride, setMobileViewOverride] = useState(null);
   const [actionSheetPlayer, setActionSheetPlayer] = useState(null);
+  const [actionError, setActionError] = useState(null);
   const {
     compareIds,
     setCompareIds,
@@ -877,18 +878,26 @@ function RosterTable({
 
   const handleTradeBlockToggle = async (playerId) => {
     if (!playerId || !actions?.toggleTradeBlock) return;
-    await actions.toggleTradeBlock(playerId, teamId);
-    actions.save();
-    onRefetch();
+    try {
+      await actions.toggleTradeBlock(playerId, teamId);
+      actions.save();
+      setActionError(null);
+      onRefetch();
+    } catch (e) {
+      console.error('[Roster] toggleTradeBlock failed', e);
+      setActionError(e?.message ?? 'Could not update the trade block. Please try again.');
+    }
   };
 
   const handleManagementUpdate = async (player, updates) => {
     if (!actions?.updatePlayerManagement || !player?.id || !teamId) return;
     try {
       await actions.updatePlayerManagement(player.id, teamId, updates);
+      setActionError(null);
       onRefetch?.();
     } catch (e) {
       console.error('[Roster] updatePlayerManagement failed', e);
+      setActionError(e?.message ?? `Could not update ${player?.name ?? 'player'}. Please try again.`);
     }
   };
   const releasePreviewCapRoom = toFiniteNumber(team?.capRoom, 0);
@@ -897,6 +906,15 @@ function RosterTable({
 
   return (
     <>
+      {actionError && (
+        <div
+          role="alert"
+          className="card padding-md"
+          style={{ marginBottom: "var(--space-3)", border: "1.5px solid var(--danger)", color: "var(--danger)" }}
+        >
+          {actionError}
+        </div>
+      )}
       {extending && (
         <ExtensionNegotiationModal
           player={extending}

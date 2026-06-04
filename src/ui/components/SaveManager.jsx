@@ -195,7 +195,7 @@ export default function SaveManager({ actions, onCreate }) {
 
         {/* Error banner */}
         {error && (
-          <div className="sm-error-banner fade-in">
+          <div className="sm-error-banner fade-in" role="alert">
             <span>{error}</span>
             <button className="sm-error-dismiss" onClick={() => setError(null)}>&times;</button>
           </div>
@@ -267,7 +267,7 @@ export default function SaveManager({ actions, onCreate }) {
                         <span> · {lastPlayed}</span>
                       </div>
                       {saveError && (
-                        <div className="sm-save-error">{saveError}</div>
+                        <div className="sm-save-error" role="alert">{saveError}</div>
                       )}
                     </div>
                     </button>

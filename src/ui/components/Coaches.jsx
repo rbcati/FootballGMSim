@@ -142,6 +142,7 @@ export default function Coaches({ league, actions }) {
   const [rosterData, setRosterData] = useState(null);
   const [availableCoaches, setAvailableCoaches] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const fetchCoaches = useCallback(async () => {
     if (teamId == null) return;
@@ -159,8 +160,10 @@ export default function Coaches({ league, actions }) {
           setAvailableCoaches(availResp.payload.coaches);
         }
       }
+      setError(null);
     } catch (e) {
       console.error(e);
+      setError(e?.message ?? "Could not load coaching staff. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -172,8 +175,14 @@ export default function Coaches({ league, actions }) {
 
   const handleFire = async (coach) => {
     if (confirm(`Are you sure you want to fire ${coach.name}?`)) {
-      await actions.fireCoach({ teamId, role: "HC" });
-      fetchCoaches();
+      try {
+        await actions.fireCoach({ teamId, role: "HC" });
+        setError(null);
+        fetchCoaches();
+      } catch (e) {
+        console.error(e);
+        setError(e?.message ?? `Could not fire ${coach.name}. Please try again.`);
+      }
     }
   };
 
@@ -183,8 +192,14 @@ export default function Coaches({ league, actions }) {
         `Hire ${coach.name} for $${coach.salary}M/yr? This will replace your current coach.`,
       )
     ) {
-      await actions.hireCoach({ teamId, coach, role: "HC" });
-      fetchCoaches();
+      try {
+        await actions.hireCoach({ teamId, coach, role: "HC" });
+        setError(null);
+        fetchCoaches();
+      } catch (e) {
+        console.error(e);
+        setError(e?.message ?? `Could not hire ${coach.name}. Please try again.`);
+      }
     }
   };
 
@@ -196,6 +211,16 @@ export default function Coaches({ league, actions }) {
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto" }}>
       <h1 style={{ marginBottom: "var(--space-4)" }}>Coaching Staff</h1>
+
+      {error && (
+        <div
+          role="alert"
+          className="card padding-md"
+          style={{ marginBottom: "var(--space-4)", border: "1.5px solid var(--danger)", color: "var(--danger)" }}
+        >
+          {error}
+        </div>
+      )}
 
       <CoachCard coach={headCoach} onFire={handleFire} isUserCoach={true} />
 
