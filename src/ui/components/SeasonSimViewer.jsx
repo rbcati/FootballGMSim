@@ -340,6 +340,9 @@ export default function SeasonSimViewer({ logs = [], homeTeam, awayTeam, onCompl
   const aColor = useMemo(() => teamColor(awayTeam?.abbr || ""), [awayTeam?.abbr]);
 
   // Auto-complete if no logs provided
+  // Safe: one-shot mount check — if the viewer opens with no plays we
+  // auto-complete after a beat. `logs`/`onComplete` are only consulted at mount;
+  // re-running on their identity changes would restart the timer.
   useEffect(() => {
     if (!Array.isArray(logs) || logs.length === 0) {
       const t = setTimeout(() => { if (onComplete) onComplete(); }, 1500);

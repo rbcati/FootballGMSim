@@ -52,6 +52,9 @@ export default function OnboardingTour({ league }) {
   const [step, setStep] = useState(0);
   const [visible, setVisible] = useState(false);
 
+  // Safe: keyed on the season so the new-career check runs once per career start.
+  // The other league fields read here (year/week/phase) only matter at that
+  // moment; re-running on every league change would re-pop the tour mid-season.
   useEffect(() => {
     // Only show for brand-new careers (year 1 + first 2 weeks)
     try {
@@ -64,6 +67,9 @@ export default function OnboardingTour({ league }) {
   }, [league?.seasonId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-dismiss after Week 3
+  // Safe: keyed on league.week. `dismiss` is omitted intentionally — it only
+  // calls setState + writes localStorage (stable behaviour), so including it
+  // would not change what this effect does on a week change.
   useEffect(() => {
     if (!league) return;
     if ((league.week ?? 0) >= 3) {

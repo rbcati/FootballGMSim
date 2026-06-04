@@ -472,19 +472,6 @@ traits: generateTraits(pos, playerOvr),
     return player;
 }
 
-function progressPlayer(player) {
-    if (!player) return player;
-    player.age++;
-    if (player.age > (C.HALL_OF_FAME?.FORCED_RETIREMENT_AGE || 38)) {
-        player.retired = true;
-        return player;
-    }
-    // Simplified progression: Re-calc OVR based on existing ratings (which might be updated elsewhere)
-    // In a real worker loop, we'd add the detailed regression logic here.
-    // For now, keep it simple/safe.
-    player.ovr = calculateOvr(player.pos, player.ratings);
-    return player;
-}
 
 // ============================================================================
 // LEGACY & STATS (Simplified)
@@ -580,7 +567,6 @@ export {
     addXP,
     applySkillTreeUpgrade,
     makePlayer,
-    progressPlayer,
     getZeroStats,
     generatePersonality,
     initializePlayerLegacy,

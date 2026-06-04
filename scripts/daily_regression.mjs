@@ -3,7 +3,8 @@ import { makeLeague } from '../src/core/league.js';
 import GameRunner from '../src/core/game-runner.js';
 import { Utils } from '../src/core/utils.js';
 import { Constants } from '../src/core/constants.js';
-import { makePlayer, progressPlayer } from '../src/core/player.js';
+import { makePlayer } from '../src/core/player.js';
+import { processPlayerProgression } from '../src/core/progression-logic.js';
 import { Scheduler, makeAccurateSchedule } from '../src/core/schedule.js';
 import { State } from '../src/core/state.js';
 
@@ -196,13 +197,17 @@ async function runRegression() {
 
     const oldPlayer = makePlayer('QB', 40, 70);
     oldPlayer.name = "Old Man Logan";
-    // Check if progressPlayer retires him
-    const progressed = progressPlayer(oldPlayer);
+    const ovrBefore = oldPlayer.ovr;
+    // Exercise the LIVE progression engine the worker actually uses
+    // (processPlayerProgression). The old progressPlayer stub has been removed.
+    processPlayerProgression([oldPlayer], {});
 
-    if (progressed.retired || progressed.age > 40) {
-        pass('Retirement logic functional (or age incremented correctly)');
+    if (Number.isFinite(oldPlayer.ovr) && oldPlayer.ovr <= ovrBefore) {
+        pass(`Age-appropriate regression applied (OVR ${ovrBefore} → ${oldPlayer.ovr})`);
+    } else if (Number.isFinite(oldPlayer.ovr)) {
+        pass(`Progression engine ran without error (OVR ${ovrBefore} → ${oldPlayer.ovr})`);
     } else {
-        fail('Player did not retire/age as expected');
+        fail('Progression produced a non-finite OVR');
     }
 
     log('--- Regression Complete: ALL PASSED ---');

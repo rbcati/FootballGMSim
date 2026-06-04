@@ -1329,6 +1329,10 @@ function PowerRankingsCard({ league, userTeam, onTeamSelect }) {
       try { localStorage.setItem(rankHistKey, JSON.stringify(snapshot)); } catch { /* non-fatal */ }
     }
     prevWeekRef.current = league.week;
+    // Safe: keyed on league.week by design — we snapshot the standings exactly
+    // once per week advance. `sorted` and `rankHistKey` are read fresh from the
+    // render closure when the week changes; adding them as deps would re-snapshot
+    // mid-week and clobber the pre-week baseline this feature relies on.
   }, [league.week]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Show user's rank + top 5 + surrounding teams if user is outside top 5
