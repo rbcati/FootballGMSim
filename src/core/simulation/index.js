@@ -145,6 +145,38 @@ function buildTeamRatingsSnapshot(team) {
 }
 
 /**
+ * Capture the injury-related state of a set of players so a re-run of the sim
+ * (e.g. the 0-0 prevention retry loop) can be rolled back without stacking
+ * duplicate in-game injuries onto the shared live roster objects.
+ */
+function snapshotInjuryState(players) {
+  const snap = new Map();
+  for (const p of players) {
+    if (!p) continue;
+    snap.set(p, {
+      injured: p.injured,
+      injuries: Array.isArray(p.injuries) ? p.injuries.map((inj) => ({ ...inj })) : p.injuries,
+      injuryWeeksRemaining: p.injuryWeeksRemaining,
+      seasonEndingInjury: p.seasonEndingInjury,
+      ovr: p.ovr,
+    });
+  }
+  return snap;
+}
+
+/** Restore a previously captured injury snapshot onto the same player objects. */
+function restoreInjuryState(snap) {
+  if (!snap) return;
+  for (const [p, state] of snap.entries()) {
+    p.injured = state.injured;
+    p.injuries = Array.isArray(state.injuries) ? state.injuries.map((inj) => ({ ...inj })) : state.injuries;
+    p.injuryWeeksRemaining = state.injuryWeeksRemaining;
+    p.seasonEndingInjury = state.seasonEndingInjury;
+    p.ovr = state.ovr;
+  }
+}
+
+/**
  * Calculate how many seasons a player has been with the team (tenure proxy).
  */
 function calculateSeasonsWithTeam(player, team) {
@@ -1076,7 +1108,8 @@ export function simGameStats(home, away, options = {}) {
         // --- SPECIAL TEAMS SCORING (Kick/Punt Return TDs) ---
         // NFL average: ~2-3 return TDs per team per season (~0.15/game)
         const checkReturnTD = (team, oppDefStr) => {
-            const returnTDChance = 0.04 + (team === result.home ? homeStr : awayStr - 70) * 0.001;
+            const str = team === result.home ? homeStr : awayStr;
+            const returnTDChance = Math.min(0.15, Math.max(0.01, 0.04 + (str - 70) * 0.001));
             if (U.random() < returnTDChance) {
                 team.score += 7;
                 team.touchdowns++;
@@ -1544,7 +1577,10 @@ export function simGameStats(home, away, options = {}) {
     const awayTo = awayOut?.turnovers ?? 0;
     const homeSacks = homeOut?.sacks ?? 0;
     const awaySacks = awayOut?.sacks ?? 0;
-    const winnerIsHome = homeScore >= awayScore;
+    // Three-way result: only a strictly higher score is a win. A tie is neither
+    // a home win nor an away win.
+    const isTie = homeScore === awayScore;
+    const winnerIsHome = homeScore > awayScore;
     const winnerAbbr = winnerIsHome ? home.abbr : away.abbr;
     const loserAbbr = winnerIsHome ? away.abbr : home.abbr;
     const winnerScore = winnerIsHome ? homeScore : awayScore;
@@ -1555,7 +1591,9 @@ export function simGameStats(home, away, options = {}) {
         ? `${winnerAbbr} owned the ground game at ${(winnerIsHome ? homeOut?.rushYPC : awayOut?.rushYPC) ?? 0} YPC.`
         : `${winnerAbbr} controlled pressure with ${(winnerIsHome ? homeSacks : awaySacks)} sacks.`;
     const decisiveLine = `A late fourth-quarter ${winnerAbbr} drive sealed a ${winnerScore}-${loserScore} finish over ${loserAbbr}.`;
-    const recapText = `${winnerAbbr} edges ${loserAbbr} ${winnerScore}-${loserScore}. ${reasonLine} ${decisiveLine}`;
+    const recapText = isTie
+      ? `${home.abbr} and ${away.abbr} play to a ${homeScore}-${awayScore} tie.`
+      : `${winnerAbbr} edges ${loserAbbr} ${winnerScore}-${loserScore}. ${reasonLine} ${decisiveLine}`;
 
     const summaryContext = {
       homeId: home?.id,
@@ -1866,6 +1904,8 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         homeScore,
         awayScore,
         homeWin: homeScore > awayScore,
+        awayWin: awayScore > homeScore,
+        tie: homeScore === awayScore,
         homeTeamName: home.name,
         awayTeamName: away.name,
         homeTeamAbbr: home.abbr,
@@ -2086,7 +2126,15 @@ export function simulateBatch(games, options = {}) {
                 // 0-0 Prevention Loop
                 let attempts = 0;
                 const stakes = pair.preGameContext?.stakes || 0;
+                // simulateMatchup mutates injury state on the shared roster objects.
+                // Snapshot it once so each retry rolls back the prior attempt's
+                // mutations — otherwise a rare 0-0 re-sim stacks duplicate injuries.
+                const injurySnapshot = snapshotInjuryState([
+                    ...(Array.isArray(home.roster) ? home.roster : []),
+                    ...(Array.isArray(away.roster) ? away.roster : []),
+                ]);
                 do {
+                    if (attempts > 0) restoreInjuryState(injurySnapshot);
                     // Use simulateMatchup (unified function)
                     // Pass league for scheme fit calculations
                     gameScores = simulateMatchup(home, away, { verbose, stakes, league, isPlayoff: options.isPlayoff, generateLogs: options.generateLogs, homeAbbr: home.abbr, awayAbbr: away.abbr, overtimeFormat: options.overtimeFormat, userTendency: options.userTendency });
@@ -2267,6 +2315,8 @@ export function simulateBatch(games, options = {}) {
                     scoreHome: sH,
                     scoreAway: sA,
                     homeWin: sH > sA,
+                    awayWin: sA > sH,
+                    tie: sH === sA,
                     homeTeamName: home.name,
                     awayTeamName: away.name,
                     homeTeamAbbr: home.abbr,
