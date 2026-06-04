@@ -59,8 +59,30 @@ class AiLogic {
     }
 
     /**
+     * Dead-money grace below zero. A team may sit at most this far below the
+     * hard cap to absorb dead cap from cuts; any transaction that would drive
+     * capRoom below `-DEAD_CAP_ALLOWANCE` must be rejected by the caller.
+     */
+    static DEAD_CAP_ALLOWANCE = 20;
+
+    /**
+     * Single salary-cap authority. Reads the live league economy cap, falling
+     * back to the constant hard cap. Replaces the old `?? 255` magic number.
+     */
+    static _getSalaryCap() {
+        const meta = cache.getMeta();
+        const economyCap = Number(meta?.economy?.currentSalaryCap);
+        if (Number.isFinite(economyCap) && economyCap > 0) return economyCap;
+        return Constants.SALARY_CAP.HARD_CAP;
+    }
+
+    /**
      * Update a team's cap space based on current contracts.
      * Mirrors logic in worker.js but available for AI moves.
+     *
+     * @returns {{ok:boolean, capRoom:number, capUsed:number, floor:number, error?:string}}
+     *   `ok` is false when the recomputed capRoom is below the dead-cap floor;
+     *   callers committing a transaction must treat `ok === false` as a rejection.
      */
     static updateTeamCap(teamId) {
         const players = cache.getPlayersByTeam(teamId);
@@ -72,14 +94,22 @@ class AiLogic {
         }, 0);
 
         const team = cache.getTeam(teamId);
-        if (!team) return;
+        if (!team) return { ok: false, capRoom: 0, capUsed: 0, floor: -AiLogic.DEAD_CAP_ALLOWANCE, error: 'Team not found' };
 
-        const capTotal = team.capTotal ?? 255;
+        const capTotal = team.capTotal ?? AiLogic._getSalaryCap();
         const deadCap  = team.deadCap  ?? 0;
+        const capRoom = Math.round((capTotal - capUsed - deadCap) * 100) / 100;
+        const floor = -AiLogic.DEAD_CAP_ALLOWANCE;
         cache.updateTeam(teamId, {
             capUsed: Math.round(capUsed * 100) / 100,
-            capRoom: Math.round((capTotal - capUsed - deadCap) * 100) / 100,
+            capRoom,
         });
+
+        if (capRoom < floor) {
+            console.warn(`[AiLogic] Team ${teamId} capRoom ${capRoom} is below dead-cap floor ${floor}.`);
+            return { ok: false, capRoom, capUsed, floor, error: 'Salary cap exceeded' };
+        }
+        return { ok: true, capRoom, capUsed, floor };
     }
 
     /**
@@ -872,12 +902,29 @@ class AiLogic {
 
                 if (team && team.capRoom >= capHit) {
                     const oldTeamId = player.teamId;
+                    const priorContract = player.contract;
+                    const priorTeamId = player.teamId;
+                    const priorStatus = player.status;
                     cache.updatePlayer(player.id, {
                         teamId,
                         status: 'active',
                         contract: offer.contract,
                         offers: [] // Clear offers
                     });
+
+                    // Enforce the dead-cap floor: if committing this signing pushed
+                    // the team below the floor, roll the signing back and skip it.
+                    const capResult = AiLogic.updateTeamCap(teamId);
+                    if (!capResult.ok) {
+                        cache.updatePlayer(player.id, {
+                            teamId: priorTeamId,
+                            status: priorStatus,
+                            contract: priorContract,
+                        });
+                        AiLogic.updateTeamCap(teamId);
+                        player.offers = (player.offers || []).filter(o => o.teamId !== teamId);
+                        continue;
+                    }
 
                     const metaSnapshot = cache.getMeta() ?? {};
                     if (metaSnapshot.phase === 'free_agency' && oldTeamId != null && Number(oldTeamId) !== Number(teamId)) {

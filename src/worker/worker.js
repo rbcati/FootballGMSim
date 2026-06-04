@@ -145,6 +145,13 @@ import { getPlayerCapHit, getRosterLimitForPhase, validateLeagueTeamLegality } f
 import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings, getRuleEditType } from '../core/leagueSettings.js';
 import { migrateSaveMetaToCurrent, CURRENT_SAVE_SCHEMA_VERSION } from '../state/saveSchema.js';
 import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.js';
+import {
+  getAssetValue,
+  PREMIUM_POSITIONS,
+  LOW_PREMIUM_POSITIONS,
+  POSITION_MARKET_WEIGHTS,
+  POSITION_PAY_SCALARS,
+} from '../core/trades/assetValuation.js';
 import { archiveCompletedSeasonIfNeeded, ensureLeagueHistoryContainer } from '../core/leagueHistory.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonalityModifier } from '../core/development/personalitySystem.js';
 import { applyTeamCultureWeek, classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../core/teamCulture.js';
@@ -1164,16 +1171,9 @@ function getPickRoundValue(round, { week = 1, teamDirection = 'balanced', projec
   return base * rangeAdj * stageAdj * directionAdj;
 }
 
-const PREMIUM_POSITIONS = new Set(['QB', 'EDGE', 'DE', 'OT', 'WR', 'CB']);
-const LOW_PREMIUM_POSITIONS = new Set(['RB', 'TE', 'S', 'LB']);
-const POSITION_MARKET_WEIGHTS = {
-  QB: 1.5, EDGE: 1.24, DE: 1.2, OT: 1.2, WR: 1.15, CB: 1.14,
-  DL: 1.0, OL: 0.98, LB: 0.9, S: 0.86, TE: 0.82, RB: 0.74,
-};
-const POSITION_PAY_SCALARS = {
-  QB: 1.45, EDGE: 1.2, DE: 1.16, OT: 1.18, WR: 1.12, CB: 1.08,
-  DL: 0.94, OL: 0.95, LB: 0.86, S: 0.78, TE: 0.76, RB: 0.66,
-};
+// PREMIUM_POSITIONS, LOW_PREMIUM_POSITIONS, POSITION_MARKET_WEIGHTS and
+// POSITION_PAY_SCALARS are imported from the shared asset-valuation module so
+// there is a single definition across every trade consumer.
 
 function ensureCompMeta(metaObj = ensureDynastyMeta(cache.getMeta())) {
   return {
@@ -6180,6 +6180,10 @@ async function releasePlayerWithValidation({ playerId, teamId }) {
   markOffseasonRelease(player, teamId, meta);
   cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [] });
   recalculateTeamCap(teamId);
+  // Repair the depth chart so the released player's ID is stripped from any
+  // starter/backup slot immediately (otherwise it lingers as a dangling
+  // reference until some unrelated rebuild happens to run).
+  ensureTeamDepthChart(teamId, { phase: cache.getPhase() });
   await Transactions.add({
     type: 'RELEASE', seasonId: meta.currentSeasonId,
     week: meta.currentWeek, teamId, details: { playerId: player.id },
@@ -6975,47 +6979,9 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
  * offering side value (15 % discount for uncertainty / home-team premium).
  */
 function _tradeValue(player, context = {}) {
-  if (!player) return 0;
-  const ovr = Number(player.ovr ?? 70);
-  const pot = Number(player.potential ?? ovr);
-  const age = Number(player.age ?? 27);
-  const yearsRemaining = Number(player?.contract?.yearsRemaining ?? player?.contract?.years ?? 1);
-  const baseAnnual = Number(player?.contract?.baseAnnual ?? 0);
-  const schemeFit = Number(player?.schemeFit ?? 65);
-  const morale = Number(player?.morale ?? 70);
-  const posMult = POSITION_MARKET_WEIGHTS[player.pos] ?? 0.9;
-  const payScalar = POSITION_PAY_SCALARS[player.pos] ?? 0.92;
-  const direction = context?.teamDirection ?? 'balanced';
-  const needPositions = context?.needPositions ?? [];
-  const scarcityBonus = needPositions.includes(player?.pos) ? 1.06 : 1.0;
-  const ageFactor = age <= 24
-    ? 1.09
-    : age <= 27
-      ? 1.02
-      : age <= 29
-        ? 0.95
-        : age <= 31
-          ? 0.78
-          : age <= 33
-            ? 0.62
-            : 0.48;
-  const potentialFactor = 0.9 + Math.max(0, Math.min(0.22, (pot - ovr) / 70));
-  const expectedAav = Math.max(1.5, ((ovr - 58) * 0.72) * payScalar);
-  const contractLoad = baseAnnual / expectedAav;
-  const surplusFactor = contractLoad <= 0.9 ? 1.15 : contractLoad <= 1.15 ? 1.0 : contractLoad <= 1.4 ? 0.82 : 0.62;
-  const controlFactor = yearsRemaining >= 3 ? 1.12 : yearsRemaining === 2 ? 1.02 : yearsRemaining === 1 ? 0.8 : 0.72;
-  const veteranContractDrag = (age >= 30 && contractLoad >= 1.2) ? 0.78 : 1.0;
-  const fitFactor = 0.9 + Math.max(0, Math.min(0.18, schemeFit / 500));
-  const moraleFactor = morale < 52 ? 0.92 : morale >= 80 ? 1.02 : 1.0;
-  const directionFactor = direction === 'contender'
-    ? (age <= 30 ? 1.04 : 0.86)
-    : direction === 'rebuilding'
-      ? (age <= 27 ? 1.1 : 0.8)
-      : 1.0;
-  const draftModePenalty = context?.marketMode === 'draft_board' && !PREMIUM_POSITIONS.has(player?.pos) ? 0.88 : 1.0;
-  const baseTalent = Math.pow(Math.max(45, ovr), 1.55);
-  const value = baseTalent * posMult * ageFactor * potentialFactor * surplusFactor * controlFactor * veteranContractDrag * fitFactor * moraleFactor * directionFactor * scarcityBonus * draftModePenalty;
-  return Math.max(0, value);
+  // Delegates to the single asset-valuation authority so user trades, AI-to-AI
+  // trades and pick valuation all share one scale.
+  return getAssetValue(player, null, context);
 }
 
 function evaluateTradeAvailability(player, context = {}) {
@@ -7216,7 +7182,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
 
   // AI acceptance threshold scales by difficulty
   let diffMult = 1.0;
-  if (diff === 'Easy') diffMult = 0.9; // AI accepts at 90% of what user offers
+  if (diff === 'Easy') diffMult = 0.8; // AI accepts down to 80% of fair value (minimum fairness floor)
   if (diff === 'Hard') diffMult = 1.15; // AI demands 15% more
   if (diff === 'Legendary') diffMult = 1.30; // AI demands 30% more
   const settingsDifficulty = Number(meta?.settings?.tradeDifficulty);

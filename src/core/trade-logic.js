@@ -29,10 +29,7 @@ import NewsEngine       from './news-engine.js';
 import { Constants }    from './constants.js';
 import { Utils as U }   from './utils.js';
 import { buildAiTeamStrategy } from './aiTeamStrategy.js';
-import {
-  applyFuturePickDecayToPickValue,
-  getPickBaseValueFromMatrix,
-} from './trades/tradeValuationModifiers.js';
+import { getAssetValue } from './trades/assetValuation.js';
 import {
   adjustTradeValueForMarketRealism,
   buildTradeRealismReasonTags,
@@ -94,34 +91,13 @@ export function shouldBlockCpuUniformPlayerSwap(playerA, playerB) {
  * @returns {number}
  */
 export function calculatePlayerValue(player) {
-  const ovr = player.ovr       ?? 60;
-  const pot = player.potential  ?? player.ovr ?? 60;
-  const age = player.age        ?? 26;
-
-  // Position multiplier (from Constants.POSITION_VALUES)
-  const posValues  = Constants?.POSITION_VALUES ?? {};
-  const posMult    = posValues[player.pos] ?? 1.0;
-
-  // Age Curve - Opus Phase 4 - Realism adjustments
-  // Sharp drop-off post 28, especially for RBs
-  let agePenalty = 0;
-  if (player.pos === 'RB' && age >= 27) {
-      agePenalty = Math.pow(1.15, age - 26) * 10;
-  } else if (age >= 30) {
-      agePenalty = Math.pow(1.10, age - 29) * 8;
-  }
-
-  // Contract cost penalty (expensive players are harder to trade for)
-  const annualSalary  = player.contract?.baseAnnual ?? 0;
-  const capHitPct = annualSalary / Constants.SALARY_CAP.HARD_CAP;
-  const contractPenalty = capHitPct * 200; // Adjust penalty based on cap percentage
-
-  // Base calculation heavily rewards potential for young players
-  const potWeight = age <= 25 ? 1.2 : 0.5;
-  const ovrWeight = age <= 25 ? 0.8 : 1.5;
-
-  const rawValue = ((ovr * ovrWeight) + (pot * potWeight)) * posMult;
-  return adjustTradeValueForMarketRealism(player, Math.max(0, rawValue - agePenalty - contractPenalty));
+  if (!player) return 0;
+  // Single asset-valuation authority. Previously this function produced values
+  // on a ~180 scale while picks (getPickMarketValue) used a ~950 scale, so any
+  // consumer mixing the two valued a R1 pick at ~5× an elite player. Routing
+  // through getAssetValue puts players and picks on the SAME scale. The strong
+  // contract penalty now lives inside getAssetValue.
+  return adjustTradeValueForMarketRealism(player, getAssetValue(player));
 }
 
 // ── Roster Analysis ───────────────────────────────────────────────────────────
@@ -451,8 +427,8 @@ export function classifyTeamDirection(team, week = 1) {
 }
 
 export function getPickMarketValue(pick, currentSeason = null) {
-  const baseValue = getPickBaseValueFromMatrix(pick?.round);
-  return applyFuturePickDecayToPickValue(pick, baseValue, currentSeason);
+  // Picks and players now share one scale via getAssetValue.
+  return getAssetValue(pick, null, { currentSeason });
 }
 
 function pickLabel(pick) {
