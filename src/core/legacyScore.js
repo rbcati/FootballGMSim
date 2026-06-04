@@ -7,6 +7,7 @@ import {
   RECORD_BOOK_PLAYER_KEYS,
   RECORD_LABELS,
   careerLineDefensiveInts,
+  recordHolderMatchesPlayer,
 } from './recordBookV1.js';
 
 const DEF_POS = new Set(['DL', 'DE', 'DT', 'EDGE', 'LB', 'CB', 'S', 'SS', 'FS']);
@@ -214,9 +215,9 @@ function scoreAwards(player, archivedSeasons, teams) {
   return { awards: pts, reasons: reasons.slice(0, 4), proBowlCount: proBowl };
 }
 
-function scoreRecords(playerId, recordBook) {
-  if (!recordBook || playerId == null) return { records: 0, reasons: [], summary: '' };
-  const pid = String(playerId);
+function scoreRecords(player, recordBook) {
+  const playerObj = (player != null && typeof player === 'object') ? player : { id: player };
+  if (!recordBook || (playerObj.id == null && playerObj.playerGuid == null)) return { records: 0, reasons: [], summary: '' };
   const ss = recordBook.singleSeasonV1 ?? {};
   const cl = recordBook.careerLeadersV1 ?? {};
   let pts = 0;
@@ -225,7 +226,7 @@ function scoreRecords(playerId, recordBook) {
 
   for (const key of RECORD_BOOK_PLAYER_KEYS) {
     const holder = ss[key];
-    if (holder && holder.playerId != null && String(holder.playerId) === pid && num(holder.value) > 0) {
+    if (holder && recordHolderMatchesPlayer(holder, playerObj) && num(holder.value) > 0) {
       pts += 4;
       reasons.push(`Single-season ${RECORD_LABELS[key] ?? key} record`);
       bits.push(`${RECORD_LABELS[key] ?? key} (season)`);
@@ -233,7 +234,7 @@ function scoreRecords(playerId, recordBook) {
   }
   for (const key of RECORD_BOOK_PLAYER_KEYS) {
     const board = Array.isArray(cl[key]) ? cl[key] : [];
-    const idx = board.findIndex((r) => r.playerId != null && String(r.playerId) === pid);
+    const idx = board.findIndex((r) => recordHolderMatchesPlayer(r, playerObj));
     if (idx === 0 && board.length) {
       pts += 5;
       reasons.push(`Career ${RECORD_LABELS[key] ?? key} leader`);
@@ -340,7 +341,7 @@ export function buildLegacyScoreReport(player, context = {}) {
 
   const prod = scoreProduction(bucket, careerStats);
   const aw = scoreAwards(player, archivedSeasons, teams);
-  const rec = scoreRecords(player?.id, recordBook);
+  const rec = scoreRecords(player, recordBook);
   const counts = getMergedAwardCounts(player?.id, accolades, archivedSeasons, teams);
   const champ = scoreChampionships(accolades, archivedSeasons, teams, player?.id);
   const long = scoreLongevity(seasons);

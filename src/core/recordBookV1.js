@@ -125,6 +125,7 @@ export function leaderEntryToRecordRow(recordKey, leader, season) {
     label: RECORD_LABELS[recordKey] ?? recordKey,
     value: num(leader.value),
     playerId: leader.playerId ?? null,
+    playerGuid: leader.playerGuid ?? null,
     playerName: leader.playerName ?? leader.name ?? null,
     position: leader.position ?? leader.pos ?? null,
     teamId: leader.teamId ?? null,
@@ -221,6 +222,7 @@ function topNPlayersByCareer(players, leagueHistory, recordKey, n = 10) {
       label: RECORD_LABELS[recordKey],
       value: v,
       playerId: p.id ?? p.playerId,
+      playerGuid: p.playerGuid ?? null,
       playerName: p.name,
       position: p.pos,
       teamId: p.teamId ?? null,
@@ -525,6 +527,7 @@ function normalizeLegacySingleRow(recordKey, raw) {
     label: RECORD_LABELS[recordKey] ?? recordKey,
     value,
     playerId,
+    playerGuid: raw.playerGuid ?? null,
     playerName: raw.playerName ?? raw.name ?? raw.holderName ?? null,
     position: raw.position ?? raw.pos ?? null,
     teamId: raw.teamId ?? null,
@@ -563,6 +566,7 @@ export function mirrorRecordBookForLegacyUi(v1Book) {
     if (!leg || !row || num(row.value) <= 0) continue;
     singleSeason[leg] = {
       playerId: row.playerId,
+      playerGuid: row.playerGuid ?? null,
       name: row.playerName,
       pos: row.position,
       team: row.teamAbbr,
@@ -579,6 +583,7 @@ export function mirrorRecordBookForLegacyUi(v1Book) {
       holderId: top.playerId,
       holderName: top.playerName,
       playerId: top.playerId,
+      playerGuid: top.playerGuid ?? null,
       name: top.playerName,
       pos: top.position,
       teamId: top.teamId,
@@ -652,16 +657,32 @@ export function mergePlayerProfileSeasonRows(player, leagueHistory) {
   return [...bySeason.values()].sort((a, b) => String(a.season).localeCompare(String(b.season)));
 }
 
-export function buildPlayerRecordContext(recordBook, playerId) {
-  if (playerId == null || !recordBook) return [];
-  const pid = String(playerId);
+/**
+ * Match a record holder row to a player. Prefers the immutable playerGuid; only
+ * falls back to the recyclable numeric playerId for legacy rows that predate the
+ * GUID (so a freed id reused by a new player cannot inherit old records).
+ */
+export function recordHolderMatchesPlayer(holder, player) {
+  if (!holder || !player) return false;
+  const guid = player.playerGuid ?? player.guid ?? null;
+  if (guid != null && holder.playerGuid != null) {
+    return String(holder.playerGuid) === String(guid);
+  }
+  const pid = player.id ?? player.playerId ?? null;
+  return holder.playerId != null && pid != null && String(holder.playerId) === String(pid);
+}
+
+export function buildPlayerRecordContext(recordBook, player) {
+  // Accepts a player object (preferred) or a bare id for backward compatibility.
+  const playerObj = (player != null && typeof player === 'object') ? player : { id: player };
+  if ((playerObj.id == null && playerObj.playerGuid == null) || !recordBook) return [];
   const lines = [];
   const ss = recordBook.singleSeasonV1 ?? {};
   const cl = recordBook.careerLeadersV1 ?? {};
 
   for (const key of PLAYER_STAT_ORDER) {
     const holder = ss[key];
-    if (holder && holder.playerId != null && String(holder.playerId) === pid && num(holder.value) > 0) {
+    if (holder && recordHolderMatchesPlayer(holder, playerObj) && num(holder.value) > 0) {
       lines.push({
         kind: 'singleSeasonRecord',
         text: `Single-season ${RECORD_LABELS[key]} record (${num(holder.value).toLocaleString()}, ${holder.year ?? '—'})`,
@@ -672,7 +693,7 @@ export function buildPlayerRecordContext(recordBook, playerId) {
 
   for (const key of PLAYER_STAT_ORDER) {
     const board = Array.isArray(cl[key]) ? cl[key] : [];
-    const idx = board.findIndex((r) => r.playerId != null && String(r.playerId) === pid);
+    const idx = board.findIndex((r) => recordHolderMatchesPlayer(r, playerObj));
     if (idx === 0 && board.length) {
       lines.push({
         kind: 'careerLeader',
@@ -689,4 +710,89 @@ export function buildPlayerRecordContext(recordBook, playerId) {
   }
 
   return lines;
+}
+
+/**
+ * Backfill immutable `playerGuid` onto existing save data so historical records
+ * and HOF points stop matching on a recyclable numeric id.
+ *
+ * Best-effort: every live player gets a GUID (generated if missing); every
+ * record holder / archived stat-leader entry is matched to a live player by
+ * (playerId + playerName) and stamped with that player's GUID. Holders that
+ * can't be matched are left as-is (they keep their playerId fallback).
+ *
+ * Idempotent and safe to run on every save load. Mutates `league` in place and
+ * returns a small summary of what it touched.
+ */
+export function migrateRecordHolderIds(league, { buildGuid } = {}) {
+  if (!league || typeof league !== 'object') return { players: 0, holders: 0 };
+  const makeGuid = typeof buildGuid === 'function'
+    ? buildGuid
+    : (p) => {
+        const slug = String(p?.name ?? 'unknown').trim().replace(/\s+/g, '_') || 'unknown';
+        const token = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+        return `${slug}_${p?.draftYear ?? ''}_${String(p?.pos ?? '')}_${token}`;
+      };
+
+  // 1. Ensure every live player has a GUID; index by id and by id+name.
+  let playersTouched = 0;
+  const guidById = new Map();
+  const guidByIdName = new Map();
+  const teams = Array.isArray(league.teams) ? league.teams : [];
+  const freeAgents = Array.isArray(league.freeAgents) ? league.freeAgents : [];
+  const allRosters = [...teams.map((t) => (Array.isArray(t?.roster) ? t.roster : [])), freeAgents];
+  for (const roster of allRosters) {
+    for (const p of roster) {
+      if (!p) continue;
+      if (p.playerGuid == null) {
+        p.playerGuid = makeGuid(p);
+        playersTouched++;
+      }
+      if (p.id != null) guidById.set(String(p.id), p.playerGuid);
+      if (p.id != null && p.name != null) guidByIdName.set(`${p.id}__${p.name}`, p.playerGuid);
+    }
+  }
+
+  // 2. Stamp record holders / archived stat leaders with the matched GUID.
+  let holdersTouched = 0;
+  const stampHolder = (holder) => {
+    if (!holder || typeof holder !== 'object' || holder.playerGuid != null) return;
+    const id = holder.playerId ?? holder.holderId;
+    const name = holder.playerName ?? holder.name ?? holder.holderName;
+    if (id == null) return;
+    const guid = guidByIdName.get(`${id}__${name}`) ?? guidById.get(String(id));
+    if (guid != null) {
+      holder.playerGuid = guid;
+      holdersTouched++;
+    }
+  };
+
+  const walkRecordBook = (book) => {
+    if (!book || typeof book !== 'object') return;
+    for (const holder of Object.values(book.singleSeasonV1 ?? {})) stampHolder(holder);
+    for (const board of Object.values(book.careerLeadersV1 ?? {})) {
+      if (Array.isArray(board)) board.forEach(stampHolder);
+    }
+    for (const holder of Object.values(book.singleSeason ?? {})) stampHolder(holder);
+    for (const holder of Object.values(book.career ?? {})) stampHolder(holder);
+  };
+
+  walkRecordBook(league.recordBookV1);
+  walkRecordBook(league.recordBook);
+  if (league.meta) {
+    walkRecordBook(league.meta.recordBookV1);
+    walkRecordBook(league.meta.recordBook);
+  }
+
+  // Archived seasons store per-season stat leaders that feed single-season rows.
+  const history = Array.isArray(league.history) ? league.history
+    : Array.isArray(league.leagueHistory) ? league.leagueHistory : [];
+  for (const season of history) {
+    const leaders = season?.playerStatLeaders;
+    if (leaders && typeof leaders === 'object') {
+      for (const entry of Object.values(leaders)) stampHolder(entry);
+    }
+  }
+
+  return { players: playersTouched, holders: holdersTouched };
 }

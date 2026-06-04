@@ -371,6 +371,21 @@ function generateUniqueName(eliteNames) {
 // MAIN PLAYER FUNCTIONS
 // ============================================================================
 
+/**
+ * Build an immutable player GUID. Unlike the numeric `id` (which can be recycled
+ * when a player is deleted and a new one generated), the GUID is generated once
+ * at creation and never reused, so record/HOF attribution can't leak to a
+ * different player who inherits a freed id.
+ */
+export function buildPlayerGuid(player = {}) {
+    const nameSlug = String(player?.name ?? 'unknown').trim().replace(/\s+/g, '_') || 'unknown';
+    const year = player?.draftYear ?? player?.rookieYear ?? player?.birthYear ?? '';
+    const pos = String(player?.pos ?? '').trim();
+    // A unique random token guarantees no two players ever share a GUID.
+    const token = (U && typeof U.id === 'function') ? U.id() : Math.random().toString(36).slice(2, 12);
+    return `${nameSlug}_${year}_${pos}_${token}`;
+}
+
 function makePlayer(pos, age = null, ovr = null, eliteNames = null) {
     if (!U || !C) throw new Error('Utils and Constants must be loaded');
 
@@ -384,9 +399,12 @@ function makePlayer(pos, age = null, ovr = null, eliteNames = null) {
     const personalityProfile = generatePersonalityProfile({ college, age: playerAge });
     const combineResults = simulateCombineResults(pos, ratings);
     const collegeStats = generateCollegeStats(pos, playerOvr, playerPotential);
+    const playerName = eliteNames ? generateUniqueName(eliteNames) : generateName();
     const player = {
         id: U.id(),
-        name: eliteNames ? generateUniqueName(eliteNames) : generateName(),
+        // Immutable identity — never recycled (see buildPlayerGuid).
+        playerGuid: buildPlayerGuid({ name: playerName, pos }),
+        name: playerName,
         pos: pos,
         age: playerAge,
         ratings: ratings,

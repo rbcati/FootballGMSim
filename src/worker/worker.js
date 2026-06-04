@@ -73,7 +73,7 @@ import GameRunner         from '../core/game-runner.js';
 import { simulateBatch }  from '../core/game-simulator.js';
 import { Utils }          from '../core/utils.js';
 import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
-import { makePlayer, generateDraftClass, calculateMorale, calculateExtensionDemand }  from '../core/player.js';
+import { makePlayer, generateDraftClass, calculateMorale, calculateExtensionDemand, buildPlayerGuid }  from '../core/player.js';
 import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
 import { ensureTeamStaff, computeStaffTeamBonuses, buildStaffMarket, buildScoutingSnapshot, negotiateContract } from '../core/staff-system.js';
 import {
@@ -135,7 +135,7 @@ import {
   indexDraftClassesFromTransactions,
   buildPlayerDraftContext,
 } from '../core/draftClassHistory.js';
-import { rebuildRecordBookV1, mirrorRecordBookForLegacyUi, RECORD_BOOK_SCHEMA_VERSION } from '../core/recordBookV1.js';
+import { rebuildRecordBookV1, mirrorRecordBookForLegacyUi, RECORD_BOOK_SCHEMA_VERSION, migrateRecordHolderIds } from '../core/recordBookV1.js';
 import { inferChampionshipOutcome, isCompletedGame, isPostseasonGame } from '../core/championshipInference.js';
 import { repairDepthChart, validateDepthChart, optimizeDepthChartForPlan } from "../core/roster/depthChartManager.ts";
 import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
@@ -1847,6 +1847,31 @@ async function handleLoadSave({ leagueId }, id) {
       } catch (migrationError) {
         post(toUI.ERROR, { message: `Could not migrate save data safely: ${migrationError.message}` }, id);
         return;
+      }
+
+      // Backfill immutable player GUIDs onto players + record holders so old
+      // saves stop attributing records by recyclable numeric id.
+      try {
+        const metaForGuid = ensureDynastyMeta(cache.getMeta());
+        const allPlayers = cache.getAllPlayers();
+        const guidView = {
+          teams: [{ roster: allPlayers }],
+          freeAgents: [],
+          history: metaForGuid.leagueHistory ?? [],
+          recordBook: metaForGuid.recordBook,
+        };
+        const guidResult = migrateRecordHolderIds(guidView, { buildGuid: buildPlayerGuid });
+        if (guidResult.players > 0) {
+          for (const p of allPlayers) {
+            if (p?.id != null && p.playerGuid) cache.updatePlayer(p.id, { playerGuid: p.playerGuid });
+          }
+        }
+        if (guidResult.players > 0 || guidResult.holders > 0) {
+          cache.setMeta({ leagueHistory: guidView.history, recordBook: metaForGuid.recordBook });
+          await flushDirty();
+        }
+      } catch (guidMigrationError) {
+        console.warn('[Worker] record holder GUID migration failed:', guidMigrationError?.message);
       }
 
       // Update lastPlayed in Global DB
