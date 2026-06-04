@@ -10,6 +10,8 @@
  * drawn by the caller). Math/branch boundaries are identical to the monolith.
  */
 
+import { canPlayerPlay } from '../injury-core.js';
+
 /**
  * Format a compact display name; guards against double position prefixes and
  * placeholder names (e.g. "H QB1", "Player #3", "Unknown").
@@ -41,7 +43,7 @@ function weightedPick(pool, weights, U) {
 /** Pick a starter-weighted player from a position group. */
 export function pickStarterWeighted(groups, pos, U) {
   if (!groups) return null;
-  const pool = (groups[pos] || []).filter((p) => !p.injured);
+  const pool = (groups[pos] || []).filter((p) => canPlayerPlay(p));
   if (!pool.length) return null;
   const weights = pool.map((p, i) => {
     let w = (p.ovr || 70) + (p.weeklyTrainingBoost || 0);
@@ -55,9 +57,9 @@ export function pickStarterWeighted(groups, pos, U) {
 /** Pick a pass-catcher weighted by awareness/speed/OVR (WR > TE > RB). */
 export function pickReceiver(groups, U) {
   if (!groups) return null;
-  const wrs = (groups['WR'] || []).slice(0, 4).filter((p) => !p.injured);
-  const tes = (groups['TE'] || []).slice(0, 2).filter((p) => !p.injured);
-  const rbs = (groups['RB'] || []).slice(0, 2).filter((p) => !p.injured);
+  const wrs = (groups['WR'] || []).slice(0, 4).filter((p) => canPlayerPlay(p));
+  const tes = (groups['TE'] || []).slice(0, 2).filter((p) => canPlayerPlay(p));
+  const rbs = (groups['RB'] || []).slice(0, 2).filter((p) => canPlayerPlay(p));
   const pool = [...wrs, ...tes, ...rbs];
   if (!pool.length) return null;
   const weights = pool.map((p) => {
@@ -72,8 +74,8 @@ export function pickReceiver(groups, U) {
 /** Pick a pass-rusher (DL/LB) for sacks. */
 export function pickRusher(groups, U) {
   if (!groups) return null;
-  const dl = (groups['DL'] || []).slice(0, 3).filter((p) => !p.injured);
-  const lb = (groups['LB'] || []).slice(0, 3).filter((p) => !p.injured);
+  const dl = (groups['DL'] || []).slice(0, 3).filter((p) => canPlayerPlay(p));
+  const lb = (groups['LB'] || []).slice(0, 3).filter((p) => canPlayerPlay(p));
   const pool = [...dl, ...lb];
   if (!pool.length) return null;
   const weights = pool.map((p) => Math.max(1, p.ovr || 70));
@@ -83,8 +85,8 @@ export function pickRusher(groups, U) {
 /** Pick a DB (CB/S) for interceptions; falls back to a pass-rusher. */
 export function pickDefBack(groups, U) {
   if (!groups) return null;
-  const cb = (groups['CB'] || []).slice(0, 3).filter((p) => !p.injured);
-  const s = (groups['S'] || []).slice(0, 2).filter((p) => !p.injured);
+  const cb = (groups['CB'] || []).slice(0, 3).filter((p) => canPlayerPlay(p));
+  const s = (groups['S'] || []).slice(0, 2).filter((p) => canPlayerPlay(p));
   const pool = [...cb, ...s];
   if (!pool.length) return pickRusher(groups, U);
   const weights = pool.map((p) => Math.max(1, p.ovr || 70));
@@ -94,9 +96,9 @@ export function pickDefBack(groups, U) {
 /** Pick a tackler (LB/S/DL) for run stops and open-field tackles. */
 export function pickTackler(groups, U) {
   if (!groups) return null;
-  const lb = (groups['LB'] || []).slice(0, 3).filter((p) => !p.injured);
-  const s = (groups['S'] || []).slice(0, 2).filter((p) => !p.injured);
-  const dl = (groups['DL'] || []).slice(0, 2).filter((p) => !p.injured);
+  const lb = (groups['LB'] || []).slice(0, 3).filter((p) => canPlayerPlay(p));
+  const s = (groups['S'] || []).slice(0, 2).filter((p) => canPlayerPlay(p));
+  const dl = (groups['DL'] || []).slice(0, 2).filter((p) => canPlayerPlay(p));
   const pool = [...lb, ...s, ...dl];
   if (!pool.length) return null;
   const weights = pool.map((p, i) => {
@@ -111,8 +113,8 @@ export function pickTackler(groups, U) {
 /** Pick a coverage defender (CB/S) for pass deflections / broken-up passes. */
 export function pickCoverage(groups, U) {
   if (!groups) return null;
-  const cb = (groups['CB'] || []).slice(0, 3).filter((p) => !p.injured);
-  const s = (groups['S'] || []).slice(0, 2).filter((p) => !p.injured);
+  const cb = (groups['CB'] || []).slice(0, 3).filter((p) => canPlayerPlay(p));
+  const s = (groups['S'] || []).slice(0, 2).filter((p) => canPlayerPlay(p));
   const pool = [...cb, ...s];
   if (!pool.length) return null;
   const weights = pool.map((p) => {

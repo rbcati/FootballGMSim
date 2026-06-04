@@ -110,6 +110,12 @@ export function buildDriveBasedSummary({
 
   const simTeam = (offOvr, defOvr, drives, teamStats, isHome, netEdge = 0) => {
     let score = 0;
+    // Scoring-play breakdown — authoritative source for box-score reconciliation.
+    // Each touchdown here is scored as 7 (6 + a made extra point), so the
+    // identity 7*tds + 3*fgs === score holds exactly.
+    let tds = 0;
+    let fgs = 0;
+    let xps = 0;
     const driveSuccessRaw = 0.4 + (offOvr - defOvr) * 0.005 + (isHome ? homeFieldAdv : 0) + netEdge;
     const driveSuccess = U.clamp(driveSuccessRaw, 0.15, 0.72);
     for (let i = 0; i < drives; i++) {
@@ -135,17 +141,22 @@ export function buildDriveBasedSummary({
       if (convertedDrive) {
         if (chance(0.67)) {
           score += 7;
+          tds += 1;
+          xps += 1;
           if (chance(0.58)) teamStats.passTD += 1;
         } else {
           score += 3;
+          fgs += 1;
         }
       }
     }
-    return score;
+    return { score, tds, fgs, xps };
   };
 
-  const homeScore = simTeam(homeOff, awayDef, homeDrives, homeStats, true, homeNetEdge);
-  const awayScore = simTeam(awayOff, homeDef, awayDrives, awayStats, false, awayNetEdge);
+  const homeResult = simTeam(homeOff, awayDef, homeDrives, homeStats, true, homeNetEdge);
+  const awayResult = simTeam(awayOff, homeDef, awayDrives, awayStats, false, awayNetEdge);
+  const homeScore = homeResult.score;
+  const awayScore = awayResult.score;
   const homeQbRating = passerRating({ comp: homeStats.comp, att: homeStats.passAtt, yds: homeStats.passYds, td: homeStats.passTD, ints: homeStats.INT });
   const awayQbRating = passerRating({ comp: awayStats.comp, att: awayStats.passAtt, yds: awayStats.passYds, td: awayStats.passTD, ints: awayStats.INT });
   const homeYpc = homeStats.rushAtt > 0 ? U.round(homeStats.rushYds / homeStats.rushAtt, 2) : null;
@@ -156,6 +167,13 @@ export function buildDriveBasedSummary({
     awayScore,
     homeDrives,
     awayDrives,
+    // Authoritative scoring-play breakdown (matches homeScore/awayScore exactly).
+    homeTDs: homeResult.tds,
+    awayTDs: awayResult.tds,
+    homeFGs: homeResult.fgs,
+    awayFGs: awayResult.fgs,
+    homeXPs: homeResult.xps,
+    awayXPs: awayResult.xps,
     homeStats: { ...homeStats, qbRating: homeQbRating, rushYPC: homeYpc },
     awayStats: { ...awayStats, qbRating: awayQbRating, rushYPC: awayYpc },
   };

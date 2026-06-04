@@ -2764,7 +2764,16 @@ async function handleAdvanceWeek(payload, id) {
               const staffBonuses = computeStaffTeamBonuses({ ...team, staff: teamStaff }, { staffImpactStrength: getLeagueSetting('staffImpactStrength', 50), year: Number(meta?.year ?? 2025) });
               const recoveryBoost = Number(staffBonuses?.recoveryDelta ?? 0);
               const extraRecovery = recoveryBoost >= 0.09 ? 1 : Utils.random() < Math.max(0, recoveryBoost) * 2.5 ? 1 : 0;
-              p.injuryWeeksRemaining -= 1 + extraRecovery;
+              const recoveryWeeks = 1 + extraRecovery;
+              p.injuryWeeksRemaining -= recoveryWeeks;
+              // Decrement per-entry counters on the SAME cadence as the aggregate
+              // so they never desync (the canonical availability predicate keys off
+              // p.injured, but downstream readers inspect per-entry weeksRemaining).
+              if (Array.isArray(p.injuries)) {
+                  p.injuries = p.injuries
+                      .map(inj => ({ ...inj, weeksRemaining: (inj.weeksRemaining || 0) - recoveryWeeks }))
+                      .filter(inj => inj.weeksRemaining > 0);
+              }
               if (p.injuryWeeksRemaining <= 0) {
                   // Healed
                   p.injuryWeeksRemaining = 0;

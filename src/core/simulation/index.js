@@ -1115,12 +1115,16 @@ export function simGameStats(home, away, options = {}) {
 
     let homeScore = Math.max(0, driveSummary?.homeScore ?? homeRes.score);
     let awayScore = Math.max(0, driveSummary?.awayScore ?? awayRes.score);
-    let homeTDs = homeRes.touchdowns;
-    let awayTDs = awayRes.touchdowns;
-    let homeFGs = homeRes.field_goals;
-    let awayFGs = awayRes.field_goals;
-    let homeXPs = homeRes.xpMade;
-    let awayXPs = awayRes.xpMade;
+    // The drive engine is the single authoritative source for BOTH the score and
+    // the scoring-play breakdown, so the box score always sums to the scoreboard
+    // (7*TDs + 3*FGs == score). Fall back to engine A only if the drive summary
+    // is unavailable.
+    let homeTDs = driveSummary?.homeTDs ?? homeRes.touchdowns;
+    let awayTDs = driveSummary?.awayTDs ?? awayRes.touchdowns;
+    let homeFGs = driveSummary?.homeFGs ?? homeRes.field_goals;
+    let awayFGs = driveSummary?.awayFGs ?? awayRes.field_goals;
+    let homeXPs = driveSummary?.homeXPs ?? homeRes.xpMade;
+    let awayXPs = driveSummary?.awayXPs ?? awayRes.xpMade;
 
     // --- OVERTIME LOGIC WITH CLUTCH MECHANICS ---
     // If tied at end of regulation, simulate OT
