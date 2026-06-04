@@ -253,6 +253,23 @@ export const cache = {
     return snapshot;
   },
 
+  /**
+   * Re-mark a previously drained snapshot as dirty. Used when a persist attempt
+   * fails after drainDirty() already cleared the flags — without this, the
+   * drained mutations would be silently lost instead of retried on the next
+   * flush. Safe to merge with any mutations accumulated since the drain
+   * (IndexedDB writes are idempotent puts).
+   */
+  restoreDirty(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') return;
+    if (snapshot.meta) _dirty.meta = true;
+    (snapshot.teams || []).forEach(id => _dirty.teams.add(id));
+    (snapshot.players || []).forEach(id => _dirty.players.add(id));
+    if (Array.isArray(snapshot.games)) _dirty.games.push(...snapshot.games);
+    (snapshot.seasonStats || []).forEach(id => _dirty.seasonStats.add(id));
+    (snapshot.draftPicks || []).forEach(id => _dirty.draftPicks.add(id));
+  },
+
   isDirty() {
     return (
       _dirty.meta ||
