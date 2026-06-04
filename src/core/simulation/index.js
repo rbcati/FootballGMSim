@@ -1809,6 +1809,17 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
 
     // 3. Update Player Stats (mutates roster objects)
     if (stats) {
+        const commitGameId = gameData.gameId ?? gameData.id ?? null;
+        // Lazily attach a runtime-only Set of game ids already accumulated into a
+        // player's totals, so a retry/resim of the same game can't double-count.
+        const getProcessedGameIds = (p) => {
+            if (!p._processedGameIds) {
+                Object.defineProperty(p, '_processedGameIds', {
+                    value: new Set(), enumerable: false, writable: true, configurable: true,
+                });
+            }
+            return p._processedGameIds;
+        };
         const updateRosterStats = (team, teamStats) => {
             if (!teamStats || !teamStats.players) return;
             team.roster.forEach(p => {
@@ -1828,18 +1839,23 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
                     }
                     p.stats.game = normalizeGameStatsForBoxScore(rawGame);
 
+                    const processedGameIds = getProcessedGameIds(p);
                     if (isPlayoff) {
                         if (!p.stats.playoffs) p.stats.playoffs = {};
-                        accumulateStats(p.stats.game, p.stats.playoffs);
-                        if (!p.stats.playoffs.gamesPlayed) p.stats.playoffs.gamesPlayed = 0;
-                        p.stats.playoffs.gamesPlayed++;
+                        const counted = accumulateStats(p.stats.game, p.stats.playoffs, commitGameId, processedGameIds);
+                        if (counted) {
+                            if (!p.stats.playoffs.gamesPlayed) p.stats.playoffs.gamesPlayed = 0;
+                            p.stats.playoffs.gamesPlayed++;
+                        }
                     } else {
-                        accumulateStats(p.stats.game, p.stats.season);
-                        if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
-                        p.stats.season.gamesPlayed++;
+                        const counted = accumulateStats(p.stats.game, p.stats.season, commitGameId, processedGameIds);
+                        if (counted) {
+                            if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
+                            p.stats.season.gamesPlayed++;
 
-                        if (updateAdvancedStats) {
-                            updateAdvancedStats(p, p.stats.season);
+                            if (updateAdvancedStats) {
+                                updateAdvancedStats(p, p.stats.season);
+                            }
                         }
                     }
 

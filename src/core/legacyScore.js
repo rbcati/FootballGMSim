@@ -125,19 +125,12 @@ function scoreProduction(bucket, careerStats) {
 }
 
 function getMergedAwardCounts(playerId, accolades, archivedSeasons, teams) {
-  const { counts: tCounts } = countAwardsFromTimeline(playerId, accolades, archivedSeasons, teams);
-  const loose = countAccoladesMissingYear(accolades);
-  return {
-    mvp: tCounts.mvp + loose.mvp,
-    opoy: tCounts.opoy + loose.opoy,
-    dpoy: tCounts.dpoy + loose.dpoy,
-    roty: tCounts.roty + loose.roty,
-    sbMvp: tCounts.sbMvp + loose.sbMvp,
-    sbRing: tCounts.sbRing + loose.sbRing,
-    allPro: tCounts.allPro + loose.allPro,
-    bestPos: tCounts.bestPos + loose.bestPos,
-    proBowl: tCounts.proBowl + loose.proBowl,
-  };
+  // buildMergedPlayerAwardTimeline now retains year-less accolades (deduped by
+  // canonical award type), so the timeline counts are authoritative. We no
+  // longer add a separate "loose" year-less count on top — that double-counted
+  // awards and could inflate MVP totals past the HOF threshold.
+  const { counts } = countAwardsFromTimeline(playerId, accolades, archivedSeasons, teams);
+  return { ...counts };
 }
 
 function countAwardsFromTimeline(playerId, accolades, archivedSeasons, teams) {
@@ -166,25 +159,6 @@ function countAwardsFromTimeline(playerId, accolades, archivedSeasons, teams) {
     else if (c === 'pro_bowl' || c === 'PRO_BOWL') counts.proBowl += 1;
   }
   return { counts, rows };
-}
-
-function countAccoladesMissingYear(accolades) {
-  const c = {
-    mvp: 0, opoy: 0, dpoy: 0, roty: 0, sbMvp: 0, sbRing: 0, allPro: 0, bestPos: 0, proBowl: 0,
-  };
-  for (const a of Array.isArray(accolades) ? accolades : []) {
-    const t = String(a?.type ?? '');
-    const y = a?.year ?? a?.seasonYear;
-    if (Number.isFinite(Number(y)) && Number(y) > 0) continue;
-    if (t === 'MVP') c.mvp += 1;
-    else if (t === 'OPOY') c.opoy += 1;
-    else if (t === 'DPOY') c.dpoy += 1;
-    else if (t === 'ROTY') c.roty += 1;
-    else if (t === 'SB_MVP') c.sbMvp += 1;
-    else if (t === 'SB_RING') c.sbRing += 1;
-    else if (t === 'PRO_BOWL') c.proBowl += 1;
-  }
-  return c;
 }
 
 function scoreAwards(player, archivedSeasons, teams) {

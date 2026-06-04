@@ -206,15 +206,32 @@ export function careerTotalsFromPlayer(player) {
   return out;
 }
 
+/**
+ * Single authoritative career-stat aggregator. Merges a player's on-object
+ * `careerStats` with any archive-only season lines from `leagueHistory`, so an
+ * archive-only player (no live careerStats) is never invisible. Returns totals
+ * keyed by RECORD_KEYS. This is the one engine both the record book and the
+ * legacy records screen route through.
+ *
+ * @param {object} player
+ * @param {any[]} leagueHistory archived seasons
+ * @returns {Record<string, number>} career totals keyed by RECORD_KEYS
+ */
+export function getCareerStats(player, leagueHistory = []) {
+  const deduped = dedupeCareerStatLines(player?.careerStats);
+  const existingKeys = deduped.map((l) => careerLineSeasonKey(l)).filter(Boolean);
+  const archiveOnly = collectArchiveOnlyCareerLinesForPlayer(player?.id ?? player?.playerId, leagueHistory, existingKeys);
+  const mergedLines = dedupeCareerStatLines([...deduped, ...archiveOnly]);
+  return careerTotalsFromPlayer({ ...player, careerStats: mergedLines });
+}
+
 function topNPlayersByCareer(players, leagueHistory, recordKey, n = 10) {
   const rows = [];
   for (const p of players || []) {
     const deduped = dedupeCareerStatLines(p?.careerStats);
     const existingKeys = deduped.map((l) => careerLineSeasonKey(l)).filter(Boolean);
     const archiveOnly = collectArchiveOnlyCareerLinesForPlayer(p?.id ?? p?.playerId, leagueHistory, existingKeys);
-    const mergedLines = dedupeCareerStatLines([...deduped, ...archiveOnly]);
-    const synthetic = { ...p, careerStats: mergedLines };
-    const totals = careerTotalsFromPlayer(synthetic);
+    const totals = getCareerStats(p, leagueHistory);
     const v = num(totals[recordKey]);
     if (v <= 0) continue;
     rows.push({

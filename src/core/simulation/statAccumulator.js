@@ -605,13 +605,28 @@ export function generatePunterStats(punter, teamScore, Urng) {
 /**
  * Accumulate game stats into a target stats object (season or career).
  * Ignores calculated fields like averages and percentages.
+ *
+ * Idempotency guard: when both `gameId` and `processedGameIds` (a Set) are
+ * supplied, a game already present in the set is skipped and the function
+ * returns `false`. This stops any retry / manual-resim path from double-counting
+ * the same game into a player's season totals. Without those args the behaviour
+ * is the legacy blind `+=` (returns `true`).
+ *
+ * @returns {boolean} whether the stats were accumulated (false if skipped).
  */
-export function accumulateStats(source, target) {
-  if (!source || !target) return;
+export function accumulateStats(source, target, gameId = null, processedGameIds = null) {
+  if (!source || !target) return false;
+
+  if (gameId != null && processedGameIds && typeof processedGameIds.has === 'function') {
+    const key = String(gameId);
+    if (processedGameIds.has(key)) return false;
+    processedGameIds.add(key);
+  }
 
   for (const [key, value] of Object.entries(source)) {
     if (typeof value !== 'number') continue;
     if (DERIVED_STAT_KEYS.has(key)) continue;
     target[key] = (target[key] || 0) + value;
   }
+  return true;
 }

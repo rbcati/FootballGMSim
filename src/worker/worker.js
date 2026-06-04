@@ -9682,7 +9682,7 @@ async function archiveSeason(seasonId) {
     const existingRecords = meta.records ?? null;
     const allPlayersForRecords = cache.getAllPlayers();
     const { records: updatedRecords, broken: brokenRecords } = processSeasonRecords(
-      existingRecords, populatedStats, allPlayersForRecords, year, teamAbbrMap
+      existingRecords, populatedStats, allPlayersForRecords, year, teamAbbrMap, meta.leagueHistory ?? []
     );
     cache.setMeta({ records: updatedRecords });
 
