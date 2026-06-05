@@ -2,9 +2,11 @@
 // completed game/box-score object. Consumes only fields that exist in
 // RichGameSummary and the legacy adapter output — never fabricates values.
 //
+// Emitted when the source game provides it (richGameSimulator):
+//   driveSummary    — per-drive result/yards/plays/time-of-possession
+//
 // Deferred (not supported by current sim output):
-//   driveSummary    — no per-drive play count or net-yards tracking
-//   longestDriveYards — same reason
+//   longestDriveYards
 //   down/distance context per play
 //   win probability chart data
 //   full play-by-play with formation/personnel
@@ -77,6 +79,22 @@ function deriveTurningPoints(game) {
     }));
 }
 
+const DRIVE_RESULTS = new Set(['TD', 'FG', 'Punt', 'INT', 'Fumble', 'Downs']);
+
+function deriveDriveSummary(game) {
+  const drives = safeArr(game?.driveSummary)
+    .filter((d) => d && typeof d === 'object')
+    .map((d, idx) => ({
+      drive: safeInt(d.drive) || idx + 1,
+      team: d.team === 'home' || d.team === 'away' ? d.team : String(d.team ?? ''),
+      result: DRIVE_RESULTS.has(d.result) ? d.result : String(d.result ?? 'Downs'),
+      yards: safeInt(d.yards),
+      plays: safeInt(d.plays),
+      topSeconds: safeInt(d.topSeconds),
+    }));
+  return drives.length ? drives : null;
+}
+
 function buildTeamFlowEntry(stats) {
   if (!stats || typeof stats !== 'object') return null;
   return {
@@ -124,14 +142,18 @@ export function buildGameFlowSummary(game) {
   const scoringTimeline = deriveScoringTimeline(game);
   const turningPoints = deriveTurningPoints(game);
   const teamFlow = deriveTeamFlow(game);
+  const driveSummary = deriveDriveSummary(game);
 
-  if (!scoringTimeline.length && !turningPoints.length && !teamFlow) return null;
+  if (!scoringTimeline.length && !turningPoints.length && !teamFlow && !driveSummary) return null;
 
-  return {
+  const out = {
     version: GAME_FLOW_VERSION,
     scoringTimeline,
-    // driveSummary intentionally omitted — deferred, no per-drive tracking in sim
     turningPoints,
     teamFlow,
   };
+  // Only present when the sim supplied per-drive data (richGameSimulator). Legacy
+  // games omit it so the drive chart can fall back gracefully.
+  if (driveSummary) out.driveSummary = driveSummary;
+  return out;
 }

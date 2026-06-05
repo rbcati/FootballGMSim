@@ -123,6 +123,7 @@ export function mapGameSummaryToLegacyResult(summary: GameSummary) {
     recapText: summary.recapText ?? (summary.topReason1 ? `${summary.topReason1}. ${summary.topReason2 ?? ''}`.trim() : null),
     recap: summary.recapText ?? null,
     quarterScores: summary.quarterScores,
+    driveSummary: summary.driveSummary ?? [],
     boxScore: summary.boxScore,
     playerStats: summary.boxScore,
     playLogs: summary.playLogs,

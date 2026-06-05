@@ -36,7 +36,7 @@ export const DEFAULT_LEAGUE_SETTINGS = Object.freeze({
   progressionEnvironmentStrength: 50,
   draftClassStrength: 50,
   staffImpactStrength: 50,
-  useNewSimulationEngine: false,
+  useNewSimulationEngine: true,
   revenueSharing: true,
   luxuryTaxRate: 20,
   revealHiddenRatingsForCommissioner: true,
