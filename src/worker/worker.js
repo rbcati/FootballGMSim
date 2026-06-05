@@ -112,6 +112,7 @@ import { parseWeeklyHeadlines } from '../core/history/NewsEngine.ts';
 import { calculateAwardRaces, selectProBowlers } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
+import { getZeroStats as getZeroSeasonStatsSchema } from '../core/state.js';
 import { getDevelopmentRateModifier } from '../core/coaching-philosophy-effects.js';
 import { processOffseasonEvolution, processWeeklyEvolution } from '../core/progression/evolutionEngine.ts';
 import { buildTeamDevelopmentFocusMap as buildCanonicalDevelopmentFocusMap } from './developmentFocus.js';
@@ -8463,7 +8464,9 @@ async function handleStartDraft(payload, id) {
   });
 
   const champId  = meta.championTeamId ?? null;
-  const draftOrder = buildDraftOrder(teams, settings, champId);
+  // Seeded RNG (mulberry32) + schedule so the SoS tiebreaker and any coin-flip
+  // are reproducible from the save seed rather than Math.random.
+  const draftOrder = buildDraftOrder(teams, settings, champId, Utils.random, { schedule: meta?.schedule });
 
   // Build full pick table
   const compPicksByRound = {};
@@ -9306,8 +9309,20 @@ async function handleAdvanceOffseason(payload, id) {
   const wallHits = [...evolvedLeaders.wallHits, ...legacyProgression.wallHits];
 
   // Flush progression mutations (ratings, ovr, progressionDelta, potential)
+  // and append the year-over-year ovrHistory snapshot. Legacy players already
+  // had the entry pushed by processPlayerProgression; attributesV2 players get
+  // it here. Idempotent on season so it never double-writes. Runs before aging,
+  // so player.age is the age during the season just completed.
+  const ovrHistorySeason = Number(meta?.year ?? 2025);
   for (const player of allPlayers) {
     if (player.status === 'draft_eligible' || player.status === 'retired') continue;
+    const existingOvrHistory = Array.isArray(player.ovrHistory) ? player.ovrHistory : [];
+    const hasSeasonEntry = existingOvrHistory.length > 0
+      && existingOvrHistory[existingOvrHistory.length - 1]?.season === ovrHistorySeason;
+    const ovrHistory = hasSeasonEntry
+      ? existingOvrHistory
+      : [...existingOvrHistory, { season: ovrHistorySeason, ovr: player.ovr, age: player.age }].slice(-20);
+    player.ovrHistory = ovrHistory;
     cache.updatePlayer(player.id, {
       ratings:          player.ratings,
       ovr:              player.ovr,
@@ -9316,6 +9331,7 @@ async function handleAdvanceOffseason(payload, id) {
       developmentContext: player.developmentContext ?? null,
       personalityProfile: player.personalityProfile ?? ensurePersonalityProfile(player),
       developmentHistory: player.developmentHistory ?? [],
+      ovrHistory,
     });
   }
 
@@ -9636,9 +9652,19 @@ async function archiveSeason(seasonId) {
         || (['DL', 'DE', 'DT', 'EDGE', 'LB', 'CB', 'S', 'SS', 'FS'].includes(posForDef)
           ? Number(totals.interceptions ?? 0)
           : 0);
+      // Archive EVERY tracked per-season field (full getZeroStats schema) so HOF
+      // scoring, career records and historical views never silently lose data.
+      // Legacy display aliases (passYds/passTDs/…) are layered on top so existing
+      // career/HOF consumers keep working.
+      const fullSeasonStats = {};
+      for (const key of Object.keys(getZeroSeasonStatsSchema())) {
+        fullSeasonStats[key] = Number(totals[key] ?? 0);
+      }
       const line = {
         season:      seasonId,
         team:        teamAbbrMap[s.teamId] ?? (s.teamId != null ? String(s.teamId) : 'FA'),
+        ...fullSeasonStats,
+        // Legacy display aliases (kept for backward compatibility):
         gamesPlayed: totals.gamesPlayed ?? 0,
         passYds:     totals.passYd      ?? 0,
         passTDs:     totals.passTD      ?? 0,

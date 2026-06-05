@@ -377,6 +377,17 @@ export function processPlayerProgression(players, options = {}) {
 
     player.ovr = ovrAfter;
     player.progressionDelta = progressionDelta;
+
+    // ── Year-over-year OVR history (powers progression charts) ─────────────
+    // Rolling 20-season window; idempotent so re-running a rollover can't double
+    // an entry. season comes from options or the season stamped on the player.
+    const ovrSeason = options?.season ?? player?.season ?? null;
+    const ovrHistory = Array.isArray(player.ovrHistory) ? player.ovrHistory : [];
+    if (!ovrHistory.length || ovrHistory[ovrHistory.length - 1]?.season !== ovrSeason) {
+      ovrHistory.push({ season: ovrSeason, ovr: player.ovr, age });
+    }
+    player.ovrHistory = ovrHistory.slice(-20);
+
     player.developmentContext = {
       baseAgeCurve: age <= 25 ? 'growth' : age <= 29 ? 'prime' : 'decline',
       trainingFocus: org?.trainingFocus ?? 'balanced',

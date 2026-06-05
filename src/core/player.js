@@ -18,6 +18,30 @@ const CONTRACT_DEFAULT = {
 
 const DEV_TRAITS = ['Normal', 'Star', 'Superstar', 'XFactor'];
 
+// Weighted dev-trait roll. Replaces the old flat U.choice (25% each), which made
+// 25% of every draft class a Superstar/X-Factor and flooded the league with
+// elites. The six talent bands collapse onto the four engine dev traits:
+//   X-Factor 2% → XFactor | Superstar 8% → Superstar | Star 20% → Star
+//   Solid 35% + Backup 25% + Bust 10% (70%) → Normal
+function rollDevTrait() {
+  const r = U.random();
+  if (r < 0.02) return 'XFactor';
+  if (r < 0.10) return 'Superstar';
+  if (r < 0.30) return 'Star';
+  return 'Normal';
+}
+
+// Target OVR + potential bands by draft slot (1-based rank within the sorted
+// class). Tiers the class so top picks are genuinely scarce blue-chips and the
+// talent tapers realistically by round, instead of a flat uniform roll.
+function draftTargetForRank(rank) {
+  if (rank <= 5)   return { ovrMin: 78, ovrMax: 85, potMin: 85, potMax: 99 }; // picks 1–5
+  if (rank <= 32)  return { ovrMin: 72, ovrMax: 80, potMin: 78, potMax: 92 }; // picks 6–32
+  if (rank <= 96)  return { ovrMin: 65, ovrMax: 74, potMin: 70, potMax: 85 }; // rounds 2–3
+  if (rank <= 160) return { ovrMin: 58, ovrMax: 68, potMin: 62, potMax: 78 }; // rounds 4–5
+  return { ovrMin: 50, ovrMax: 62, potMin: 55, potMax: 72 };                  // round 6+ / UDFA
+}
+
 // ============================================================================
 // PLAYER PROGRESSION & SKILL TREES
 // ============================================================================
@@ -427,7 +451,7 @@ function makePlayer(pos, age = null, ovr = null, eliteNames = null) {
         morale: U.rand(70, 95),
         negotiationStatus: 'OPEN',
         lockoutWeeks: 0,
-        devTrait: U.choice(DEV_TRAITS),
+        devTrait: rollDevTrait(),
         xp: 0,
         ovrHistory: [],
         potential: playerPotential,
@@ -513,7 +537,11 @@ function generateDraftClass(year, options = {}) {
 
     for (let i = 0; i < classSize; i++) {
         const pos = U.choice(posKeys);
-        const rookie = makePlayer(pos, 21, null, eliteNames); // Rookies are young
+        // Tier target OVR/potential by draft slot so the class isn't a flat roll.
+        const band = draftTargetForRank(i + 1);
+        const targetOvr = U.rand(band.ovrMin, band.ovrMax);
+        const rookie = makePlayer(pos, 21, targetOvr, eliteNames); // Rookies are young
+        rookie.potential = U.clamp(U.rand(band.potMin, band.potMax), rookie.ovr, 99);
         rookie.year = year;
         rookie.draftId = i + 1;
         rookie.age = U.choice([21, 22, 23]);
@@ -527,7 +555,7 @@ function generateDraftClass(year, options = {}) {
         });
         rookie.scoutedOvr = scoutingRange.estimated;
         rookie.scoutingReport = scoutingRange;
-        rookie.devTrait = U.choice(DEV_TRAITS);
+        rookie.devTrait = rollDevTrait();
         rookie.projectedRound = U.clamp(Math.ceil((100 - rookie.scoutedOvr) / 10), 1, 7);
         rookie.combineResults = simulateCombineResults(rookie.pos, rookie.ratings);
         rookie.collegeStats = generateCollegeStats(rookie.pos, rookie.trueOvr, rookie.potential);

@@ -76,7 +76,10 @@ const LAST_NAMES = (typeof window !== 'undefined' && window.EXPANDED_LAST_NAMES)
  * Returns an object with common stats initialized to 0.
  * @returns {Object} Zeroed stats object
  */
-function getZeroStats() {
+// Exported as the single source of truth for the full per-season stat schema.
+// Season archival (worker.archiveSeason) reads these keys so no tracked field is
+// silently dropped from career history. Do not prune fields here.
+export function getZeroStats() {
   return {
     // General
     gamesPlayed: 0,
