@@ -109,7 +109,7 @@ import {
 import AiLogic from '../core/ai-logic.js';
 import NewsEngine, { createNewsItem, addNewsItem } from '../core/news-engine.js';
 import { parseWeeklyHeadlines } from '../core/history/NewsEngine.ts';
-import { calculateAwardRaces } from '../core/awards-logic.js';
+import { calculateAwardRaces, selectProBowlers } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
 import { getDevelopmentRateModifier } from '../core/coaching-philosophy-effects.js';
@@ -1715,40 +1715,56 @@ async function flushDirty(forceFlush = false) {
       return true;
     });
 
-  // Draft picks are handled separately (small volume, own store not in bulkWrite).
-  if (dirty.draftPicks.length > 0) {
-    const toSave = dirty.draftPicks
-      .map(id => cache.getDraftPick(id))
-      .filter(pk => pk && pk.id != null);
-    if (toSave.length) await DraftPicks.saveBulk(toSave);
-  }
-
-  // Update Global Save Metadata if league meta changed
-  if (dirty.meta) {
-    const meta = ensureDynastyMeta(cache.getMeta());
-    const leagueId = getActiveLeagueId();
-    if (leagueId) {
-      const userTeam = cache.getTeam(meta.userTeamId);
-      await Saves.save({
-        id: leagueId,
-        name: meta.name || `League ${leagueId}`,
-        year: meta.year,
-        teamId: meta.userTeamId,
-        teamAbbr: userTeam?.abbr || '???',
-        lastPlayed: Date.now()
-      });
+  // drainDirty() above already cleared the cache's dirty flags. If any write
+  // below throws (e.g. a transient WebKit IDB error), restore the drained
+  // snapshot so the mutations are retried on the next flush instead of being
+  // silently lost. The draft-pick and Saves writes use their own transactions,
+  // so they are part of the same all-or-restore guard as bulkWrite.
+  try {
+    // Draft picks are handled separately (small volume, own store not in bulkWrite).
+    if (dirty.draftPicks.length > 0) {
+      const toSave = dirty.draftPicks
+        .map(id => cache.getDraftPick(id))
+        .filter(pk => pk && pk.id != null);
+      if (toSave.length) await DraftPicks.saveBulk(toSave);
     }
-  }
 
-  // bulkWrite itself also validates before each put — belt-and-suspenders.
-  await bulkWrite({
-    meta:          dirty.meta ? cache.getMeta() : null,
-    teams,
-    players,
-    playerDeletes,
-    games:         validGames,
-    seasonStats,
-  });
+    // Update Global Save Metadata if league meta changed
+    if (dirty.meta) {
+      const meta = ensureDynastyMeta(cache.getMeta());
+      const leagueId = getActiveLeagueId();
+      if (leagueId) {
+        const userTeam = cache.getTeam(meta.userTeamId);
+        await Saves.save({
+          id: leagueId,
+          name: meta.name || `League ${leagueId}`,
+          year: meta.year,
+          teamId: meta.userTeamId,
+          teamAbbr: userTeam?.abbr || '???',
+          lastPlayed: Date.now()
+        });
+      }
+    }
+
+    // bulkWrite itself also validates before each put — belt-and-suspenders.
+    await bulkWrite({
+      meta:          dirty.meta ? cache.getMeta() : null,
+      teams,
+      players,
+      playerDeletes,
+      games:         validGames,
+      seasonStats,
+    });
+  } catch (writeErr) {
+    // `dirty` is the exact set we attempted to write. On the forceFlush path it
+    // already includes pendingBatchDirty, so fold it back into the cache and
+    // clear pendingBatchDirty to avoid double-retaining. On a normal flush,
+    // pendingBatchDirty was NOT part of this attempt — leave it untouched.
+    cache.restoreDirty(dirty);
+    if (forceFlush) pendingBatchDirty = createEmptyDirtySnapshot();
+    console.error('[Worker] flushDirty: persist failed; dirty state restored for retry.', writeErr);
+    throw writeErr;
+  }
 
   // Heartbeat persistence: post a lightweight save manifest to the UI so it
   // can mirror the save index in localStorage. This protects against iOS Safari
@@ -2529,18 +2545,41 @@ function generatePlayoffWeek19() {
   // playoffSeeds[confId] = [{ teamId, seed, conf }, ...]  (index 0 = #1 seed)
   const playoffSeeds = {};
 
+  // Win% with ties counted as half a win, matching the standings view.
+  const winPct = (t) => {
+    const w = t.wins ?? 0, l = t.losses ?? 0, ti = t.ties ?? 0;
+    const g = w + l + ti;
+    return g > 0 ? (w + 0.5 * ti) / g : 0;
+  };
+  // Sort by record, tiebroken by point differential.
+  const byRecord = (a, b) => {
+    const pDiff = winPct(b) - winPct(a);
+    if (Math.abs(pDiff) > 1e-9) return pDiff > 0 ? 1 : -1;
+    const diffA = (a.ptsFor ?? 0) - (a.ptsAgainst ?? 0);
+    const diffB = (b.ptsFor ?? 0) - (b.ptsAgainst ?? 0);
+    return diffB - diffA;
+  };
+
   const rankConf = (confId) => {
-    const ranked = teams
-      .filter(t => t.conf === confId)
-      .sort((a, b) => {
-        const wDiff = (b.wins ?? 0) - (a.wins ?? 0);
-        if (wDiff !== 0) return wDiff;
-        // Tiebreaker: point differential
-        const diffA = (a.ptsFor ?? 0) - (a.ptsAgainst ?? 0);
-        const diffB = (b.ptsFor ?? 0) - (b.ptsAgainst ?? 0);
-        return diffB - diffA;
-      })
-      .slice(0, SEEDS);
+    const confTeams = teams.filter(t => t.conf === confId);
+
+    // NFL rule: every division winner is seeded ahead of every wild card.
+    // Take the best team in each division as that division's champion, rank the
+    // champions among themselves for the top seeds, then fill the remaining
+    // seeds with the best non-division-winners (wild cards).
+    const divisions = [...new Set(confTeams.map(t => t.div))];
+    const divisionWinners = divisions
+      .map(div => confTeams.filter(t => t.div === div).sort(byRecord)[0])
+      .filter(Boolean)
+      .sort(byRecord);
+    const winnerIds = new Set(divisionWinners.map(t => t.id));
+
+    const wildCards = confTeams
+      .filter(t => !winnerIds.has(t.id))
+      .sort(byRecord)
+      .slice(0, Math.max(0, SEEDS - divisionWinners.length));
+
+    const ranked = [...divisionWinners, ...wildCards].slice(0, SEEDS);
 
     // Store seeds so advancePlayoffBracket can look them up later
     playoffSeeds[confId] = ranked.map((t, i) => ({ teamId: t.id, seed: i + 1, conf: confId }));
@@ -5602,22 +5641,21 @@ async function handleImportSave({ data, saveName }, id) {
     await writeLeagueSnapshot(leagueId, snapshot);
     configureActiveLeague(leagueId);
     await openDB();
-    const rawMeta = await Meta.load();
-    const migration = migrateSaveMetaToCurrent(rawMeta ?? {});
-    if (migration.migratedTo !== migration.migratedFrom) {
-      await Meta.save(migration.migrated);
+    // Hydrate the cache through the same proven path LOAD_SAVE uses. The previous
+    // hand-rolled hydrate called methods that don't exist (cache.load,
+    // Seasons.current, Games.byWeek, DraftPicks.bySeason, News.latest) and threw
+    // on every import. loadSave() reads the snapshot we just wrote to the DB.
+    const found = await loadSave();
+    if (!found) {
+      post(toUI.ERROR, { message: 'Imported save contained no league metadata.' }, id);
+      return;
     }
-    const meta = migration.migrated;
-    cache.load({
-      meta,
-      teams: await Teams.loadAll(),
-      players: await Players.loadAll(),
-      season: await Seasons.current(),
-      weekGames: await Games.byWeek(meta?.currentSeasonId, meta?.currentWeek),
-      draftPicks: await DraftPicks.bySeason(meta?.currentSeasonId),
-      news: await News.latest(200),
-      availableCoaches: meta?.availableCoaches ?? [],
-    });
+    // Apply schema migrations in-cache, mirroring the LOAD_SAVE path.
+    const migration = migrateSaveMetaToCurrent(cache.getMeta() ?? {});
+    if (migration.migratedTo !== migration.migratedFrom) {
+      cache.setMeta(migration.migrated);
+    }
+    const meta = ensureDynastyMeta(cache.getMeta());
     repairRosterAndTeamLinks({ reason: 'import-save' });
     for (const team of cache.getAllTeams()) {
       recalculateTeamCap(team.id);
@@ -6173,6 +6211,41 @@ async function resolvePendingFreeAgencyOffers({ resolutionDay = 7, onlyPlayerId 
 
 // ── Handler: RELEASE_PLAYER ───────────────────────────────────────────────────
 
+/**
+ * Accrue dead cap onto a team when it parts with a player who still has
+ * prorated signing-bonus money on the books. Shared by both the release path
+ * and the trade path so the cap accounting stays identical. Post-June-1 splits
+ * the acceleration between the current year and next year; otherwise the full
+ * remaining proration hits the current year. Returns the total dead cap added.
+ */
+function accrueReleaseDeadCap(teamId, contract, meta) {
+  const team = cache.getTeam(teamId);
+  if (!team || !contract) return 0;
+
+  const yearsRemaining = Math.max(contract.years ?? 1, 1);
+  const yearsTotal     = Math.max(contract.yearsTotal ?? yearsRemaining, 1);
+  const totalBonus     = contract.signingBonus ?? 0;
+  const annualBonus    = totalBonus / yearsTotal;
+  if (annualBonus <= 0) return 0;
+
+  const isPostJune1 = Constants.SALARY_CAP.POST_JUNE1_PHASES.includes(meta?.phase);
+
+  if (isPostJune1 && yearsRemaining > 1) {
+    const currentYearDead = annualBonus;
+    const futureYearsDead = annualBonus * (yearsRemaining - 1);
+    if (currentYearDead > 0) cache.updateTeam(teamId, { deadCap: (team.deadCap ?? 0) + currentYearDead });
+    if (futureYearsDead > 0) {
+      const freshTeam = cache.getTeam(teamId);
+      cache.updateTeam(teamId, { deadMoneyNextYear: (freshTeam.deadMoneyNextYear ?? 0) + futureYearsDead });
+    }
+    return currentYearDead + futureYearsDead;
+  }
+
+  const deadMoney = annualBonus * yearsRemaining;
+  if (deadMoney > 0) cache.updateTeam(teamId, { deadCap: (team.deadCap ?? 0) + deadMoney });
+  return deadMoney;
+}
+
 async function releasePlayerWithValidation({ playerId, teamId }) {
   const player = cache.getPlayer(playerId);
   if (!player) return { ok: false, error: 'Player not found' };
@@ -6181,25 +6254,7 @@ async function releasePlayerWithValidation({ playerId, teamId }) {
   const meta = ensureDynastyMeta(cache.getMeta());
   const team = cache.getTeam(teamId);
   if (team && player.contract) {
-    const yearsRemaining = Math.max(player.contract.years ?? 1, 1);
-    const yearsTotal     = Math.max(player.contract.yearsTotal ?? yearsRemaining, 1);
-    const totalBonus     = player.contract.signingBonus ?? 0;
-    const annualBonus    = totalBonus / yearsTotal;
-
-    const isPostJune1 = Constants.SALARY_CAP.POST_JUNE1_PHASES.includes(meta.phase);
-
-    if (isPostJune1 && yearsRemaining > 1) {
-      const currentYearDead = annualBonus;
-      const futureYearsDead = annualBonus * (yearsRemaining - 1);
-      if (currentYearDead > 0) cache.updateTeam(teamId, { deadCap: (team.deadCap ?? 0) + currentYearDead });
-      if (futureYearsDead > 0) {
-        const freshTeam = cache.getTeam(teamId);
-        cache.updateTeam(teamId, { deadMoneyNextYear: (freshTeam.deadMoneyNextYear ?? 0) + futureYearsDead });
-      }
-    } else {
-      const deadMoney = annualBonus * yearsRemaining;
-      if (deadMoney > 0) cache.updateTeam(teamId, { deadCap: (team.deadCap ?? 0) + deadMoney });
-    }
+    accrueReleaseDeadCap(teamId, player.contract, meta);
   }
 
   markOffseasonRelease(player, teamId, meta);
@@ -7341,10 +7396,19 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
 }
 
 async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving }) {
+  // Trading away a player accelerates his remaining signing-bonus proration onto
+  // the team that gives him up (just like a release). The acquiring team picks up
+  // his cap hit via recalculateTeamCap below. Accrue dead cap BEFORE reassigning
+  // the player's team so the charge lands on the correct (giving) side.
+  const tradeMeta = ensureDynastyMeta(cache.getMeta());
   (offering?.playerIds ?? []).forEach(pid => {
+    const player = cache.getPlayer(Number(pid));
+    if (player?.contract) accrueReleaseDeadCap(Number(fromTeamId), player.contract, tradeMeta);
     cache.updatePlayer(Number(pid), { teamId: Number(toTeamId) });
   });
   (receiving?.playerIds ?? []).forEach(pid => {
+    const player = cache.getPlayer(Number(pid));
+    if (player?.contract) accrueReleaseDeadCap(Number(toTeamId), player.contract, tradeMeta);
     cache.updatePlayer(Number(pid), { teamId: Number(fromTeamId) });
   });
   transferPickOwnership(offering?.pickIds ?? [], Number(fromTeamId), Number(toTeamId));
@@ -9637,6 +9701,19 @@ async function archiveSeason(seasonId) {
     }
     if (awards.dpoy?.playerId != null) {
       await grantAccolade(awards.dpoy.playerId, { type: 'DPOY', year, seasonId });
+    }
+
+    // Pro Bowl: top players per position per conference. Previously these
+    // accolades were consumed (HOF/legacy score, player profile counts) but
+    // never produced — no code selected Pro Bowlers. Now we actually grant them.
+    try {
+      const proBowlers = selectProBowlers(populatedStats, teams, year);
+      for (const sel of proBowlers) {
+        await grantAccolade(sel.playerId, { type: 'PRO_BOWL', year, seasonId, pos: sel.pos, conf: sel.conf });
+      }
+      if (proBowlers.length > 0) awards.proBowl = proBowlers;
+    } catch (proBowlErr) {
+      console.error('[Worker] Pro Bowl selection failed:', proBowlErr);
     }
     if (awards.roty?.playerId != null) {
       await grantAccolade(awards.roty.playerId, { type: 'ROTY', year, seasonId });

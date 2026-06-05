@@ -426,3 +426,66 @@ export function calculateAwardRaces(allEntries, playerMap, allTeams, currentYear
 
   return { awards, allPro };
 }
+
+// ── Pro Bowl selection ─────────────────────────────────────────────────────────
+
+/**
+ * Roster slots per conference, keyed by normalisePos() group. Roughly mirrors
+ * an NFL Pro Bowl conference roster (multiple selections per position, unlike
+ * the single-team All-Pro list).
+ */
+const PRO_BOWL_SLOTS = {
+  QB: 3, RB: 3, WR: 4, TE: 2, OL: 7,
+  EDGE: 3, DT: 2, LB: 4, CB: 4, S: 3, K: 1, P: 1,
+};
+
+const PRO_BOWL_DEF_GROUPS = new Set(['EDGE', 'DT', 'LB', 'CB', 'S']);
+
+/**
+ * Select the Pro Bowl roster: the top players at each position in each
+ * conference, ranked by the same scoring functions used for the award races.
+ * Pure and deterministic.
+ *
+ * @param entries  Array of enriched stat entries: { playerId, pos, teamId, totals }
+ * @param teams    Array of team objects with { id, conf, wins }
+ * @param year     Numeric season year (stamped onto each selection)
+ * @returns Array<{ playerId, pos, conf, year }>
+ */
+export function selectProBowlers(entries, teams, year) {
+  const teamById = new Map((teams || []).map(t => [t.id, t]));
+
+  const eligible = (entries || [])
+    .filter(e => (e.totals?.gamesPlayed ?? 0) >= MIN_GAMES_AWARD)
+    .map(e => {
+      const team = teamById.get(e.teamId);
+      return {
+        ...e,
+        conf:     team ? normaliseConf(team.conf) : -1,
+        teamWins: team ? (team.wins ?? 0) : 0,
+        group:    normalisePos(e.pos),
+      };
+    })
+    .filter(e => e.conf === CONF_AFC || e.conf === CONF_NFC);
+
+  const scoreFor = (e) => {
+    if (e.group === 'K') return (e.totals?.fgMade ?? 0) * 2 + (e.totals?.fgAttempts ?? 0) * 0.5;
+    if (e.group === 'P') { const t = e.totals ?? {}; return t.punts ? t.puntYards / t.punts : 0; }
+    if (PRO_BOWL_DEF_GROUPS.has(e.group)) return defensiveScore(e);
+    return offensiveScore(e, e.teamWins);
+  };
+
+  const selections = [];
+  for (const conf of [CONF_AFC, CONF_NFC]) {
+    for (const [group, slots] of Object.entries(PRO_BOWL_SLOTS)) {
+      const picks = eligible
+        .filter(e => e.conf === conf && e.group === group)
+        .map(e => ({ e, score: scoreFor(e) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, slots);
+      for (const { e } of picks) {
+        selections.push({ playerId: e.playerId, pos: e.pos, conf, year });
+      }
+    }
+  }
+  return selections;
+}
