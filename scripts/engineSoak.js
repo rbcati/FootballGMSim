@@ -111,6 +111,7 @@ function newAccumulator(teamCount) {
     scores: [],
     wins: new Array(teamCount).fill(0),
     losses: new Array(teamCount).fill(0),
+    minTeamScore: Infinity,
   };
 }
 
@@ -121,6 +122,7 @@ function recordGame(acc, homeIdx, awayIdx, homeScore, awayScore, homePassYd, hom
   acc.passYds += homePassYd + awayPassYd;
   acc.rushYds += homeRushYd + awayRushYd;
   acc.scores.push(homeScore, awayScore);
+  acc.minTeamScore = Math.min(acc.minTeamScore, homeScore, awayScore);
   if (homeScore >= awayScore) { acc.wins[homeIdx] += 1; acc.losses[awayIdx] += 1; }
   else { acc.wins[awayIdx] += 1; acc.losses[homeIdx] += 1; }
 }
@@ -215,6 +217,7 @@ function summarize(acc, ovrByTeam) {
     rushYdsPerGame: acc.teamGames > 0 ? acc.rushYds / acc.teamGames : 0,
     scoreStdDev: stdDev(acc.scores),
     topQuartileWinPct: topQuartileWinPct(acc, ovrByTeam),
+    minTeamScore: acc.minTeamScore === Infinity ? 0 : acc.minTeamScore,
   };
 }
 
@@ -228,6 +231,7 @@ export function evaluateGate(matchup, legacy) {
     { name: 'Stat realism (pass yds/game)', pass: inRange(matchup.passYdsPerGame, t.passYdsPerGame), detail: `${matchup.passYdsPerGame.toFixed(1)} (want ${t.passYdsPerGame.min}–${t.passYdsPerGame.max})` },
     { name: 'Stat realism (rush yds/game)', pass: inRange(matchup.rushYdsPerGame, t.rushYdsPerGame), detail: `${matchup.rushYdsPerGame.toFixed(1)} (want ${t.rushYdsPerGame.min}–${t.rushYdsPerGame.max})` },
     { name: 'Stat realism (points/game)', pass: inRange(matchup.pointsPerGame, t.pointsPerGame), detail: `${matchup.pointsPerGame.toFixed(1)} (want ${t.pointsPerGame.min}–${t.pointsPerGame.max})` },
+    { name: 'Score floor (no team should average < 8 pts)', pass: matchup.pointsPerGame >= 16, detail: `${matchup.pointsPerGame.toFixed(1)} (floor: 16 combined)` },
     { name: 'Score variance (PBP std-dev >= legacy)', pass: matchup.scoreStdDev >= legacy.scoreStdDev, detail: `PBP ${matchup.scoreStdDev.toFixed(2)} vs legacy ${legacy.scoreStdDev.toFixed(2)}` },
     { name: 'Performance (ms/game)', pass: matchup.msPerGame <= t.maxMsPerGame, detail: `${matchup.msPerGame.toFixed(3)} ms (max ${t.maxMsPerGame})` },
     { name: 'Crash/error rate (zero throws)', pass: matchup.crashes === 0, detail: `${matchup.crashes} crashes` },

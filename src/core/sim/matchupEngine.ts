@@ -203,7 +203,7 @@ export function resolveMatchup(
 
   // Base success tuned so completion rate lands near the NFL ~63–65% range
   // (was ~39%, which starved drives and prevented touchdowns entirely).
-  const base = playType === 'pass' ? 0.62 : 0.62;
+  const base = playType === 'pass' ? 0.62 : 0.54;
   // Talent gap influences success; per-game form (ctx.formBias) injects the
   // hot/cold-day variance that keeps favorites at a realistic ~70% win rate and
   // gives final scores NFL-like spread instead of grinding to the mean.

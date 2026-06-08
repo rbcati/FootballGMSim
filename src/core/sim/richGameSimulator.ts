@@ -337,9 +337,21 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   // Per-game offensive "form" (hot/cold day). Sum of three rng draws approximates
   // a normal distribution; scaled to a meaningful success-input swing so favorites
   // don't win deterministically and final scores get NFL-like game-to-game spread.
-  const drawForm = (): number => ((rng() + rng() + rng()) - 1.5) * 1.0;
-  const homeForm = drawForm();
-  const awayForm = drawForm();
+  const drawForm = (): number => ((rng() + rng() + rng()) - 1.5) * 0.35;
+  const homeOff1 = drawForm();
+  const homeOff2 = drawForm();
+  const awayOff1 = drawForm();
+  const awayOff2 = drawForm();
+  const homeDef1 = drawForm();
+  const homeDef2 = drawForm();
+  const awayDef1 = drawForm();
+  const awayDef2 = drawForm();
+  // Shared game-pace factor (tempo / conditions): positive = open game, negative = grind.
+  const gamePace = drawForm();
+  // Per-game home-edge (crowd noise, surface familiarity, etc.): helps home offense, hurts away.
+  const homeEdge = drawForm();
+  const homeFormBias = homeOff1 + homeOff2 - awayDef1 - awayDef2 + gamePace + homeEdge;
+  const awayFormBias = awayOff1 + awayOff2 - homeDef1 - homeDef2 + gamePace - homeEdge;
 
   const state = {
     homeScore: 0,
@@ -444,7 +456,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       clockSec: state.clockSec,
       weather: payload.weather,
       normalizationConstant: state.normalizationConstant,
-      formBias: state.possession === 'home' ? homeForm : awayForm,
+      formBias: state.possession === 'home' ? homeFormBias : awayFormBias,
       fatigueFactor: clamp(fatigueBaseline - offensePrep.fatigueDisciplineDelta * 0.35, 0, 0.95),
       playType,
       targetId: target?.id != null ? String(target.id) : undefined,
