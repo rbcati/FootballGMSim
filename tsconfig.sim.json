@@ -1,0 +1,20 @@
+{
+  "// purpose": "Wave 3 strict-mode gate for the play-by-play simulation engine. These two files decide every game once useNewSimulationEngine is on, so they must stay type-safe. Run: npm run check:sim-types",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "skipLibCheck": true,
+    "module": "esnext",
+    "target": "es2022",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": false,
+    "types": []
+  },
+  "files": [
+    "src/core/sim/matchupEngine.ts",
+    "src/core/sim/richGameSimulator.ts"
+  ]
+}

@@ -2,6 +2,18 @@ import { resolveMatchup, DEFAULT_NORMALIZATION_CONSTANT } from './matchupEngine.
 import type { AttributesV2 } from '../../types/player.ts';
 import type { DerivedGamePlanMultipliers } from './gamePlanMultipliers.ts';
 import { archiveGameStats } from '../playerSeasonStatsArchive.js';
+import { decideLateGameSequence } from '../simulation/clockManager.js';
+
+export type DriveResult = 'TD' | 'FG' | 'Punt' | 'INT' | 'Fumble' | 'Downs';
+
+export interface DriveSummaryItem {
+  drive: number;
+  team: 'home' | 'away';
+  result: DriveResult;
+  yards: number;
+  plays: number;
+  topSeconds: number;
+}
 
 export interface SimPlayerRef {
   id: number | string;
@@ -80,6 +92,7 @@ export interface RichGameSummary {
   topReason1: string | null;
   topReason2: string | null;
   quarterScores: { home: number[]; away: number[] };
+  driveSummary: DriveSummaryItem[];
   teamStats: { home: TeamStatLine; away: TeamStatLine };
   boxScore: {
     home: Record<string, { name: string; pos: string; stats: Record<string, number> }>;
@@ -134,6 +147,13 @@ export interface RichMatchupPayload {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+// Rough offense-vs-defense edge (~[-50,50]) used to scale two-point success odds.
+function offenseScoreEdge(offense: AttributesV2, defense: AttributesV2): number {
+  const off = ((offense.throwAccuracyShort ?? 50) + (offense.routeRunning ?? 50) + (offense.passBlockStrength ?? 50)) / 3;
+  const def = ((defense.passRush ?? 50) + (defense.pressCoverage ?? 50) + (defense.zoneCoverage ?? 50)) / 3;
+  return off - def;
 }
 
 const NEUTRAL_PREP: DerivedGamePlanMultipliers = {
@@ -314,6 +334,13 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   const homePlayers = (payload.homePlayers?.length ? payload.homePlayers : defaultPlayers(payload.homeTeamId, 'home')).map((p) => ({ ...p, id: String(p.id) }));
   const awayPlayers = (payload.awayPlayers?.length ? payload.awayPlayers : defaultPlayers(payload.awayTeamId, 'away')).map((p) => ({ ...p, id: String(p.id) }));
 
+  // Per-game offensive "form" (hot/cold day). Sum of three rng draws approximates
+  // a normal distribution; scaled to a meaningful success-input swing so favorites
+  // don't win deterministically and final scores get NFL-like game-to-game spread.
+  const drawForm = (): number => ((rng() + rng() + rng()) - 1.5) * 1.0;
+  const homeForm = drawForm();
+  const awayForm = drawForm();
+
   const state = {
     homeScore: 0,
     awayScore: 0,
@@ -338,7 +365,59 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     away: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0, kickReturns: 0, kickReturnYards: 0, puntReturns: 0, puntReturnYards: 0 },
   };
 
+  // ── Per-drive tracking (powers driveSummary / the drive chart UI) ──────────
+  const driveSummary: DriveSummaryItem[] = [];
+  let driveNo = 0;
+  let curDrive = { team: state.possession, plays: 0, yards: 0, seconds: 0 };
+  const closeDrive = (result: DriveResult) => {
+    driveNo += 1;
+    driveSummary.push({
+      drive: driveNo,
+      team: curDrive.team,
+      result,
+      yards: curDrive.yards,
+      plays: curDrive.plays,
+      topSeconds: curDrive.seconds,
+    });
+    curDrive = { team: state.possession, plays: 0, yards: 0, seconds: 0 };
+  };
+
   while (state.quarter <= 4 && (stats.home.plays + stats.away.plays) < 184) {
+    const offenseLead = state.possession === 'home'
+      ? state.homeScore - state.awayScore
+      : state.awayScore - state.homeScore;
+    const late = decideLateGameSequence({
+      quarter: state.quarter,
+      clockSeconds: state.clockSec,
+      scoreDiff: offenseLead,
+      down: state.down,
+      distance: state.distance,
+      yardLine: state.yardLine,
+      timeouts: 3,
+    });
+
+    // Victory-formation kneel: protecting a multi-score lead late, burn the clock.
+    const kneel = offenseLead >= 3 && state.quarter >= 4 && state.clockSec < 60 && state.down === 1;
+    if (kneel) {
+      const offStats = state.possession === 'home' ? stats.home : stats.away;
+      offStats.plays += 1;
+      offStats.rushAtt += 1;
+      offStats.rushYd += -1;
+      curDrive.plays += 1;
+      curDrive.yards += -1;
+      curDrive.seconds += 40;
+      state.clockSec = Math.max(0, state.clockSec - 40);
+      state.down = Math.min(4, state.down + 1);
+      state.distance += 1;
+      if (state.clockSec <= 0) {
+        if (state.quarter < 4) { state.quarter += 1; state.clockSec = 900; } else break;
+      }
+      continue;
+    }
+
+    // No-huddle: trailing offense inside two minutes hurries to save clock.
+    const noHuddle = offenseLead < 0 && state.quarter >= 4 && state.clockSec <= 120;
+
     const offense = state.possession === 'home' ? payload.homeOffense : payload.awayOffense;
     const defense = state.possession === 'home' ? payload.awayDefense : payload.homeDefense;
     const offenseStats = state.possession === 'home' ? stats.home : stats.away;
@@ -365,6 +444,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       clockSec: state.clockSec,
       weather: payload.weather,
       normalizationConstant: state.normalizationConstant,
+      formBias: state.possession === 'home' ? homeForm : awayForm,
       fatigueFactor: clamp(fatigueBaseline - offensePrep.fatigueDisciplineDelta * 0.35, 0, 0.95),
       playType,
       targetId: target?.id != null ? String(target.id) : undefined,
@@ -423,7 +503,11 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     }
 
     const priorQuarter = state.quarter;
-    state.clockSec = Math.max(0, state.clockSec - result.clockElapsedSec);
+    const clockElapsed = noHuddle ? Math.round(result.clockElapsedSec * 0.45) : result.clockElapsedSec;
+    state.clockSec = Math.max(0, state.clockSec - clockElapsed);
+    curDrive.plays += 1;
+    curDrive.yards += result.yardsGained;
+    curDrive.seconds += clockElapsed;
 
     if (result.turnover) {
       offenseStats.turnovers += 1;
@@ -433,18 +517,34 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       state.down = 1;
       state.distance = 10;
       state.yardLine = clamp(100 - result.nextYardLine, 20, 85);
+      closeDrive(result.turnoverType === 'interception' ? 'INT' : 'Fumble');
     } else if (result.nextYardLine >= 100) {
-      if (state.possession === 'home') {
-        state.homeScore += 7;
-        quarterScores.home[Math.max(0, priorQuarter - 1)] += 7;
+      // Touchdown (+6). Then choose XP vs two-point try via the late-game table.
+      const scorerScore = state.possession === 'home' ? state.homeScore : state.awayScore;
+      const oppScore = state.possession === 'home' ? state.awayScore : state.homeScore;
+      const leadAfterTd = (scorerScore + 6) - oppScore;
+      const twoPointDecision = decideLateGameSequence({
+        quarter: state.quarter, clockSeconds: state.clockSec, scoreDiff: leadAfterTd,
+        down: 1, distance: 2, yardLine: 98, timeouts: 3,
+      });
+      let pointsScored = 6;
+      if (twoPointDecision.goForTwo) {
+        const twoPtProb = clamp(0.46 + (offenseScoreEdge(offense, defense)) / 600, 0.32, 0.62);
+        if (rng() <= twoPtProb) pointsScored += 2;
       } else {
-        state.awayScore += 7;
-        quarterScores.away[Math.max(0, priorQuarter - 1)] += 7;
+        pointsScored += 1; // extra point (modeled as automatic)
+        offenseStats.extraPointsMade += 1;
+        offenseStats.extraPointsAttempted += 1;
+      }
+      if (state.possession === 'home') {
+        state.homeScore += pointsScored;
+        quarterScores.home[Math.max(0, priorQuarter - 1)] += pointsScored;
+      } else {
+        state.awayScore += pointsScored;
+        quarterScores.away[Math.max(0, priorQuarter - 1)] += pointsScored;
       }
       if (playType === 'pass') offenseStats.passTD += 1;
       else offenseStats.rushTD += 1;
-      offenseStats.extraPointsMade += 1;
-      offenseStats.extraPointsAttempted += 1;
       const returnStats = state.possession === 'home' ? stats.away : stats.home;
       returnStats.kickReturns += 1;
       returnStats.kickReturnYards += Math.max(12, Math.round(18 + rng() * 18));
@@ -454,39 +554,52 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       state.down = 1;
       state.distance = 10;
       state.yardLine = 25;
+      closeDrive('TD');
     } else if (wasFourthDown && !result.success) {
       const fieldGoalRange = result.nextYardLine >= 68;
-      if (fieldGoalRange && rng() <= (result.nextYardLine >= 82 ? 0.92 : 0.7)) {
+      // Honour the late-game playbook: 'go' = turnover on downs, 'field_goal'/'punt'
+      // force that choice; 'normal' falls back to the range-based heuristic.
+      const choice = late.fourthDownChoice;
+      const goForIt = choice === 'go';
+      const attemptFg = !goForIt && (choice === 'field_goal' || (choice === 'normal' && fieldGoalRange && rng() <= (result.nextYardLine >= 82 ? 0.92 : 0.7)));
+      if (attemptFg) {
         offenseStats.fieldGoalsAttempted += 1;
-        offenseStats.fieldGoalsMade += 1;
-        if (state.possession === 'home') {
-          state.homeScore += 3;
-          quarterScores.home[Math.max(0, priorQuarter - 1)] += 3;
-        } else {
-          state.awayScore += 3;
-          quarterScores.away[Math.max(0, priorQuarter - 1)] += 3;
+        const fgMade = fieldGoalRange ? rng() <= (result.nextYardLine >= 82 ? 0.95 : 0.75) : rng() <= 0.4;
+        if (fgMade) {
+          offenseStats.fieldGoalsMade += 1;
+          if (state.possession === 'home') {
+            state.homeScore += 3;
+            quarterScores.home[Math.max(0, priorQuarter - 1)] += 3;
+          } else {
+            state.awayScore += 3;
+            quarterScores.away[Math.max(0, priorQuarter - 1)] += 3;
+          }
+          if (wasRedZone) offenseStats.redZoneScores += 1;
+          pushDigest(digest, { quarter: state.quarter, clockSec: state.clockSec, team: state.possession, type: 'field_goal', text: `${state.possession === 'home' ? 'Home' : 'Away'} cashes in a field goal.` }, state);
         }
-        if (wasRedZone) offenseStats.redZoneScores += 1;
-        pushDigest(digest, { quarter: state.quarter, clockSec: state.clockSec, team: state.possession, type: 'field_goal', text: `${state.possession === 'home' ? 'Home' : 'Away'} cashes in a field goal.` }, state);
         state.possession = state.possession === 'home' ? 'away' : 'home';
         state.down = 1;
         state.distance = 10;
         state.yardLine = 25;
-      } else {
-        if (fieldGoalRange) {
-          offenseStats.fieldGoalsAttempted += 1;
-        } else {
-          offenseStats.punts += 1;
-          offenseStats.puntYards += Math.max(34, Math.round(40 + rng() * 18));
-          const returnStats = state.possession === 'home' ? stats.away : stats.home;
-          const puntReturned = rng() < 0.55 ? 1 : 0;
-          returnStats.puntReturns += puntReturned;
-          returnStats.puntReturnYards += puntReturned ? Math.max(0, Math.round(rng() * 18)) : 0;
-        }
+        closeDrive(fgMade ? 'FG' : 'Downs');
+      } else if (goForIt) {
         state.possession = state.possession === 'home' ? 'away' : 'home';
         state.down = 1;
         state.distance = 10;
         state.yardLine = clamp(100 - result.nextYardLine, 20, 90);
+        closeDrive('Downs');
+      } else {
+        offenseStats.punts += 1;
+        offenseStats.puntYards += Math.max(34, Math.round(40 + rng() * 18));
+        const returnStats = state.possession === 'home' ? stats.away : stats.home;
+        const puntReturned = rng() < 0.55 ? 1 : 0;
+        returnStats.puntReturns += puntReturned;
+        returnStats.puntReturnYards += puntReturned ? Math.max(0, Math.round(rng() * 18)) : 0;
+        state.possession = state.possession === 'home' ? 'away' : 'home';
+        state.down = 1;
+        state.distance = 10;
+        state.yardLine = clamp(100 - result.nextYardLine, 20, 90);
+        closeDrive('Punt');
       }
     } else {
       state.down = result.nextDown;
@@ -736,6 +849,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     topReason1: topReasons[0] ?? null,
     topReason2: topReasons[1] ?? null,
     quarterScores,
+    driveSummary,
     teamStats: { home: homeTeamLine, away: awayTeamLine },
     boxScore: { home: homeBox, away: awayBox },
     playDigest: digest.slice(0, 12),
