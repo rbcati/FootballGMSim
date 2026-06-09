@@ -10,7 +10,7 @@ import { DEFAULT_LEAGUE_SETTINGS } from '../../src/core/leagueSettings.js';
 describe('engineSoak gate logic', () => {
   const passing = {
     topQuartileWinPct: 0.70, passYdsPerGame: 240, rushYdsPerGame: 115,
-    pointsPerGame: 24, scoreStdDev: 12, msPerGame: 3, crashes: 0,
+    pointsPerGame: 24, scoreStdDev: 12, msPerGame: 3, crashes: 0, minTeamScore: 0,
   };
   const legacy = { scoreStdDev: 11 };
 
