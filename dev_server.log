@@ -2,4 +2,8 @@
 > football-gm-sim@2.0.0 dev
 > vite
 
-sh: 1: vite: not found
+
+  VITE v7.3.3  ready in 390 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
