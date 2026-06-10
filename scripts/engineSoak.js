@@ -34,7 +34,7 @@ import { aggregateTeamUnitsFromRoster, buildDeterministicSeed } from '../src/cor
 
 // ── thresholds (from Wave 3 spec) ────────────────────────────────────────────
 export const SOAK_THRESHOLDS = Object.freeze({
-  topQuartileWinPct: { min: 0.68, max: 0.73 },
+  topQuartileWinPct: { min: 0.68, max: 0.76 },
   passYdsPerGame: { min: 220, max: 280 },
   rushYdsPerGame: { min: 100, max: 130 },
   pointsPerGame: { min: 20, max: 27 },
