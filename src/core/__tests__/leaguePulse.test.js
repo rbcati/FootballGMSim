@@ -63,7 +63,7 @@ describe('leaguePulse.js', () => {
       expect(items).toEqual([]);
     });
 
-    it('generates game result stories', () => {
+    it('generates game result stories (legacy score-object shape)', () => {
       const meta = { season: 1, week: 3, userTeamId: '10' };
       const data = {
         games: [{ home: '10', away: '11', played: true, score: { home: 24, away: 10 } }]
@@ -72,6 +72,48 @@ describe('leaguePulse.js', () => {
       expect(items.length).toBe(1);
       expect(items[0].headline).toBe('Statement Victory');
       expect(items[0].type).toBe(PULSE_TYPES.GAME_RESULT);
+    });
+
+    it('generates game result stories from the worker result shape', () => {
+      // Actual shape produced by mapGameSummaryToLegacyResult / commitGameResult:
+      // scoreHome/homeScore pairs, no `played` flag, no nested `score`.
+      const meta = { season: 1, week: 3, userTeamId: '10' };
+      const data = {
+        games: [{
+          home: '10', away: '11',
+          scoreHome: 27, scoreAway: 24,
+          homeScore: 27, awayScore: 24,
+        }],
+      };
+      const items = generateLeaguePulseItems(meta, data);
+      expect(items.length).toBe(1);
+      expect(items[0].headline).toBe('Nail-Biter Win');
+      expect(items[0].type).toBe(PULSE_TYPES.GAME_RESULT);
+    });
+
+    it('prefers canonical scores over a stale legacy score object', () => {
+      const meta = { season: 1, week: 3, userTeamId: '10' };
+      const data = {
+        games: [{
+          home: '10', away: '11',
+          scoreHome: 13, scoreAway: 31,
+          // Stale legacy object disagreeing with the canonical fields.
+          played: true, score: { home: 99, away: 0 },
+        }],
+      };
+      const items = generateLeaguePulseItems(meta, data);
+      expect(items.length).toBe(1);
+      // 13-31 is an 18-point loss → blowout-loss copy, not a 99-0 win.
+      expect(items[0].headline).toBe('Tough Blowout Loss');
+      expect(items[0].body).toContain('13-31');
+    });
+
+    it('skips games with no recorded score (unplayed schedule rows)', () => {
+      const meta = { season: 1, week: 3, userTeamId: '10' };
+      const data = {
+        games: [{ home: '10', away: '11', played: false }],
+      };
+      expect(generateLeaguePulseItems(meta, data)).toEqual([]);
     });
 
     it('generates standings pressure stories', () => {

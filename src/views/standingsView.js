@@ -63,7 +63,7 @@ function seededCoinKey(seed, teamId) {
  * Falls back to empty context (every step ties) when no game data is present,
  * which preserves the simple win% ordering for minimal/preseason states.
  */
-function buildTiebreakContext(teams, schedule) {
+export function buildTiebreakContext(teams, schedule) {
   const teamById = new Map(teams.map((t) => [Number(t.id), t]));
   const winPctById = new Map(teams.map((t) => [Number(t.id), t.winPct]));
   const ctx = new Map();
@@ -125,7 +125,7 @@ function buildTiebreakContext(teams, schedule) {
 // SOS → point diff/points (deterministic fallbacks) → seeded coin-flip.
 // Note: 3+-way ties are resolved pairwise rather than via full mini-leagues — a
 // pragmatic approximation that still honours the documented chain order.
-function makeStandingsComparator(ctx, seed) {
+export function makeStandingsComparator(ctx, seed) {
   return (a, b) => {
     if (b.winPct !== a.winPct) return b.winPct - a.winPct;
     const ca = ctx.get(Number(a.id));
@@ -169,6 +169,35 @@ function makeStandingsComparator(ctx, seed) {
     if (b.ptsFor !== a.ptsFor) return b.ptsFor - a.ptsFor;
     return seededCoinKey(seed, a.id) - seededCoinKey(seed, b.id);
   };
+}
+
+/**
+ * Sort flat standings rows with the full NFL tiebreaker chain. This is the
+ * worker's entry point (its rows use `pct`/`pf`/`pa`): rows are enriched with
+ * the comparator's field names, the tiebreak context is derived from the
+ * played games in the slim schedule, and ordering is fully deterministic for
+ * a given save (seeded coin-flip is the only post-SOS step).
+ *
+ * @param {Array<object>} rows - standings rows ({ id, conf, div, wins, losses,
+ *   ties } plus `pct`/`pf`/`pa` or `winPct`/`ptsFor`/`ptsAgainst`)
+ * @param {object|null} schedule - slim schedule ({ weeks: [{ games }] }) with
+ *   homeScore/awayScore written on played games
+ * @param {number} seed - per-save seed for the final deterministic coin-flip
+ */
+export function sortStandingsRows(rows = [], schedule = null, seed = 0) {
+  const enriched = rows.map((row) => {
+    const ptsFor = Number(row?.ptsFor ?? row?.pf ?? 0);
+    const ptsAgainst = Number(row?.ptsAgainst ?? row?.pa ?? 0);
+    return {
+      ...row,
+      winPct: Number(row?.winPct ?? row?.pct ?? 0),
+      ptsFor,
+      ptsAgainst,
+      pointDiff: ptsFor - ptsAgainst,
+    };
+  });
+  const ctx = buildTiebreakContext(enriched, schedule);
+  return [...enriched].sort(makeStandingsComparator(ctx, Number(seed) || 0));
 }
 
 /**

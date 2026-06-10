@@ -221,6 +221,7 @@ export function buildTeamStatComparisonFromArchive(boxScore = {}, context = {}) 
     byTeam[row.teamId].push(row);
   });
   const sum = (teamRows, key) => teamRows.reduce((acc, row) => acc + asNum(row.stats?.[key]), 0);
+  const sumIf = (teamRows, key, predicate) => teamRows.reduce((acc, row) => (predicate(row.stats ?? {}) ? acc + asNum(row.stats?.[key]) : acc), 0);
   const buildSide = (teamId) => {
     const teamRows = byTeam[teamId] ?? [];
     const passYards = sum(teamRows, 'passYd');
@@ -230,8 +231,12 @@ export function buildTeamStatComparisonFromArchive(boxScore = {}, context = {}) 
       passYards,
       rushYards,
       firstDowns: sum(teamRows, 'firstDowns'),
-      turnovers: sum(teamRows, 'interceptions') + sum(teamRows, 'fumblesLost'),
-      sacks: sum(teamRows, 'sacks'),
+      // Offensive turnovers only: 'interceptions' on a passer row (passAtt > 0)
+      // means INTs thrown; on a defender row it means INTs made — summing both
+      // double-counted takeaways into the team's giveaway column. Same filter
+      // as gameArchive.deriveTeamStatsFromPlayerRows.
+      turnovers: sumIf(teamRows, 'interceptions', (stats) => asNum(stats?.passAtt) > 0) + sum(teamRows, 'fumblesLost'),
+      sacks: sumIf(teamRows, 'sacks', (stats) => asNum(stats?.passAtt) === 0),
       thirdDownMade: sum(teamRows, 'thirdDownMade'),
       thirdDownAtt: sum(teamRows, 'thirdDownAtt'),
       redZoneMade: sum(teamRows, 'redZoneMade'),
@@ -241,6 +246,30 @@ export function buildTeamStatComparisonFromArchive(boxScore = {}, context = {}) 
     };
   };
   return { home: buildSide(Number(context.homeId)), away: buildSide(Number(context.awayId)) };
+}
+
+/**
+ * Canonical team-comparison stats for the archive. Prefers the simulator's own
+ * result.teamStats (the rich engine and the legacy commit path both emit a
+ * full canonical line with plays / yardsPerPlay / firstDowns / red-zone data —
+ * re-deriving from box-score rows dropped all of those and inflated turnovers)
+ * and falls back to the box-score derivation only for results that carry no
+ * team stats at all. Pass-through adds the alias keys the Game Book comparison
+ * reads (`sacks`, `passYards`/`rushYards`).
+ */
+export function resolveCanonicalTeamStats(resultTeamStats, boxScore = {}, context = {}) {
+  const hasSide = (side) => Boolean(side && typeof side === 'object' && Object.keys(side).length > 0);
+  if (hasSide(resultTeamStats?.home) && hasSide(resultTeamStats?.away)) {
+    const withAliases = (side) => ({
+      ...side,
+      sacks: side.sacks ?? side.sacksMade,
+      passYards: side.passYards ?? side.passYd,
+      rushYards: side.rushYards ?? side.rushYd,
+      totalYards: side.totalYards ?? (asNum(side.passYd ?? side.passYards) + asNum(side.rushYd ?? side.rushYards)),
+    });
+    return { home: withAliases(resultTeamStats.home), away: withAliases(resultTeamStats.away) };
+  }
+  return buildTeamStatComparisonFromArchive(boxScore, context);
 }
 
 export function classifyGameScript({ homeScore = 0, awayScore = 0, isPlayoff = false, wentOvertime = false, wasUpset = false }) {

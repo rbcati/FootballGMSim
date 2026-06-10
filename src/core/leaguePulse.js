@@ -112,17 +112,29 @@ export function generateLeaguePulseItems(meta, data = {}) {
   if (!userTeamId) return items;
 
   // 1. GAME RESULT STORY
-  // Only process if games exist for the exact week
+  // Only process if games exist for the exact week. The worker feeds completed
+  // result objects shaped { scoreHome/homeScore, scoreAway/awayScore }; the
+  // legacy { played, score: { home, away } } shape is a fallback only, and the
+  // canonical fields always win over it. A finite score pair IS the
+  // completed-game signal — result objects never carried a `played` flag,
+  // which is why this story never fired.
+  const readScore = (g, side) => {
+    const canonical = side === 'home'
+      ? (g?.scoreHome ?? g?.homeScore)
+      : (g?.scoreAway ?? g?.awayScore);
+    const value = Number(canonical ?? (side === 'home' ? g?.score?.home : g?.score?.away));
+    return Number.isFinite(value) ? value : null;
+  };
   const userGame = games.find(g =>
     (String(g.home) === String(userTeamId) || String(g.away) === String(userTeamId)) &&
-    g.played === true &&
-    g.score != null
+    readScore(g, 'home') != null &&
+    readScore(g, 'away') != null
   );
 
   if (userGame) {
     const isHome = String(userGame.home) === String(userTeamId);
-    const userScore = isHome ? userGame.score.home : userGame.score.away;
-    const oppScore = isHome ? userGame.score.away : userGame.score.home;
+    const userScore = isHome ? readScore(userGame, 'home') : readScore(userGame, 'away');
+    const oppScore = isHome ? readScore(userGame, 'away') : readScore(userGame, 'home');
     const oppTeamId = isHome ? userGame.away : userGame.home;
     const won = userScore > oppScore;
     const diff = Math.abs(userScore - oppScore);

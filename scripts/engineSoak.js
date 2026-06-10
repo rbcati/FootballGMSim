@@ -39,6 +39,9 @@ export const SOAK_THRESHOLDS = Object.freeze({
   rushYdsPerGame: { min: 100, max: 130 },
   pointsPerGame: { min: 20, max: 27 },
   maxMsPerGame: 50, // generous upper bound for a headless single-game sim
+  // OT must resolve ties: the rich engine should essentially never return a
+  // tied final (downstream playoff code cannot represent ties).
+  maxFinalTieRate: 0.01,
 });
 
 function parseArgs(argv) {
@@ -112,17 +115,32 @@ function newAccumulator(teamCount) {
     wins: new Array(teamCount).fill(0),
     losses: new Array(teamCount).fill(0),
     minTeamScore: Infinity,
+    // Tie / shutout-floor observability (FIX 1 / FIX 6). regulationTies and
+    // floorTeamGames are only reported by the matchup engine; tracksOvertime
+    // stays false for engines that don't expose the flags so summarize() can
+    // report n/a instead of a misleading 0.
+    finalTies: 0,
+    regulationTies: 0,
+    floorTeamGames: 0,
+    tracksOvertime: false,
   };
 }
 
-function recordGame(acc, homeIdx, awayIdx, homeScore, awayScore, homePassYd, homeRushYd, awayPassYd, awayRushYd) {
+function recordGame(acc, homeIdx, awayIdx, g) {
+  const { homeScore, awayScore } = g;
   acc.games += 1;
   acc.teamGames += 2;
   acc.points += homeScore + awayScore;
-  acc.passYds += homePassYd + awayPassYd;
-  acc.rushYds += homeRushYd + awayRushYd;
+  acc.passYds += g.homePassYd + g.awayPassYd;
+  acc.rushYds += g.homeRushYd + g.awayRushYd;
   acc.scores.push(homeScore, awayScore);
   acc.minTeamScore = Math.min(acc.minTeamScore, homeScore, awayScore);
+  if (homeScore === awayScore) acc.finalTies += 1;
+  if (g.regulationTied != null) {
+    acc.tracksOvertime = true;
+    if (g.regulationTied) acc.regulationTies += 1;
+    acc.floorTeamGames += Number(g.floorCount ?? 0);
+  }
   if (homeScore >= awayScore) { acc.wins[homeIdx] += 1; acc.losses[awayIdx] += 1; }
   else { acc.wins[awayIdx] += 1; acc.losses[homeIdx] += 1; }
 }
@@ -139,6 +157,10 @@ function simulateLegacyGame(league, homeIdx, awayIdx) {
     homeRushYd: Number(home.rushYds ?? 0),
     awayPassYd: Number(away.passYds ?? 0),
     awayRushYd: Number(away.rushYds ?? 0),
+    // The legacy engine resolves OT internally and does not expose
+    // regulation-tie or shutout-floor flags.
+    regulationTied: null,
+    floorCount: null,
   };
 }
 
@@ -168,6 +190,8 @@ function simulateMatchupGame(league, homeIdx, awayIdx, season, week) {
     homeRushYd: Number(res.teamStats?.home?.rushYd ?? 0),
     awayPassYd: Number(res.teamStats?.away?.passYd ?? 0),
     awayRushYd: Number(res.teamStats?.away?.rushYd ?? 0),
+    regulationTied: Boolean(res.regulationTied),
+    floorCount: Number(res.shutoutFloorApplied?.home ? 1 : 0) + Number(res.shutoutFloorApplied?.away ? 1 : 0),
   };
 }
 
@@ -180,7 +204,7 @@ function runEngine(label, simFn, league, schedule, seasons) {
         try {
           const g = simFn(league, homeIdx, awayIdx, s, w);
           acc.totalMs += performance.now() - t0;
-          recordGame(acc, homeIdx, awayIdx, g.homeScore, g.awayScore, g.homePassYd, g.homeRushYd, g.awayPassYd, g.awayRushYd);
+          recordGame(acc, homeIdx, awayIdx, g);
         } catch (err) {
           acc.totalMs += performance.now() - t0;
           acc.crashes += 1;
@@ -218,6 +242,14 @@ function summarize(acc, ovrByTeam) {
     scoreStdDev: stdDev(acc.scores),
     topQuartileWinPct: topQuartileWinPct(acc, ovrByTeam),
     minTeamScore: acc.minTeamScore === Infinity ? 0 : acc.minTeamScore,
+    // Tie/floor observability. finalTieRate is gated; regulationTieRate is
+    // reported (not gated) so the engine's underlying tie tendency stays
+    // visible even though OT resolves it. preFloorShutoutRate is per
+    // team-game: the floor fires exactly when a side's pre-floor score is 0,
+    // so this doubles as the floor trigger rate.
+    finalTieRate: acc.games > 0 ? acc.finalTies / acc.games : 0,
+    regulationTieRate: acc.tracksOvertime && acc.games > 0 ? acc.regulationTies / acc.games : null,
+    preFloorShutoutRate: acc.tracksOvertime && acc.teamGames > 0 ? acc.floorTeamGames / acc.teamGames : null,
   };
 }
 
@@ -231,7 +263,12 @@ export function evaluateGate(matchup, legacy) {
     { name: 'Stat realism (pass yds/game)', pass: inRange(matchup.passYdsPerGame, t.passYdsPerGame), detail: `${matchup.passYdsPerGame.toFixed(1)} (want ${t.passYdsPerGame.min}–${t.passYdsPerGame.max})` },
     { name: 'Stat realism (rush yds/game)', pass: inRange(matchup.rushYdsPerGame, t.rushYdsPerGame), detail: `${matchup.rushYdsPerGame.toFixed(1)} (want ${t.rushYdsPerGame.min}–${t.rushYdsPerGame.max})` },
     { name: 'Stat realism (points/game)', pass: inRange(matchup.pointsPerGame, t.pointsPerGame), detail: `${matchup.pointsPerGame.toFixed(1)} (want ${t.pointsPerGame.min}–${t.pointsPerGame.max})` },
-    { name: 'Score floor — no team should score fewer than 3 pts in any game', pass: matchup.minTeamScore >= 3, detail: `min individual team score: ${matchup.minTeamScore}` },
+    // FLOOR REGRESSION CHECK ONLY: the end-of-game shutout floor guarantees
+    // minTeamScore >= 3 by construction, so this no longer measures scoring
+    // health — it just trips if the floor itself regresses. The underlying
+    // scoring tail is reported separately as preFloorShutoutRate.
+    { name: 'Floor regression check (shutout floor guarantees >= 3; not a scoring-health gate)', pass: matchup.minTeamScore >= 3, detail: `min individual team score: ${matchup.minTeamScore}` },
+    { name: 'Final tie rate (OT must resolve ties)', pass: Number(matchup.finalTieRate ?? 0) <= t.maxFinalTieRate, detail: `${((matchup.finalTieRate ?? 0) * 100).toFixed(2)}% of games (max ${(t.maxFinalTieRate * 100).toFixed(0)}%)` },
     { name: 'Score variance (PBP std-dev >= legacy)', pass: matchup.scoreStdDev >= legacy.scoreStdDev, detail: `PBP ${matchup.scoreStdDev.toFixed(2)} vs legacy ${legacy.scoreStdDev.toFixed(2)}` },
     { name: 'Performance (ms/game)', pass: matchup.msPerGame <= t.maxMsPerGame, detail: `${matchup.msPerGame.toFixed(3)} ms (max ${t.maxMsPerGame})` },
     { name: 'Crash/error rate (zero throws)', pass: matchup.crashes === 0, detail: `${matchup.crashes} crashes` },
@@ -271,6 +308,12 @@ export function runEngineSoak({ seasons = 100, teams = 32, seed = 20260605 } = {
   Utils.setSeed(seed);
   const stubs = buildTeamStubs(teams);
   const league = makeLeague(stubs, {}, { Constants, Utils, makePlayer });
+  // makeLeague seeds per-save entropy from Math.random (league.globalSeed) and
+  // the legacy drive engine mixes it into its per-game seeds, which made the
+  // legacy comparison baseline — and therefore the comparative variance gate —
+  // nondeterministic across identical soak invocations. Pin it to the CLI seed
+  // so the whole soak is reproducible.
+  league.globalSeed = seed >>> 0;
   applyTalentTiers(league);
   const ovrByTeam = league.teams.map((t) => t.ovr);
   const schedule = buildSchedule(teams, 17);
@@ -296,6 +339,10 @@ function printReport(report) {
   console.log(row('rush yds / game', legacy.rushYdsPerGame.toFixed(1), matchup.rushYdsPerGame.toFixed(1)));
   console.log(row('score std-dev', legacy.scoreStdDev.toFixed(2), matchup.scoreStdDev.toFixed(2)));
   console.log(row('min team score', legacy.minTeamScore, matchup.minTeamScore));
+  const pct = (v) => (v == null ? 'n/a' : `${(v * 100).toFixed(2)}%`);
+  console.log(row('regulation tie rate', pct(legacy.regulationTieRate), pct(matchup.regulationTieRate)));
+  console.log(row('final tie rate', pct(legacy.finalTieRate), pct(matchup.finalTieRate)));
+  console.log(row('pre-floor shutout rate', pct(legacy.preFloorShutoutRate), pct(matchup.preFloorShutoutRate)));
   console.log(row('top-quartile win%', (legacy.topQuartileWinPct * 100).toFixed(1) + '%', (matchup.topQuartileWinPct * 100).toFixed(1) + '%'));
   console.log(row('ms / game', legacy.msPerGame.toFixed(3), matchup.msPerGame.toFixed(3)));
   console.log(row('crashes', legacy.crashes, matchup.crashes));

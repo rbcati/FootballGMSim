@@ -189,3 +189,42 @@ describe('gameArchive helpers', () => {
     expect(game.archiveQuality).toBe('full');
   });
 });
+
+describe('canonical rich-engine teamStats hydration', () => {
+  it('survives archive normalization + enrichment without being re-derived or zeroed', () => {
+    const richSide = {
+      plays: 64, firstDowns: 22, passYd: 251, passYards: 251, rushYd: 104, rushYards: 104,
+      totalYards: 355, yardsPerPlay: 5.55, turnovers: 1, sacksAllowed: 2, sacksMade: 3,
+      redZoneTrips: 4, redZoneScores: 2, fieldGoalsMade: 2, fieldGoalsAttempted: 3,
+      extraPointsMade: 2, extraPointsAttempted: 2,
+    };
+    const archived = normalizeArchivedGamePayload({
+      id: '2031_w3_1_2',
+      seasonId: '2031',
+      week: 3,
+      homeId: 1,
+      awayId: 2,
+      homeScore: 23,
+      awayScore: 20,
+      quarterScores: { home: [3, 7, 3, 10], away: [7, 3, 7, 3] },
+      teamStats: { home: richSide, away: { ...richSide, totalYards: 330 } },
+      playerStats: {
+        home: { 10: { name: 'Home QB', pos: 'QB', stats: { passAtt: 31, passYd: 251, interceptions: 1 } } },
+        away: { 20: { name: 'Away QB', pos: 'QB', stats: { passAtt: 29, passYd: 240, interceptions: 2 } } },
+      },
+      scoringSummary: [{ id: 'score_0', quarter: 1, teamId: 1, points: 3, text: 'FG' }],
+    });
+    const hydrated = enrichArchivedGamePayload(JSON.parse(JSON.stringify(archived)));
+    // Canonical engine line is preserved verbatim — firstDowns / plays /
+    // yardsPerPlay / red-zone data must not be zeroed or re-derived from rows.
+    expect(hydrated.teamStats.home.plays).toBe(64);
+    expect(hydrated.teamStats.home.firstDowns).toBe(22);
+    expect(hydrated.teamStats.home.yardsPerPlay).toBe(5.55);
+    expect(hydrated.teamStats.home.redZoneTrips).toBe(4);
+    expect(hydrated.teamStats.home.redZoneScores).toBe(2);
+    expect(hydrated.teamStats.home.turnovers).toBe(1);
+    expect(hydrated.teamStats.away.totalYards).toBe(330);
+    expect(hydrated.homeScore).toBe(23);
+    expect(hydrated.awayScore).toBe(20);
+  });
+});

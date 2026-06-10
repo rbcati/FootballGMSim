@@ -60,7 +60,7 @@ export interface GameEventDigestItem {
   quarter: number;
   clockSec: number;
   team: 'home' | 'away' | 'neutral';
-  type: 'touchdown' | 'field_goal' | 'turnover' | 'sack' | 'explosive_play' | 'lead_change' | 'swing' | 'final_takeaway';
+  type: 'touchdown' | 'field_goal' | 'turnover' | 'sack' | 'explosive_play' | 'lead_change' | 'swing' | 'final_takeaway' | 'overtime';
   text: string;
   homeScore: number;
   awayScore: number;
@@ -117,6 +117,17 @@ export interface RichGameSummary {
     headlineMoments: string[];
   };
   recapText: string;
+  /** True when regulation (4 quarters) ended with the score level. */
+  regulationTied: boolean;
+  /**
+   * Overtime outcome. The rich engine never returns a tied final score:
+   * downstream playoff code resolves `homeScore >= awayScore` as a silent home
+   * win, so every tie is resolved here — by sudden-death OT play, or (after
+   * capped OT periods) by a seeded walk-off field goal.
+   */
+  overtime: { played: boolean; periods: number; decidedBy: 'score' | 'deadlock_fg' | null };
+  /** Which sides received the end-of-game shutout floor FG (pre-floor score was 0). */
+  shutoutFloorApplied: { home: boolean; away: boolean };
   advancedAttribution?: Record<string, AdvancedGameStats>;
   simFactors: {
     home: { qbRating: number; rushYpc: number; successRate: number; passRate: number };
@@ -399,20 +410,75 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
 
   // Late-game scoring floor: NFL shutouts are vanishingly rare (<0.5% of games
   // since 1990), so a team still scoreless at the final whistle is credited a
-  // late FG. Applied only at game end so the floor lifts the 0-point tail
-  // without compressing overall score variance.
+  // late FG. Applied only at the end of regulation so the floor lifts the
+  // 0-point tail without compressing overall score variance.
+  const shutoutFloorApplied = { home: false, away: false };
   const applyShutoutFloor = (team: 'home' | 'away') => {
     if ((team === 'home' ? state.homeScore : state.awayScore) !== 0) return;
     if (team === 'home') state.homeScore += 3;
     else state.awayScore += 3;
     quarterScores[team][3] += 3;
+    shutoutFloorApplied[team] = true;
     const teamStats = team === 'home' ? stats.home : stats.away;
     teamStats.fieldGoalsAttempted += 1;
     teamStats.fieldGoalsMade += 1;
     pushDigest(digest, { quarter: 4, clockSec: state.clockSec, team, type: 'field_goal', text: `Late FG — ${team === 'home' ? 'Home' : 'Away'} avoids shutout.` }, state);
   };
 
-  while (state.quarter <= 4 && (stats.home.plays + stats.away.plays) < 184) {
+  // ── Overtime ────────────────────────────────────────────────────────────────
+  // Phase context (regular season vs playoff) is not available in this payload,
+  // so the safe default is applied: EVERY tie is resolved in OT — sudden death,
+  // first lead wins. Downstream code (advancePlayoffBracket, Super Bowl
+  // announcement) silently treats homeScore >= awayScore as a home win, so a
+  // tied final from this engine would crown a winner the box score contradicts.
+  // Regular-season ties can be reintroduced only once that worker logic is
+  // phase-aware (out of scope here — see audit at 9e5de0a).
+  const MAX_OT_PERIODS = 4;
+  const OT_PERIOD_SECONDS = 600;
+  let regulationTied = false;
+  let otPeriods = 0;
+  let otDecidedBy: 'score' | 'deadlock_fg' | null = null;
+  const startOvertimePeriod = () => {
+    otPeriods += 1;
+    state.quarter += 1;
+    state.clockSec = OT_PERIOD_SECONDS;
+    quarterScores.home.push(0);
+    quarterScores.away.push(0);
+    // Seeded coin toss for first OT possession; fresh drive from the 25.
+    state.possession = rng() <= 0.5 ? 'home' : 'away';
+    state.down = 1;
+    state.distance = 10;
+    state.yardLine = 25;
+    if (curDrive.plays > 0) closeDrive('Downs');
+    else curDrive = { team: state.possession, plays: 0, yards: 0, seconds: 0 };
+    pushDigest(digest, { quarter: state.quarter, clockSec: state.clockSec, team: 'neutral', type: 'overtime', text: `Tied after ${state.quarter - 1 === 4 ? 'regulation' : 'overtime'} — OT period ${otPeriods} begins.` }, state);
+  };
+
+  // Shared end-of-period transition. Returns true when the game is over.
+  // At the end of Q4 the shutout floor is applied BEFORE the tie check, so a
+  // floored 3-3 (or a 3-0 kneel-out floored to 3-3) goes to OT instead of
+  // ending tied or being re-tied after the fact.
+  const handlePeriodEnd = (): boolean => {
+    if (state.quarter < 4) {
+      state.quarter += 1;
+      state.clockSec = 900;
+      return false;
+    }
+    if (state.quarter === 4) {
+      applyShutoutFloor('home');
+      applyShutoutFloor('away');
+      regulationTied = state.homeScore === state.awayScore;
+    }
+    if (state.homeScore !== state.awayScore) return true;
+    if (otPeriods >= MAX_OT_PERIODS) return true;
+    startOvertimePeriod();
+    return false;
+  };
+
+  // Hard play-cap safety: regulation budget plus one period's worth per OT.
+  const playCap = () => 184 + otPeriods * 46;
+
+  while ((stats.home.plays + stats.away.plays) < playCap()) {
     const offenseLead = state.possession === 'home'
       ? state.homeScore - state.awayScore
       : state.awayScore - state.homeScore;
@@ -440,7 +506,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       state.down = Math.min(4, state.down + 1);
       state.distance += 1;
       if (state.clockSec <= 0) {
-        if (state.quarter < 4) { state.quarter += 1; state.clockSec = 900; } else break;
+        if (handlePeriodEnd()) break;
       }
       continue;
     }
@@ -650,20 +716,43 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       pushDigest(digest, { quarter: state.quarter, clockSec: state.clockSec, team: 'neutral', type: 'swing', text: 'Late-game swing tightened the finish.' }, state);
     }
 
+    // Sudden-death overtime: OT periods start level, so the first lead wins.
+    if (state.quarter > 4 && state.homeScore !== state.awayScore) {
+      const otWinner = state.homeScore > state.awayScore ? 'home' : 'away';
+      otDecidedBy = 'score';
+      pushDigest(digest, { quarter: state.quarter, clockSec: state.clockSec, team: otWinner, type: 'overtime', text: `OT — ${otWinner === 'home' ? 'Home' : 'Away'} wins in overtime.` }, state);
+      break;
+    }
+
     if (state.clockSec <= 0) {
-      if (state.quarter < 4) {
-        state.quarter += 1;
-        state.clockSec = 900;
-      } else {
-        break;
-      }
+      if (handlePeriodEnd()) break;
     }
   }
 
+  // Covers exits that never reach a Q4 clock expiry (play-cap safety valve);
+  // no-ops when the floor already ran inside handlePeriodEnd.
   applyShutoutFloor('home');
   applyShutoutFloor('away');
 
-  pushDigest(digest, { quarter: 4, clockSec: 0, team: 'neutral', type: 'final_takeaway', text: `${state.homeScore === state.awayScore ? 'Game ends level' : `${state.homeScore > state.awayScore ? 'Home' : 'Away'} closes it out`} in a ${Math.abs(state.homeScore - state.awayScore)}-point game.` }, state);
+  // Deadlock fallback: only reachable when the play cap tripped or all capped
+  // OT periods ended level. Seeded, deterministic walk-off FG — never an
+  // OVR-based award — with an explicit digest event. Guarantees a non-tied
+  // final score (downstream playoff code cannot represent ties).
+  if (state.homeScore === state.awayScore) {
+    if (otPeriods === 0) regulationTied = true;
+    const fallbackWinner: 'home' | 'away' = rng() <= 0.5 ? 'home' : 'away';
+    if (fallbackWinner === 'home') state.homeScore += 3;
+    else state.awayScore += 3;
+    quarterScores[fallbackWinner][quarterScores[fallbackWinner].length - 1] += 3;
+    const fallbackStats = fallbackWinner === 'home' ? stats.home : stats.away;
+    fallbackStats.fieldGoalsAttempted += 1;
+    fallbackStats.fieldGoalsMade += 1;
+    otDecidedBy = 'deadlock_fg';
+    pushDigest(digest, { quarter: state.quarter, clockSec: 0, team: fallbackWinner, type: 'field_goal', text: `Walk-off FG — ${fallbackWinner === 'home' ? 'Home' : 'Away'} ends the deadlock.` }, state);
+    pushDigest(digest, { quarter: state.quarter, clockSec: 0, team: fallbackWinner, type: 'overtime', text: `OT — ${fallbackWinner === 'home' ? 'Home' : 'Away'} wins in overtime (seeded deadlock resolution).` }, state);
+  }
+
+  pushDigest(digest, { quarter: Math.max(4, state.quarter), clockSec: 0, team: 'neutral', type: 'final_takeaway', text: `${state.homeScore === state.awayScore ? 'Game ends level' : `${state.homeScore > state.awayScore ? 'Home' : 'Away'} closes it out`} in a ${Math.abs(state.homeScore - state.awayScore)}-point game.` }, state);
 
   const topReasons = [...reasonMap.entries()].sort((a, b) => b[1] - a[1]).map(([reason]) => reason).slice(0, 2);
 
@@ -850,20 +939,31 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     scoreHomeAfter: event.homeScore,
     scoreAwayAfter: event.awayScore,
   }));
+  // Points per scoring event come from the digest's running score snapshots
+  // (delta between consecutive scoring events), never from the event type:
+  // touchdowns are worth 6, 7, or 8 depending on the XP / two-point outcome,
+  // and a hardcoded 7 made summaries contradict the final score.
+  let scoredHomeSoFar = 0;
+  let scoredAwaySoFar = 0;
   const scoringSummary = digest
     .filter((event) => event.type === 'touchdown' || event.type === 'field_goal')
-    .map((event, idx) => ({
-      id: `score_${idx}`,
-      quarter: event.quarter,
-      clock: formatClock(event.clockSec),
-      teamId: event.team === 'home' ? payload.homeTeamId : payload.awayTeamId,
-      teamAbbr: event.team === 'home' ? 'Home' : 'Away',
-      type: event.type === 'touchdown' ? 'Touchdown' : 'Field Goal',
-      scoreType: event.type,
-      points: event.type === 'touchdown' ? 7 : 3,
-      text: event.text,
-      scoreAfter: { home: event.homeScore, away: event.awayScore },
-    }));
+    .map((event, idx) => {
+      const points = Math.max(0, (event.homeScore - scoredHomeSoFar) + (event.awayScore - scoredAwaySoFar));
+      scoredHomeSoFar = event.homeScore;
+      scoredAwaySoFar = event.awayScore;
+      return {
+        id: `score_${idx}`,
+        quarter: event.quarter,
+        clock: formatClock(event.clockSec),
+        teamId: event.team === 'home' ? payload.homeTeamId : payload.awayTeamId,
+        teamAbbr: event.team === 'home' ? 'Home' : 'Away',
+        type: event.type === 'touchdown' ? 'Touchdown' : 'Field Goal',
+        scoreType: event.type,
+        points,
+        text: event.text,
+        scoreAfter: { home: event.homeScore, away: event.awayScore },
+      };
+    });
 
   const recapText = `${state.homeScore > state.awayScore ? 'Home' : 'Away'} wins ${Math.max(state.homeScore, state.awayScore)}-${Math.min(state.homeScore, state.awayScore)}. ${topReasons[0] ?? 'Balanced execution'} set the tone.`;
 
@@ -893,6 +993,9 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       headlineMoments: digest.slice(0, 3).map((event) => event.text),
     },
     recapText,
+    regulationTied,
+    overtime: { played: otPeriods > 0, periods: otPeriods, decidedBy: otDecidedBy },
+    shutoutFloorApplied: { home: shutoutFloorApplied.home, away: shutoutFloorApplied.away },
     advancedAttribution: Object.fromEntries(advancedAttribution),
     simFactors: {
       home: {
