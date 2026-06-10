@@ -231,7 +231,7 @@ export function evaluateGate(matchup, legacy) {
     { name: 'Stat realism (pass yds/game)', pass: inRange(matchup.passYdsPerGame, t.passYdsPerGame), detail: `${matchup.passYdsPerGame.toFixed(1)} (want ${t.passYdsPerGame.min}–${t.passYdsPerGame.max})` },
     { name: 'Stat realism (rush yds/game)', pass: inRange(matchup.rushYdsPerGame, t.rushYdsPerGame), detail: `${matchup.rushYdsPerGame.toFixed(1)} (want ${t.rushYdsPerGame.min}–${t.rushYdsPerGame.max})` },
     { name: 'Stat realism (points/game)', pass: inRange(matchup.pointsPerGame, t.pointsPerGame), detail: `${matchup.pointsPerGame.toFixed(1)} (want ${t.pointsPerGame.min}–${t.pointsPerGame.max})` },
-    { name: 'Score floor (no negative team scores)', pass: matchup.minTeamScore >= 0, detail: `lowest team score: ${matchup.minTeamScore} (floor: 0)` },
+    { name: 'Score floor — no team should score fewer than 3 pts in any game', pass: matchup.minTeamScore >= 3, detail: `min individual team score: ${matchup.minTeamScore}` },
     { name: 'Score variance (PBP std-dev >= legacy)', pass: matchup.scoreStdDev >= legacy.scoreStdDev, detail: `PBP ${matchup.scoreStdDev.toFixed(2)} vs legacy ${legacy.scoreStdDev.toFixed(2)}` },
     { name: 'Performance (ms/game)', pass: matchup.msPerGame <= t.maxMsPerGame, detail: `${matchup.msPerGame.toFixed(3)} ms (max ${t.maxMsPerGame})` },
     { name: 'Crash/error rate (zero throws)', pass: matchup.crashes === 0, detail: `${matchup.crashes} crashes` },
@@ -295,6 +295,7 @@ function printReport(report) {
   console.log(row('pass yds / game', legacy.passYdsPerGame.toFixed(1), matchup.passYdsPerGame.toFixed(1)));
   console.log(row('rush yds / game', legacy.rushYdsPerGame.toFixed(1), matchup.rushYdsPerGame.toFixed(1)));
   console.log(row('score std-dev', legacy.scoreStdDev.toFixed(2), matchup.scoreStdDev.toFixed(2)));
+  console.log(row('min team score', legacy.minTeamScore, matchup.minTeamScore));
   console.log(row('top-quartile win%', (legacy.topQuartileWinPct * 100).toFixed(1) + '%', (matchup.topQuartileWinPct * 100).toFixed(1) + '%'));
   console.log(row('ms / game', legacy.msPerGame.toFixed(3), matchup.msPerGame.toFixed(3)));
   console.log(row('crashes', legacy.crashes, matchup.crashes));

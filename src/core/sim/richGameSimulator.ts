@@ -350,8 +350,11 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   const gamePace = drawForm();
   // Per-game home-edge (crowd noise, surface familiarity, etc.): helps home offense, hurts away.
   const homeEdge = drawForm();
-  const homeFormBias = homeOff1 + homeOff2 - awayDef1 - awayDef2 + gamePace + homeEdge;
-  const awayFormBias = awayOff1 + awayOff2 - homeDef1 - homeDef2 + gamePace - homeEdge;
+  // The sigmoid in matchupEngine is centered at 0; |formBias| beyond ~0.5 lets a
+  // hot/cold day swamp talent entirely, so clamp the summed draws to [-0.5, 0.5].
+  const clampFormBias = (raw: number): number => Math.max(-0.5, Math.min(0.5, raw));
+  const homeFormBias = clampFormBias(homeOff1 + homeOff2 - awayDef1 - awayDef2 + gamePace + homeEdge);
+  const awayFormBias = clampFormBias(awayOff1 + awayOff2 - homeDef1 - homeDef2 + gamePace - homeEdge);
 
   const state = {
     homeScore: 0,
