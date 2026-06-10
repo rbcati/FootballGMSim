@@ -45,8 +45,16 @@ test('simulate week produces non-zero box score and standings win', async ({ pag
   const combined = scoreNumbers.reduce((s, n) => s + n, 0);
   expect(combined).toBeGreaterThan(0);
 
-  // Return to HQ then navigate to standings
+  // Return to HQ then navigate to standings. The live game viewer stays open
+  // after a sim to show results, so dismiss it if it is covering HQ.
   await page.getByTestId('return-to-hq').click();
+  const closeViewer = page.getByRole('button', { name: 'Close live game viewer' });
+  if (await closeViewer.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await closeViewer.click();
+  }
+  if (!(await page.getByTestId('franchise-hq').isVisible({ timeout: 3000 }).catch(() => false))) {
+    await page.getByRole('button', { name: /^Back to HQ$/i }).click().catch(() => {});
+  }
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
 
   // ── Standings: at least one team must have a win recorded ───────────────────
