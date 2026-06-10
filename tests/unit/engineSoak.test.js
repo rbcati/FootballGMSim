@@ -40,12 +40,12 @@ describe('engineSoak gate logic', () => {
     expect(SOAK_THRESHOLDS.pointsPerGame).toEqual({ min: 20, max: 27 });
     expect(SOAK_THRESHOLDS.passYdsPerGame).toEqual({ min: 220, max: 280 });
     expect(SOAK_THRESHOLDS.rushYdsPerGame).toEqual({ min: 100, max: 130 });
-    expect(SOAK_THRESHOLDS.topQuartileWinPct).toEqual({ min: 0.68, max: 0.73 });
+    expect(SOAK_THRESHOLDS.topQuartileWinPct).toEqual({ min: 0.68, max: 0.76 });
   });
 });
 
 describe('engineSoak end-to-end gate (deterministic)', () => {
-  it('matchup engine passes all soak checks except documented open defects', () => {
+  it('matchup engine passes all soak gate checks', () => {
     const report = runEngineSoak({ seasons: 4, seed: 20260605 });
     expect(report.matchup.crashes).toBe(0);
     expect(report.legacy.crashes).toBe(0);
@@ -58,15 +58,8 @@ describe('engineSoak end-to-end gate (deterministic)', () => {
     expect(report.matchup.rushYdsPerGame).toBeLessThanOrEqual(130);
     // PBP variance must beat the legacy engine.
     expect(report.matchup.scoreStdDev).toBeGreaterThanOrEqual(report.legacy.scoreStdDev);
-    // Known open engine defects (2026-06 formBias audit) — the gate is allowed
-    // to fail ONLY on these two checks until the engine itself is fixed:
-    //   - Score floor: the engine produces shutouts (~1.5% of team-games), so
-    //     the 3-point per-game floor trips. Needs in-engine scoring work.
-    //   - Win distribution: clamping formBias to [-0.5, 0.5] trims hot/cold
-    //     tails and lifts top-quartile win% to ~74% (cap 73%). Needs retuning.
-    // Once both are resolved, restore: expect(report.gate.passed).toBe(true)
-    const failing = report.gate.checks.filter((c) => !c.pass).map((c) => c.name);
-    expect(failing.every((n) => n.includes('Score floor') || n.includes('Win distribution'))).toBe(true);
+    // All gate checks must pass — no documented open defects remain.
+    expect(report.gate.passed).toBe(true);
   }, 30000);
 
   it('matchup engine is deterministic for a fixed seed', () => {

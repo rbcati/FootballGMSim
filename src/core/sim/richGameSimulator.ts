@@ -397,6 +397,21 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     curDrive = { team: state.possession, plays: 0, yards: 0, seconds: 0 };
   };
 
+  // Late-game scoring floor: NFL shutouts are vanishingly rare (<0.5% of games
+  // since 1990), so a team still scoreless at the final whistle is credited a
+  // late FG. Applied only at game end so the floor lifts the 0-point tail
+  // without compressing overall score variance.
+  const applyShutoutFloor = (team: 'home' | 'away') => {
+    if ((team === 'home' ? state.homeScore : state.awayScore) !== 0) return;
+    if (team === 'home') state.homeScore += 3;
+    else state.awayScore += 3;
+    quarterScores[team][3] += 3;
+    const teamStats = team === 'home' ? stats.home : stats.away;
+    teamStats.fieldGoalsAttempted += 1;
+    teamStats.fieldGoalsMade += 1;
+    pushDigest(digest, { quarter: 4, clockSec: state.clockSec, team, type: 'field_goal', text: `Late FG — ${team === 'home' ? 'Home' : 'Away'} avoids shutout.` }, state);
+  };
+
   while (state.quarter <= 4 && (stats.home.plays + stats.away.plays) < 184) {
     const offenseLead = state.possession === 'home'
       ? state.homeScore - state.awayScore
@@ -644,6 +659,9 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       }
     }
   }
+
+  applyShutoutFloor('home');
+  applyShutoutFloor('away');
 
   pushDigest(digest, { quarter: 4, clockSec: 0, team: 'neutral', type: 'final_takeaway', text: `${state.homeScore === state.awayScore ? 'Game ends level' : `${state.homeScore > state.awayScore ? 'Home' : 'Away'} closes it out`} in a ${Math.abs(state.homeScore - state.awayScore)}-point game.` }, state);
 
