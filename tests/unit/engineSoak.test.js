@@ -11,6 +11,7 @@ describe('engineSoak gate logic', () => {
   const passing = {
     topQuartileWinPct: 0.70, passYdsPerGame: 240, rushYdsPerGame: 115,
     pointsPerGame: 24, scoreStdDev: 12, msPerGame: 3, crashes: 0, minTeamScore: 3,
+    finalTieRate: 0,
   };
   const legacy = { scoreStdDev: 11 };
 
@@ -36,11 +37,26 @@ describe('engineSoak gate logic', () => {
     expect(evaluateGate(flat, { scoreStdDev: 11 }).passed).toBe(false);
   });
 
+  it('fails when the rich engine still returns tied finals (OT must resolve ties)', () => {
+    const tying = { ...passing, finalTieRate: 0.045 };
+    const { passed, checks } = evaluateGate(tying, legacy);
+    expect(passed).toBe(false);
+    expect(checks.find((c) => c.name.includes('Final tie rate'))?.pass).toBe(false);
+  });
+
+  it('labels the minTeamScore check as a floor regression check, not a scoring-health gate', () => {
+    const { checks } = evaluateGate(passing, legacy);
+    const floorCheck = checks.find((c) => c.name.includes('Floor regression check'));
+    expect(floorCheck).toBeDefined();
+    expect(floorCheck.name).toContain('not a scoring-health gate');
+  });
+
   it('exposes the documented threshold bands', () => {
     expect(SOAK_THRESHOLDS.pointsPerGame).toEqual({ min: 20, max: 27 });
     expect(SOAK_THRESHOLDS.passYdsPerGame).toEqual({ min: 220, max: 280 });
     expect(SOAK_THRESHOLDS.rushYdsPerGame).toEqual({ min: 100, max: 130 });
     expect(SOAK_THRESHOLDS.topQuartileWinPct).toEqual({ min: 0.68, max: 0.76 });
+    expect(SOAK_THRESHOLDS.maxFinalTieRate).toBe(0.01);
   });
 });
 
@@ -58,17 +74,24 @@ describe('engineSoak end-to-end gate (deterministic)', () => {
     expect(report.matchup.rushYdsPerGame).toBeLessThanOrEqual(130);
     // PBP variance must beat the legacy engine.
     expect(report.matchup.scoreStdDev).toBeGreaterThanOrEqual(report.legacy.scoreStdDev);
+    // OT resolves every tie; the underlying regulation tie tendency stays visible.
+    expect(report.matchup.finalTieRate).toBe(0);
+    expect(report.matchup.regulationTieRate).not.toBeNull();
+    expect(report.matchup.preFloorShutoutRate).not.toBeNull();
     // All gate checks must pass — no documented open defects remain.
     expect(report.gate.passed).toBe(true);
   }, 30000);
 
-  it('matchup engine is deterministic for a fixed seed', () => {
-    // msPerGame is wall-clock and excluded. We assert the NEW engine only — it
-    // uses per-game seeded RNG; the legacy engine carries non-seeded internals.
+  it('soak is deterministic for a fixed seed (globalSeed pinned for the legacy engine)', () => {
+    // msPerGame is wall-clock and excluded. Both engines must reproduce: the
+    // matchup engine via per-game seeded RNG, the legacy engine because the
+    // soak now pins league.globalSeed (previously Math.random per-save entropy,
+    // which made the comparative variance gate flaky across identical runs).
     const omitTiming = ({ msPerGame, ...rest }) => rest;
     const a = runEngineSoak({ seasons: 2, seed: 4242 });
     const b = runEngineSoak({ seasons: 2, seed: 4242 });
     expect(omitTiming(a.matchup)).toEqual(omitTiming(b.matchup));
+    expect(omitTiming(a.legacy)).toEqual(omitTiming(b.legacy));
   }, 30000);
 });
 

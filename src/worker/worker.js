@@ -171,9 +171,9 @@ import {
   buildGameNarrativeSummary,
   buildPlayerLeadersFromArchive,
   buildScoringSummaryFromSimulation,
-  buildTeamStatComparisonFromArchive,
   buildTurningPointsFromGameEvents,
   classifyGameScript,
+  resolveCanonicalTeamStats,
   summarizeWhyTeamWon,
 } from '../core/gameSummary.js';
 import { getScoutingRangeFromProfile, scoreDraftBoardEntry } from '../core/draft/draftScouting.js';
@@ -208,6 +208,7 @@ import {
   buildRatingMatrix,
   buildScheduleBuffer,
 } from './serialization.js';
+import { sortStandingsRows } from '../views/standingsView.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -3683,7 +3684,10 @@ function applyGameResultToCache(result, week, seasonId) {
       ? result.drives
       : buildDriveSummaryFromSimulation(playLogs, archiveContext));
   const turningPoints = buildTurningPointsFromGameEvents(playLogs, archiveContext);
-  const teamStats = buildTeamStatComparisonFromArchive(result.boxScore ?? {}, archiveContext);
+  // Prefer the simulator's canonical team stats (full line incl. plays,
+  // yardsPerPlay, firstDowns, red-zone data); re-derive from box-score rows
+  // only when the result carries none.
+  const teamStats = resolveCanonicalTeamStats(result.teamStats, result.boxScore ?? {}, archiveContext);
   const playerLeaders = buildPlayerLeadersFromArchive(result.boxScore ?? {}, archiveContext);
   const getRating = (team, key) => Number(team?.[key] ?? team?.[`${key}Rating`] ?? team?.[`${key}Ovr`] ?? team?.ovr ?? 0);
   const countInjured = (roster = []) => roster.filter((player) => {
@@ -3732,7 +3736,9 @@ function applyGameResultToCache(result, week, seasonId) {
     topReceiver: normalizeLeaderForTeam(playerLeaders?.categories?.receiving, aId),
     teamStats: teamStats?.away,
   });
-  const wentOvertime = playLogs.some((log) => Number(log?.quarter) > 4);
+  // Rich-engine results carry an explicit overtime flag (playLogs are capped at
+  // the first 20 digest events, so OT entries near the end may not appear there).
+  const wentOvertime = result?.overtime?.played === true || playLogs.some((log) => Number(log?.quarter) > 4);
   const rivalryGame = Boolean(homeTeamSnapshot?.conf && awayTeamSnapshot?.conf && homeTeamSnapshot?.conf === awayTeamSnapshot?.conf && homeTeamSnapshot?.div === awayTeamSnapshot?.div);
   const gameScript = classifyGameScript({
     homeScore: scoreHome,
@@ -3928,9 +3934,17 @@ function markWeekPlayed(slimSchedule, week) {
   cache.setMeta({ schedule: slimSchedule });
 }
 
-/** Build a standings array sorted by win% for the current state. */
+/**
+ * Build the standings array for the current state, ordered by the full NFL
+ * tiebreaker chain (win% → head-to-head → division → common games →
+ * conference → SOS → point diff → seeded coin-flip) via
+ * standingsView.makeStandingsComparator. The tiebreak context comes from the
+ * played scores in the slim schedule; the seeded coin-flip keys off the
+ * save's globalSeed, so ordering is deterministic for identical saves.
+ */
 function buildStandings() {
-  return cache.getAllTeams()
+  const meta = cache.getMeta() ?? {};
+  const rows = cache.getAllTeams()
     .map(t => ({
       id:      t.id,
       name:    t.name,
@@ -3943,8 +3957,8 @@ function buildStandings() {
       pf:      t.ptsFor  ?? 0,
       pa:      t.ptsAgainst ?? 0,
       pct:     winPct(t),
-    }))
-    .sort((a, b) => b.pct - a.pct || b.pf - a.pf);
+    }));
+  return sortStandingsRows(rows, meta?.schedule ?? null, Number(meta?.globalSeed ?? 0));
 }
 
 function winPct(t) {
@@ -10963,7 +10977,18 @@ async function handleWatchGame(payload, id) {
 
   const userGame = league._weekGames[userGameIndex];
 
-  // Simulate JUST the user game, passing options to generate logs
+  // Simulate JUST the user game, passing options to generate logs.
+  //
+  // ENGINE ROUTING — INTENTIONAL: watched games run the LEGACY simulator even
+  // when useNewSimulationEngine is on. The LiveGameViewer streams the granular
+  // per-play logs that only simulateBatch({ generateLogs: true }) produces;
+  // the rich engine (simulateRichGame) emits a capped post-game digest, not a
+  // live play feed, so routing it here would break the viewer. Known trade-off
+  // until then: the watched game uses legacy scoring/OT behavior while the
+  // rest of the week runs the rich engine.
+  // TODO(rich-engine live viewer): switch this to the rich engine once it can
+  // emit a full play-by-play stream the LiveGameViewer can consume (and the
+  // e2e watch-game flow covers it).
   const batchResults = simulateBatch([userGame], {
     league,
     isPlayoff: meta.phase === 'playoffs',

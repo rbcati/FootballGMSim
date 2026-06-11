@@ -4,6 +4,8 @@ import {
   buildDriveSummaryFromSimulation,
   buildQuarterScoresFromScoring,
   buildScoringSummaryFromSimulation,
+  buildTeamStatComparisonFromArchive,
+  resolveCanonicalTeamStats,
 } from '../gameSummary.js';
 
 describe('game summary pipeline', () => {
@@ -45,5 +47,66 @@ describe('game summary pipeline', () => {
       result: expect.any(String),
       points: expect.any(Number),
     }));
+  });
+});
+
+describe('archived team stats (post-engine-flip stabilization)', () => {
+  const context = { homeId: 1, awayId: 2, homeAbbr: 'HME', awayAbbr: 'AWY' };
+  // Rich-engine box-score shape: the QB row's `interceptions` are INTs THROWN
+  // (set to total offensive turnovers), defender rows' are INTs MADE.
+  const boxScore = {
+    home: {
+      hqb: { name: 'Home QB', pos: 'QB', stats: { passAtt: 30, passYd: 250, interceptions: 2 } },
+      hrb: { name: 'Home RB', pos: 'RB', stats: { rushAtt: 18, rushYd: 80, fumblesLost: 1 } },
+      hcb: { name: 'Home CB', pos: 'CB', stats: { interceptions: 1, tackles: 6 } },
+      hedge: { name: 'Home EDGE', pos: 'EDGE', stats: { sacks: 2, tackles: 4 } },
+    },
+    away: {
+      aqb: { name: 'Away QB', pos: 'QB', stats: { passAtt: 28, passYd: 210, interceptions: 1 } },
+      as: { name: 'Away S', pos: 'S', stats: { interceptions: 2, tackles: 5 } },
+    },
+  };
+
+  it('does not count defensive INTs made as offensive turnovers (fallback derivation)', () => {
+    const derived = buildTeamStatComparisonFromArchive(boxScore, context);
+    // Home giveaways: 2 thrown INTs + 1 lost fumble — NOT the CB's pick.
+    expect(derived.home.turnovers).toBe(3);
+    // Away giveaways: 1 thrown INT — NOT the safety's 2 picks.
+    expect(derived.away.turnovers).toBe(1);
+    expect(derived.home.sacks).toBe(2);
+  });
+
+  it('prefers the simulator canonical teamStats and preserves the full line', () => {
+    const richLine = (over) => ({
+      plays: 62, firstDowns: 21, passAtt: 33, passComp: 21, passYd: 245, passYards: 245,
+      passTD: 2, rushAtt: 26, rushYd: 110, rushYards: 110, rushTD: 1, totalYards: 355,
+      yardsPerPlay: 5.73, turnovers: 1, sacksAllowed: 2, sacksMade: 3, interceptions: 1,
+      redZoneTrips: 4, redZoneScores: 3, explosivePlays: 5, successRate: 0.47,
+      fieldGoalsMade: 1, fieldGoalsAttempted: 2, extraPointsMade: 3, extraPointsAttempted: 3,
+      punts: 4, puntYards: 180, kickReturns: 2, kickReturnYards: 44, puntReturns: 1, puntReturnYards: 8,
+      ...over,
+    });
+    const canonical = resolveCanonicalTeamStats(
+      { home: richLine({}), away: richLine({ passYd: 200, passYards: 200, totalYards: 310 }) },
+      boxScore,
+      context,
+    );
+    // The engine's full line survives — not zeroed/dropped by box-row re-derivation.
+    expect(canonical.home.plays).toBe(62);
+    expect(canonical.home.firstDowns).toBe(21);
+    expect(canonical.home.yardsPerPlay).toBe(5.73);
+    expect(canonical.home.redZoneTrips).toBe(4);
+    expect(canonical.home.redZoneScores).toBe(3);
+    expect(canonical.home.turnovers).toBe(1);
+    // Alias keys the Game Book comparison rows read.
+    expect(canonical.home.sacks).toBe(3);
+    expect(canonical.home.passYards).toBe(245);
+    expect(canonical.away.passYards).toBe(200);
+  });
+
+  it('falls back to box-row derivation when the result has no team stats', () => {
+    const fallback = resolveCanonicalTeamStats(null, boxScore, context);
+    expect(fallback.home.passYards).toBe(250);
+    expect(fallback.home.turnovers).toBe(3);
   });
 });
