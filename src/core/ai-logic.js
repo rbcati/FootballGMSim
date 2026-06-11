@@ -1113,6 +1113,10 @@ class AiLogic {
         }
 
         if (timing.atWaitCap || day >= 3) {
+            // Market V2: clearly-below-demand offers no longer auto-sign when
+            // patience runs out — the player keeps waiting and the offer is
+            // rejected/expired by the pending-offer ledger instead.
+            if (weakOffer) return { signed: false, offer: bestOffer, heldOutWeak: true };
             return { signed: true, offer: bestOffer };
         }
 

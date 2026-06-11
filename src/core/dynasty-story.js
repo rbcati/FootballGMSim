@@ -6,6 +6,7 @@ export const ensureDynastyMeta = (meta) => ensureLeagueMemoryMeta({
   socialFeedEntries: Array.isArray(meta?.socialFeedEntries) ? meta.socialFeedEntries : [],
   ownerGoals: Array.isArray(meta?.ownerGoals) ? meta.ownerGoals : [],
   retiredPlayers: Array.isArray(meta?.retiredPlayers) ? meta.retiredPlayers : [],
+  pendingOffers: Array.isArray(meta?.pendingOffers) ? meta.pendingOffers : [],
   records: meta?.records ?? {
     mostPassingYardsSeason: null,
     mostRushingYardsSeason: null,

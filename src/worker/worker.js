@@ -102,6 +102,20 @@ import { generateSlottedRookieContract } from '../core/contracts/rookieWageScale
 import { summarizePlayerMood } from '../core/mood/playerMood.js';
 import { getFreeAgencyDecisionState } from '../core/freeAgency/decisionState.js';
 import {
+  PENDING_OFFER_STATUS,
+  ensurePendingOffersList,
+  createPendingOffer,
+  upsertPendingOffer,
+  computeReservedPendingCap,
+  validateOfferAgainstReservedCap,
+  buildOfferFeedback,
+  agePendingOffers,
+  markOfferResolved,
+  reconcilePendingOffers,
+  expireAllPendingOffers,
+  prunePendingOffers,
+} from '../core/freeAgency/pendingOffers.js';
+import {
   calculateOffensiveSchemeFit, calculateDefensiveSchemeFit,
   computeTeamSchemeFits, schemeOvrBonus, recalcTeamSchemeFit,
   OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES,
@@ -987,6 +1001,8 @@ function buildViewState() {
     schedule:   meta?.schedule    ?? null,
     offseasonProgressionDone: meta?.offseasonProgressionDone ?? false,
     freeAgencyState: meta?.freeAgencyState ?? null,
+    pendingOffers: ensurePendingOffersList(meta?.pendingOffers)
+      .filter((row) => Number(row.teamId) === Number(meta?.userTeamId)),
     draftStarted: !!(meta?.draftState),
     draftLifecycleStatus: resolveDraftLifecycleStatus(meta),
     nextGameStakes,
@@ -3163,6 +3179,10 @@ async function handleAdvanceWeek(payload, id) {
   if (meta.phase === 'regular' || meta.phase === 'preseason') {
     try {
       await resolvePendingFreeAgencyOffers({ resolutionDay: 7, emitNotifications: true });
+      // In-season, each week counts as one "day" for pending offer aging so
+      // lowball bids still reject/expire instead of reserving cap forever.
+      savePendingOffersLedger(agePendingOffers(getPendingOffersLedger()));
+      syncPendingOfferLedger({ emitNotifications: true });
     } catch (faErr) {
       console.warn('[Worker] in-season FA offer resolution error (non-fatal):', faErr.message);
     }
@@ -5855,6 +5875,89 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
 
 // ── Handler: SUBMIT_OFFER ─────────────────────────────────────────────────────
 
+// ── Pending offer ledger (Free Agency Market V2) ─────────────────────────────
+// League-level record of submitted offers, persisted on meta.pendingOffers.
+// Pending entries reserve cap room; resolved entries keep their feedback so
+// the UI can explain why an offer was accepted, rejected, or expired.
+
+function getPendingOffersLedger() {
+  return ensurePendingOffersList(cache.getMeta()?.pendingOffers);
+}
+
+function savePendingOffersLedger(list, { day = null } = {}) {
+  const faDay = day ?? Number(cache.getMeta()?.freeAgencyState?.day ?? 1);
+  cache.setMeta({ pendingOffers: prunePendingOffers(list, { day: faDay }) });
+}
+
+/** Demand snapshot used for offer feedback + weak-offer detection. Mirrors the ask shown in GET_FREE_AGENTS. */
+function buildDemandSnapshotForOffer(player, team) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const allFreeAgents = cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent');
+  const heat = computeMarketHeat(player.pos, allFreeAgents);
+  const profile = buildContractProfile(player);
+  const wins = Number(team?.wins ?? 0);
+  const losses = Number(team?.losses ?? 0);
+  const ties = Number(team?.ties ?? 0);
+  const games = wins + losses + ties;
+  const ask = inflateContract(buildDemandFromProfile(player, profile, {
+    marketHeat: heat,
+    morale: player.morale ?? 68,
+    fit: Number(player?.schemeFit ?? 65),
+    teamSuccess: games > 0 ? (wins + ties * 0.5) / games : 0.5,
+  }), getSalaryInflationMultiplier(meta?.economy ?? {}));
+  return {
+    baseAnnual: ask.baseAnnual,
+    yearsTotal: ask.yearsTotal,
+    signingBonus: ask.signingBonus,
+    guaranteedPct: ask.guaranteedPct,
+    willingness: ask.willingness,
+    marketHeat: Math.round(heat * 100) / 100,
+  };
+}
+
+/**
+ * Reconcile the pending offer ledger against live player state: mark offers
+ * accepted/rejected/expired, refresh competing-team snapshots, and strip dead
+ * bids from player.offers so they stop influencing decisions. Idempotent.
+ */
+function syncPendingOfferLedger({ day = null, emitNotifications = false } = {}) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const ledger = ensurePendingOffersList(meta.pendingOffers);
+  if (ledger.length === 0) return { accepted: [], rejected: [], expired: [] };
+  const faDay = day ?? Number(meta?.freeAgencyState?.day ?? 1);
+
+  const { list, accepted, rejected, expired, offerRemovals } = reconcilePendingOffers({
+    pendingOffers: ledger,
+    resolvePlayer: (pid) => cache.getPlayer(pid),
+    resolveTeamName: (tid) => cache.getTeam(tid)?.name ?? null,
+    day: faDay,
+  });
+
+  for (const removal of offerRemovals) {
+    const player = cache.getPlayer(removal.playerId);
+    if (!player || !Array.isArray(player.offers)) continue;
+    cache.updatePlayer(player.id, {
+      offers: player.offers.filter((o) => Number(o?.teamId) !== Number(removal.teamId)),
+    });
+  }
+
+  savePendingOffersLedger(list, { day: faDay });
+
+  if (emitNotifications) {
+    const userTeamId = Number(meta?.userTeamId);
+    for (const row of accepted) {
+      if (Number(row.teamId) !== userTeamId) continue;
+      post(toUI.NOTIFICATION, { level: 'info', message: `${row.playerName ?? 'Free agent'} accepted your ${row.years}-year, $${row.totalValue}M offer.` });
+    }
+    for (const row of [...rejected, ...expired]) {
+      if (Number(row.teamId) !== userTeamId) continue;
+      post(toUI.NOTIFICATION, { level: 'warn', message: `${row.playerName ?? 'Free agent'}: ${row.feedback?.[0] ?? 'Offer is off the table.'}` });
+    }
+  }
+
+  return { accepted, rejected, expired };
+}
+
 async function handleSubmitOffer({ playerId, teamId, contract }, id) {
   const teamCtx = resolveTeamContext(teamId);
   if (!teamCtx.ok) { post(toUI.ERROR, { message: teamCtx.message }, id); return; }
@@ -5863,11 +5966,20 @@ async function handleSubmitOffer({ playerId, teamId, contract }, id) {
   const player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
-  // Cap check
+  // Cap check: the offer must fit inside cap room net of what other pending
+  // offers from this team already reserve.
   const capHit = contract.baseAnnual + (contract.signingBonus / contract.yearsTotal);
-  if (team.capRoom < capHit) {
-      post(toUI.ERROR, { message: 'Not enough cap room' }, id);
-      return;
+  const ledger = getPendingOffersLedger();
+  const capCheck = validateOfferAgainstReservedCap({
+    capRoom: team.capRoom ?? 0,
+    annualCapHit: capHit,
+    pendingOffers: ledger,
+    teamId: resolvedTeamId,
+    playerId: player.id,
+  });
+  if (!capCheck.ok) {
+    post(toUI.ERROR, { message: capCheck.message }, id);
+    return;
   }
 
   // Add/Update offer
@@ -5891,6 +6003,36 @@ async function handleSubmitOffer({ playerId, teamId, contract }, id) {
   cache.updatePlayer(playerId, { offers: player.offers });
 
   const liveMeta = ensureDynastyMeta(cache.getMeta());
+
+  // Record the bid in the league-level pending offer ledger (replaces any
+  // previous pending offer from this team on this player).
+  const faDay = Number(liveMeta?.freeAgencyState?.day ?? 1);
+  const demandSnapshot = buildDemandSnapshotForOffer(player, team);
+  const competingTeamIds = player.offers
+    .map((o) => Number(o?.teamId))
+    .filter((tid) => Number.isFinite(tid) && tid !== Number(resolvedTeamId));
+  const quality = buildOfferFeedback({
+    contract,
+    demand: demandSnapshot,
+    playerAge: player.age,
+    competingOfferCount: competingTeamIds.length,
+    capRoomAfter: capCheck.roomAfter,
+  });
+  const offerRecord = createPendingOffer({
+    playerId: player.id,
+    playerName: player.name,
+    pos: player.pos,
+    ovr: player.ovr,
+    teamId: resolvedTeamId,
+    teamName: team.name,
+    contract,
+    day: faDay,
+    demandSnapshot,
+    competingTeamIds,
+    feedback: quality.feedback,
+    score: quality.score,
+  });
+  savePendingOffersLedger(upsertPendingOffer(ledger, offerRecord).list, { day: faDay });
   const allFreeAgents = cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent');
   const heat = computeMarketHeat(player.pos, allFreeAgents);
   const marketMemory = liveMeta?.contractMarketMemory?.[String(playerId)] ?? {};
@@ -5904,6 +6046,9 @@ async function handleSubmitOffer({ playerId, teamId, contract }, id) {
       onlyPlayerId: playerId,
       emitNotifications: false,
     });
+    // Mirror any immediate resolution into the ledger so the offer's status
+    // reads accepted/rejected instead of dangling as pending.
+    syncPendingOfferLedger({ day: faDay });
   }
 
   await flushDirty();
@@ -5911,7 +6056,8 @@ async function handleSubmitOffer({ playerId, teamId, contract }, id) {
   // Return updated FA data view so UI reflects the offer immediately
   // Also state update
   await handleGetFreeAgents({}, null); // Broadcast FA update if needed, but easier to just reply success
-  post(toUI.STATE_UPDATE, buildViewState(), id);
+  const submittedOffer = getPendingOffersLedger().find((row) => row.id === offerRecord.id) ?? offerRecord;
+  post(toUI.STATE_UPDATE, { ...buildViewState(), submittedOffer }, id);
 
   if (immediateOutcome?.signedCount > 0) {
     const resolved = immediateOutcome.results?.[0];
@@ -5928,6 +6074,35 @@ async function handleSubmitOffer({ playerId, teamId, contract }, id) {
   } else if (!immediateOutcome) {
     post(toUI.NOTIFICATION, { level: 'info', message: `${player.name} logged your bid. ${decisionTiming.reason}.` });
   }
+}
+
+// ── Handler: WITHDRAW_OFFER ───────────────────────────────────────────────────
+
+async function handleWithdrawOffer({ playerId, teamId }, id) {
+  const teamCtx = resolveTeamContext(teamId);
+  if (!teamCtx.ok) { post(toUI.ERROR, { message: teamCtx.message }, id); return; }
+  const { teamId: resolvedTeamId } = teamCtx;
+
+  const player = cache.getPlayer(playerId);
+  if (player && Array.isArray(player.offers)) {
+    const nextOffers = player.offers.filter((o) => Number(o?.teamId) !== Number(resolvedTeamId));
+    if (nextOffers.length !== player.offers.length) {
+      cache.updatePlayer(player.id, { offers: nextOffers });
+    }
+  }
+
+  const faDay = Number(cache.getMeta()?.freeAgencyState?.day ?? 1);
+  savePendingOffersLedger(markOfferResolved(getPendingOffersLedger(), {
+    playerId,
+    teamId: resolvedTeamId,
+    status: PENDING_OFFER_STATUS.WITHDRAWN,
+    feedback: 'Offer withdrawn — cap reservation released.',
+    day: faDay,
+  }), { day: faDay });
+
+  await flushDirty();
+  await handleGetFreeAgents({}, null);
+  post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 
 async function finalizeFreeAgencySigning(player, offer, liveMeta) {
@@ -6067,6 +6242,27 @@ function evaluatePlayerOfferDecision(player, offers = [], liveMeta, memory = {})
     timing.eliteMarket
       || ((player?.ovr ?? 0) >= 84 && offers.length >= 2 && heat >= 1.08 && moneyGapRatio >= minimumGapForWait)
   );
+
+  // Market V2: a best offer clearly below the asking price never auto-signs.
+  // The player holds out; the pending-offer ledger rejects/expires the bid
+  // after its short review window instead.
+  if (topValue < askTotalValue * 0.75) {
+    return {
+      status: 'pending',
+      reason: 'Low annual value — waiting for a better market',
+      bestOffer,
+      topValue,
+      askTotalValue,
+      timing,
+      marketHeat: heat,
+      bidderCount: offers.length,
+      userBidValue,
+      moneyGapRatio,
+      state: 'holding_for_improvement',
+      urgency: timing.risk,
+      negotiation: bestOffer?._evaluation ?? null,
+    };
+  }
 
   if (!timing.resolveNow && shouldWaitForMoney && canUseWaitState) {
     return {
@@ -6638,7 +6834,20 @@ async function handleGetFreeAgents(payload, id) {
   const faDay = meta.freeAgencyState?.day ?? 1;
   const faMaxDays = meta.freeAgencyState?.maxDays ?? 5;
 
-  post(toUI.FREE_AGENT_DATA, { freeAgents, faDay, faMaxDays, phase: meta.phase }, id);
+  // Market V2: the user team's pending offer ledger + cap reservation summary.
+  const offerLedger = ensurePendingOffersList(meta.pendingOffers);
+  const pendingOffers = offerLedger
+    .filter((row) => Number(row.teamId) === Number(userTeamId))
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+  const reservedPendingCap = computeReservedPendingCap(offerLedger, userTeamId);
+  const userCapRoom = Math.round(Number(userTeam?.capRoom ?? 0) * 10) / 10;
+  const capSummary = {
+    capRoom: userCapRoom,
+    reservedPendingCap,
+    effectiveCapRoom: Math.round((userCapRoom - reservedPendingCap) * 10) / 10,
+  };
+
+  post(toUI.FREE_AGENT_DATA, { freeAgents, faDay, faMaxDays, phase: meta.phase, pendingOffers, capSummary }, id);
 }
 
 // ── Handler: COACHING ACTIONS ────────────────────────────────────────────────
@@ -9486,6 +9695,7 @@ async function handleAdvanceOffseason(payload, id) {
     freeAgencyState: { day: 1, maxDays: 5, complete: false },
     contractMarketMemory: {},
     offseasonFaMovements: [],
+    pendingOffers: [],
   });
 
   // AUTO-SAVE: phase transition — flush all progression/retirement changes before notifying UI.
@@ -9515,6 +9725,12 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
 
     const { day, maxDays } = meta.freeAgencyState;
 
+    // ── Market V2 pre-pass ──────────────────────────────────────────────────
+    // Every pending offer ages by one day, then clearly-weak or stale bids
+    // reject/expire BEFORE the market acts so players can't sign a dead bid.
+    savePendingOffersLedger(agePendingOffers(getPendingOffersLedger()), { day });
+    syncPendingOfferLedger({ day, emitNotifications: true });
+
     if (day > maxDays) {
         // FA is already over — ensure the phase advanced correctly (idempotent).
         if (meta.phase === 'free_agency') {
@@ -9528,6 +9744,12 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
 
     // Process Day
     await AiLogic.processFreeAgencyDay(day);
+
+    // ── Market V2 post-pass ─────────────────────────────────────────────────
+    // Reconcile the ledger against today's signings: mark accepted offers,
+    // reject offers for players who signed elsewhere, refresh competition.
+    syncPendingOfferLedger({ day, emitNotifications: true });
+
     const faEvents = generateDynamicEvents({
       players: cache.getAllPlayers(),
       teams: cache.getAllTeams(),
@@ -9560,6 +9782,21 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
     };
 
     if (isComplete) {
+        // Close the negotiation market: any offer still pending expires and
+        // releases its cap reservation, and unresolved bids on players come
+        // off the table so they don't linger into the draft/season.
+        const closed = expireAllPendingOffers(getPendingOffersLedger(), { day: nextDay });
+        savePendingOffersLedger(closed.list, { day: nextDay });
+        const userTeamIdNum = Number(meta?.userTeamId);
+        for (const row of closed.expired) {
+            if (Number(row.teamId) !== userTeamIdNum) continue;
+            post(toUI.NOTIFICATION, { level: 'warn', message: `${row.playerName ?? 'Free agent'}: offer expired — free agency period ended.` });
+        }
+        for (const fa of cache.getAllPlayers()) {
+            if ((!fa.teamId || fa.status === 'free_agent') && Array.isArray(fa.offers) && fa.offers.length > 0) {
+                cache.updatePlayer(fa.id, { offers: [] });
+            }
+        }
         const compAwards = awardCompensatoryPicksForUpcomingDraft(ensureCompMeta(cache.getMeta()));
         if (compAwards.length > 0) {
             const preview = compAwards.slice(0, 4)
@@ -10866,6 +11103,7 @@ async function handleMessage(event) {
       case toWorker.SET_USER_TEAM:      return await handleSetUserTeam(payload, id);
       case toWorker.SIGN_PLAYER:        return await handleSignPlayer(payload, id);
       case toWorker.SUBMIT_OFFER:       return await handleSubmitOffer(payload, id);
+      case toWorker.WITHDRAW_OFFER:     return await handleWithdrawOffer(payload, id);
       case toWorker.RELEASE_PLAYER:     return await handleReleasePlayer(payload, id);
       case toWorker.BULK_RELEASE_PLAYERS: return await handleBulkReleasePlayers(payload, id);
       case toWorker.UPDATE_SETTINGS:    return await handleUpdateSettings(payload, id);

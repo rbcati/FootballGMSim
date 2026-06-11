@@ -53,6 +53,7 @@ export const toWorker = Object.freeze({
   /** Free agency */
   SIGN_PLAYER:        'SIGN_PLAYER',       // { playerId, teamId, contract }
   SUBMIT_OFFER:       'SUBMIT_OFFER',      // { playerId, teamId, contract }
+  WITHDRAW_OFFER:     'WITHDRAW_OFFER',    // { playerId, teamId }
   ADVANCE_FREE_AGENCY_DAY: 'ADVANCE_FREE_AGENCY_DAY', // {}
   RELEASE_PLAYER:     'RELEASE_PLAYER',    // { playerId, teamId }
   BULK_RELEASE_PLAYERS: 'BULK_RELEASE_PLAYERS', // { teamId, playerIds: number[] }

@@ -32,6 +32,14 @@ export default function CapManager({ league, actions }) {
   const deadCap = userTeam?.deadCap ?? 0;
   const used = useMemo(() => roster.reduce((sum, p) => sum + (safeContract(p)?.salary ?? 2), 0), [roster]);
   const capSpace = calcCapSpace(roster) - deadCap;
+  // Pending free agency offers reserve cap room until they resolve.
+  const reservedPendingCap = useMemo(
+    () => (Array.isArray(league?.pendingOffers) ? league.pendingOffers : [])
+      .filter((row) => row?.status === 'pending')
+      .reduce((sum, row) => sum + (Number(row?.annualCapHit) || 0), 0),
+    [league?.pendingOffers],
+  );
+  const effectiveCapSpace = capSpace - reservedPendingCap;
   const [ext, setExt] = useState(null);
   const [offer, setOffer] = useState({ years: 3, salary: 8, guaranteedPct: 50 });
 
@@ -43,7 +51,12 @@ export default function CapManager({ league, actions }) {
       <div style={{ height: 10, background: '#1f2937', borderRadius: 999, overflow: 'hidden', marginBottom: 8 }}>
         <div style={{ width: `${Math.min(100, (used / SALARY_CAP_AMOUNT) * 100)}%`, height: '100%', background: usageColor }} />
       </div>
-      <div style={{ marginBottom: 16 }}>Dead Cap: ${Number(deadCap).toFixed(1)}M</div>
+      <div style={{ marginBottom: reservedPendingCap > 0 ? 4 : 16 }}>Dead Cap: ${Number(deadCap).toFixed(1)}M</div>
+      {reservedPendingCap > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          Pending FA offers reserve ${reservedPendingCap.toFixed(1)}M · Effective cap space: ${effectiveCapSpace.toFixed(1)}M
+        </div>
+      )}
 
       <table style={{ width: '100%', fontSize: 13 }}>
         <thead><tr><th>Name</th><th>Pos</th><th>OVR</th><th>Age</th><th>Salary ($M)</th><th>Yrs</th><th>Actions</th></tr></thead>
