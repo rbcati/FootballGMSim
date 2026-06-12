@@ -1,6 +1,8 @@
+/** @vitest-environment jsdom */
 import React from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
+import { cleanup, render, fireEvent } from '@testing-library/react';
 import { PendingOffersPanel } from './FreeAgency.jsx';
 
 const baseOffer = {
@@ -31,6 +33,8 @@ const capSummary = { capRoom: 40, reservedPendingCap: 12, effectiveCapRoom: 28 }
 const renderHtml = (node) => renderToString(node).replace(/<!-- -->/g, '');
 
 describe('PendingOffersPanel', () => {
+  afterEach(cleanup);
+
   it('shows each offer with its pending/accepted/rejected/expired status and feedback', () => {
     const html = renderHtml(
       <PendingOffersPanel pendingOffers={offers} capSummary={capSummary} onWithdraw={() => {}} />,
@@ -67,5 +71,37 @@ describe('PendingOffersPanel', () => {
       <PendingOffersPanel pendingOffers={[]} capSummary={{ capRoom: 40, reservedPendingCap: 0, effectiveCapRoom: 40 }} />,
     );
     expect(html).toBe('');
+  });
+
+  it('renders the panel with the effective-cap badge when pending offers exist', () => {
+    const { getByTestId } = render(
+      <PendingOffersPanel pendingOffers={offers} capSummary={capSummary} onWithdraw={() => {}} />,
+    );
+    expect(getByTestId('pending-offers-panel')).toBeTruthy();
+    expect(getByTestId('effective-cap-badge').textContent).toContain('Effective cap: $28.0M (reserved $12.0M)');
+    expect(getByTestId(`pending-offer-${baseOffer.playerId}`)).toBeTruthy();
+  });
+
+  it('clicking Withdraw invokes the withdraw action with the offer playerId', () => {
+    const onWithdraw = vi.fn();
+    const { getByText } = render(
+      <PendingOffersPanel pendingOffers={[baseOffer]} capSummary={capSummary} onWithdraw={onWithdraw} />,
+    );
+    fireEvent.click(getByText('Withdraw'));
+    expect(onWithdraw).toHaveBeenCalledTimes(1);
+    expect(onWithdraw).toHaveBeenCalledWith(baseOffer.playerId);
+  });
+
+  it('keeps the Withdraw button in the DOM for very long player names', () => {
+    const longName = 'Bartholomew Maximiliano Featherstonehaugh-Cholmondeley von Hohenzollern III';
+    const { getByText } = render(
+      <PendingOffersPanel
+        pendingOffers={[{ ...baseOffer, playerName: longName }]}
+        capSummary={capSummary}
+        onWithdraw={() => {}}
+      />,
+    );
+    expect(getByText(new RegExp(longName.slice(0, 30)))).toBeTruthy();
+    expect(getByText('Withdraw')).toBeTruthy();
   });
 });

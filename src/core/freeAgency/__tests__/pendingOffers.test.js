@@ -219,6 +219,25 @@ describe('daily resolution (reconcile)', () => {
     expect(aged[1].daysPending).toBe(1);
   });
 
+  it('never increments daysPending on any resolved status, even across repeated days', () => {
+    const resolvedStatuses = [
+      PENDING_OFFER_STATUS.ACCEPTED,
+      PENDING_OFFER_STATUS.REJECTED,
+      PENDING_OFFER_STATUS.EXPIRED,
+      PENDING_OFFER_STATUS.WITHDRAWN,
+    ];
+    let ledger = resolvedStatuses.map((status, i) => ({
+      ...makeOffer({ playerId: 100 + i }),
+      status,
+      daysPending: 2,
+      resolvedDay: 3,
+    }));
+    ledger = agePendingOffers(agePendingOffers(agePendingOffers(ledger)));
+    for (const row of ledger) {
+      expect(row.daysPending).toBe(2);
+    }
+  });
+
   it('expires every remaining pending offer when the market closes', () => {
     const { list, expired } = expireAllPendingOffers([makeOffer(), makeOffer({ playerId: 22 })], { day: 6 });
     expect(expired).toHaveLength(2);
