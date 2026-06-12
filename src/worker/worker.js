@@ -5892,7 +5892,7 @@ function savePendingOffersLedger(list, { day = null } = {}) {
 /** Demand snapshot used for offer feedback + weak-offer detection. Mirrors the ask shown in GET_FREE_AGENTS. */
 function buildDemandSnapshotForOffer(player, team) {
   const meta = ensureDynastyMeta(cache.getMeta());
-  const allFreeAgents = cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent');
+  const allFreeAgents = cache.getAllPlayers().filter((p) => p.teamId == null || p.status === 'free_agent');
   const heat = computeMarketHeat(player.pos, allFreeAgents);
   const profile = buildContractProfile(player);
   const wins = Number(team?.wins ?? 0);
@@ -6626,7 +6626,9 @@ async function handleGetFreeAgents(payload, id) {
   const meta = ensureDynastyMeta(cache.getMeta());
   const inflationMult = getSalaryInflationMultiplier(meta?.economy ?? {});
   const userTeamId = meta.userTeamId;
-  const allFreeAgents = cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent');
+  // teamId 0 is a valid franchise (the default user team) — only a null/undefined
+  // teamId means unsigned, so accepted players never linger in the FA pool.
+  const allFreeAgents = cache.getAllPlayers().filter((p) => p.teamId == null || p.status === 'free_agent');
   const userTeam = cache.getTeam(userTeamId);
   const userDirection = inferTeamDirection(userTeam, Number(meta?.currentWeek ?? 1));
   const userWinPct = Math.max(0, Math.min(1, (() => {
@@ -9793,7 +9795,7 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
             post(toUI.NOTIFICATION, { level: 'warn', message: `${row.playerName ?? 'Free agent'}: offer expired — free agency period ended.` });
         }
         for (const fa of cache.getAllPlayers()) {
-            if ((!fa.teamId || fa.status === 'free_agent') && Array.isArray(fa.offers) && fa.offers.length > 0) {
+            if ((fa.teamId == null || fa.status === 'free_agent') && Array.isArray(fa.offers) && fa.offers.length > 0) {
                 cache.updatePlayer(fa.id, { offers: [] });
             }
         }
