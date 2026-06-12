@@ -616,6 +616,10 @@ export function useWorker() {
     submitOffer: (playerId, teamId, contract) =>
       request(toWorker.SUBMIT_OFFER, { playerId, teamId, contract }),
 
+    /** Withdraw a pending free agency offer (releases its cap reservation). */
+    withdrawOffer: (playerId, teamId) =>
+      request(toWorker.WITHDRAW_OFFER, { playerId, teamId }),
+
     /** Release a player. */
     releasePlayer: (playerId, teamId) =>
       send(toWorker.RELEASE_PLAYER, { playerId, teamId }),

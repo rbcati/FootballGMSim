@@ -394,6 +394,76 @@ export function PendingCapImpactPanel({ reservation }) {
   );
 }
 
+// ── Pending offers (negotiation market) ──────────────────────────────────────
+
+const OFFER_STATUS_TONE = Object.freeze({
+  pending: 'var(--accent)',
+  accepted: 'var(--success)',
+  rejected: 'var(--danger)',
+  expired: 'var(--text-muted)',
+  withdrawn: 'var(--text-muted)',
+});
+
+const OFFER_STATUS_LABEL = Object.freeze({
+  pending: 'Pending',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+  expired: 'Expired',
+  withdrawn: 'Withdrawn',
+});
+
+export function PendingOffersPanel({ pendingOffers = [], capSummary = null, onWithdraw }) {
+  const offers = Array.isArray(pendingOffers) ? pendingOffers : [];
+  if (offers.length === 0 && !capSummary?.reservedPendingCap) return null;
+  return (
+    <Card className="card-premium" style={{ marginBottom: "var(--space-4)" }} data-testid="pending-offers-panel">
+      <CardContent style={{ padding: "var(--space-4)", display: "grid", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.7px", fontWeight: 800 }}>Your offers</div>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 3 }}>Offers stay pending until the player decides. Pending bids reserve cap room.</div>
+          </div>
+          {capSummary ? (
+            <Badge variant="outline" data-testid="effective-cap-badge">
+              Effective cap: {formatCapValue(capSummary.effectiveCapRoom)} (reserved {formatCapValue(capSummary.reservedPendingCap)})
+            </Badge>
+          ) : null}
+        </div>
+        <div style={{ display: "grid", gap: 6 }}>
+          {offers.map((offer) => {
+            const status = OFFER_STATUS_LABEL[offer.status] ? offer.status : 'pending';
+            const tone = OFFER_STATUS_TONE[status];
+            return (
+              <div key={offer.id} data-testid={`pending-offer-${offer.playerId}`} style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "8px 10px", background: "var(--surface)", display: "grid", gap: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <div style={{ fontWeight: 700, fontSize: "var(--text-sm)" }}>
+                    {offer.playerName ?? `Player ${offer.playerId}`}{offer.pos ? ` · ${offer.pos}` : ''}
+                    <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>
+                      {' '}— {offer.years}y / ${Number(offer.totalValue ?? 0).toFixed(1)}M (${Number(offer.annualCapHit ?? 0).toFixed(1)}M cap/yr)
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <Badge variant="outline" style={{ color: tone, borderColor: tone, background: `${tone}14` }}>{OFFER_STATUS_LABEL[status]}</Badge>
+                    {status === 'pending' && typeof onWithdraw === 'function' ? (
+                      <Button size="sm" variant="outline" onClick={() => onWithdraw(offer.playerId)}>Withdraw</Button>
+                    ) : null}
+                  </div>
+                </div>
+                {(offer.feedback ?? []).slice(0, 2).map((line) => (
+                  <div key={line} style={{ fontSize: "var(--text-xs)", color: status === 'rejected' ? "var(--danger)" : "var(--text-muted)" }}>{line}</div>
+                ))}
+                {status === 'pending' && (offer.competingTeamIds ?? []).length > 0 ? (
+                  <div style={{ fontSize: "10px", color: "var(--warning)" }}>{offer.competingTeamIds.length} competing team{offer.competingTeamIds.length === 1 ? '' : 's'} bidding</div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Cap banner ────────────────────────────────────────────────────────────────
 
 function CapBanner({ userTeam }) {
@@ -910,6 +980,15 @@ export default function FreeAgency({
     () => evaluatePendingOfferCapReservation(pendingCapContext),
     [pendingCapContext],
   );
+  // Latest ledger record per player (worker returns newest-first) so rows can
+  // show pending/accepted/rejected/expired status next to the player name.
+  const offerStatusByPlayer = useMemo(() => {
+    const map = new Map();
+    for (const offer of faState?.pendingOffers ?? []) {
+      if (!map.has(offer.playerId)) map.set(offer.playerId, offer);
+    }
+    return map;
+  }, [faState?.pendingOffers]);
 
   const displayed = useMemo(() => {
     const base = filterFreeAgentsForView(evaluatedFaPool, {
@@ -984,6 +1063,26 @@ export default function FreeAgency({
     }
   };
 
+  const refreshFreeAgents = async () => {
+    try {
+      const res = await actions.getFreeAgents();
+      setFaState(res.payload);
+    } catch (err) {
+      console.error("FA refresh error:", err);
+    }
+  };
+
+  const handleWithdrawOffer = async (playerId) => {
+    if (activeTeamId == null) return;
+    try {
+      await actions.withdrawOffer(playerId, activeTeamId);
+      showFlash("Offer withdrawn — cap reservation released.");
+      await refreshFreeAgents();
+    } catch (err) {
+      alert("Withdraw failed: " + err.message);
+    }
+  };
+
   const handleSign = async (playerId, contract) => {
     setSigningPlayerId(null);
     if (activeTeamId == null) {
@@ -993,6 +1092,7 @@ export default function FreeAgency({
     try {
         await actions.submitOffer(playerId, activeTeamId, contract);
         showFlash(`Offer submitted.`);
+        await refreshFreeAgents();
         // Optimistic update for test
         setFaState(prev => {
             if (!prev) return prev;
@@ -1053,6 +1153,9 @@ export default function FreeAgency({
         subtitle="Scan market pressure, filter targets, and place bids quickly."
         metadata={[
           { label: "Cap Room", value: `$${capRoom.toFixed(1)}M` },
+          ...(faState?.capSummary && faState.capSummary.reservedPendingCap > 0
+            ? [{ label: "Effective Cap", value: `$${Number(faState.capSummary.effectiveCapRoom).toFixed(1)}M` }]
+            : []),
           { label: "Pool", value: sortedAgents.length },
           { label: "Phase", value: faState?.phase ?? "loading" },
         ]}
@@ -1196,6 +1299,11 @@ export default function FreeAgency({
       )}
 
       <CapBanner userTeam={userTeam} />
+      <PendingOffersPanel
+        pendingOffers={faState?.pendingOffers}
+        capSummary={faState?.capSummary}
+        onWithdraw={handleWithdrawOffer}
+      />
       <PendingCapImpactPanel reservation={pendingCapReservation} />
 
       {flash && (
@@ -1664,6 +1772,16 @@ export default function FreeAgency({
                         <TableCell><PosBadge pos={player.pos} /></TableCell>
                         <TableCell onClick={() => onPlayerSelect && onPlayerSelect(player.id, buildFreeAgencyProfileContext(player.market ?? player))} style={{ fontWeight: 600, color: "var(--text)", cursor: onPlayerSelect ? "pointer" : "default" }}>
                           <span style={{ borderBottom: onPlayerSelect ? "1px dotted var(--text-muted)" : "none" }}>{player.name}</span>
+                          {(() => {
+                            const offerStatus = offerStatusByPlayer.get(player.id);
+                            if (!offerStatus) return null;
+                            const tone = OFFER_STATUS_TONE[offerStatus.status] ?? "var(--text-muted)";
+                            return (
+                              <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: "0 6px" }}>
+                                {OFFER_STATUS_LABEL[offerStatus.status] ?? "Pending"}
+                              </span>
+                            );
+                          })()}
                           <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
                             {player?._eval?.archetype?.archetype ?? "Balanced"} · {player?._eval?.roleProjection?.replaceContext ?? "Depth option"}
                           </div>

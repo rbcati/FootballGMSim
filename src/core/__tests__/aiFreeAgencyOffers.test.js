@@ -59,6 +59,8 @@ vi.mock('../retention/reSigning.js', () => ({
 }));
 
 const { default: AiLogic } = await import('../ai-logic.js');
+const { Transactions } = await import('../../db/index.js');
+const { default: NewsEngine } = await import('../news-engine.js');
 
 describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
   beforeEach(() => {
@@ -466,5 +468,85 @@ describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
     const needs = AiLogic.calculateTeamNeeds(1);
     expect(needs.QB).toBeGreaterThanOrEqual(1.05);
     expect(needs.QB).toBeGreaterThan(needs.WR);
+  });
+
+  it('evaluateOffers holds out instead of signing a clearly-below-demand offer when patience runs out', () => {
+    // Mocked ask: baseAnnual 1 / 1 year → askTotal = 1. A 0.5 total offer is
+    // clearly below demand, so even at day 3 (the old force-sign fallback)
+    // the player keeps waiting and the ledger rejects/expires the bid.
+    const player = {
+      id: 51,
+      name: 'Holdout WR',
+      pos: 'WR',
+      status: 'free_agent',
+      teamId: null,
+      ovr: 76,
+      age: 27,
+      offers: [{ teamId: 1, contract: { baseAnnual: 0.5, yearsTotal: 1, signingBonus: 0 } }],
+    };
+    mockCache.getAllPlayers.mockReturnValue([player]);
+    mockCache.getTeam.mockReturnValue({ id: 1, name: 'Lowball Team', capRoom: 30 });
+
+    const decision = AiLogic.evaluateOffers(player, 3);
+    expect(decision.signed).toBe(false);
+    expect(decision.heldOutWeak).toBe(true);
+
+    // A fair offer (meets the ask) still signs once patience runs out.
+    const fairPlayer = {
+      ...player,
+      id: 52,
+      offers: [{ teamId: 1, contract: { baseAnnual: 1, yearsTotal: 1, signingBonus: 0 } }],
+    };
+    mockCache.getAllPlayers.mockReturnValue([fairPlayer]);
+    expect(AiLogic.evaluateOffers(fairPlayer, 3).signed).toBe(true);
+  });
+
+  it('processFreeAgencyDay logs a transaction and news item when an offer is accepted', async () => {
+    const fa = {
+      id: 61,
+      name: 'Signable QB',
+      pos: 'QB',
+      status: 'free_agent',
+      teamId: null,
+      ovr: 77,
+      age: 33,
+      contract: { baseAnnual: 36, years: 1, yearsTotal: 1, signingBonus: 0 },
+      offers: [],
+    };
+    const team = { id: 1, name: 'Signing Team', capRoom: 15 };
+    const userTeam = { id: 99, name: 'User Team', capRoom: 15 };
+    mockCache.getMeta.mockReturnValue({ year: 2026, userTeamId: 99, currentSeasonId: 's1', currentWeek: 1, phase: 'free_agency' });
+    mockCache.getAllPlayers.mockReturnValue([fa]);
+    mockCache.getAllTeams.mockReturnValue([team, userTeam]);
+    mockCache.getTeam.mockImplementation((id) => (Number(id) === 1 ? team : userTeam));
+    mockCalculateExtensionDemand.mockReturnValue({ years: 2, yearsTotal: 2, baseAnnual: 5, signingBonus: 2 });
+    mockBuildFreeAgencyMarketAnalysis.mockImplementation(({ freeAgents }) => ({
+      marketRows: freeAgents.map((p) => ({
+        pos: p.pos,
+        recommendation: 'pursue',
+        capFit: 'expensive',
+        costSource: 'staleContract',
+        fitScore: 90,
+        _player: p,
+      })),
+    }));
+
+    await AiLogic.processFreeAgencyDay(2);
+
+    // The signing moved the player onto the roster and out of free agency…
+    expect(mockCache.updatePlayer).toHaveBeenCalledWith(
+      61,
+      expect.objectContaining({ teamId: 1, status: 'active', offers: [] }),
+    );
+    // …and produced a transaction log entry plus a news item.
+    expect(Transactions.add).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'SIGN', teamId: 1, details: expect.objectContaining({ playerId: 61 }) }),
+    );
+    expect(NewsEngine.logNews).toHaveBeenCalledWith(
+      'TRANSACTION',
+      expect.stringContaining('Signable QB signs'),
+      1,
+      expect.objectContaining({ playerId: 61 }),
+    );
   });
 });
