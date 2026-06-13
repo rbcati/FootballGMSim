@@ -103,8 +103,12 @@ secondary / advanced fields:
 (`richGameSimulator.ts:999`) and the UI consumes it
 (`src/ui/utils/boxScoreViewModel.js:583`, `src/ui/components/AdvancedGameStats.jsx:33`).
 But `mapGameSummaryToLegacyResult` (`weekSimulationBridge.ts:109-164`) does
-**not** carry an `advancedAttribution` key, and the `buildArchivedGame` call
-(`worker.js:3897-3941`) never passes it. Net: in the new-engine week-sim path
+**not** carry an `advancedAttribution` key, the `buildArchivedGame` call
+(`worker.js:3897-3941`) never passes it, **and** the
+`normalizeArchivedGamePayload` wrapper that `applyGameResultToCache` runs before
+`cache.addGame` (`worker.js:3897`) whitelists archive fields explicitly
+(`src/core/gameArchive.js:170-210`) without copying `advancedAttribution` — a
+**third** drop point. Net: in the new-engine week-sim path
 the per-game **Advanced Game Stats panel renders empty for every non-watched
 game**. (Season aggregation is unaffected — that runs through the separate
 `archiveGameStats(playerStatsStore)` path, `richGameSimulator.ts:1016-1018` /
@@ -275,9 +279,14 @@ threshold drift.
      remove the peer-only install risk.
   6. Minor: `shutoutFloorApplied` dead field (2d); blank `rushLong`/`recLong`
      columns (2e).
-- **Suggested first next feature:** _Wire `advancedAttribution` through
-  `mapGameSummaryToLegacyResult` + `buildArchivedGame` so the Advanced Game Stats
-  panel populates for all games._ It is small, self-contained, closes the most
-  visible Check-2 gap, and pairs naturally with re-activating the dead
-  feat/upset post-game news (2b/2c) — turning this audit's findings into one
-  cohesive "post-game data fidelity" feature.
+- **Suggested first next feature:** _Wire `advancedAttribution` through all
+  **three** drop points — `mapGameSummaryToLegacyResult`
+  (`weekSimulationBridge.ts:109-164`), the `buildArchivedGame` payload
+  (`worker.js:3897-3941`), **and** the `normalizeArchivedGamePayload` whitelist
+  (`gameArchive.js:170-210`) — so the Advanced Game Stats panel populates for all
+  games._ Missing any one of the three still discards the field before
+  `cache.addGame`, so the fix is incomplete unless the normalizer whitelist is
+  extended too. It is small, self-contained, closes the most visible Check-2 gap,
+  and pairs naturally with re-activating the dead feat/upset post-game news
+  (2b/2c) — turning this audit's findings into one cohesive "post-game data
+  fidelity" feature.
