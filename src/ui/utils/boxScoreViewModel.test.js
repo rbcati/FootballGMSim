@@ -257,4 +257,35 @@ describe('buildBoxScoreViewModel', () => {
     expect(vm.playByPlayRows[0]).toMatchObject({ teamAbbr: 'AWY', clock: '1:29', text: 'Late interception seals it' });
     expect(vm.playByPlayRows[0].tags).toContain('turnover');
   });
+
+  it('passes advancedAttribution through to view-model from archived (non-watched-game) data', () => {
+    const advancedAttribution = {
+      'qb-1': { targets: 0, receptionsAllowed: 0, coverageTargets: 0, coverageCompletionsAllowed: 0, drops: 2, battedPasses: 1, sacksAllowed: 3, sacksMade: 0 },
+      'cb-1': { targets: 7, receptionsAllowed: 4, coverageTargets: 7, coverageCompletionsAllowed: 4, drops: 0, battedPasses: 0, sacksAllowed: 0, sacksMade: 1 },
+    };
+    // Simulate archived week-sim data that has gone through normalizeArchivedGamePayload
+    // (i.e. the non-watched-game path where game.advancedAttribution fallback must not be needed)
+    const vm = buildBoxScoreViewModel({
+      game: {
+        homeId: 1,
+        awayId: 2,
+        homeScore: 28,
+        awayScore: 17,
+        advancedAttribution,
+      },
+    });
+    // advancedAttribution should be normalised and available without relying on the
+    // watched-game fallback (game?.advancedAttribution)
+    expect(vm.advancedAttribution).toBeDefined();
+    expect(Object.keys(vm.advancedAttribution)).toHaveLength(2);
+    expect(vm.advancedAttribution['qb-1']).toMatchObject({ drops: 2, battedPasses: 1, sacksAllowed: 3 });
+    expect(vm.advancedAttribution['cb-1']).toMatchObject({ coverageTargets: 7, coverageCompletionsAllowed: 4, sacksMade: 1 });
+  });
+
+  it('advancedAttribution is empty object when not in archived data (no phantom output)', () => {
+    const vm = buildBoxScoreViewModel({
+      game: { homeId: 1, awayId: 2, homeScore: 14, awayScore: 10 },
+    });
+    expect(vm.advancedAttribution).toEqual({});
+  });
 });

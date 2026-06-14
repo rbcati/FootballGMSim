@@ -121,4 +121,84 @@ describe('weekSimulationBridge', () => {
   it('builds deterministic seeds', () => {
     expect(buildDeterministicSeed('2026:4:1:2')).toBe(buildDeterministicSeed('2026:4:1:2'));
   });
+
+  it('carries advancedAttribution from rich summary into bridge result', () => {
+    const advancedAttribution = {
+      'qb-1': { targets: 0, receptionsAllowed: 0, coverageTargets: 0, coverageCompletionsAllowed: 0, drops: 2, battedPasses: 1, sacksAllowed: 3, sacksMade: 0 },
+    };
+    const mapped = mapGameSummaryToLegacyResult({
+      gameId: 'g-adv',
+      homeTeamId: 1,
+      awayTeamId: 2,
+      homeScore: 21,
+      awayScore: 14,
+      totalPlays: 110,
+      homePassYards: 240,
+      awayPassYards: 200,
+      homeSuccessRate: 0.55,
+      awaySuccessRate: 0.50,
+      normalizationConstant: 0.74,
+      topReason1: null,
+      topReason2: null,
+      quarterScores: { home: [7, 0, 7, 7], away: [7, 7, 0, 0] },
+      teamStats: {
+        home: { plays: 60, passAtt: 30, passComp: 20, passYd: 240, rushAtt: 30, rushYd: 110, passTD: 1, rushTD: 2, totalYards: 350, yardsPerPlay: 5.8, turnovers: 0, sacksAllowed: 1, sacksMade: 2, interceptions: 0, redZoneTrips: 3, redZoneScores: 2, explosivePlays: 3, successRate: 0.55, firstDowns: 18, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 3, extraPointsAttempted: 3, punts: 4, puntYards: 160, kickReturns: 3, kickReturnYards: 60, puntReturns: 2, puntReturnYards: 18 },
+        away: { plays: 58, passAtt: 28, passComp: 18, passYd: 200, rushAtt: 30, rushYd: 90, passTD: 1, rushTD: 1, totalYards: 290, yardsPerPlay: 5.0, turnovers: 1, sacksAllowed: 2, sacksMade: 1, interceptions: 1, redZoneTrips: 2, redZoneScores: 1, explosivePlays: 2, successRate: 0.50, firstDowns: 15, fieldGoalsMade: 1, fieldGoalsAttempted: 1, extraPointsMade: 2, extraPointsAttempted: 2, punts: 5, puntYards: 200, kickReturns: 2, kickReturnYards: 44, puntReturns: 1, puntReturnYards: 8 },
+      },
+      boxScore: { home: {}, away: {} },
+      playDigest: [],
+      scoringSummary: [],
+      playLogs: [],
+      summary: { storyline: 'Solid win.', headlineMoments: [] },
+      recapText: 'Home holds on.',
+      regulationTied: false,
+      overtime: { played: false, periods: 0, decidedBy: null },
+      shutoutFloorApplied: { home: false, away: false },
+      advancedAttribution,
+      simFactors: {
+        home: { qbRating: 95.0, rushYpc: 3.67, successRate: 0.55, passRate: 0.5 },
+        away: { qbRating: 85.0, rushYpc: 3.0, successRate: 0.50, passRate: 0.483 },
+      },
+    } as any);
+
+    expect(mapped.advancedAttribution).toEqual(advancedAttribution);
+  });
+
+  it('carries shutoutFloorApplied from rich summary into bridge result', () => {
+    const mapped = mapGameSummaryToLegacyResult({
+      gameId: 'g-shutout',
+      homeTeamId: 10,
+      awayTeamId: 20,
+      homeScore: 17,
+      awayScore: 3,
+      totalPlays: 100,
+      homePassYards: 200,
+      awayPassYards: 150,
+      homeSuccessRate: 0.52,
+      awaySuccessRate: 0.44,
+      normalizationConstant: 0.74,
+      topReason1: null,
+      topReason2: null,
+      quarterScores: { home: [7, 0, 10, 0], away: [0, 0, 0, 3] },
+      teamStats: {
+        home: { plays: 55, passAtt: 25, passComp: 15, passYd: 200, rushAtt: 30, rushYd: 120, passTD: 1, rushTD: 2, totalYards: 320, yardsPerPlay: 5.8, turnovers: 0, sacksAllowed: 1, sacksMade: 3, interceptions: 0, redZoneTrips: 3, redZoneScores: 3, explosivePlays: 2, successRate: 0.52, firstDowns: 16, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 3, extraPointsAttempted: 3, punts: 3, puntYards: 120, kickReturns: 2, kickReturnYards: 40, puntReturns: 1, puntReturnYards: 6 },
+        away: { plays: 52, passAtt: 24, passComp: 14, passYd: 150, rushAtt: 28, rushYd: 70, passTD: 0, rushTD: 0, totalYards: 220, yardsPerPlay: 4.2, turnovers: 2, sacksAllowed: 3, sacksMade: 1, interceptions: 2, redZoneTrips: 1, redZoneScores: 0, explosivePlays: 1, successRate: 0.44, firstDowns: 11, fieldGoalsMade: 1, fieldGoalsAttempted: 1, extraPointsMade: 0, extraPointsAttempted: 0, punts: 6, puntYards: 252, kickReturns: 3, kickReturnYards: 63, puntReturns: 2, puntReturnYards: 12 },
+      },
+      boxScore: { home: {}, away: {} },
+      playDigest: [],
+      scoringSummary: [],
+      playLogs: [],
+      summary: { storyline: 'Home dominates.', headlineMoments: [] },
+      recapText: 'Home wins big.',
+      regulationTied: false,
+      overtime: { played: false, periods: 0, decidedBy: null },
+      shutoutFloorApplied: { home: false, away: true },
+      simFactors: {
+        home: { qbRating: 92.0, rushYpc: 4.0, successRate: 0.52, passRate: 0.455 },
+        away: { qbRating: 72.0, rushYpc: 2.5, successRate: 0.44, passRate: 0.462 },
+      },
+    } as any);
+
+    expect(mapped.shutoutFloorApplied).toEqual({ home: false, away: true });
+  });
 });

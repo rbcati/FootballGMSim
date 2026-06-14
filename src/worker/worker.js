@@ -202,6 +202,7 @@ import {
   buildDeterministicSeed,
   simulateWithOptionalNewEngine,
 } from '../core/sim/weekSimulationBridge.ts';
+import { deriveFeatsFromRichGame } from '../core/sim/featDerivation.js';
 import { deriveGamePlanMultipliers } from '../core/sim/gamePlanMultipliers.ts';
 import { buildGamePlanNarrative } from '../core/narrative.js';
 import { buildRosterBuildingAnalysis } from '../core/rosterBuildingAnalysis.js';
@@ -3880,7 +3881,7 @@ function applyGameResultToCache(result, week, seasonId) {
 
   // ── 4. Queue game record for DB flush ─────────────────────────────────────
 
-  // Process feats
+  // Process feats (legacy engine: result.feats populated by engine)
   if (result.feats && result.feats.length > 0) {
     for (const feat of result.feats) {
       if (feat.playerId) {
@@ -3893,6 +3894,28 @@ function applyGameResultToCache(result, week, seasonId) {
       }
     }
   }
+
+  // Rich-engine feat news: derived from boxScore when engine does not emit result.feats
+  if (!result.feats && result.boxScore) {
+    const richFeats = deriveFeatsFromRichGame(result);
+    if (richFeats.length > 0) {
+      const homeAbbr = cache.getTeam(hId)?.abbr ?? 'HME';
+      const awayAbbr = cache.getTeam(aId)?.abbr ?? 'AWY';
+      for (const feat of richFeats) {
+        const teamAbbr = feat.teamSide === 'home' ? homeAbbr : awayAbbr;
+        const opponentAbbr = feat.teamSide === 'home' ? awayAbbr : homeAbbr;
+        const teamId = feat.teamSide === 'home' ? hId : aId;
+        const p = cache.getPlayer(feat.playerId);
+        NewsEngine.logFeat(
+          p || { id: feat.playerId, name: feat.name, teamId },
+          teamAbbr, opponentAbbr, feat.featDescription, feat.statValue ?? '',
+        );
+      }
+    }
+  }
+
+  // Upset alert: fires when the lower-OVR team wins by more than 5 OVR points
+  NewsEngine.logGameEvent({ homeId: hId, awayId: aId, homeScore: scoreHome, awayScore: scoreAway });
 
   const archivedGame = normalizeArchivedGamePayload(buildArchivedGame({
     seasonId,
@@ -3938,6 +3961,8 @@ function applyGameResultToCache(result, week, seasonId) {
     notablePerformances: playerLeaders?.standouts ?? [],
     playerLeaders,
     archiveQuality,
+    advancedAttribution: result.advancedAttribution ?? null,
+    shutoutFloorApplied: result.shutoutFloorApplied ?? null,
   }));
   const archiveValidation = validateArchivedGame(archivedGame);
   if (!archiveValidation.valid) {
