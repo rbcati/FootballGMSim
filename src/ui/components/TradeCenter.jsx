@@ -17,6 +17,11 @@ import { buildIncomingOfferPresentation, getOfferIdentity } from "../utils/trade
 import { ScreenHeader, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
 import { isTradeWindowOpen, getTradeWindowSnapshot } from "../../core/tradeWindow.js";
 import { DeadlineBanner } from "./common/UiPrimitives.jsx";
+import {
+  classifyDeadlinePosture,
+  getTradeDeadlinePressure,
+  DEADLINE_POSTURE,
+} from "../../core/trades/tradeDeadlinePressure.js";
 import { buildTradeAssetDisplay } from "../utils/tradeAssetDisplay.js";
 import { getTradeLockReason } from "../utils/tradeLockReason.js";
 import { getBudgetLabel, toneToCssColor } from "../utils/transactionMarket.js";
@@ -331,6 +336,49 @@ function TradeConsequenceStrip({ myTeam, offeringCount, receivingCount, myCapAft
   );
 }
 
+const POSTURE_LABEL = {
+  contender:    { label: "Contender",    color: "var(--success)" },
+  playoff_hunt: { label: "Playoff Push", color: "#30D158" },
+  middle:       { label: "Middle",       color: "var(--text-muted)" },
+  rebuild:      { label: "Rebuilding",   color: "var(--accent)" },
+  seller:       { label: "Seller",       color: "#FF9F0A" },
+};
+
+function DeadlinePressureBadge({ pressure, myPosture, theirPosture, myAbbr, theirAbbr }) {
+  if (!pressure?.active) return null;
+  const isDeadlineWeek = pressure.phase === "deadline_week";
+  const borderColor = isDeadlineWeek ? "var(--danger)" : "#FF9F0A";
+  const bg = isDeadlineWeek ? "rgba(255,69,58,0.07)" : "rgba(255,159,10,0.07)";
+  const myLabel   = POSTURE_LABEL[myPosture]    ?? POSTURE_LABEL.middle;
+  const theirLabel = POSTURE_LABEL[theirPosture] ?? POSTURE_LABEL.middle;
+
+  return (
+    <div style={{ marginTop: "var(--space-2)", borderRadius: "var(--radius-md)", border: `1px solid ${borderColor}`, background: bg, padding: "8px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: "var(--text-xs)", fontWeight: 800, color: borderColor, textTransform: "uppercase", letterSpacing: ".06em" }}>
+          {isDeadlineWeek ? "Deadline Pressure Active" : "Deadline Approaching"}
+        </span>
+        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+          {pressure.weeksToDeadline === 0 ? "Last chance to trade" : `${pressure.weeksToDeadline} wk${pressure.weeksToDeadline !== 1 ? "s" : ""} remaining`}
+        </span>
+      </div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+          <strong style={{ color: "var(--text)" }}>{myAbbr}</strong>:&nbsp;
+          <span style={{ color: myLabel.color, fontWeight: 700 }}>{myLabel.label}</span>
+        </span>
+        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+          <strong style={{ color: "var(--text)" }}>{theirAbbr}</strong>:&nbsp;
+          <span style={{ color: theirLabel.color, fontWeight: 700 }}>{theirLabel.label}</span>
+        </span>
+      </div>
+      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontStyle: "italic" }}>
+        {pressure.explanation}
+      </div>
+    </div>
+  );
+}
+
 function TradePlayerSheet({ player, onClose }) {
   if (!player) return null;
   return (
@@ -471,6 +519,21 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   const hasSelection = offering.size > 0 || receiving.size > 0 || myPicks.length > 0 || theirPicks.length > 0;
   const outgoingCount = offering.size;
   const incomingCount = receiving.size;
+
+  // Deadline pressure — classify user team and selected partner for UI labels.
+  const myDeadlinePosture = useMemo(() => classifyDeadlinePosture(
+    { ...(liveMyTeam ?? {}), roster: myRoster },
+    { currentSeason: league?.year ?? league?.season },
+  ), [liveMyTeam, myRoster, league?.year, league?.season]);
+
+  const theirDeadlinePosture = useMemo(() => liveTheirTeam
+    ? classifyDeadlinePosture(
+        { ...(liveTheirTeam ?? {}), roster: theirRoster },
+        { currentSeason: league?.year ?? league?.season },
+      )
+    : DEADLINE_POSTURE.MIDDLE,
+  [liveTheirTeam, theirRoster, league?.year, league?.season]);
+
   const tradeDeadline = getTradeWindowSnapshot({
     week: league?.week,
     phase: league?.phase,
@@ -484,6 +547,12 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     commissionerMode: league?.commissionerMode,
   });
   const lockReason = getTradeLockReason({ tradeLocked, tradeDeadline, phase: league?.phase });
+
+  const deadlinePressure = useMemo(() => getTradeDeadlinePressure({
+    currentWeek:  tradeDeadline.currentWeek,
+    deadlineWeek: tradeDeadline.deadlineWeek,
+    teamPosture:  myDeadlinePosture,
+  }), [tradeDeadline.currentWeek, tradeDeadline.deadlineWeek, myDeadlinePosture]);
   const tradeBlockers = useMemo(() => {
     const blockers = [];
     if (targetId == null) blockers.push("Choose a trade partner.");
@@ -635,6 +704,15 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
             ? `Trade deadline passed after Week ${tradeDeadline?.deadlineWeek}. Normal trading unlocks in offseason.`
             : `Week ${tradeDeadline?.deadlineWeek} deadline · ${Math.max(0, tradeDeadline?.weeksRemaining ?? 0)} week(s) remaining.`}
         />
+        {deadlinePressure.active && (
+          <DeadlinePressureBadge
+            pressure={deadlinePressure}
+            myPosture={myDeadlinePosture}
+            theirPosture={theirDeadlinePosture}
+            myAbbr={liveMyTeam?.abbr ?? "You"}
+            theirAbbr={liveTheirTeam?.abbr ?? "Them"}
+          />
+        )}
       </div>
       {showSavedToast && (
         <div style={{

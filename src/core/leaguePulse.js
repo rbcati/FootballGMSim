@@ -2,6 +2,11 @@
  * League Pulse / News Timeline System V1
  * Pure deterministic helpers to generate meaningful weekly stories based on existing league state.
  */
+import {
+  classifyDeadlinePosture,
+  getTradeDeadlinePressure,
+  buildDeadlinePulseItem,
+} from './trades/tradeDeadlinePressure.js';
 
 export const MAX_PULSE_ITEMS = 200;
 
@@ -257,7 +262,34 @@ export function generateLeaguePulseItems(meta, data = {}) {
     });
   }
 
-  // 5. TRANSACTIONS / NOTABLE LEAGUE EVENTS
+  // 5. TRADE DEADLINE PRESSURE
+  // Surface a pulse item when approaching or at the trade deadline.
+  if (phase === 'regular') {
+    const deadlineWeek = Number(data?.deadlineWeek ?? data?.tradeDeadlineWeek ?? 9);
+    const userTeamState = data?.standings?.find((s) => String(s.tid) === String(userTeamId)) ?? {};
+    const userRoster = data?.userRoster ?? [];
+    const userPosture = classifyDeadlinePosture(
+      { wins: userTeamState?.w, losses: userTeamState?.l, ties: userTeamState?.t, roster: userRoster },
+      { currentSeason: season },
+    );
+    const pressure = getTradeDeadlinePressure({
+      currentWeek: week,
+      deadlineWeek,
+      teamPosture: userPosture,
+    });
+    const pulseItem = buildDeadlinePulseItem({
+      season,
+      week,
+      phase:            pressure.phase,
+      weeksToDeadline:  pressure.weeksToDeadline,
+      deadlineWeek,
+      userTeamId,
+      userPosture,
+    });
+    if (pulseItem) items.push(pulseItem);
+  }
+
+  // 6. TRANSACTIONS / NOTABLE LEAGUE EVENTS
   // Look at recent transactions if provided
   if (transactions && transactions.length > 0) {
     // Only look at high value transactions (e.g., massive trades or big signings)
