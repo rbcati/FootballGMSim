@@ -1449,6 +1449,31 @@ export default function PlayerProfile({
                   );
                 })()}
 
+                {/* ── Holdout Status ── */}
+                {playerView?.holdout?.active && (
+                  <div
+                    data-testid="player-profile-holdout"
+                    style={{
+                      marginTop: 'var(--space-2)',
+                      padding: 'var(--space-3)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid #FF9F0A44',
+                      background: '#FF9F0A0E',
+                      fontSize: 'var(--text-xs)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontWeight: 900, color: '#FF9F0A', textTransform: 'uppercase', letterSpacing: '.07em', fontSize: 'var(--text-xs)' }}>On Holdout</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>— {playerView.holdout.reason?.replace(/_/g, ' ') ?? 'contract dispute'}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      <span style={{ color: 'var(--text-subtle)' }}>Started Week {playerView.holdout.startWeek}</span>
+                      <span style={{ color: '#FF9F0A', fontWeight: 700 }}>+{Math.round((playerView.holdout.demandPremium ?? 0) * 100)}% demand premium</span>
+                    </div>
+                    <div style={{ marginTop: 4, color: 'var(--text-muted)' }}>Resolve by signing, trading, or releasing this player.</div>
+                  </div>
+                )}
+
                 {!isProspect && playerView && (
                   <div
                     data-testid="player-profile-dev-arc"

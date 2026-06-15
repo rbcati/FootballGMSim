@@ -1460,7 +1460,26 @@ function RosterTable({
                         >
                           {morale}
                         </span>
-                        {morale < 40 && (
+                        {player?.holdout?.active && (
+                          <span
+                            data-testid="roster-holdout-badge"
+                            title={`On holdout — ${player.holdout.reason?.replace(/_/g, ' ') ?? 'contract dispute'}. Demand premium: +${Math.round((player.holdout.demandPremium ?? 0) * 100)}%`}
+                            style={{
+                              display: 'inline-block',
+                              padding: '1px 5px',
+                              borderRadius: 'var(--radius-pill)',
+                              background: '#FF9F0A',
+                              color: '#000',
+                              fontSize: 9,
+                              fontWeight: 900,
+                              letterSpacing: '0.5px',
+                              cursor: 'default',
+                            }}
+                          >
+                            HOLDOUT
+                          </span>
+                        )}
+                        {morale < 40 && !player?.holdout?.active && (
                           <span
                             data-testid="roster-low-morale-flag"
                             title="Low morale — player is disgruntled"
