@@ -755,6 +755,80 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         </SectionCard>
       </details>
 
+      {/* ── Trophy Case ── */}
+      {(() => {
+        const userTeamId = Number(league?.userTeamId);
+        const franchiseAwards = Array.isArray(league?.franchiseAwards) ? league.franchiseAwards : [];
+        const leagueHistory = Array.isArray(league?.leagueHistory) ? league.leagueHistory : [];
+        const teams = Array.isArray(league?.teams) ? league.teams : [];
+        const teamAbbrById = new Map(teams.map(t => [Number(t.id), t.abbr ?? t.name]));
+
+        // Championships from franchiseAwards
+        const championships = franchiseAwards
+          .filter(a => a.type === 'LEAGUE_CHAMPION' && Number(a.teamId) === userTeamId)
+          .sort((a, b) => (b.season ?? 0) - (a.season ?? 0));
+
+        // Coach of Year from franchiseAwards
+        const coachAwards = franchiseAwards
+          .filter(a => a.type === 'COACH_OF_YEAR' && Number(a.teamId) === userTeamId)
+          .sort((a, b) => (b.season ?? 0) - (a.season ?? 0));
+
+        // Individual awards from leagueHistory for players on user team
+        const indAwards = [];
+        for (const s of leagueHistory) {
+          const yr = s.year ?? s.seasonId;
+          const aw = s.awards ?? {};
+          for (const [key, val] of Object.entries(aw)) {
+            if (!val?.playerId || !val?.teamId) continue;
+            if (Number(val.teamId) !== userTeamId) continue;
+            if (['mvp', 'opoy', 'dpoy', 'roty'].includes(key)) {
+              indAwards.push({ year: yr, key, name: val.name, pos: val.pos });
+            }
+          }
+        }
+        indAwards.sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+
+        if (championships.length === 0 && coachAwards.length === 0 && indAwards.length === 0) return null;
+
+        const LABELS = { mvp: 'MVP', opoy: 'OPOY', dpoy: 'DPOY', roty: 'ROTY' };
+
+        return (
+          <SectionCard
+            title="Trophy Case"
+            subtitle="Championship seasons and major franchise honors."
+            variant="compact"
+            data-testid="hq-trophy-case"
+          >
+            <details className="app-hq-background-section__inner">
+              <summary className="app-hq-section-expand">Show trophy case ▾</summary>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 8, maxHeight: 280, overflowY: 'auto' }}>
+                {championships.map(c => (
+                  <div key={`champ-${c.season}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px solid var(--hairline)' }}>
+                    <span style={{ fontSize: '1.1rem' }}>🏆</span>
+                    <span style={{ fontWeight: 700, color: 'var(--warning)' }}>{c.season}</span>
+                    <span style={{ color: 'var(--text)', fontSize: 'var(--text-xs)' }}>League Champions</span>
+                  </div>
+                ))}
+                {coachAwards.map(c => (
+                  <div key={`coy-${c.season}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px solid var(--hairline)' }}>
+                    <span style={{ fontSize: '1.1rem' }}>🎖️</span>
+                    <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{c.season}</span>
+                    <span style={{ color: 'var(--text)', fontSize: 'var(--text-xs)' }}>Coach of the Year{c.coachName ? ` — ${c.coachName}` : ''}</span>
+                  </div>
+                ))}
+                {indAwards.slice(0, 10).map((a, i) => (
+                  <div key={`ind-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px solid var(--hairline)' }}>
+                    <span style={{ fontSize: '1.1rem' }}>🥇</span>
+                    <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{a.year}</span>
+                    <span style={{ color: 'var(--text)', fontSize: 'var(--text-xs)' }}>{a.pos} {a.name} — {LABELS[a.key] ?? a.key}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </SectionCard>
+        );
+      })()}
+
       {lineupToast ? <p className="app-inline-toast" role="status" aria-live="polite">{lineupToast}</p> : null}
 
       {showGate ? (

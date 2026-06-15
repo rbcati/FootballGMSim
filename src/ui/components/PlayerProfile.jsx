@@ -38,6 +38,7 @@ import { buildProspectScoutingReport } from "../../core/scoutingModel.js";
 import { buildPlayerCareerTimeline } from "../utils/playerCareerTimeline.js";
 import { buildPlayerAdvancedStatsView } from "../utils/playerAdvancedStatsViewModel.js";
 import { getPlayerMoraleSummary } from "../../core/mood/playerMoraleEngine.js";
+import { getPlayerAwardSummary, AWARD_LABELS, AWARD_TYPES } from "../../core/awards/awardEngine.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -1353,6 +1354,55 @@ export default function PlayerProfile({
                           · {moraleSummary.topEvent.reason}
                         </span>
                       )}
+                    </div>
+                  );
+                })()}
+
+                {/* ── Career Awards Trophy Shelf ── */}
+                {playerView && (() => {
+                  const awardSummary = getPlayerAwardSummary(playerView);
+                  if (awardSummary.totalAwards === 0) return null;
+                  const teams = data?.teams ?? [];
+                  const teamAbbrById = new Map(teams.map(t => [String(t.id), t.abbr ?? t.name]));
+                  return (
+                    <div
+                      data-testid="player-profile-career-awards"
+                      style={{
+                        marginTop: 'var(--space-2)',
+                        padding: 'var(--space-3)',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--hairline)',
+                        background: 'var(--surface-strong)',
+                        fontSize: 'var(--text-xs)',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--text-muted)', marginBottom: 6 }}>
+                        Career Awards
+                      </div>
+                      {awardSummary.summaryLine && (
+                        <div
+                          data-testid="player-profile-award-summary"
+                          style={{ fontWeight: 700, color: 'var(--warning)', fontSize: 'var(--text-sm)', marginBottom: 6 }}
+                        >
+                          {awardSummary.summaryLine}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {awardSummary.highlights.map((h) => (
+                          <div key={h.dedupeKey} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                            <span style={{ color: 'var(--text-subtle)', minWidth: 36 }}>{h.season}</span>
+                            <span style={{ color: 'var(--text)' }}>{h.label}</span>
+                            {h.teamId != null && (
+                              <span style={{ color: 'var(--text-muted)' }}>· {teamAbbrById.get(String(h.teamId)) ?? h.teamId}</span>
+                            )}
+                          </div>
+                        ))}
+                        {awardSummary.totalAwards > awardSummary.highlights.length && (
+                          <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                            +{awardSummary.totalAwards - awardSummary.highlights.length} more awards
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })()}

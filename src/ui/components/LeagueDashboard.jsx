@@ -982,7 +982,61 @@ export default function LeagueDashboard({
             />
           </TabErrorBoundary>
         )}
-                {activeTab === "League Pulse" && (
+        {activeTab === "League" && (() => {
+          const phase = league?.phase ?? 'regular';
+          const isPostSeason = !['regular', 'preseason', 'playoffs'].includes(phase);
+          if (!isPostSeason) return null;
+          const leagueHistory = Array.isArray(league?.leagueHistory) ? league.leagueHistory : [];
+          const lastSeason = leagueHistory[leagueHistory.length - 1];
+          if (!lastSeason?.awards) return null;
+          const aw = lastSeason.awards;
+          const teams = Array.isArray(league?.teams) ? league.teams : [];
+          const teamAbbrById = new Map(teams.map(t => [Number(t.id), t.abbr ?? t.name]));
+          const AWARD_ROW_DEFS = [
+            { key: 'mvp', label: 'MVP' },
+            { key: 'opoy', label: 'OPOY' },
+            { key: 'dpoy', label: 'DPOY' },
+            { key: 'roty', label: 'ROTY' },
+            { key: 'coachOfTheYear', label: 'Coach of Year', nameField: 'coachName' },
+          ];
+          const rows = AWARD_ROW_DEFS
+            .map(({ key, label, nameField }) => {
+              const entry = aw[key];
+              if (!entry) return null;
+              const name = nameField ? entry[nameField] : entry.name;
+              if (!name && !entry.playerId) return null;
+              const teamAbbr = teamAbbrById.get(Number(entry.teamId)) ?? null;
+              return { label, name, pos: entry.pos, teamAbbr };
+            })
+            .filter(Boolean);
+          if (!rows.length) return null;
+          return (
+            <div
+              data-testid="season-awards-panel"
+              style={{
+                margin: '0 0 var(--space-4)',
+                padding: 'var(--space-3) var(--space-4)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--hairline)',
+                background: 'var(--surface-strong)',
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--warning)', marginBottom: 8 }}>
+                {lastSeason.year} Season Awards
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 6 }}>
+                {rows.map(r => (
+                  <div key={r.label} style={{ fontSize: 'var(--text-xs)' }}>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 700 }}>{r.label} </span>
+                    <span style={{ color: 'var(--text)' }}>{r.pos ? `${r.pos} ` : ''}{r.name}</span>
+                    {r.teamAbbr ? <span style={{ color: 'var(--text-muted)' }}> · {r.teamAbbr}</span> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+        {activeTab === "League Pulse" && (
           <LeaguePulseTimeline
             league={league}
             currentTeamId={league?.userTeamId}
