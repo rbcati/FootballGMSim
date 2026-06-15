@@ -41,6 +41,12 @@ import {
   applyStrategicValuationModifiers,
 } from './trades/teamStrategicDirection.js';
 import {
+  classifyDeadlinePosture,
+  getTradeDeadlinePressure,
+  applyDeadlinePressureModifiers,
+} from './trades/tradeDeadlinePressure.js';
+import { getTradeWindowSnapshot } from './tradeWindow.js';
+import {
   calculateTeamDepthDeficiencies,
   applyPositionalNeedModifiers,
 } from './trades/tradePositionalNeeds.js';
@@ -247,12 +253,21 @@ export async function runAIToAITrades() {
   // Randomise order so the same teams don't always trade first.
   const shuffled = U.shuffle([...allTeams]);
 
+  // Compute league-wide deadline pressure once per weekly run.
+  const tradeWindow = getTradeWindowSnapshot({
+    week: meta?.currentWeek ?? meta?.week,
+    phase: meta?.phase,
+    settings: meta?.settings,
+  });
+
   // Build surplus/need/strategy/posture/depth maps upfront — avoids repeated roster scans.
   const surplusMap = {};
   const needsMap   = {};
   const rosterMap = {};
   const strategyMap = {};
   const postureMap = {};
+  const deadlinePostureMap = {};
+  const deadlinePressureMap = {};
   const depthNeedsMap = {};
   for (const team of shuffled) {
     const roster = cache.getPlayersByTeam(team.id);
@@ -269,6 +284,16 @@ export async function runAIToAITrades() {
       { currentSeason: meta?.year, phase: meta?.phase },
       { minGamesForClassification: 7 },
     );
+    const dlPosture = classifyDeadlinePosture(
+      { ...team, roster },
+      { currentSeason: meta?.year },
+    );
+    deadlinePostureMap[team.id] = dlPosture;
+    deadlinePressureMap[team.id] = getTradeDeadlinePressure({
+      currentWeek:  tradeWindow.currentWeek,
+      deadlineWeek: tradeWindow.deadlineWeek,
+      teamPosture:  dlPosture,
+    });
     depthNeedsMap[team.id] = calculateTeamDepthDeficiencies(roster);
     surplusMap[team.id] = getSurplusPlayers(team.id);
     needsMap[team.id]   = getTeamNeeds(team.id);
@@ -369,6 +394,22 @@ export async function runAIToAITrades() {
       teamBContextualValue = applyContractCapBurdenModifiers(
         assetFromA, teamBContextualValue, effectiveCapRoomB, teamBPosture,
       );
+
+      // Deadline pressure — biases contextual value for buyers/sellers.
+      // Applied after cap/strategic modifiers but before fairness check.
+      // Clamps are inside applyDeadlinePressureModifiers; fairness guard still runs.
+      const pressureA = deadlinePressureMap[teamA.id];
+      const pressureB = deadlinePressureMap[teamB.id];
+      if (pressureA?.active) {
+        teamAContextualValue = applyDeadlinePressureModifiers(
+          assetFromB, teamAContextualValue, deadlinePostureMap[teamA.id], pressureA,
+        );
+      }
+      if (pressureB?.active) {
+        teamBContextualValue = applyDeadlinePressureModifiers(
+          assetFromA, teamBContextualValue, deadlinePostureMap[teamB.id], pressureB,
+        );
+      }
 
       // Check trade fairness: values must be within ±VALUE_TOLERANCE after team-fit realism.
       const teamAIncomingValue = teamAContextualValue * (0.72 + realismForTeamA.fitScore / 100);
