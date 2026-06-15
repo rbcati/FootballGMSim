@@ -13,7 +13,7 @@
  * Both engines consume the SAME generated rosters, so the comparison is fair.
  *
  * Checks (applied to the matchup engine as the flip gate):
- *   1. Win distribution : top-quartile teams (by roster OVR) win ~68–73% of games
+ *   1. Win distribution : top-quartile teams (by roster OVR) win ~68–76% of games
  *   2. Stat realism     : pass yds/game 220–280, rush yds/game 100–130, pts/game 20–27
  *   3. Score variance   : std-dev of final team scores reported (PBP should be >= legacy)
  *   4. Performance      : wall-clock ms per game

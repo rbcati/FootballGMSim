@@ -190,6 +190,77 @@ describe('gameArchive helpers', () => {
   });
 });
 
+describe('advancedAttribution and shutoutFloorApplied survive normalizeArchivedGamePayload', () => {
+  it('preserves advancedAttribution through normalizeArchivedGamePayload whitelist', () => {
+    const advancedAttribution = {
+      'qb-1': { targets: 0, receptionsAllowed: 0, coverageTargets: 0, coverageCompletionsAllowed: 0, drops: 2, battedPasses: 1, sacksAllowed: 3, sacksMade: 0 },
+      'cb-1': { targets: 7, receptionsAllowed: 4, coverageTargets: 7, coverageCompletionsAllowed: 4, drops: 0, battedPasses: 0, sacksAllowed: 0, sacksMade: 0 },
+    };
+    const normalized = normalizeArchivedGamePayload({
+      id: '2031_w5_1_2',
+      seasonId: '2031',
+      week: 5,
+      homeId: 1,
+      awayId: 2,
+      homeScore: 28,
+      awayScore: 14,
+      advancedAttribution,
+    });
+    expect(normalized.advancedAttribution).toEqual(advancedAttribution);
+  });
+
+  it('advancedAttribution is null when not provided', () => {
+    const normalized = normalizeArchivedGamePayload({
+      id: '2031_w5_3_4',
+      seasonId: '2031',
+      week: 5,
+      homeId: 3,
+      awayId: 4,
+      homeScore: 17,
+      awayScore: 14,
+    });
+    expect(normalized.advancedAttribution).toBeNull();
+  });
+
+  it('preserves advancedAttribution through a JSON round-trip normalization', () => {
+    const advancedAttribution = { 'wr-1': { targets: 8, drops: 1, battedPasses: 0, coverageTargets: 0, coverageCompletionsAllowed: 0, receptionsAllowed: 0, sacksAllowed: 0, sacksMade: 0 } };
+    const first = normalizeArchivedGamePayload({
+      id: '2031_w6_1_2', seasonId: '2031', week: 6, homeId: 1, awayId: 2,
+      homeScore: 24, awayScore: 21, advancedAttribution,
+    });
+    const reloaded = normalizeArchivedGamePayload(JSON.parse(JSON.stringify(first)));
+    expect(reloaded.advancedAttribution).toEqual(advancedAttribution);
+  });
+
+  it('preserves shutoutFloorApplied through normalizeArchivedGamePayload whitelist', () => {
+    const shutoutFloorApplied = { home: false, away: true };
+    const normalized = normalizeArchivedGamePayload({
+      id: '2031_w7_5_6',
+      seasonId: '2031',
+      week: 7,
+      homeId: 5,
+      awayId: 6,
+      homeScore: 17,
+      awayScore: 3,
+      shutoutFloorApplied,
+    });
+    expect(normalized.shutoutFloorApplied).toEqual(shutoutFloorApplied);
+  });
+
+  it('shutoutFloorApplied is null when not provided', () => {
+    const normalized = normalizeArchivedGamePayload({
+      id: '2031_w8_7_8',
+      seasonId: '2031',
+      week: 8,
+      homeId: 7,
+      awayId: 8,
+      homeScore: 21,
+      awayScore: 14,
+    });
+    expect(normalized.shutoutFloorApplied).toBeNull();
+  });
+});
+
 describe('canonical rich-engine teamStats hydration', () => {
   it('survives archive normalization + enrichment without being re-derived or zeroed', () => {
     const richSide = {

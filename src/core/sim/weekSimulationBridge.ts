@@ -160,6 +160,8 @@ export function mapGameSummaryToLegacyResult(summary: GameSummary) {
         passRate: summary.simFactors?.away?.passRate ?? awayPassRate,
       },
     },
+    advancedAttribution: summary.advancedAttribution,
+    shutoutFloorApplied: summary.shutoutFloorApplied,
   };
 }
 
