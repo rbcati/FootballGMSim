@@ -1408,6 +1408,43 @@ export default function PlayerProfile({
                   );
                 })()}
 
+                {/* ── HOF Status Badge ── */}
+                {playerView && (() => {
+                  const hofStatus = playerView.hofStatus ?? (playerView.hof ? 'inducted' : 'none');
+                  if (hofStatus === 'none') return null;
+                  const isInducted = hofStatus === 'inducted';
+                  const isNominee = hofStatus === 'nominee';
+                  const badgeLabel = isInducted ? 'Hall of Famer' : isNominee ? 'HOF Nominee' : 'HOF Eligible';
+                  const badgeColor = isInducted ? 'var(--warning)' : isNominee ? '#a8a8a8' : 'var(--text-subtle)';
+                  const badgeBorder = isInducted ? '#b8860b' : isNominee ? '#888' : 'var(--hairline)';
+                  return (
+                    <div
+                      data-testid="player-profile-hof-badge"
+                      style={{
+                        marginTop: 'var(--space-2)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '3px 10px',
+                        borderRadius: 'var(--radius-pill)',
+                        border: `1px solid ${badgeBorder}`,
+                        background: isInducted ? 'rgba(184,134,11,0.1)' : 'transparent',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 700,
+                        color: badgeColor,
+                      }}
+                    >
+                      {isInducted ? '★' : isNominee ? '◈' : '○'} {badgeLabel}
+                      {isInducted && playerView.hofInductionSeason && (
+                        <span style={{ fontWeight: 400, opacity: 0.75 }}>· {playerView.hofInductionSeason}</span>
+                      )}
+                      {isInducted && playerView.hofScore != null && (
+                        <span style={{ fontWeight: 400, opacity: 0.75 }}>· Score {Math.round(playerView.hofScore)}</span>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* ── Negotiation Profile ── */}
                 {playerView && (() => {
                   const moraleSummary = getPlayerMoraleSummary(playerView);

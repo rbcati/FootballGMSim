@@ -1036,6 +1036,42 @@ export default function LeagueDashboard({
             </div>
           );
         })()}
+        {activeTab === "League" && (() => {
+          const phase = league?.phase ?? 'regular';
+          const isPostSeason = !['regular', 'preseason', 'playoffs'].includes(phase);
+          if (!isPostSeason) return null;
+          const hofBallot = league?.hofBallot ?? null;
+          const hofRoster = Array.isArray(league?.hofRoster) ? league.hofRoster : [];
+          if (!hofBallot?.resolved) return null;
+          const inductedIds = new Set((hofBallot.inducted ?? []).map(String));
+          const inductees = hofRoster.filter((h) => inductedIds.has(String(h.playerId)) && Number(h.inductionSeason) === Number(hofBallot.season));
+          if (inductees.length === 0) return null;
+          return (
+            <div
+              data-testid="hof-class-panel"
+              style={{
+                margin: '0 0 var(--space-4)',
+                padding: 'var(--space-3) var(--space-4)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--hairline)',
+                background: 'var(--surface-strong)',
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--warning)', marginBottom: 8 }}>
+                ★ {hofBallot.season} Hall of Fame Class
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 6 }}>
+                {inductees.map((h) => (
+                  <div key={`hof-class-${h.playerId}`} style={{ fontSize: 'var(--text-xs)' }}>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 700 }}>{h.position} </span>
+                    <span style={{ color: 'var(--text)' }}>{h.playerName}</span>
+                    <span style={{ color: 'var(--text-muted)' }}> · {Math.round(h.hofScore ?? 0)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
         {activeTab === "League Pulse" && (
           <LeaguePulseTimeline
             league={league}
