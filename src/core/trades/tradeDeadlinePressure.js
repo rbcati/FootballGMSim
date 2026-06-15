@@ -240,11 +240,14 @@ export function getTradeDeadlinePressure({
  *
  * Called from the perspective of the RECEIVING team: how much do they want this?
  *
- * Guarantees:
- *  - Never reduces below the original baseValue (pressure only inflates).
- *  - Multiplier is hard-capped at 1 + maxBuyerBoost or 1 + maxSellerBoost.
+ * Bounds:
+ *  - When pressure is inactive, returns baseValue unchanged.
  *  - Middle-of-pack teams receive no adjustment.
- *  - When pressure is inactive (urgency=0), returns baseValue unchanged.
+ *  - Value may be BOOSTED (buyers on quality players, sellers on picks/young players)
+ *    or DISCOUNTED (buyers on picks, sellers on aging veterans).
+ *  - The multiplier is hard-clamped to [0.85, 1 + maxBoost] so pressure can never
+ *    drop value below 0.85× base or boost it above 1.25× base (default).
+ *  - Existing fairness/cap checks in trade-logic.js still run after this modifier.
  *
  * @param {object} asset       – player or pick asset { assetType, age, ovr, potential, season, year }
  * @param {number} baseValue   – value before deadline adjustment
@@ -302,7 +305,7 @@ export function applyDeadlinePressureModifiers(asset = {}, baseValue = 0, teamPo
     }
   }
 
-  // Hard cap: multiplier cannot push value below base or above (1 + maxBoost).
+  // Hard clamp: [0.85, 1 + maxBoost]. Pressure can reduce below base (discounts) but never below 0.85×.
   const maxBoost = Math.max(cfg.maxBuyerBoost, cfg.maxSellerBoost);
   multiplier = clamp(multiplier, 0.85, 1 + maxBoost);
 

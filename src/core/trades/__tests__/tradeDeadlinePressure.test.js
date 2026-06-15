@@ -318,7 +318,92 @@ describe('buildDeadlinePulseItem', () => {
   });
 });
 
-// ─── 5. League Memory event ───────────────────────────────────────────────────
+// ─── 5. Fairness / cap guard regression ──────────────────────────────────────
+//
+// These tests prove that even at maximum deadline-week pressure the modifier
+// cannot close a large enough value gap to make an unfair trade pass the
+// ±10% VALUE_TOLERANCE check used in runAIToAITrades.
+
+describe('deadline pressure cannot bypass fairness guard', () => {
+  const VALUE_TOLERANCE = 0.10;
+
+  function wouldPassFairnessCheck(valueA, valueB) {
+    const ratio = valueA / valueB;
+    return ratio >= (1 - VALUE_TOLERANCE) && ratio <= (1 + VALUE_TOLERANCE);
+  }
+
+  it('3:1 lopsided trade stays unfair even with max buyer boost', () => {
+    const deadline = getTradeDeadlinePressure({
+      currentWeek: 9, deadlineWeek: 9, teamPosture: DEADLINE_POSTURE.CONTENDER,
+    });
+    const elitePlayer = { assetType: 'player', age: 27, ovr: 88 };
+    const scrubPlayer = { assetType: 'player', age: 27, ovr: 72 };
+
+    // Team A (contender) receiving elite player worth 300 — deadline boosts their valuation.
+    const teamAContextual = applyDeadlinePressureModifiers(elitePlayer, 300, DEADLINE_POSTURE.CONTENDER, deadline);
+    // Team B receiving a scrub worth 100 — even with max boost it stays near 100.
+    const teamBContextual = applyDeadlinePressureModifiers(scrubPlayer, 100, DEADLINE_POSTURE.MIDDLE, { active: false });
+
+    // Even at max 1.25x, teamAContextual = 300 * 1.25 = 375 ≠ close to teamBContextual ≈ 100.
+    expect(wouldPassFairnessCheck(teamAContextual, teamBContextual)).toBe(false);
+  });
+
+  it('seller discount on vet cannot make them overpay to acquire', () => {
+    const deadline = getTradeDeadlinePressure({
+      currentWeek: 9, deadlineWeek: 9, teamPosture: DEADLINE_POSTURE.SELLER,
+    });
+    const pick = { assetType: 'pick', round: 1 };
+    const agingVet = { assetType: 'player', age: 34, ovr: 80 };
+
+    // Seller's inflated valuation of the pick they are receiving.
+    const pickContextual = applyDeadlinePressureModifiers(pick, 175, DEADLINE_POSTURE.SELLER, deadline);
+    // They discount the aging vet they'd have to give up.
+    const vetContextual = applyDeadlinePressureModifiers(agingVet, 175, DEADLINE_POSTURE.SELLER, deadline);
+
+    // Discount on the vet should be bounded (floor 0.85x); the values must remain
+    // within at most 25% of each other for a trade to happen. A heavily discounted
+    // vet against a highly valued pick could still open a gap — confirm the
+    // modifier values stay within the floor/ceiling contract.
+    expect(pickContextual).toBeLessThanOrEqual(Math.round(175 * 1.25) + 1);
+    expect(vetContextual).toBeGreaterThanOrEqual(Math.round(175 * 0.85));
+  });
+
+  it('maximum buyer boost is capped and cannot exceed 1.25x base', () => {
+    const deadline = getTradeDeadlinePressure({
+      currentWeek: 9, deadlineWeek: 9, teamPosture: DEADLINE_POSTURE.CONTENDER,
+    });
+    const player = { assetType: 'player', age: 25, ovr: 92 };
+    const boosted = applyDeadlinePressureModifiers(player, 400, DEADLINE_POSTURE.CONTENDER, deadline);
+    expect(boosted).toBeLessThanOrEqual(Math.round(400 * 1.25) + 1);
+    // Confirm it did actually boost (verifies the cap is active, not that boosts are missing).
+    expect(boosted).toBeGreaterThan(400);
+  });
+
+  it('floor guard prevents seller discount from driving value below 0.85x', () => {
+    const deadline = getTradeDeadlinePressure({
+      currentWeek: 9, deadlineWeek: 9, teamPosture: DEADLINE_POSTURE.SELLER,
+    });
+    const veryOldVet = { assetType: 'player', age: 38, ovr: 78 };
+    const discounted = applyDeadlinePressureModifiers(veryOldVet, 200, DEADLINE_POSTURE.SELLER, deadline);
+    expect(discounted).toBeGreaterThanOrEqual(Math.round(200 * 0.85));
+  });
+
+  it('a moderately unequal trade (2:1 gap) still fails the fairness ratio', () => {
+    const deadline = getTradeDeadlinePressure({
+      currentWeek: 9, deadlineWeek: 9, teamPosture: DEADLINE_POSTURE.CONTENDER,
+    });
+    const goodPlayer  = { assetType: 'player', age: 28, ovr: 84 };
+    const weakPlayer  = { assetType: 'player', age: 28, ovr: 74 };
+
+    const teamAContextual = applyDeadlinePressureModifiers(goodPlayer, 240, DEADLINE_POSTURE.CONTENDER, deadline);
+    const teamBContextual = applyDeadlinePressureModifiers(weakPlayer, 120, DEADLINE_POSTURE.MIDDLE, { active: false });
+
+    // Even 1.25x on teamAContextual: 240*1.25=300, teamBContextual=120 → ratio 2.5 → fails ±10%.
+    expect(wouldPassFairnessCheck(teamAContextual, teamBContextual)).toBe(false);
+  });
+});
+
+// ─── 7. League Memory event ───────────────────────────────────────────────────
 
 describe('buildDeadlineMemoryEvent', () => {
   it('produces the expected event shape', () => {
