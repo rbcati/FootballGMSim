@@ -3708,12 +3708,17 @@ function buildWeekMatchupsFromLeague(league, meta, week, opts = {}) {
         name: player.name,
         pos: player.pos,
         ovr: player.ovr ?? player?.ratings?.overall ?? player?.ratings?.ovr ?? 70,
+        // morale feeds applyMoraleToEffectiveOvr() in richGameSimulator; absent on
+        // old saves → 0 modifier. Without this the morale sim modifier (#1591)
+        // silently scored 0 for every player.
+        morale: player.morale,
       })),
       awayPlayers: awayRoster.map((player) => ({
         id: player.id,
         name: player.name,
         pos: player.pos,
         ovr: player.ovr ?? player?.ratings?.overall ?? player?.ratings?.ovr ?? 70,
+        morale: player.morale,
       })),
       seed: buildDeterministicSeed(`${meta?.currentSeasonId ?? 1}:${week}:${game?.home?.id}:${game?.away?.id}`),
       weather: 'clear',
