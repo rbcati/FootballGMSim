@@ -3,6 +3,7 @@ import type { AttributesV2 } from '../../types/player.ts';
 import type { DerivedGamePlanMultipliers } from './gamePlanMultipliers.ts';
 import { archiveGameStats } from '../playerSeasonStatsArchive.js';
 import { decideLateGameSequence } from '../simulation/clockManager.js';
+import { applyMoraleToEffectiveOvr } from './moraleSimModifier.js';
 
 export type DriveResult = 'TD' | 'FG' | 'Punt' | 'INT' | 'Fumble' | 'Downs';
 
@@ -20,6 +21,8 @@ export interface SimPlayerRef {
   name: string;
   pos: string;
   ovr?: number;
+  /** Optional morale score (0–100). Absent on old saves; treated as 0 modifier. */
+  morale?: number;
 }
 
 export interface TeamStatLine {
@@ -526,10 +529,10 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     const playType = getPlayType(state, rng, offensePrep);
     const offensePlayers = state.possession === 'home' ? homePlayers : awayPlayers;
     const defensePlayers = state.possession === 'home' ? awayPlayers : homePlayers;
-    const target = playType === 'pass' ? pickWeightedPlayer(offensePlayers.filter((player) => ['WR', 'TE', 'RB'].includes(player.pos)), rng, (player) => (player.ovr ?? 70) + (player.pos === 'WR' ? 12 : player.pos === 'TE' ? 8 : 5)) : null;
-    const defender = playType === 'pass' ? pickWeightedPlayer(defensePlayers.filter((player) => ['CB', 'S', 'FS', 'SS', 'LB'].includes(player.pos)), rng, (player) => (player.ovr ?? 70) + (player.pos === 'CB' ? 10 : 6)) : null;
-    const blocker = pickWeightedPlayer(offensePlayers.filter((player) => ['OT', 'OG', 'C', 'TE', 'RB', 'QB'].includes(player.pos)), rng, (player) => (player.ovr ?? 70) + (player.pos === 'QB' ? -10 : 0));
-    const rusher = pickWeightedPlayer(defensePlayers.filter((player) => ['EDGE', 'DE', 'DT', 'LB'].includes(player.pos)), rng, (player) => (player.ovr ?? 70) + (player.pos === 'EDGE' ? 12 : 6));
+    const target = playType === 'pass' ? pickWeightedPlayer(offensePlayers.filter((player) => ['WR', 'TE', 'RB'].includes(player.pos)), rng, (player) => applyMoraleToEffectiveOvr(player.ovr ?? 70, player) + (player.pos === 'WR' ? 12 : player.pos === 'TE' ? 8 : 5)) : null;
+    const defender = playType === 'pass' ? pickWeightedPlayer(defensePlayers.filter((player) => ['CB', 'S', 'FS', 'SS', 'LB'].includes(player.pos)), rng, (player) => applyMoraleToEffectiveOvr(player.ovr ?? 70, player) + (player.pos === 'CB' ? 10 : 6)) : null;
+    const blocker = pickWeightedPlayer(offensePlayers.filter((player) => ['OT', 'OG', 'C', 'TE', 'RB', 'QB'].includes(player.pos)), rng, (player) => applyMoraleToEffectiveOvr(player.ovr ?? 70, player) + (player.pos === 'QB' ? -10 : 0));
+    const rusher = pickWeightedPlayer(defensePlayers.filter((player) => ['EDGE', 'DE', 'DT', 'LB'].includes(player.pos)), rng, (player) => applyMoraleToEffectiveOvr(player.ovr ?? 70, player) + (player.pos === 'EDGE' ? 12 : 6));
     const tunedOffense = applyPrepToOffenseAttributes(offense, offensePrep, playType, state.yardLine >= 80);
     const fatigueBaseline = (stats.home.plays + stats.away.plays) / 220;
     const result = resolveMatchup(tunedOffense, defense, {
