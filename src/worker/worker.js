@@ -150,6 +150,7 @@ import NewsEngine, { createNewsItem, addNewsItem } from '../core/news-engine.js'
 import { parseWeeklyHeadlines } from '../core/history/NewsEngine.ts';
 import { calculateAwardRaces, selectProBowlers } from '../core/awards-logic.js';
 import { determineSeasonAwards, applySeasonAwards, checkCareerMilestones, getPlayerAwardSummary, AWARD_TYPES as ENGINE_AWARD_TYPES, AWARD_LABELS as ENGINE_AWARD_LABELS } from '../core/awards/awardEngine.js';
+import { generateHofBallot, resolveHofVote, applyHofInductions, ensureHofMeta } from '../core/awards/hofEngine.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
 import { getZeroStats as getZeroSeasonStatsSchema } from '../core/state.js';
@@ -1053,6 +1054,8 @@ function buildViewState() {
     franchiseSeasonReviews: Array.isArray(meta?.franchiseSeasonReviews) ? meta.franchiseSeasonReviews.slice(-40) : [],
     seasonStorylines: Array.isArray(meta?.seasonStorylines) ? meta.seasonStorylines : [],
     hallOfFameClasses: Array.isArray(meta?.hallOfFame?.classes) ? meta.hallOfFame.classes.slice(0, 20) : [],
+    hofRoster: Array.isArray(meta?.hofRoster) ? meta.hofRoster.slice(-100) : [],
+    hofBallot: meta?.hofBallot ?? null,
     weeklyHeadlines: Array.isArray(meta?.weeklyHeadlines) ? meta.weeklyHeadlines.slice(-40) : [],
     settings: normalizeLeagueSettings(meta?.settings ?? {}),
     economy: normalizeLeagueEconomy(meta?.economy ?? {}, { year: meta?.year }),
@@ -10604,6 +10607,76 @@ async function archiveSeason(seasonId) {
       await flushDirty();
     } catch (awardEngineErr) {
       console.error('[Worker] Award engine V1 failed (non-fatal):', awardEngineErr);
+    }
+
+    // ── HOF Engine V1: ballot generation, voting, inductions ──────────────────
+    try {
+      const allPlayersForHof = cache.getAllPlayers();
+      const metaForHof = ensureHofMeta(cache.getMeta());
+
+      const ballot = generateHofBallot(allPlayersForHof, null, metaForHof, year);
+      const { inducted, remaining } = resolveHofVote(ballot, allPlayersForHof);
+
+      if (ballot.nominees.length > 0 || inducted.length > 0) {
+        const hofUpdates = applyHofInductions(
+          metaForHof,
+          inducted,
+          ballot.nominees,
+          allPlayersForHof,
+          year,
+        );
+        cache.setMeta(hofUpdates);
+
+        // Update player.hofStatus for nominees and inductees
+        const inductedSet = new Set(inducted.map(e => String(e.playerId)));
+        const nomineeSet = new Set(ballot.nominees.map(n => String(n.playerId)));
+        for (const p of allPlayersForHof) {
+          const pidStr = String(p.id);
+          if (inductedSet.has(pidStr)) {
+            cache.updatePlayer(p.id, { hofStatus: 'inducted', hofScore: (inducted.find(e => String(e.playerId) === pidStr))?.score ?? p.hofScore, hofInductionSeason: year });
+          } else if (nomineeSet.has(pidStr) && p.hofStatus !== 'inducted') {
+            cache.updatePlayer(p.id, { hofStatus: 'nominee' });
+          }
+        }
+
+        // News: individual inductee items
+        for (const entry of inducted) {
+          await NewsEngine.logNews(
+            'HOF',
+            `HALL OF FAME: ${entry.pos} ${entry.playerName} has been inducted into the Hall of Fame!`,
+            null,
+            { category: 'hof_inducted', playerId: entry.playerId, season: year, hofScore: entry.score, dedupeKey: `news_hof_inducted_${entry.playerId}_${year}` },
+          );
+        }
+
+        // News: HOF class announcement
+        if (inducted.length > 0) {
+          const names = inducted.map(e => e.playerName).filter(Boolean).join(', ');
+          await NewsEngine.logNews(
+            'HOF',
+            `The ${year} Hall of Fame class has been announced: ${names}.`,
+            null,
+            { category: 'hof_class', season: year, inducteeCount: inducted.length, dedupeKey: `news_hof_class_${year}` },
+          );
+
+          // Pulse item for HOF induction class
+          const currentPulse = Array.isArray(cache.getMeta()?.franchiseChronicle) ? cache.getMeta().franchiseChronicle : [];
+          const hofPulseItem = {
+            season: year,
+            week: meta.currentWeek ?? 22,
+            type: 'general',
+            importance: 85,
+            headline: `${year} Hall of Fame Class Announced`,
+            body: `${inducted.length} player${inducted.length === 1 ? '' : 's'} inducted into the Hall of Fame this season.`,
+            dedupeKey: `hof_class_${year}`,
+          };
+          cache.setMeta({ franchiseChronicle: mergeLeaguePulseItems(currentPulse, [hofPulseItem]) });
+        }
+
+        await flushDirty();
+      }
+    } catch (hofErr) {
+      console.error('[Worker] HOF Engine V1 failed (non-fatal):', hofErr);
     }
 
     // ── Record Book: check for broken single-season & all-time records ──────

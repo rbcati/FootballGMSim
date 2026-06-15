@@ -292,6 +292,21 @@ export const createNewsItem = (type, data, week, season) => {
             body: (d) => `${d?.playerName ?? 'A player'} has been moved to backup.`,
             priority: 'low',
         },
+        hof_inducted: {
+            headline: (d) => `${d?.playerName ?? 'Player'} inducted into the Hall of Fame`,
+            body: (d) => `${d?.playerName ?? 'Player'} has been inducted into the Hall of Fame.`,
+            priority: 'high',
+        },
+        hof_eligible: {
+            headline: (d) => `${d?.playerName ?? 'Player'} is now HOF eligible`,
+            body: (d) => `${d?.playerName ?? 'Player'} is now eligible for Hall of Fame consideration.`,
+            priority: 'medium',
+        },
+        hof_class: {
+            headline: (d) => `${d?.season ?? 'This year'}'s Hall of Fame class announced`,
+            body: (d) => `The ${d?.season ?? 'season'} Hall of Fame class has been announced: ${d?.names ?? 'several legends'}.`,
+            priority: 'high',
+        },
     };
     const template = templates[type];
     if (!template) return null;

@@ -829,6 +829,47 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         );
       })()}
 
+      {/* ── Hall of Famers ── */}
+      {(() => {
+        const userTeamId = Number(league?.userTeamId);
+        const userTeam = (league?.teams ?? []).find((t) => Number(t?.id) === userTeamId);
+        const userTeamAbbr = userTeam?.abbr ?? null;
+        const hofRoster = Array.isArray(league?.hofRoster) ? league.hofRoster : [];
+        const franchiseLegends = hofRoster.filter((h) =>
+          Array.isArray(h.teamIds) && userTeamAbbr && h.teamIds.includes(userTeamAbbr),
+        ).sort((a, b) => Number(b.inductionSeason ?? 0) - Number(a.inductionSeason ?? 0));
+        if (franchiseLegends.length === 0) return null;
+        return (
+          <SectionCard
+            title="Hall of Famers"
+            subtitle="Legends who wore your franchise's colors."
+            variant="compact"
+            data-testid="hq-hall-of-famers"
+          >
+            <details className="app-hq-background-section__inner">
+              <summary className="app-hq-section-expand">Show Hall of Famers ▾</summary>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 8, maxHeight: 260, overflowY: 'auto' }}>
+                {franchiseLegends.map((h) => (
+                  <div
+                    key={`hof-${h.playerId}`}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px solid var(--hairline)' }}
+                  >
+                    <span style={{ fontSize: '1.1rem' }}>★</span>
+                    <span style={{ fontWeight: 700, color: 'var(--warning)' }}>{h.inductionSeason}</span>
+                    <span style={{ color: 'var(--text)', fontSize: 'var(--text-xs)' }}>
+                      {h.position} {h.playerName}
+                    </span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', marginLeft: 'auto' }}>
+                      Score {Math.round(h.hofScore ?? 0)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </SectionCard>
+        );
+      })()}
+
       {lineupToast ? <p className="app-inline-toast" role="status" aria-live="polite">{lineupToast}</p> : null}
 
       {showGate ? (
