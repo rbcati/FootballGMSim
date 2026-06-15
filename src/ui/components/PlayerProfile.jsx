@@ -37,6 +37,7 @@ import { buildPlayerDevelopmentModel } from "../../core/playerDevelopmentModel.j
 import { buildProspectScoutingReport } from "../../core/scoutingModel.js";
 import { buildPlayerCareerTimeline } from "../utils/playerCareerTimeline.js";
 import { buildPlayerAdvancedStatsView } from "../utils/playerAdvancedStatsViewModel.js";
+import { getPlayerMoraleSummary } from "../../core/mood/playerMoraleEngine.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -1316,6 +1317,45 @@ export default function PlayerProfile({
                     { label: ageCurve.label, tone: ageCurve.tone },
                   ]}
                 />
+
+                {/* ── Morale Indicator ── */}
+                {playerView && (() => {
+                  const moraleSummary = getPlayerMoraleSummary(playerView);
+                  const moraleColor = moraleSummary.score >= 85 ? 'var(--success)'
+                                    : moraleSummary.score >= 70 ? 'var(--text-muted)'
+                                    : moraleSummary.score >= 55 ? 'var(--text-subtle)'
+                                    : moraleSummary.score >= 40 ? 'var(--warning)'
+                                    : 'var(--danger)';
+                  return (
+                    <div
+                      data-testid="player-profile-morale"
+                      style={{
+                        marginTop: 'var(--space-2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Morale</span>
+                      <span
+                        data-testid="player-profile-morale-label"
+                        style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: moraleColor }}
+                      >
+                        {moraleSummary.label}
+                      </span>
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>({moraleSummary.score})</span>
+                      {moraleSummary.topEvent?.reason && (
+                        <span
+                          data-testid="player-profile-morale-reason"
+                          style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontStyle: 'italic' }}
+                        >
+                          · {moraleSummary.topEvent.reason}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {!isProspect && playerView && (
                   <div

@@ -262,6 +262,16 @@ export const createNewsItem = (type, data, week, season) => {
             body: () => 'A deal was reached between the two franchises.',
             priority: 'low',
         },
+        morale_drop: {
+            headline: (d) => `Locker Room Watch: ${d?.playerName ?? 'Player'} disgruntled`,
+            body: (d) => `${d?.playerName ?? 'A player'} (${d?.teamAbbr ?? 'FA'}) morale has collapsed to ${d?.morale ?? 0}. A volatile situation worth monitoring.`,
+            priority: 'medium',
+        },
+        trade_request_denied: {
+            headline: (d) => `${d?.playerName ?? 'Player'} trade request denied`,
+            body: (d) => `${d?.teamName ?? 'The team'} refused to deal ${d?.playerName ?? 'the player'}, leaving them frustrated.`,
+            priority: 'medium',
+        },
     };
     const template = templates[type];
     if (!template) return null;
@@ -285,5 +295,18 @@ export const addNewsItem = (leagueState, item) => {
         newsItems: [item, ...news].slice(0, 200),
     };
 };
+
+/**
+ * Build a stable dedupeKey for a morale-drop news item.
+ * Deterministic: same playerId + season + week → same key.
+ */
+export const buildMoraleDropDedupeKey = (playerId, season, week) =>
+    `morale-drop-${playerId}-${season}-${week}`;
+
+/**
+ * Build a stable dedupeKey for a trade-request-denied news item.
+ */
+export const buildTradeRequestDeniedDedupeKey = (playerId, season, week) =>
+    `trade-request-denied-${playerId}-${season}-${week}`;
 
 export default NewsEngine;

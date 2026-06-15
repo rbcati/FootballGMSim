@@ -100,6 +100,13 @@ import {
 } from '../core/contracts/realisticContracts.js';
 import { generateSlottedRookieContract } from '../core/contracts/rookieWageScale.js';
 import { summarizePlayerMood } from '../core/mood/playerMood.js';
+import {
+  MORALE_EVENTS,
+  MORALE_DELTAS,
+  applyMoraleEvent,
+  applyWeeklyMoraleEffects,
+} from '../core/mood/playerMoraleEngine.js';
+import { classifyDeadlinePosture, DEADLINE_POSTURE } from '../core/trades/tradeDeadlinePressure.js';
 import { getFreeAgencyDecisionState } from '../core/freeAgency/decisionState.js';
 import {
   PENDING_OFFER_STATUS,
@@ -3287,6 +3294,79 @@ async function handleAdvanceWeek(payload, id) {
     } catch (cultureErr) {
       // Culture update must never crash the week advance
       console.warn('[Worker] Team culture update error (non-fatal):', cultureErr?.message);
+    }
+  }
+
+  // ── Player Morale Causality: weekly effects ────────────────────────────────
+  // Applies VETERAN_LEADER_BONUS and DEADLINE_SELL_FRUSTRATION once per week per player.
+  // NOTE: DEADLINE_SELL_FRUSTRATION is driven by current posture/week because
+  // buildDeadlineMemoryEvent() events are not yet persisted through league-memory.js.
+  // TODO: switch to league-memory deadline events once persistence is wired.
+  if (meta.phase === 'regular') {
+    try {
+      const moraleAllPlayers = cache.getAllPlayers();
+      const moraleAllTeams   = cache.getAllTeams();
+      const moraleDeadline   = getTradeDeadlineSnapshot(cache.getMeta());
+      const moraleSeasonId   = meta.currentSeasonId ?? meta.season ?? 0;
+
+      // Build a posture map for every team so applyWeeklyMoraleEffects is pure
+      const teamPostureMap = {};
+      for (const team of moraleAllTeams) {
+        teamPostureMap[String(team.id)] = classifyDeadlinePosture(
+          {
+            wins:   team.wins   ?? 0,
+            losses: team.losses ?? 0,
+            ties:   team.ties   ?? 0,
+            roster: cache.getPlayersByTeam(team.id),
+          },
+          { numTeams: moraleAllTeams.length },
+        );
+      }
+
+      const moraleUpdatedPlayers = applyWeeklyMoraleEffects(moraleAllPlayers, {
+        season:        moraleSeasonId,
+        week,
+        deadlineWeek:  moraleDeadline.deadlineWeek ?? 9,
+        phase:         meta.phase,
+        teamPostureMap,
+      });
+
+      // Persist only players whose morale or events changed
+      for (let i = 0; i < moraleUpdatedPlayers.length; i++) {
+        const orig    = moraleAllPlayers[i];
+        const updated = moraleUpdatedPlayers[i];
+        if (updated !== orig) {
+          cache.updatePlayer(updated.id, { morale: updated.morale, moraleEvents: updated.moraleEvents });
+        }
+      }
+
+      // Emit LeaguePulse items and news for notable morale threshold crossings
+      const currentMoraleNewsItems = cache.getMeta().newsItems;
+      for (let i = 0; i < moraleUpdatedPlayers.length; i++) {
+        const orig    = moraleAllPlayers[i];
+        const updated = moraleUpdatedPlayers[i];
+        if (updated === orig) continue;
+        const prevMorale = Number(orig.morale ?? 70);
+        const newMorale  = Number(updated.morale ?? 70);
+        // News: significant morale drop crossing below 35
+        if (prevMorale >= 35 && newMorale < 35) {
+          const teamForMorale = cache.getTeam(updated.teamId);
+          const moraleDropNews = {
+            id:       `morale-drop-${updated.id}-${moraleSeasonId}-${week}`,
+            headline: `Locker Room Watch: ${updated.name ?? 'Player'} disgruntled`,
+            body:     `${updated.name ?? 'A player'} (${teamForMorale?.abbr ?? 'FA'}) morale has dropped to ${newMorale} — a situation worth monitoring.`,
+            week,
+            season:   moraleSeasonId,
+            type:     'MORALE',
+            teamId:   updated.teamId ?? null,
+            priority: 'medium',
+            dedupeKey: `morale-drop-${updated.id}-${moraleSeasonId}-${week}`,
+          };
+          cache.setMeta(addNewsItem(cache.getMeta(), moraleDropNews));
+        }
+      }
+    } catch (moraleWeeklyErr) {
+      console.warn('[Worker] Player morale weekly effects error (non-fatal):', moraleWeeklyErr?.message);
     }
   }
 
@@ -7280,6 +7360,30 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
       details: { playerId, contract, reasons },
     });
     await NewsEngine.logTransaction('EXTEND', { teamId: resolvedTeamId, playerId, contract });
+
+    // ── Morale causality: contract extension ──────────────────────────────────
+    try {
+      const extPlayer = cache.getPlayer(playerId);
+      if (extPlayer) {
+        const moraleSeasonId = meta.currentSeasonId ?? meta.season ?? 0;
+        const moraleWeek = meta.currentWeek ?? 0;
+        const extUpdated = applyMoraleEvent(extPlayer, {
+          type:      MORALE_EVENTS.CONTRACT_EXTENDED,
+          delta:     MORALE_DELTAS[MORALE_EVENTS.CONTRACT_EXTENDED],
+          season:    moraleSeasonId,
+          week:      moraleWeek,
+          reason:    'Contract extension signed',
+          source:    'contract',
+          dedupeKey: `${MORALE_EVENTS.CONTRACT_EXTENDED}-${playerId}-${moraleSeasonId}`,
+        }, { season: moraleSeasonId, week: moraleWeek });
+        if (extUpdated !== extPlayer) {
+          cache.updatePlayer(playerId, { morale: extUpdated.morale, moraleEvents: extUpdated.moraleEvents });
+        }
+      }
+    } catch (moraleErr) {
+      console.warn('[Worker] Contract extension morale event error (non-fatal):', moraleErr?.message);
+    }
+
     await flushDirty();
     post(toUI.EXTENSION_RESPONSE, { status: 'accepted', reason: 'Offer accepted', reasons }, id);
     post(toUI.STATE_UPDATE, { roster: buildRosterView(resolvedTeamId), ...buildViewState() });
@@ -7684,6 +7788,59 @@ async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving 
   };
   await Transactions.add(tradeRecord);
   await NewsEngine.logTransaction('TRADE', { fromTeamId, toTeamId });
+
+  // ── Morale causality: apply trade morale events ───────────────────────────
+  try {
+    const moraleSeasonId = latestMeta.currentSeasonId ?? latestMeta.season ?? 0;
+    const moraleWeek = latestMeta.currentWeek ?? 0;
+    const allTeamsForMorale = cache.getAllTeams();
+    const numTeams = allTeamsForMorale.length;
+
+    const applyTradeMorale = (playerIds, receivingTeamId) => {
+      const recTeam = cache.getTeam(Number(receivingTeamId));
+      if (!recTeam) return;
+      const posture = classifyDeadlinePosture(
+        {
+          wins:   recTeam.wins   ?? recTeam.record?.wins   ?? 0,
+          losses: recTeam.losses ?? recTeam.record?.losses ?? 0,
+          roster: cache.getPlayersByTeam(Number(receivingTeamId)),
+        },
+        { numTeams },
+      );
+      const isContenderOrHunt = posture === DEADLINE_POSTURE.CONTENDER || posture === DEADLINE_POSTURE.PLAYOFF_HUNT;
+      const isSellerOrRebuild = posture === DEADLINE_POSTURE.SELLER    || posture === DEADLINE_POSTURE.REBUILD;
+      const eventType = isContenderOrHunt ? MORALE_EVENTS.TRADED_TO_CONTENDER
+                      : isSellerOrRebuild ? MORALE_EVENTS.TRADED_TO_REBUILDER
+                      : null;
+      if (!eventType) return;
+      for (const pid of (playerIds ?? [])) {
+        const player = cache.getPlayer(Number(pid));
+        if (!player) continue;
+        const updated = applyMoraleEvent(player, {
+          type:      eventType,
+          delta:     MORALE_DELTAS[eventType],
+          season:    moraleSeasonId,
+          week:      moraleWeek,
+          reason:    eventType === MORALE_EVENTS.TRADED_TO_CONTENDER
+            ? 'Traded to a contender'
+            : 'Traded to a rebuilding team',
+          source:    'trade',
+          dedupeKey: `${eventType}-${player.id}-${moraleSeasonId}-${moraleWeek}-${receivingTeamId}`,
+        }, { season: moraleSeasonId, week: moraleWeek });
+        if (updated !== player) {
+          cache.updatePlayer(player.id, { morale: updated.morale, moraleEvents: updated.moraleEvents });
+        }
+      }
+    };
+
+    // Players in `offering` moved from fromTeam → toTeam
+    applyTradeMorale(offering?.playerIds ?? [], toTeamId);
+    // Players in `receiving` moved from toTeam → fromTeam
+    applyTradeMorale(receiving?.playerIds ?? [], fromTeamId);
+  } catch (moraleErr) {
+    console.warn('[Worker] Trade morale event error (non-fatal):', moraleErr?.message);
+  }
+
   await flushDirty();
 }
 
