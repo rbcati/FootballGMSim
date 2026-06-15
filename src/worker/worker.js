@@ -131,6 +131,7 @@ import AiLogic from '../core/ai-logic.js';
 import NewsEngine, { createNewsItem, addNewsItem } from '../core/news-engine.js';
 import { parseWeeklyHeadlines } from '../core/history/NewsEngine.ts';
 import { calculateAwardRaces, selectProBowlers } from '../core/awards-logic.js';
+import { determineSeasonAwards, applySeasonAwards, checkCareerMilestones, AWARD_TYPES as ENGINE_AWARD_TYPES, AWARD_LABELS as ENGINE_AWARD_LABELS } from '../core/awards/awardEngine.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
 import { getZeroStats as getZeroSeasonStatsSchema } from '../core/state.js';
@@ -1029,6 +1030,7 @@ function buildViewState() {
     playerSeasonStatsArchive: meta?.playerSeasonStatsArchive ?? {},
     teamCulture: meta?.teamCulture ?? {},
     leagueHistory: Array.isArray(meta?.leagueHistory) ? meta.leagueHistory.slice(-60) : [],
+    franchiseAwards: Array.isArray(meta?.franchiseAwards) ? meta.franchiseAwards : [],
     franchiseChronicle: Array.isArray(meta?.franchiseChronicle) ? meta.franchiseChronicle.slice(-340) : [],
     franchiseSeasonReviews: Array.isArray(meta?.franchiseSeasonReviews) ? meta.franchiseSeasonReviews.slice(-40) : [],
     seasonStorylines: Array.isArray(meta?.seasonStorylines) ? meta.seasonStorylines : [],
@@ -10215,6 +10217,136 @@ async function archiveSeason(seasonId) {
 
     // Flush accolade writes to DB
     await flushDirty();
+
+    // ── Awards Engine V1: structured player.awards + meta.franchiseAwards ────
+    try {
+      const allPlayersForAwards = cache.getAllPlayers();
+      const awardResults = determineSeasonAwards(allPlayersForAwards, teams, year, {
+        stats: populatedStats,
+        coaches: staffRows,
+        championTeamId: championId,
+      });
+
+      const playerMapForAwards = new Map(allPlayersForAwards.map(p => [String(p.id), p]));
+      const currentMeta = cache.getMeta();
+      const applyResult = applySeasonAwards(playerMapForAwards, currentMeta, awardResults);
+
+      for (const [pidStr, updates] of applyResult.playerUpdates) {
+        cache.updatePlayer(pidStr, updates);
+      }
+      cache.setMeta({ franchiseAwards: applyResult.updatedFranchiseAwards });
+
+      // Emit news items for individual season award winners
+      const newsAwardPairs = [
+        [ENGINE_AWARD_TYPES.MVP, 'MVP'],
+        [ENGINE_AWARD_TYPES.OFFENSIVE_POY, 'Offensive Player of the Year'],
+        [ENGINE_AWARD_TYPES.DEFENSIVE_POY, 'Defensive Player of the Year'],
+        [ENGINE_AWARD_TYPES.ROOKIE_OF_YEAR, 'Rookie of the Year'],
+        [ENGINE_AWARD_TYPES.COMEBACK_PLAYER, 'Comeback Player of the Year'],
+      ];
+      for (const [type, label] of newsAwardPairs) {
+        const winner = awardResults.playerAwards.find(a => a.type === type);
+        if (!winner) continue;
+        const wTeam = cache.getTeam(winner.teamId);
+        await NewsEngine.logNews(
+          'AWARD',
+          `AWARD: ${winner.pos} ${winner.name} (${wTeam?.abbr ?? 'FA'}) wins the ${label}.`,
+          winner.teamId,
+          { category: 'season_award', awardType: type, playerId: winner.playerId, dedupeKey: `news_${winner.dedupeKey}` },
+        );
+      }
+
+      // Emit news item for All-Pro team
+      if (awardResults.allProTeam.length > 0) {
+        const names = awardResults.allProTeam.slice(0, 4).map(a => a.name).filter(Boolean).join(', ');
+        await NewsEngine.logNews(
+          'AWARD',
+          `First Team All-Pro announced: ${names}${awardResults.allProTeam.length > 4 ? ` and ${awardResults.allProTeam.length - 4} more` : ''}.`,
+          null,
+          { category: 'all_pro_team', season: year, dedupeKey: `news_ALL_PRO_${year}` },
+        );
+      }
+
+      // Emit news item for League Champion
+      const champFA = awardResults.franchiseAwards.find(a => a.type === ENGINE_AWARD_TYPES.LEAGUE_CHAMPION);
+      if (champFA) {
+        const champT = cache.getTeam(champFA.teamId);
+        await NewsEngine.logNews(
+          'AWARD',
+          `CHAMPIONS: The ${champT?.name ?? champFA.teamId} have won the championship!`,
+          champFA.teamId,
+          { category: 'league_champion', season: year, dedupeKey: `news_LEAGUE_CHAMPION_${year}` },
+        );
+      }
+
+      // Emit LeaguePulse items for MVP and champion
+      const mvpEntry = awardResults.playerAwards.find(a => a.type === ENGINE_AWARD_TYPES.MVP);
+      const newPulseItems = [];
+      if (mvpEntry) {
+        const mvpT = cache.getTeam(mvpEntry.teamId);
+        newPulseItems.push({
+          season: year,
+          week: meta.currentWeek ?? 22,
+          type: 'performance',
+          importance: 100,
+          headline: `${mvpEntry.name} named League MVP`,
+          body: `${mvpEntry.pos} ${mvpEntry.name} (${mvpT?.abbr ?? 'FA'}) wins the MVP award.`,
+          relatedPlayerId: mvpEntry.playerId,
+          relatedTeamId: mvpEntry.teamId,
+          dedupeKey: `pulse_MVP_${year}`,
+        });
+      }
+      if (champFA) {
+        const champT = cache.getTeam(champFA.teamId);
+        newPulseItems.push({
+          season: year,
+          week: meta.currentWeek ?? 22,
+          type: 'general',
+          importance: 100,
+          headline: `${champT?.name ?? 'Team'} wins the Championship`,
+          body: `${champT?.name ?? 'The champion'} are your ${year} league champions.`,
+          relatedTeamId: champFA.teamId,
+          dedupeKey: `pulse_CHAMPION_${year}`,
+        });
+      }
+
+      // Career milestone checks
+      const playersPostAward = cache.getAllPlayers();
+      for (const p of playersPostAward) {
+        const milestone = checkCareerMilestones(p, year);
+        if (!milestone) continue;
+        await NewsEngine.logNews(
+          'MILESTONE',
+          milestone.type === '300_CAREER_TDs'
+            ? `MILESTONE: ${p.pos} ${p.name} reached ${milestone.totalTDs} career touchdowns!`
+            : `MILESTONE: ${p.pos} ${p.name} is Hall of Fame eligible after a legendary career.`,
+          p.teamId ?? null,
+          { category: 'career_milestone', milestoneType: milestone.type, playerId: p.id, dedupeKey: `milestone_${milestone.type}_${p.id}` },
+        );
+        if (milestone.type === '300_CAREER_TDs') {
+          newPulseItems.push({
+            season: year,
+            week: meta.currentWeek ?? 22,
+            type: 'performance',
+            importance: 75,
+            headline: `${p.name} reaches 300 career TDs`,
+            body: `${p.pos} ${p.name} surpassed 300 career touchdowns, cementing their legacy.`,
+            relatedPlayerId: p.id,
+            relatedTeamId: p.teamId ?? null,
+            dedupeKey: `pulse_TD300_${p.id}_${year}`,
+          });
+        }
+      }
+
+      if (newPulseItems.length > 0) {
+        const existingPulse = Array.isArray(currentMeta?.franchiseChronicle) ? currentMeta.franchiseChronicle : [];
+        cache.setMeta({ franchiseChronicle: mergeLeaguePulseItems(existingPulse, newPulseItems) });
+      }
+
+      await flushDirty();
+    } catch (awardEngineErr) {
+      console.error('[Worker] Award engine V1 failed (non-fatal):', awardEngineErr);
+    }
 
     // ── Record Book: check for broken single-season & all-time records ──────
     const existingRecords = meta.records ?? null;
