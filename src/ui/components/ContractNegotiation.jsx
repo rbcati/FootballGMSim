@@ -262,6 +262,24 @@ export default function ContractNegotiation({
           <div style={{ fontSize: "var(--text-xs)", marginTop: 8, color: schemeFit === "Excellent" ? "var(--success)" : "var(--warning)" }}>
             Scheme Fit: <strong>{schemeFit}</strong>
           </div>
+          {player?.holdout?.active && (
+            <div
+              data-testid="contract-negotiation-holdout-premium"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: "var(--text-xs)",
+                marginTop: 6,
+                borderTop: "1px solid #FF9F0A44",
+                paddingTop: 6,
+                color: "#FF9F0A",
+                fontWeight: 700,
+              }}
+            >
+              <span>Holdout Demand Premium</span>
+              <span>+{Math.round((player.holdout.demandPremium ?? 0) * 100)}%</span>
+            </div>
+          )}
           {(() => {
             const feedbackLine = player?.demandProfile?.feedbackLine
               ?? (() => {

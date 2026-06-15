@@ -310,6 +310,30 @@ export function generateLeaguePulseItems(meta, data = {}) {
 
   // 7. MORALE: Locker Room Watch (player crossed below 35)
   // 8. MORALE: Veteran Presence (veteran leader bonus applied this week)
+  // 9. HOLDOUTS: Active holdout tension
+  if (Array.isArray(players) && players.length > 0) {
+    const userHoldouts = players.filter(
+      (p) => p?.holdout?.active && String(p?.teamId) === String(userTeamId),
+    );
+    if (userHoldouts.length > 0) {
+      const holdoutDedupeKey = `holdout_tension_${season}_${week}`;
+      if (!items.some((i) => i.dedupeKey === holdoutDedupeKey)) {
+        items.push({
+          id:            holdoutDedupeKey,
+          season,
+          week,
+          type:          PULSE_TYPES.GENERAL,
+          headline:      'Locker Room Tension',
+          body:          `${userHoldouts.length} player${userHoldouts.length === 1 ? '' : 's'} on holdout. Resolve disputes before game day.`,
+          importance:    80,
+          relatedTeamId: String(userTeamId),
+          source:        'holdout',
+          dedupeKey:     holdoutDedupeKey,
+        });
+      }
+    }
+  }
+
   if (Array.isArray(players) && players.length > 0) {
     const ALERT_THRESHOLD = 35;
     for (const player of players) {

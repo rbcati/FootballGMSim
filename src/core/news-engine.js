@@ -272,6 +272,26 @@ export const createNewsItem = (type, data, week, season) => {
             body: (d) => `${d?.teamName ?? 'The team'} refused to deal ${d?.playerName ?? 'the player'}, leaving them frustrated.`,
             priority: 'medium',
         },
+        holdout_declared: {
+            headline: (d) => `${d?.playerName ?? 'Player'} declares holdout`,
+            body: (d) => `${d?.playerName ?? 'A player'} has declared a holdout. Morale: ${d?.morale ?? '?'}.`,
+            priority: 'high',
+        },
+        holdout_resolved_gm: {
+            headline: (d) => `${d?.playerName ?? 'Player'} ends holdout`,
+            body: (d) => `${d?.playerName ?? 'A player'} ends holdout after signing new deal.`,
+            priority: 'medium',
+        },
+        holdout_ended_bitter: {
+            headline: (d) => `${d?.playerName ?? 'Player'} returns from holdout`,
+            body: (d) => `${d?.playerName ?? 'A player'} returns from holdout — but is not happy about it.`,
+            priority: 'medium',
+        },
+        starter_role_lost: {
+            headline: (d) => `${d?.playerName ?? 'Player'} moved to backup`,
+            body: (d) => `${d?.playerName ?? 'A player'} has been moved to backup.`,
+            priority: 'low',
+        },
     };
     const template = templates[type];
     if (!template) return null;

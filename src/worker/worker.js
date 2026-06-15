@@ -108,6 +108,17 @@ import {
   getPlayerMoraleSummary,
 } from '../core/mood/playerMoraleEngine.js';
 import {
+  HOLDOUT_TRIGGERS,
+  HOLDOUT_RESOLUTION,
+  HOLDOUT_RETURNED_DELTA,
+  evaluateHoldoutTriggers,
+  applyHoldout,
+  resolveHoldout,
+  isAvailableForGameDay,
+  checkHoldoutTimeExpiry,
+  getHoldoutDemandPremium,
+} from '../core/holdouts/holdoutEngine.js';
+import {
   computePlayerLeverage,
   computeFranchiseReputation,
   applyNegotiationModifiers,
@@ -3379,6 +3390,72 @@ async function handleAdvanceWeek(payload, id) {
     }
   }
 
+  // ── Holdout evaluation (after morale effects, before sim roster build) ─────
+  if (meta.phase === 'regular') {
+    try {
+      const holdoutSeasonId = meta.currentSeasonId ?? meta.season ?? 0;
+      const holdoutAllPlayers = cache.getAllPlayers();
+      for (const player of holdoutAllPlayers) {
+        if (!player?.id || player.teamId == null) continue;
+
+        // Time expiry: resolve active holdouts that have lasted 4+ weeks
+        if (checkHoldoutTimeExpiry(player, holdoutSeasonId, week)) {
+          const expired = resolveHoldout(player, HOLDOUT_RESOLUTION.TIME_EXPIRED, holdoutSeasonId, week);
+          // Apply bitter return morale event
+          const bitterPlayer = applyMoraleEvent(expired, {
+            type:      MORALE_EVENTS.HOLDOUT_RETURNED,
+            delta:     HOLDOUT_RETURNED_DELTA,
+            season:    holdoutSeasonId,
+            week,
+            reason:    'Returned from holdout bitter',
+            source:    'holdout',
+            dedupeKey: `HOLDOUT_RETURNED-${player.id}-${holdoutSeasonId}`,
+          }, { season: holdoutSeasonId, week });
+          cache.updatePlayer(player.id, {
+            holdout:      bitterPlayer.holdout,
+            morale:       bitterPlayer.morale,
+            moraleEvents: bitterPlayer.moraleEvents,
+          });
+          const bitterNewsItem = {
+            id:       `holdout-expired-${player.id}-${holdoutSeasonId}-${week}`,
+            headline: `${player.name ?? 'A player'} returns from holdout — but is not happy about it.`,
+            body:     `${player.name ?? 'A player'} ended their holdout after 4 weeks. The situation remains tense.`,
+            week,
+            season:   holdoutSeasonId,
+            type:     'HOLDOUT',
+            teamId:   player.teamId ?? null,
+            priority: 'medium',
+            dedupeKey: `holdout-expired-${player.id}-${holdoutSeasonId}-${week}`,
+          };
+          cache.setMeta(addNewsItem(cache.getMeta(), bitterNewsItem));
+          continue;
+        }
+
+        // Trigger evaluation: only for non-holdout players
+        const moraleSummary = getPlayerMoraleSummary(player);
+        const trigger = evaluateHoldoutTriggers(player, holdoutSeasonId, week, { moraleSummary });
+        if (trigger) {
+          const withHoldout = applyHoldout(player, trigger, holdoutSeasonId, week);
+          cache.updatePlayer(player.id, { holdout: withHoldout.holdout });
+          const holdoutNewsItem = {
+            id:       `holdout-declared-${player.id}-${holdoutSeasonId}-${week}`,
+            headline: `${player.name ?? 'A player'} declares a holdout`,
+            body:     `${player.name ?? 'A player'} has declared a holdout. Morale: ${Math.round(moraleSummary.score)}.`,
+            week,
+            season:   holdoutSeasonId,
+            type:     'HOLDOUT',
+            teamId:   player.teamId ?? null,
+            priority: 'high',
+            dedupeKey: `holdout-declared-${player.id}-${holdoutSeasonId}-${week}`,
+          };
+          cache.setMeta(addNewsItem(cache.getMeta(), holdoutNewsItem));
+        }
+      }
+    } catch (holdoutErr) {
+      console.warn('[Worker] Holdout evaluation error (non-fatal):', holdoutErr?.message);
+    }
+  }
+
   if (results.length > 0 && ['regular', 'playoffs', 'preseason'].includes(meta.phase)) {
     const pulseMeta = ensureDynastyMeta(cache.getMeta());
     const metaForPulse = {
@@ -3503,9 +3580,10 @@ function buildLeagueForSim(schedule, week, seasonId) {
   const meta   = cache.getMeta();
   const teams  = cache.getAllTeams();
   // Attach rosters to teams temporarily (simulateBatch needs player arrays for ratings)
+  // Exclude holdout players from game-day roster (same treatment as injury unavailability)
   const teamsWithRosters = teams.map(t => ({
     ...t,
-    roster: cache.getPlayersByTeam(t.id),
+    roster: cache.getPlayersByTeam(t.id).filter(isAvailableForGameDay),
   }));
 
   // Replace team references in schedule with full team objects
@@ -6602,7 +6680,11 @@ async function releasePlayerWithValidation({ playerId, teamId }) {
   }
 
   markOffseasonRelease(player, teamId, meta);
-  cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [] });
+  // Resolve any active holdout on release
+  const holdoutReleasePlayer = player.holdout?.active
+    ? resolveHoldout(player, HOLDOUT_RESOLUTION.GM_RELEASED, meta.currentSeasonId ?? meta.season ?? 0, meta.currentWeek ?? 0)
+    : player;
+  cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [], holdout: holdoutReleasePlayer.holdout });
   recalculateTeamCap(teamId);
   // Repair the depth chart so the released player's ID is stripped from any
   // starter/backup slot immediately (otherwise it lingers as a dangling
@@ -7432,8 +7514,27 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
           source:    'contract',
           dedupeKey: `${MORALE_EVENTS.CONTRACT_EXTENDED}-${playerId}-${moraleSeasonId}`,
         }, { season: moraleSeasonId, week: moraleWeek });
-        if (extUpdated !== extPlayer) {
-          cache.updatePlayer(playerId, { morale: extUpdated.morale, moraleEvents: extUpdated.moraleEvents });
+
+        // Resolve any active holdout when GM signs the player
+        const extWithResolved = resolveHoldout(extUpdated, HOLDOUT_RESOLUTION.GM_SIGNED, moraleSeasonId, moraleWeek);
+        const patch = { morale: extWithResolved.morale, moraleEvents: extWithResolved.moraleEvents };
+        if (extWithResolved.holdout !== extUpdated.holdout) {
+          patch.holdout = extWithResolved.holdout;
+          const holdoutSignedNews = {
+            id:       `holdout-signed-${playerId}-${moraleSeasonId}-${moraleWeek}`,
+            headline: `${extWithResolved.name ?? 'A player'} ends holdout after signing new deal.`,
+            body:     `${extWithResolved.name ?? 'A player'} ends holdout after signing new deal.`,
+            week:     moraleWeek,
+            season:   moraleSeasonId,
+            type:     'HOLDOUT',
+            teamId:   extWithResolved.teamId ?? null,
+            priority: 'medium',
+            dedupeKey: `holdout-signed-${playerId}-${moraleSeasonId}-${moraleWeek}`,
+          };
+          cache.setMeta(addNewsItem(cache.getMeta(), holdoutSignedNews));
+        }
+        if (extWithResolved !== extPlayer) {
+          cache.updatePlayer(playerId, patch);
         }
       }
     } catch (moraleErr) {
@@ -7444,6 +7545,31 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
     post(toUI.EXTENSION_RESPONSE, { status: 'accepted', reason: 'Offer accepted', reasons }, id);
     post(toUI.STATE_UPDATE, { roster: buildRosterView(resolvedTeamId), ...buildViewState() });
     return;
+  }
+
+  // ── Morale causality: below-demand counter → negative extension event ────────
+  try {
+    const counterMeta = ensureDynastyMeta(cache.getMeta());
+    const counterSeasonId = counterMeta.currentSeasonId ?? counterMeta.season ?? 0;
+    const counterWeek = counterMeta.currentWeek ?? 0;
+    const counterPlayer = cache.getPlayer(playerId);
+    if (counterPlayer) {
+      const counterDedupeKey = `CONTRACT_EXTENDED-counter-${playerId}-${counterSeasonId}`;
+      const counterUpdated = applyMoraleEvent(counterPlayer, {
+        type:      MORALE_EVENTS.CONTRACT_EXTENDED,
+        delta:     -5,
+        season:    counterSeasonId,
+        week:      counterWeek,
+        reason:    'Extension offer below demand',
+        source:    'contract',
+        dedupeKey: counterDedupeKey,
+      }, { season: counterSeasonId, week: counterWeek });
+      if (counterUpdated !== counterPlayer) {
+        cache.updatePlayer(playerId, { morale: counterUpdated.morale, moraleEvents: counterUpdated.moraleEvents });
+      }
+    }
+  } catch (counterMoraleErr) {
+    console.warn('[Worker] Extension counter morale event error (non-fatal):', counterMoraleErr?.message);
   }
 
   const counter = {
@@ -7804,6 +7930,38 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   if (accepted) {
     post(toUI.STATE_UPDATE, buildViewState());
   }
+
+  // Wire TRADE_REQUEST_DENIED morale event when trade is rejected
+  if (!accepted) {
+    try {
+      const tradeRejMeta = ensureDynastyMeta(cache.getMeta());
+      const tradeRejSeason = tradeRejMeta.currentSeasonId ?? tradeRejMeta.season ?? 0;
+      const tradeRejWeek = tradeRejMeta.currentWeek ?? 0;
+      const involvedPlayerIds = [
+        ...(offering?.playerIds ?? []),
+        ...(receiving?.playerIds ?? []),
+      ].map(Number).filter(Number.isFinite);
+      for (const pid of involvedPlayerIds) {
+        const tradeRejPlayer = cache.getPlayer(pid);
+        if (!tradeRejPlayer) continue;
+        const dedupeKey = `TRADE_REQUEST_DENIED-${pid}-${tradeRejSeason}-${tradeRejWeek}`;
+        const updatedRejPlayer = applyMoraleEvent(tradeRejPlayer, {
+          type:      MORALE_EVENTS.TRADE_REQUEST_DENIED,
+          delta:     MORALE_DELTAS[MORALE_EVENTS.TRADE_REQUEST_DENIED],
+          season:    tradeRejSeason,
+          week:      tradeRejWeek,
+          reason:    'Trade request denied',
+          source:    'trade_rejection',
+          dedupeKey,
+        }, { season: tradeRejSeason, week: tradeRejWeek });
+        if (updatedRejPlayer !== tradeRejPlayer) {
+          cache.updatePlayer(pid, { morale: updatedRejPlayer.morale, moraleEvents: updatedRejPlayer.moraleEvents });
+        }
+      }
+    } catch (tradeRejErr) {
+      console.warn('[Worker] Trade rejection morale event error (non-fatal):', tradeRejErr?.message);
+    }
+  }
 }
 
 async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving }) {
@@ -7895,6 +8053,24 @@ async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving 
     applyTradeMorale(receiving?.playerIds ?? [], fromTeamId);
   } catch (moraleErr) {
     console.warn('[Worker] Trade morale event error (non-fatal):', moraleErr?.message);
+  }
+
+  // Resolve holdouts for all traded players
+  try {
+    const tradedSeasonId = latestMeta.currentSeasonId ?? latestMeta.season ?? 0;
+    const tradedWeek = latestMeta.currentWeek ?? 0;
+    const allTradedIds = [
+      ...(offering?.playerIds ?? []),
+      ...(receiving?.playerIds ?? []),
+    ].map(Number).filter(Number.isFinite);
+    for (const pid of allTradedIds) {
+      const tradedPlayer = cache.getPlayer(pid);
+      if (!tradedPlayer?.holdout?.active) continue;
+      const tradedResolved = resolveHoldout(tradedPlayer, HOLDOUT_RESOLUTION.GM_TRADED, tradedSeasonId, tradedWeek);
+      cache.updatePlayer(pid, { holdout: tradedResolved.holdout });
+    }
+  } catch (tradeHoldoutErr) {
+    console.warn('[Worker] Trade holdout resolution error (non-fatal):', tradeHoldoutErr?.message);
   }
 
   await flushDirty();
@@ -8769,21 +8945,49 @@ async function handleGetDraftState(payload, id) {
 async function handleUpdateDepthChart({ updates, positions }, id) {
   const normalizedUpdates = Array.isArray(updates) ? updates : (Array.isArray(positions) ? positions : []);
   if (!normalizedUpdates.length) return;
+  const dcMeta = ensureDynastyMeta(cache.getMeta());
+  const dcSeason = dcMeta.currentSeasonId ?? dcMeta.season ?? 0;
+  const dcWeek = dcMeta.currentWeek ?? 0;
   normalizedUpdates.forEach((u) => {
       const p = cache.getPlayer(u.playerId);
       if (p) {
+          const prevOrder = Number(p?.depthChart?.order ?? p?.depthOrder ?? 0);
+          const newOrder  = Number(u.newOrder) || 1;
           const rowKey = u.rowKey ?? p?.depthChart?.rowKey ?? null;
           cache.updatePlayer(p.id, {
-            depthOrder: Number(u.newOrder) || 1,
+            depthOrder: newOrder,
             depthChart: {
               ...(p.depthChart || {}),
               rowKey,
-              order: Number(u.newOrder) || 1,
+              order: newOrder,
             },
           });
+          // Wire STARTER_ROLE_LOST: player demoted from starter (order 1) to backup (order 2+)
+          if (prevOrder === 1 && newOrder >= 2) {
+            try {
+              const dedupeKey = `STARTER_ROLE_LOST-${p.id}-${dcSeason}-${dcWeek}`;
+              const freshP = cache.getPlayer(p.id);
+              if (freshP) {
+                const updatedDc = applyMoraleEvent(freshP, {
+                  type:      MORALE_EVENTS.STARTER_ROLE_LOST,
+                  delta:     MORALE_DELTAS[MORALE_EVENTS.STARTER_ROLE_LOST],
+                  season:    dcSeason,
+                  week:      dcWeek,
+                  reason:    'Lost starting role',
+                  source:    'depth_chart',
+                  dedupeKey,
+                }, { season: dcSeason, week: dcWeek });
+                if (updatedDc !== freshP) {
+                  cache.updatePlayer(p.id, { morale: updatedDc.morale, moraleEvents: updatedDc.moraleEvents });
+                }
+              }
+            } catch (dcMoraleErr) {
+              console.warn('[Worker] Starter role lost morale event error (non-fatal):', dcMoraleErr?.message);
+            }
+          }
       }
   });
-  const userTeamId = ensureDynastyMeta(cache.getMeta())?.userTeamId;
+  const userTeamId = dcMeta?.userTeamId;
   if (userTeamId != null) ensureTeamDepthChart(userTeamId);
   await flushDirty();
   post(toUI.STATE_UPDATE, buildViewState(), id);
