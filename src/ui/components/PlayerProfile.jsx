@@ -39,6 +39,7 @@ import { buildPlayerCareerTimeline } from "../utils/playerCareerTimeline.js";
 import { buildPlayerAdvancedStatsView } from "../utils/playerAdvancedStatsViewModel.js";
 import { getPlayerMoraleSummary } from "../../core/mood/playerMoraleEngine.js";
 import { getPlayerAwardSummary, AWARD_LABELS, AWARD_TYPES } from "../../core/awards/awardEngine.js";
+import { getNegotiationContext } from "../../core/contracts/negotiationModifiers.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -1403,6 +1404,47 @@ export default function PlayerProfile({
                           </div>
                         )}
                       </div>
+                    </div>
+                  );
+                })()}
+
+                {/* ── Negotiation Profile ── */}
+                {playerView && (() => {
+                  const moraleSummary = getPlayerMoraleSummary(playerView);
+                  const awardSummary = getPlayerAwardSummary(playerView);
+                  const currentSeason = Number(data?.meta?.season ?? 0);
+                  const userTeamId = Number(data?.meta?.userTeamId ?? 0);
+                  const negCtx = getNegotiationContext(playerView, data?.meta ?? {}, { moraleSummary, awardSummary, currentSeason, userTeamId });
+                  if (!negCtx.feedbackLine && negCtx.leverageLabel === 'Standard') return null;
+                  const leverageColor = negCtx.leverageLabel === 'High Leverage' ? 'var(--warning)'
+                                       : negCtx.leverageLabel === 'Discount' ? 'var(--success)'
+                                       : 'var(--text-muted)';
+                  return (
+                    <div
+                      data-testid="player-profile-negotiation"
+                      style={{
+                        marginTop: 'var(--space-2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Negotiation</span>
+                      <span
+                        data-testid="player-profile-leverage-label"
+                        style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: leverageColor }}
+                      >
+                        {negCtx.leverageLabel}
+                      </span>
+                      {negCtx.feedbackLine && (
+                        <span
+                          data-testid="player-profile-negotiation-reason"
+                          style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontStyle: 'italic' }}
+                        >
+                          · {negCtx.feedbackLine}
+                        </span>
+                      )}
                     </div>
                   );
                 })()}
