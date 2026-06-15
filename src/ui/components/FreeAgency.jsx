@@ -1804,6 +1804,24 @@ export default function FreeAgency({
                             ${(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M{" "}
                             <span style={{ color: "var(--text-muted)" }}>/ {askYrs}y</span>
                           </div>
+                          {(() => {
+                            const leverageLabel = player?.demandProfile?.leverageLabel;
+                            if (!leverageLabel || leverageLabel === 'Standard') return null;
+                            const leverageColor = leverageLabel === 'High Leverage' ? 'var(--warning)' : 'var(--success)';
+                            const feedbackLine = player?.demandProfile?.feedbackLine;
+                            return (
+                              <div data-testid="fa-leverage-indicator" style={{ marginBottom: 4 }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, color: leverageColor, border: `1px solid ${leverageColor}`, borderRadius: 999, padding: "0 5px" }}>
+                                  {leverageLabel}
+                                </span>
+                                {feedbackLine && (
+                                  <div data-testid="fa-leverage-reason" style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
+                                    {feedbackLine}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                           <div style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: 4 }}>
                             {player?.demandProfile?.headline ?? "Balanced priorities"}{market.riskLabel ? ` · ${market.riskLabel}` : ""}
                           </div>
@@ -1816,6 +1834,11 @@ export default function FreeAgency({
                           <div style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: 4 }}>
                             Playbook: {formatPlaybookKnowledge(player?.playbookKnowledge)}
                           </div>
+                          {player?.demandProfile?.feedbackLine && player?.demandProfile?.leverageLabel === 'Standard' && (
+                            <div style={{ fontSize: 10, color: "var(--text-subtle)", marginBottom: 4 }}>
+                              {player.demandProfile.feedbackLine}
+                            </div>
+                          )}
                           {!canAfford ? (
                             <span style={{ color: "var(--danger)", fontSize: "var(--text-xs)" }}>
                               Cannot Afford

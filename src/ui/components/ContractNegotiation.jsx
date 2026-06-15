@@ -6,6 +6,9 @@
 
 import React, { useState, useMemo } from "react";
 import PlayerCard from "./PlayerCard.jsx";
+import { getNegotiationContext } from "../../core/contracts/negotiationModifiers.js";
+import { getPlayerMoraleSummary } from "../../core/mood/playerMoraleEngine.js";
+import { getPlayerAwardSummary } from "../../core/awards/awardEngine.js";
 
 const CAP_TOTAL = 301.2; // hard cap in $M
 
@@ -259,6 +262,20 @@ export default function ContractNegotiation({
           <div style={{ fontSize: "var(--text-xs)", marginTop: 8, color: schemeFit === "Excellent" ? "var(--success)" : "var(--warning)" }}>
             Scheme Fit: <strong>{schemeFit}</strong>
           </div>
+          {(() => {
+            const feedbackLine = player?.demandProfile?.feedbackLine
+              ?? (() => {
+                  const ms = getPlayerMoraleSummary(player);
+                  const as = getPlayerAwardSummary(player);
+                  return getNegotiationContext(player, {}, { moraleSummary: ms, awardSummary: as }).feedbackLine;
+                })();
+            if (!feedbackLine) return null;
+            return (
+              <div data-testid="contract-negotiation-v2-feedback" style={{ fontSize: "var(--text-xs)", marginTop: 6, color: "var(--text-subtle)", fontStyle: "italic", borderTop: "1px solid var(--hairline)", paddingTop: 6 }}>
+                {feedbackLine}
+              </div>
+            );
+          })()}
           <CapImpactBar capRoom={capRoom} capHitThisYear={capHitThisYear} />
         </div>
 

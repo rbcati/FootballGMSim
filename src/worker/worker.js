@@ -105,7 +105,14 @@ import {
   MORALE_DELTAS,
   applyMoraleEvent,
   applyWeeklyMoraleEffects,
+  getPlayerMoraleSummary,
 } from '../core/mood/playerMoraleEngine.js';
+import {
+  computePlayerLeverage,
+  computeFranchiseReputation,
+  applyNegotiationModifiers,
+  getNegotiationContext,
+} from '../core/contracts/negotiationModifiers.js';
 import { classifyDeadlinePosture, DEADLINE_POSTURE } from '../core/trades/tradeDeadlinePressure.js';
 import { getFreeAgencyDecisionState } from '../core/freeAgency/decisionState.js';
 import {
@@ -131,7 +138,7 @@ import AiLogic from '../core/ai-logic.js';
 import NewsEngine, { createNewsItem, addNewsItem } from '../core/news-engine.js';
 import { parseWeeklyHeadlines } from '../core/history/NewsEngine.ts';
 import { calculateAwardRaces, selectProBowlers } from '../core/awards-logic.js';
-import { determineSeasonAwards, applySeasonAwards, checkCareerMilestones, AWARD_TYPES as ENGINE_AWARD_TYPES, AWARD_LABELS as ENGINE_AWARD_LABELS } from '../core/awards/awardEngine.js';
+import { determineSeasonAwards, applySeasonAwards, checkCareerMilestones, getPlayerAwardSummary, AWARD_TYPES as ENGINE_AWARD_TYPES, AWARD_LABELS as ENGINE_AWARD_LABELS } from '../core/awards/awardEngine.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
 import { getZeroStats as getZeroSeasonStatsSchema } from '../core/state.js';
@@ -6006,19 +6013,38 @@ function buildDemandSnapshotForOffer(player, team) {
   const losses = Number(team?.losses ?? 0);
   const ties = Number(team?.ties ?? 0);
   const games = wins + losses + ties;
-  const ask = inflateContract(buildDemandFromProfile(player, profile, {
+  const baseAsk = inflateContract(buildDemandFromProfile(player, profile, {
     marketHeat: heat,
     morale: player.morale ?? 68,
     fit: Number(player?.schemeFit ?? 65),
     teamSuccess: games > 0 ? (wins + ties * 0.5) / games : 0.5,
   }), getSalaryInflationMultiplier(meta?.economy ?? {}));
+
+  // V2: apply negotiation modifiers (morale, awards, franchise reputation)
+  const moraleSummary = getPlayerMoraleSummary(player);
+  const awardSummary = getPlayerAwardSummary(player);
+  const currentSeason = Number(meta?.season ?? 0);
+  const userTeamId = Number(meta?.userTeamId ?? 0);
+
+  const playerLeverage = computePlayerLeverage(player, { moraleSummary, awardSummary, currentSeason });
+  const franchiseRep = computeFranchiseReputation(meta, { userTeamId, currentSeason });
+  const ask = applyNegotiationModifiers(baseAsk, playerLeverage, franchiseRep);
+  const negCtx = getNegotiationContext(player, meta, { moraleSummary, awardSummary, currentSeason, userTeamId });
+
   return {
     baseAnnual: ask.baseAnnual,
-    yearsTotal: ask.yearsTotal,
-    signingBonus: ask.signingBonus,
-    guaranteedPct: ask.guaranteedPct,
-    willingness: ask.willingness,
+    yearsTotal: baseAsk.yearsTotal,
+    signingBonus: baseAsk.signingBonus,
+    guaranteedPct: baseAsk.guaranteedPct,
+    willingness: baseAsk.willingness,
     marketHeat: Math.round(heat * 100) / 100,
+    // V2 negotiation context
+    leverageLabel: negCtx.leverageLabel,
+    reputationLabel: negCtx.reputationLabel,
+    feedbackLine: negCtx.feedbackLine,
+    leverageReasons: playerLeverage.reasons,
+    franchiseReasons: franchiseRep.reasons,
+    negotiationShift: ask._negotiationShift ?? 0,
   };
 }
 
@@ -6763,12 +6789,20 @@ async function handleGetFreeAgents(payload, id) {
         const userOffer = offers.find(o => o.teamId === userTeamId);
         const profile = buildContractProfile(p);
         const heat = computeMarketHeat(p.pos, allFreeAgents);
-        const ask = inflateContract(buildDemandFromProfile(p, profile, {
+        const baseAsk = inflateContract(buildDemandFromProfile(p, profile, {
           marketHeat: heat,
           morale: p.morale ?? 68,
           fit: Number(p?.schemeFit ?? 65),
           teamSuccess: userWinPct,
         }), inflationMult);
+        // V2: apply negotiation modifiers (morale, awards, franchise reputation)
+        const pMoraleSummary = getPlayerMoraleSummary(p);
+        const pAwardSummary = getPlayerAwardSummary(p);
+        const faCurrentSeason = Number(meta?.season ?? 0);
+        const pLeverage = computePlayerLeverage(p, { moraleSummary: pMoraleSummary, awardSummary: pAwardSummary, currentSeason: faCurrentSeason });
+        const fReputation = computeFranchiseReputation(meta, { userTeamId: Number(userTeamId ?? 0), currentSeason: faCurrentSeason });
+        const ask = applyNegotiationModifiers(baseAsk, pLeverage, fReputation);
+        const pNegCtx = getNegotiationContext(p, meta, { moraleSummary: pMoraleSummary, awardSummary: pAwardSummary, currentSeason: faCurrentSeason, userTeamId: Number(userTeamId ?? 0) });
         const reSignInsight = evaluateReSignPriority(p, {
           marketHeat: heat,
           teamDirection: userDirection,
@@ -6913,6 +6947,11 @@ async function handleGetFreeAgents(payload, id) {
             negotiationStance: userOfferEval.negotiationStance,
             fitScore: userOfferEval.score,
             explanationSummary: userOfferEval.explanationSummary,
+            // V2 negotiation modifier context
+            leverageLabel: pNegCtx.leverageLabel,
+            reputationLabel: pNegCtx.reputationLabel,
+            feedbackLine: pNegCtx.feedbackLine,
+            negotiationShift: ask._negotiationShift ?? 0,
           },
           playbookKnowledge: {
             score: Math.round(playbookKnowledgeScore),
@@ -7298,7 +7337,7 @@ async function handleGetExtensionAsk({ playerId }, id) {
     teamSuccess: ((team?.wins ?? 0) + (team?.ties ?? 0) * 0.5) / Math.max(1, (team?.wins ?? 0) + (team?.losses ?? 0) + (team?.ties ?? 0)),
   }), inflationMult);
   const baselineAsk = inflateContract(calculateExtensionDemand(player, meta?.difficulty ?? 'Normal') ?? {}, inflationMult);
-  const ask = {
+  const baseAsk = {
     ...baselineAsk,
     baseAnnual: Math.max(baselineAsk?.baseAnnual ?? 0, demandFromProfile.baseAnnual),
     signingBonus: Math.max(baselineAsk?.signingBonus ?? 0, demandFromProfile.signingBonus),
@@ -7309,6 +7348,21 @@ async function handleGetExtensionAsk({ playerId }, id) {
     profileHeadline: profile.headline,
     marketHeat: Math.round(marketHeat * 100) / 100,
     marketHeatLabel: marketHeatLabel(marketHeat),
+  };
+  // V2: apply negotiation modifiers
+  const extMoraleSummary = getPlayerMoraleSummary(player);
+  const extAwardSummary = getPlayerAwardSummary(player);
+  const extSeason = Number(meta?.season ?? 0);
+  const extTeamId = Number(meta?.userTeamId ?? 0);
+  const extLeverage = computePlayerLeverage(player, { moraleSummary: extMoraleSummary, awardSummary: extAwardSummary, currentSeason: extSeason });
+  const extFranchiseRep = computeFranchiseReputation(meta, { userTeamId: extTeamId, currentSeason: extSeason });
+  const modifiedAsk = applyNegotiationModifiers(baseAsk, extLeverage, extFranchiseRep);
+  const extNegCtx = getNegotiationContext(player, meta, { moraleSummary: extMoraleSummary, awardSummary: extAwardSummary, currentSeason: extSeason, userTeamId: extTeamId });
+  const ask = {
+    ...modifiedAsk,
+    leverageLabel: extNegCtx.leverageLabel,
+    reputationLabel: extNegCtx.reputationLabel,
+    feedbackLine: extNegCtx.feedbackLine,
   };
   post(toUI.EXTENSION_ASK, { ask }, id);
 }
