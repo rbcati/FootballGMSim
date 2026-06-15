@@ -642,11 +642,17 @@ export function useWorker() {
     negotiateStaffContract: (payload) => request(toWorker.NEGOTIATE_STAFF_CONTRACT, payload, { silent: true }),
     updateDraftBoard: (payload) => send(toWorker.UPDATE_DRAFT_BOARD, payload),
 
-    /** Hire a coach (replaces existing). */
-    hireCoach: (payload) => send(toWorker.HIRE_COACH, payload),
+    /** Fetch V1 coaching state for a team (returns a Promise). */
+    getCoachingState: (teamId) => request(toWorker.GET_COACHING_STATE, teamId != null ? { teamId } : {}, { silent: true }),
 
-    /** Fire a coach. */
-    fireCoach: (payload) => send(toWorker.FIRE_COACH, payload),
+    /** Hire a coach (returns a Promise with COACHING_STATE payload). */
+    hireCoach: (payload) => request(toWorker.HIRE_COACH, payload),
+
+    /** Fire a coach (returns a Promise with COACHING_STATE payload). */
+    fireCoach: (payload) => request(toWorker.FIRE_COACH, payload),
+
+    /** Extend a coach's contract (returns a Promise with COACHING_STATE payload). */
+    contractExtensionCoach: (payload) => request(toWorker.CONTRACT_EXTENSION_COACH, payload),
 
     /** Submit a trade offer to an AI team (returns a Promise). */
     submitTrade: (fromTeamId, toTeamId, offering, receiving) =>

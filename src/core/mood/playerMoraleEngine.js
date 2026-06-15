@@ -47,6 +47,11 @@ export const MORALE_EVENTS = Object.freeze({
   HOLDOUT_RETURNED:          'HOLDOUT_RETURNED',
   VETERAN_LEADER_BONUS:      'VETERAN_LEADER_BONUS',
   DEADLINE_SELL_FRUSTRATION: 'DEADLINE_SELL_FRUSTRATION',
+  // Coaching Carousel V1
+  COACH_FIRED_HC:            'COACH_FIRED_HC',
+  COACH_FIRED_OC:            'COACH_FIRED_OC',
+  COACH_FIRED_DC:            'COACH_FIRED_DC',
+  SCHEME_CHANGE:             'SCHEME_CHANGE',
 });
 
 // ── Delta constants ────────────────────────────────────────────────────────────
@@ -61,6 +66,11 @@ export const MORALE_DELTAS = Object.freeze({
   [MORALE_EVENTS.HOLDOUT_RETURNED]:           -8,
   [MORALE_EVENTS.VETERAN_LEADER_BONUS]:        3,
   [MORALE_EVENTS.DEADLINE_SELL_FRUSTRATION]:  -3,
+  // Coaching Carousel V1
+  [MORALE_EVENTS.COACH_FIRED_HC]:             -6,
+  [MORALE_EVENTS.COACH_FIRED_OC]:             -4,
+  [MORALE_EVENTS.COACH_FIRED_DC]:             -4,
+  [MORALE_EVENTS.SCHEME_CHANGE]:              -3,
 });
 
 // ── Morale label thresholds ────────────────────────────────────────────────────

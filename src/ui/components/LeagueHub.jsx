@@ -7,7 +7,7 @@ import { buildWeeklyLeagueRecap } from '../utils/weeklyLeagueRecap.js';
 import { CompactListRow, StatusChip, HeroCard, SectionCard, StatStrip, CompactInsightCard } from './ScreenSystem.jsx';
 import { openResolvedBoxScore } from '../utils/boxScoreAccess.js';
 
-const LEAGUE_SECTIONS = ['Overview', 'Results', 'Standings', 'News', 'Leaders'];
+const LEAGUE_SECTIONS = ['Overview', 'Results', 'Standings', 'News', 'Leaders', 'Coaching'];
 
 function normalizeSection(section) {
   if (typeof section !== 'string') return 'Overview';
@@ -147,6 +147,82 @@ export default function LeagueHub({
           <SectionCard title="League leaders" subtitle="Season production and race snapshots." variant="compact" />
           <LeagueLeaders league={league} actions={actions} onPlayerSelect={onPlayerSelect} />
         </div>
+      )}
+
+      {section === 'Coaching' && (
+        <CoachingCarouselPanel league={league} />
+      )}
+    </div>
+  );
+}
+
+function CoachingCarouselPanel({ league }) {
+  const phase = league?.phase ?? 'regular';
+  const teams = Array.isArray(league?.teams) ? league.teams : [];
+  const coachingMarket = Array.isArray(league?.coachingMarket) ? league.coachingMarket : [];
+
+  const offseasonPhases = ['offseason', 'offseason_resign', 'offseason_draft', 'free_agency', 'preseason', 'draft'];
+  const isOffseason = offseasonPhases.includes(phase);
+
+  const hotSeatTeams = teams.filter((t) => t?.coachHotSeat);
+
+  return (
+    <div className="app-screen-stack">
+      <SectionCard
+        title="Coaching Carousel"
+        subtitle={isOffseason ? 'Hot seats and coaching market this offseason.' : 'Coaching carousel data available during the offseason.'}
+        variant="compact"
+      >
+        {!isOffseason && (
+          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', padding: 'var(--space-2) 0' }}>
+            Coaching changes are processed at the end of each season.
+          </div>
+        )}
+      </SectionCard>
+
+      {hotSeatTeams.length > 0 && (
+        <SectionCard title="Hot seat coaches" subtitle="Coaches at risk of being fired." variant="compact">
+          <div className="app-row-stack">
+            {hotSeatTeams.map((team) => (
+              <CompactListRow
+                key={team.id}
+                title={`${team.name ?? team.abbr}`}
+                subtitle={team.coachHCName ? `HC: ${team.coachHCName}` : 'Head Coach'}
+                meta={
+                  <StatusChip
+                    label={`OVR ${team.coachHCRating ?? '—'}`}
+                    tone={team.coachHCRating >= 65 ? 'info' : 'warning'}
+                  />
+                }
+              >
+                <StatusChip label="HOT SEAT" tone="danger" />
+              </CompactListRow>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {hotSeatTeams.length === 0 && isOffseason && (
+        <SectionCard title="Hot seat coaches" variant="compact">
+          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', padding: 'var(--space-2) 0' }}>
+            No coaches currently on the hot seat.
+          </div>
+        </SectionCard>
+      )}
+
+      {isOffseason && coachingMarket.length > 0 && (
+        <SectionCard title="Coaching market" subtitle={`${coachingMarket.length} coaches available`} variant="compact">
+          <div className="app-row-stack">
+            {coachingMarket.slice(0, 6).map((coach) => (
+              <CompactInsightCard
+                key={coach.id ?? coach.name}
+                title={coach.name ?? 'Unknown'}
+                subtitle={`OVR ${coach.overallRating ?? coach.rating ?? '—'} · ${coach.scheme ?? '—'}`}
+                tone={coach.overallRating >= 75 ? 'ok' : coach.overallRating >= 60 ? 'info' : 'neutral'}
+              />
+            ))}
+          </div>
+        </SectionCard>
       )}
     </div>
   );

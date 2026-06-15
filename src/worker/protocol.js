@@ -124,6 +124,8 @@ export const toWorker = Object.freeze({
   OPTIMIZE_ROSTER:    'OPTIMIZE_ROSTER',  // { teamId, mode?: 'optimize'|'best_available' }
   HIRE_COACH:         'HIRE_COACH',           // { teamId, coachId, role }
   FIRE_COACH:         'FIRE_COACH',           // { teamId, role }
+  CONTRACT_EXTENSION_COACH: 'CONTRACT_EXTENSION_COACH', // { teamId, role, years }
+  GET_COACHING_STATE: 'GET_COACHING_STATE',   // { teamId? } — fetch V1 coaching state
   GET_AVAILABLE_COACHES: 'GET_AVAILABLE_COACHES', // {}
   GET_STAFF_STATE: 'GET_STAFF_STATE',
   HIRE_STAFF_MEMBER: 'HIRE_STAFF_MEMBER',
@@ -230,6 +232,7 @@ export const toUI = Object.freeze({
   /** Coaching Data */
   AVAILABLE_COACHES:  'AVAILABLE_COACHES',    // { coaches[] }
   STAFF_STATE: 'STAFF_STATE',
+  COACHING_STATE: 'COACHING_STATE',           // { team.coach, coachHistory, coachingMarket }
 
   /** Box score response */
   BOX_SCORE:          'BOX_SCORE',            // { gameId, game }
