@@ -75,6 +75,14 @@ import { Utils }          from '../core/utils.js';
 import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
 import { makePlayer, generateDraftClass, calculateMorale, calculateExtensionDemand, buildPlayerGuid }  from '../core/player.js';
 import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
+import {
+  COACH_ROLES,
+  generateCoachingMarket,
+  evaluateHotSeat,
+  getCoachingInstabilityPenalty,
+  ensureCoachSchema,
+  isPositionMisfitForScheme,
+} from '../core/coaching/coachingEngine.js';
 import { ensureTeamStaff, computeStaffTeamBonuses, buildStaffMarket, buildScoutingSnapshot, negotiateContract } from '../core/staff-system.js';
 import {
   inferTeamDirection,
@@ -272,6 +280,12 @@ let _lastSentViewState = null;
 // payloads so the UI can detect and drop STATE_UPDATE packets that pre-date the
 // last accepted FULL_STATE baseline (stale-packet guard).
 let _stateEpoch = 0;
+
+// ── Coaching Carousel V1 constants ───────────────────────────────────────────
+const DEFAULT_HC_STUB = Object.freeze({
+  id: null, name: null, scheme: 'BALANCED', contractYearsLeft: 0,
+  overallRating: 65, hotSeat: false, firedSeason: null, hiredSeason: null,
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -949,6 +963,9 @@ function buildViewState() {
     fanApproval: t?.fanApproval ?? 50,
     franchiseInvestments: normalizeFranchiseInvestments(t?.franchiseInvestments),
     rivalTeamId: t?.rivalTeamId ?? null,
+    coachHotSeat: t?.coach?.headCoach?.hotSeat ?? false,
+    coachHCName: t?.coach?.headCoach?.name ?? null,
+    coachHCRating: t?.coach?.headCoach?.overallRating ?? null,
     picks: Array.isArray(t?.picks)
       ? t.picks.map((pk) => ({
         id: pk.id,
@@ -1066,6 +1083,7 @@ function buildViewState() {
     commissionerLog: Array.isArray(meta?.commissionerLog) ? meta.commissionerLog.slice(-100) : [],
     standings: standingsRows,
     standingsContext,
+    coachingMarket: Array.isArray(meta?.coachingMarket) ? meta.coachingMarket : [],
     teams,
     ...(typeof globalThis !== 'undefined' && globalThis.__DYNASTY_SOAK_PROFILE__ && globalThis.__DYNASTY_SOAK_LAST_BATCH__
       ? { dynastySoakSimBatch: { ...globalThis.__DYNASTY_SOAK_LAST_BATCH__ } }
@@ -2817,8 +2835,9 @@ async function handleAdvanceWeek(payload, id) {
       }
     }
 
-    // Set phase to Regular Season, keep Week 1
-    cache.setMeta({ phase: 'regular', currentWeek: 1 });
+    // Set phase to Regular Season, keep Week 1.
+    // V1 Coaching Carousel: clear the coaching market at end of preseason.
+    cache.setMeta({ phase: 'regular', currentWeek: 1, coachingMarket: [] });
     await flushDirty();
 
     // Return state update (no simulation)
@@ -6113,7 +6132,9 @@ function buildDemandSnapshotForOffer(player, team) {
   const userTeamId = Number(meta?.userTeamId ?? 0);
 
   const playerLeverage = computePlayerLeverage(player, { moraleSummary, awardSummary, currentSeason });
-  const franchiseRep = computeFranchiseReputation(meta, { userTeamId, currentSeason });
+  const userTeamForCoach = cache.getTeam(userTeamId);
+  const instabilityPenalty = getCoachingInstabilityPenalty(userTeamForCoach?.coachHistory ?? [], 3);
+  const franchiseRep = computeFranchiseReputation(meta, { userTeamId, currentSeason, coachingInstabilityPenalty: instabilityPenalty });
   const ask = applyNegotiationModifiers(baseAsk, playerLeverage, franchiseRep);
   const negCtx = getNegotiationContext(player, meta, { moraleSummary, awardSummary, currentSeason, userTeamId });
 
@@ -6890,7 +6911,9 @@ async function handleGetFreeAgents(payload, id) {
         const pAwardSummary = getPlayerAwardSummary(p);
         const faCurrentSeason = Number(meta?.season ?? 0);
         const pLeverage = computePlayerLeverage(p, { moraleSummary: pMoraleSummary, awardSummary: pAwardSummary, currentSeason: faCurrentSeason });
-        const fReputation = computeFranchiseReputation(meta, { userTeamId: Number(userTeamId ?? 0), currentSeason: faCurrentSeason });
+        const faUserTeam = cache.getTeam(Number(userTeamId ?? 0));
+        const faInstability = getCoachingInstabilityPenalty(faUserTeam?.coachHistory ?? [], 3);
+        const fReputation = computeFranchiseReputation(meta, { userTeamId: Number(userTeamId ?? 0), currentSeason: faCurrentSeason, coachingInstabilityPenalty: faInstability });
         const ask = applyNegotiationModifiers(baseAsk, pLeverage, fReputation);
         const pNegCtx = getNegotiationContext(p, meta, { moraleSummary: pMoraleSummary, awardSummary: pAwardSummary, currentSeason: faCurrentSeason, userTeamId: Number(userTeamId ?? 0) });
         const reSignInsight = evaluateReSignPriority(p, {
@@ -7104,43 +7127,298 @@ async function handleGetAvailableCoaches(payload, id) {
     post(toUI.AVAILABLE_COACHES, { coaches }, id);
 }
 
-async function handleHireCoach({ teamId, coach, role }, id) {
-    const team = cache.getTeam(Number(teamId));
-    if (!team) {
-        post(toUI.ERROR, { message: 'Team not found' }, id);
-        return;
-    }
+// ── Coaching Carousel V1 helpers ──────────────────────────────────────────────
 
-    if (!team.staff) team.staff = {};
-
-    // Assign coach to slot
-    if (role === 'HC') team.staff.headCoach = coach;
-    else if (role === 'OC') team.staff.offCoordinator = coach;
-    else if (role === 'DC') team.staff.defCoordinator = coach;
-
-    // If HC, update strategies to match their schemes
-    if (role === 'HC') {
-        if (!team.strategies) team.strategies = {};
-        team.strategies.offense = coach.offScheme;
-        team.strategies.defense = coach.defScheme;
-    }
-
-    await flushDirty(); // Should trigger update of team record
-
-    // Return updated roster data which includes staff
-    await handleGetRoster({ teamId }, id);
+function getCoachV1Role(role) {
+  if (role === 'headCoach' || role === 'HC') return COACH_ROLES.HEAD_COACH;
+  if (role === 'OC' || role === 'offensiveCoordinator') return COACH_ROLES.OC;
+  if (role === 'DC' || role === 'defensiveCoordinator') return COACH_ROLES.DC;
+  return null;
 }
 
+function buildCoachFireMoraleEvent(v1Role, teamId, season) {
+  if (v1Role === COACH_ROLES.HEAD_COACH) {
+    return { type: MORALE_EVENTS.COACH_FIRED_HC, delta: MORALE_DELTAS[MORALE_EVENTS.COACH_FIRED_HC], dedupeKey: `coach_fired_hc_${teamId}_${season}` };
+  }
+  if (v1Role === COACH_ROLES.OC) {
+    return { type: MORALE_EVENTS.COACH_FIRED_OC, delta: MORALE_DELTAS[MORALE_EVENTS.COACH_FIRED_OC], dedupeKey: `coach_fired_oc_${teamId}_${season}` };
+  }
+  if (v1Role === COACH_ROLES.DC) {
+    return { type: MORALE_EVENTS.COACH_FIRED_DC, delta: MORALE_DELTAS[MORALE_EVENTS.COACH_FIRED_DC], dedupeKey: `coach_fired_dc_${teamId}_${season}` };
+  }
+  return null;
+}
+
+function isOffensivePosition(pos) {
+  const p = String(pos ?? '').toUpperCase();
+  return ['QB', 'RB', 'FB', 'HB', 'WR', 'TE', 'OL', 'OT', 'OG', 'C', 'G', 'T', 'LT', 'RT', 'LG', 'RG'].includes(p);
+}
+
+function isDefensivePosition(pos) {
+  const p = String(pos ?? '').toUpperCase();
+  return ['DL', 'DE', 'DT', 'NT', 'EDGE', 'LB', 'ILB', 'OLB', 'MLB', 'CB', 'DB', 'S', 'FS', 'SS'].includes(p);
+}
+
+function getStartersForRole(players, v1Role) {
+  if (v1Role === COACH_ROLES.HEAD_COACH) {
+    return players.filter((p) => p?.depthChartPosition === 1 || p?.isStarter);
+  }
+  if (v1Role === COACH_ROLES.OC) {
+    return players.filter((p) => isOffensivePosition(p?.pos) && (p?.depthChartPosition === 1 || p?.isStarter));
+  }
+  if (v1Role === COACH_ROLES.DC) {
+    return players.filter((p) => isDefensivePosition(p?.pos) && (p?.depthChartPosition === 1 || p?.isStarter));
+  }
+  return [];
+}
+
+function postCoachingState(team, meta, msgId) {
+  const coachingMarket = Array.isArray(meta?.coachingMarket) ? meta.coachingMarket : [];
+  post(toUI.COACHING_STATE, {
+    teamId:        team.id,
+    coach:         team.coach ?? {},
+    coachHistory:  Array.isArray(team.coachHistory) ? team.coachHistory : [],
+    coachingMarket,
+  }, msgId);
+}
+
+// ── Handler: GET_COACHING_STATE ───────────────────────────────────────────────
+
+async function handleGetCoachingState({ teamId } = {}, id) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const resolvedId = Number(teamId ?? meta?.userTeamId);
+  const team = cache.getTeam(resolvedId);
+  if (!team) { post(toUI.ERROR, { message: 'Team not found' }, id); return; }
+  const teamWithSchema = ensureCoachSchema(team);
+  postCoachingState(teamWithSchema, meta, id);
+}
+
+// ── Handler: FIRE_COACH (V1) ──────────────────────────────────────────────────
+
 async function handleFireCoach({ teamId, role }, id) {
-    const team = cache.getTeam(Number(teamId));
-    if (!team || !team.staff) return;
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const team = cache.getTeam(Number(teamId));
+  if (!team) { post(toUI.ERROR, { message: 'Team not found' }, id); return; }
 
-    if (role === 'HC') team.staff.headCoach = null;
-    else if (role === 'OC') team.staff.offCoordinator = null;
-    else if (role === 'DC') team.staff.defCoordinator = null;
+  const phase   = meta?.phase ?? 'regular';
+  const season  = Number(meta?.year ?? 0);
+  const week    = Number(meta?.currentWeek ?? 0);
 
-    await flushDirty();
-    await handleGetRoster({ teamId }, id);
+  const allowedPhases = ['offseason_resign', 'free_agency', 'draft', 'offseason', 'preseason'];
+  if (!allowedPhases.includes(phase)) {
+    post(toUI.ERROR, { message: 'Coaches can only be fired during the offseason or preseason.' }, id);
+    return;
+  }
+
+  const v1Role = getCoachV1Role(role);
+  if (!v1Role) { post(toUI.ERROR, { message: `Invalid coach role: ${role}` }, id); return; }
+
+  // Ensure V1 schema
+  const teamWithSchema = ensureCoachSchema(team);
+  const coachData      = teamWithSchema.coach?.[v1Role] ?? {};
+  const coachName      = coachData.name ?? 'Unknown Coach';
+  const coachScheme    = coachData.scheme ?? 'BALANCED';
+  const coachRating    = coachData.overallRating ?? 65;
+
+  // Archive to coachHistory
+  const historyEntry = {
+    role:         v1Role,
+    name:         coachName,
+    scheme:       coachScheme,
+    overallRating: coachRating,
+    seasons:      coachData.hiredSeason ? season - coachData.hiredSeason : 0,
+    record:       { w: 0, l: 0 },
+    firedReason:  coachData.hotSeat ? 'hotseat' : 'gm_decision',
+    season,
+  };
+
+  const coachHistory = [...(Array.isArray(teamWithSchema.coachHistory) ? teamWithSchema.coachHistory : []), historyEntry];
+
+  // Update V1 coach slot to null equivalent
+  const updatedCoach = {
+    ...teamWithSchema.coach,
+    [v1Role]: { id: null, name: null, scheme: 'BALANCED', contractYearsLeft: 0, overallRating: 65,
+      ...(v1Role === COACH_ROLES.HEAD_COACH ? { hotSeat: false, firedSeason: season, hiredSeason: null } : {}) },
+  };
+
+  // Also clear legacy staff slot
+  if (!team.staff) team.staff = {};
+  if (v1Role === COACH_ROLES.HEAD_COACH) team.staff.headCoach      = null;
+  if (v1Role === COACH_ROLES.OC)         team.staff.offCoordinator  = null;
+  if (v1Role === COACH_ROLES.DC)         team.staff.defCoordinator  = null;
+
+  cache.updateTeam(team.id, { coach: updatedCoach, coachHistory, staff: team.staff });
+
+  // Fire morale events for affected starters
+  const moraleEvent = buildCoachFireMoraleEvent(v1Role, team.id, season);
+  if (moraleEvent) {
+    const players = cache.getPlayersByTeam(team.id);
+    const starters = getStartersForRole(players, v1Role);
+    for (const player of starters) {
+      const updated = applyMoraleEvent(player, { ...moraleEvent, season, week, reason: `${coachName} was fired` }, { season, week });
+      if (updated !== player) cache.updatePlayer(player.id, { morale: updated.morale, moraleEvents: updated.moraleEvents });
+    }
+  }
+
+  // News item
+  const roleLabel = v1Role === COACH_ROLES.HEAD_COACH ? 'head coach' : v1Role === COACH_ROLES.OC ? 'offensive coordinator' : 'defensive coordinator';
+  const hotSeatNote = coachData.hotSeat ? ' (expected firing after two poor seasons)' : '';
+  await NewsEngine.logNews(
+    'TRANSACTION',
+    `${team.abbr ?? 'Team'} fires ${roleLabel} ${coachName}${hotSeatNote}.`,
+    team.id,
+    { category: 'coach_fired', coachName, role: v1Role, teamId: team.id, dedupeKey: `coach_fired_${v1Role}_${team.id}_${season}` },
+  );
+
+  await flushDirty();
+  const refreshed = cache.getTeam(Number(teamId));
+  postCoachingState(refreshed ?? team, cache.getMeta(), id);
+  await handleGetRoster({ teamId }, id);
+}
+
+// ── Handler: HIRE_COACH (V1) ──────────────────────────────────────────────────
+
+async function handleHireCoach({ teamId, coachId, coach: legacyCoach, role }, id) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const team = cache.getTeam(Number(teamId));
+  if (!team) { post(toUI.ERROR, { message: 'Team not found' }, id); return; }
+
+  const phase  = meta?.phase ?? 'regular';
+  const season = Number(meta?.year ?? 0);
+  const week   = Number(meta?.currentWeek ?? 0);
+
+  const v1Role = getCoachV1Role(role);
+  if (!v1Role) { post(toUI.ERROR, { message: `Invalid coach role: ${role}` }, id); return; }
+
+  // Resolve the coach from the market or legacy payload
+  const coachingMarket = Array.isArray(meta?.coachingMarket) ? meta.coachingMarket : [];
+  let marketCoach = coachId ? coachingMarket.find((c) => c.id === coachId) : null;
+  // Fall back to legacy coach object for backward compatibility
+  const coachToHire = marketCoach ?? legacyCoach;
+  if (!coachToHire) { post(toUI.ERROR, { message: 'Coach not found in coaching market' }, id); return; }
+
+  if (marketCoach && !coachingMarket.some((c) => c.id === coachId)) {
+    post(toUI.ERROR, { message: 'This coach is no longer available' }, id);
+    return;
+  }
+
+  // Ensure V1 schema
+  const teamWithSchema = ensureCoachSchema(team);
+  const prevCoach      = teamWithSchema.coach?.[v1Role] ?? {};
+  const prevScheme     = prevCoach.scheme ?? 'BALANCED';
+  const newScheme      = coachToHire.scheme ?? 'BALANCED';
+
+  const newV1CoachData = {
+    id:               coachToHire.id ?? null,
+    name:             coachToHire.name ?? 'Unknown Coach',
+    scheme:           newScheme,
+    contractYearsLeft: 3,
+    overallRating:    coachToHire.overallRating ?? 65,
+    ...(v1Role === COACH_ROLES.HEAD_COACH ? { hotSeat: false, firedSeason: null, hiredSeason: season } : {}),
+  };
+
+  const updatedCoach = { ...teamWithSchema.coach, [v1Role]: newV1CoachData };
+
+  // Also sync to legacy staff object for sim engine compatibility
+  if (!team.staff) team.staff = {};
+  const legacyStaffCoach = {
+    ...coachToHire,
+    overallRating: coachToHire.overallRating ?? 65,
+    position: v1Role === COACH_ROLES.HEAD_COACH ? 'HC' : v1Role === COACH_ROLES.OC ? 'OC' : 'DC',
+  };
+  if (v1Role === COACH_ROLES.HEAD_COACH) {
+    team.staff.headCoach = legacyStaffCoach;
+    if (!team.strategies) team.strategies = {};
+    team.strategies.offense = coachToHire.offScheme ?? coachToHire.scheme;
+    team.strategies.defense = coachToHire.defScheme ?? coachToHire.scheme;
+  } else if (v1Role === COACH_ROLES.OC) {
+    team.staff.offCoordinator = legacyStaffCoach;
+  } else if (v1Role === COACH_ROLES.DC) {
+    team.staff.defCoordinator = legacyStaffCoach;
+  }
+
+  cache.updateTeam(team.id, { coach: updatedCoach, staff: team.staff });
+
+  // Fire morale events for scheme-misfit players (HC scheme change only)
+  const schemeChanged = newScheme !== prevScheme && prevCoach.name != null;
+  if (schemeChanged && v1Role === COACH_ROLES.HEAD_COACH) {
+    const players = cache.getPlayersByTeam(team.id);
+    for (const player of players) {
+      if (!isPositionMisfitForScheme(player?.pos, newScheme)) continue;
+      const dedupeKey = `scheme_change_${player.id}_${team.id}_${season}`;
+      const updated = applyMoraleEvent(player, {
+        type:      MORALE_EVENTS.SCHEME_CHANGE,
+        delta:     MORALE_DELTAS[MORALE_EVENTS.SCHEME_CHANGE],
+        season,
+        week,
+        reason:    `New scheme (${newScheme}) doesn't suit their position`,
+        dedupeKey,
+      }, { season, week });
+      if (updated !== player) cache.updatePlayer(player.id, { morale: updated.morale, moraleEvents: updated.moraleEvents });
+    }
+  }
+
+  // Remove coach from market
+  if (marketCoach) {
+    const updatedMarket = coachingMarket.filter((c) => c.id !== coachId);
+    cache.setMeta({ coachingMarket: updatedMarket });
+  }
+
+  // News item
+  const hireRoleLabel = v1Role === COACH_ROLES.HEAD_COACH ? 'head coach' : v1Role === COACH_ROLES.OC ? 'offensive coordinator' : 'defensive coordinator';
+  await NewsEngine.logNews(
+    'TRANSACTION',
+    `${team.abbr ?? 'Team'} hires ${coachToHire.name} as ${hireRoleLabel}.`,
+    team.id,
+    { category: 'coach_hired', coachName: coachToHire.name, role: v1Role, teamId: team.id, dedupeKey: `coach_hired_${v1Role}_${team.id}_${season}` },
+  );
+
+  await flushDirty();
+  const refreshed = cache.getTeam(Number(teamId));
+  postCoachingState(refreshed ?? team, cache.getMeta(), id);
+  await handleGetRoster({ teamId }, id);
+}
+
+// ── Handler: CONTRACT_EXTENSION_COACH ────────────────────────────────────────
+
+async function handleContractExtensionCoach({ teamId, role, years }, id) {
+  const meta   = ensureDynastyMeta(cache.getMeta());
+  const team   = cache.getTeam(Number(teamId));
+  if (!team) { post(toUI.ERROR, { message: 'Team not found' }, id); return; }
+
+  const v1Role = getCoachV1Role(role);
+  if (!v1Role) { post(toUI.ERROR, { message: `Invalid coach role: ${role}` }, id); return; }
+
+  const teamWithSchema = ensureCoachSchema(team);
+  const coachData      = teamWithSchema.coach?.[v1Role] ?? {};
+
+  if ((coachData.contractYearsLeft ?? 0) > 1) {
+    post(toUI.ERROR, { message: 'Contract extensions are only available when contractYearsLeft is 1 or fewer.' }, id);
+    return;
+  }
+
+  const extensionYears = Math.min(3, Math.max(1, Number(years ?? 1)));
+  const newYearsLeft   = (coachData.contractYearsLeft ?? 0) + extensionYears;
+
+  const updatedCoach = {
+    ...teamWithSchema.coach,
+    [v1Role]: { ...coachData, contractYearsLeft: newYearsLeft },
+  };
+  cache.updateTeam(team.id, { coach: updatedCoach });
+
+  const season = Number(meta?.year ?? 0);
+  const week   = Number(meta?.currentWeek ?? 0);
+
+  await NewsEngine.logNews(
+    'TRANSACTION',
+    `${team.abbr ?? 'Team'} extends ${coachData.name ?? 'coach'} by ${extensionYears} year${extensionYears !== 1 ? 's' : ''}.`,
+    team.id,
+    { category: 'coach_extended', coachName: coachData.name ?? 'coach', role: v1Role, extensionYears, teamId: team.id, dedupeKey: `coach_extended_${v1Role}_${team.id}_${season}` },
+  );
+
+  await flushDirty();
+  const refreshed = cache.getTeam(Number(teamId));
+  postCoachingState(refreshed ?? team, cache.getMeta(), id);
 }
 
 async function handleGetStaffState(payload, id) {
@@ -7445,7 +7723,9 @@ async function handleGetExtensionAsk({ playerId }, id) {
   const extSeason = Number(meta?.season ?? 0);
   const extTeamId = Number(meta?.userTeamId ?? 0);
   const extLeverage = computePlayerLeverage(player, { moraleSummary: extMoraleSummary, awardSummary: extAwardSummary, currentSeason: extSeason });
-  const extFranchiseRep = computeFranchiseReputation(meta, { userTeamId: extTeamId, currentSeason: extSeason });
+  const extUserTeam = cache.getTeam(extTeamId);
+  const extInstability = getCoachingInstabilityPenalty(extUserTeam?.coachHistory ?? [], 3);
+  const extFranchiseRep = computeFranchiseReputation(meta, { userTeamId: extTeamId, currentSeason: extSeason, coachingInstabilityPenalty: extInstability });
   const modifiedAsk = applyNegotiationModifiers(baseAsk, extLeverage, extFranchiseRep);
   const extNegCtx = getNegotiationContext(player, meta, { moraleSummary: extMoraleSummary, awardSummary: extAwardSummary, currentSeason: extSeason, userTeamId: extTeamId });
   const ask = {
@@ -10803,6 +11083,63 @@ async function archiveSeason(seasonId) {
       }
     }
     memoryMeta.seasonStorylines = buildSeasonStorylineSnapshot(memoryMeta, teams, meta.userTeamId);
+    // ── V1 Coaching Carousel: hot-seat evaluation + AI auto-fire ─────────────
+    try {
+      const allTeamsForCoaching = cache.getAllTeams();
+      const userTeamId = Number(meta?.userTeamId ?? -1);
+      // Build a seeded RNG for AI auto-fire (deterministic per season)
+      const autoFireSeed = Number(year) * 1009 + 7;
+      let autoFireRng = autoFireSeed;
+      function nextAutoFireRng() {
+        autoFireRng = ((1664525 * autoFireRng + 1013904223) | 0) >>> 0;
+        return autoFireRng / 0x100000000;
+      }
+
+      for (const t of allTeamsForCoaching) {
+        const teamWithCoach = ensureCoachSchema(t);
+        const hc = teamWithCoach.coach?.headCoach;
+        if (!hc?.name) continue;
+
+        const teamStanding = standingsRows.find((s) => Number(s.id) === Number(t.id));
+        const w = Number(teamStanding?.wins ?? t.wins ?? 0);
+        const l = Number(teamStanding?.losses ?? t.losses ?? 0);
+        const seasonRecord = { w, l };
+
+        const onHotSeat = evaluateHotSeat(teamWithCoach, seasonRecord, year);
+        const updatedHC = { ...hc, hotSeat: onHotSeat };
+        const updatedCoach = { ...teamWithCoach.coach, headCoach: updatedHC };
+        cache.updateTeam(t.id, { coach: updatedCoach });
+
+        // AI teams: auto-fire hot-seat coaches at 60% probability
+        if (Number(t.id) !== userTeamId && onHotSeat) {
+          const roll = nextAutoFireRng();
+          if (roll < 0.60) {
+            const historyEntry = {
+              role:         COACH_ROLES.HEAD_COACH,
+              name:         hc.name,
+              scheme:       hc.scheme ?? 'BALANCED',
+              overallRating: hc.overallRating ?? 65,
+              seasons:      hc.hiredSeason ? year - hc.hiredSeason : 0,
+              record:       seasonRecord,
+              firedReason:  'hotseat_ai_autfire',
+              season:       year,
+            };
+            const coachHistory = [...(Array.isArray(t.coachHistory) ? t.coachHistory : []), historyEntry];
+            const clearedHC = { ...DEFAULT_HC_STUB, firedSeason: year, hotSeat: false };
+            cache.updateTeam(t.id, {
+              coachHistory,
+              coach: { ...updatedCoach, headCoach: clearedHC },
+            });
+            if (!t.staff) t.staff = {};
+            t.staff.headCoach = null;
+            cache.updateTeam(t.id, { staff: t.staff });
+          }
+        }
+      }
+    } catch (coachingCarouselErr) {
+      console.error('[Worker] Coaching Carousel V1 season-end failed (non-fatal):', coachingCarouselErr);
+    }
+
     cache.setMeta({
       leagueHistory: memoryMeta.leagueHistory,
       franchiseHistoryByTeam: memoryMeta.franchiseHistoryByTeam,
@@ -10873,7 +11210,27 @@ async function handleStartNewSeason(payload, id) {
   const rawSchedule  = makeScheduleFn(teamDefs);
   const slimSchedule = slimifySchedule(rawSchedule, teamDefs);
 
-    cache.setMeta({
+  // V1 Coaching Carousel: generate coaching market at season start.
+  // Collect coaches fired last season from all teams' coachHistory.
+  const firedLastSeason = [];
+  for (const t of cache.getAllTeams()) {
+    const hist = Array.isArray(t.coachHistory) ? t.coachHistory : [];
+    for (const entry of hist) {
+      if (Number(entry?.season) === Number(meta?.year ?? 0)) {
+        firedLastSeason.push({
+          id:              entry.id ?? null,
+          name:            entry.name,
+          scheme:          entry.scheme,
+          overallRating:   entry.overallRating ?? 65,
+          yearsExperience: entry.seasons ?? 1,
+          formerTeamId:    t.id,
+        });
+      }
+    }
+  }
+  const freshCoachingMarket = generateCoachingMarket(newSeason, firedLastSeason);
+
+  cache.setMeta({
     year:                    newYear,
     season:                  newSeason,
     currentSeasonId:         newSeasonId,
@@ -10890,6 +11247,7 @@ async function handleStartNewSeason(payload, id) {
     ownerGoals: generateOwnerGoals(),
     offseasonReleaseMap: {},
     economy: nextEconomy,
+    coachingMarket:          freshCoachingMarket,
     settings: normalizeLeagueSettings({
       ...(meta?.settings ?? {}),
       salaryCap: nextEconomy.currentSalaryCap,
@@ -11770,8 +12128,10 @@ async function handleMessage(event) {
       case toWorker.FIRE_STAFF_MEMBER:  return await handleFireStaffMember(payload, id);
       case toWorker.NEGOTIATE_STAFF_CONTRACT: return await handleNegotiateStaffContract(payload, id);
       case toWorker.UPDATE_DRAFT_BOARD: return await handleUpdateDraftBoard(payload, id);
+      case toWorker.GET_COACHING_STATE: return await handleGetCoachingState(payload, id);
       case toWorker.HIRE_COACH:         return await handleHireCoach(payload, id);
       case toWorker.FIRE_COACH:         return await handleFireCoach(payload, id);
+      case toWorker.CONTRACT_EXTENSION_COACH: return await handleContractExtensionCoach(payload, id);
       case toWorker.CONDUCT_DRILL:      return await handleConductDrill(payload, id);
       case toWorker.UPDATE_MEDICAL_STAFF: return await handleUpdateMedicalStaff(payload, id);
       case toWorker.UPDATE_FRANCHISE_INVESTMENTS: return await handleUpdateFranchiseInvestments(payload, id);

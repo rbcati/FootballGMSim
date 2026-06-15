@@ -34,6 +34,8 @@ export const LEVERAGE_MODIFIERS = Object.freeze({
   FRANCHISE_CHAMPION: -0.05,
   /** Franchise had 0 playoff appearances in 3+ seasons → +8% demand */
   FRANCHISE_DROUGHT: 0.08,
+  /** Franchise instability — 3+ coaching changes in 3 seasons → +6% demand */
+  COACHING_INSTABILITY: 0.06,
   /** Maximum total demand shift in either direction */
   MAX_SHIFT: 0.25,
 });
@@ -140,11 +142,15 @@ export function computePlayerLeverage(player, context = {}) {
  *   meta.franchiseHistoryByTeam    – keyed by teamId string
  *
  * @param {object} meta      – game meta (reads franchiseAwards + franchiseHistoryByTeam)
- * @param {object} context   – { userTeamId: number|string, currentSeason?: number }
+ * @param {object} context   – {
+ *   userTeamId: number|string,
+ *   currentSeason?: number,
+ *   coachingInstabilityPenalty?: { penalty: number, reason: string } | null
+ * }
  * @returns {{ multiplier: number, reasons: string[] }}
  */
 export function computeFranchiseReputation(meta, context = {}) {
-  const { userTeamId = null, currentSeason = 0 } = context;
+  const { userTeamId = null, currentSeason = 0, coachingInstabilityPenalty = null } = context;
 
   const reasons = [];
   let shift = 0;
@@ -174,6 +180,12 @@ export function computeFranchiseReputation(meta, context = {}) {
       shift += LEVERAGE_MODIFIERS.FRANCHISE_DROUGHT;
       reasons.push('Franchise playoff drought raises free agent skepticism');
     }
+  }
+
+  // Coaching instability: 3+ changes in last 3 seasons → +6% demand premium
+  if (coachingInstabilityPenalty?.penalty) {
+    shift += LEVERAGE_MODIFIERS.COACHING_INSTABILITY;
+    reasons.push(coachingInstabilityPenalty.reason ?? 'Franchise instability — frequent coaching changes');
   }
 
   return { multiplier: 1 + shift, reasons };

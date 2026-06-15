@@ -1,6 +1,7 @@
 /**
  * coaching-philosophy-effects.js
  * Single source of truth for coaching philosophy → simulation modifier math.
+ * Also applies V1 coach overall-rating scheme multiplier (Coaching Carousel).
  * All functions are pure (no side effects, no imports from game-simulator).
  *
  * AUDIT FINDINGS (feat/coaching-philosophy-effects)
@@ -37,6 +38,8 @@
  * via getCoachingMods(team.staff). applyCoachingModifiers() layers philosophy mods
  * on top of those mods before stat generation runs. Single callsite per team.
  */
+
+import { getCoachSchemeMultiplier } from './coaching/coachingEngine.js';
 
 // ── Philosophy enum mirrors (kept local; no runtime dependency on staffPhilosophy.js) ─
 const OFF = Object.freeze({
@@ -351,15 +354,30 @@ export function applyCoachingModifiers(teamRatings, coach, staff) {
   const offMods = getOffensivePhilosophyModifiers(coach, staff);
   const defMods = getDefensivePhilosophyModifiers(coach, staff);
 
+  // V1 Coaching Carousel: overall-rating scheme multiplier.
+  // Reads overallRating from HC and coordinator objects if present.
+  // Falls back to 1.0 for old saves without V1 data.
+  const hcRating  = hc?.overallRating ?? hc?.rating ?? null;
+  const hcMult    = hcRating != null ? getCoachSchemeMultiplier(hcRating) : 1.0;
+
+  const oc = extractOC(staff);
+  const dc = extractDC(staff);
+  const ocRating  = oc?.overallRating ?? oc?.rating ?? null;
+  const ocMult    = ocRating != null ? getCoachSchemeMultiplier(ocRating) : 1.0;
+  const dcRating  = dc?.overallRating ?? dc?.rating ?? null;
+  const dcMult    = dcRating != null ? getCoachSchemeMultiplier(dcRating) : 1.0;
+
   const base = teamRatings ?? {};
   return {
     ...base,
-    passVolume:   (base.passVolume   ?? 1) * offMods.passingMod,
-    runVolume:    (base.runVolume    ?? 1) * offMods.rushingMod,
-    passAccuracy: (base.passAccuracy ?? 1) * offMods.tempoMod,
-    redZoneMod:   (base.redZoneMod   ?? 1) * offMods.redZoneMod,
-    sackChance:   (base.sackChance    ?? 1) * defMods.pressureMod,
-    defIntChance: (base.defIntChance ?? 1) * defMods.coverageMod,
-    runStop:      (base.runStop      ?? 1) * defMods.runStopMod,
+    // Offensive weights: HC × OC multipliers
+    passVolume:   (base.passVolume   ?? 1) * offMods.passingMod  * hcMult * ocMult,
+    runVolume:    (base.runVolume    ?? 1) * offMods.rushingMod  * hcMult * ocMult,
+    passAccuracy: (base.passAccuracy ?? 1) * offMods.tempoMod    * hcMult * ocMult,
+    redZoneMod:   (base.redZoneMod   ?? 1) * offMods.redZoneMod  * hcMult * ocMult,
+    // Defensive weights: HC × DC multipliers
+    sackChance:   (base.sackChance   ?? 1) * defMods.pressureMod * hcMult * dcMult,
+    defIntChance: (base.defIntChance ?? 1) * defMods.coverageMod * hcMult * dcMult,
+    runStop:      (base.runStop      ?? 1) * defMods.runStopMod  * hcMult * dcMult,
   };
 }
