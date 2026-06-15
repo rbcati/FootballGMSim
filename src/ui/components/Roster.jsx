@@ -1460,6 +1460,24 @@ function RosterTable({
                         >
                           {morale}
                         </span>
+                        {morale < 40 && (
+                          <span
+                            data-testid="roster-low-morale-flag"
+                            title="Low morale — player is disgruntled"
+                            style={{
+                              display: 'inline-block',
+                              padding: '1px 4px',
+                              borderRadius: 'var(--radius-pill)',
+                              background: '#FF453A',
+                              color: '#fff',
+                              fontSize: 9,
+                              fontWeight: 800,
+                              letterSpacing: '0.4px',
+                            }}
+                          >
+                            LOW
+                          </span>
+                        )}
                         {moraleContext?.reasons?.[0] && (
                           <span style={{ fontSize: 9, color: "var(--text-subtle)", maxWidth: 120, lineHeight: 1.2, textAlign: "center" }}>
                             {moraleContext.reasons[0]}

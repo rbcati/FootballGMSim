@@ -308,6 +308,60 @@ export function generateLeaguePulseItems(meta, data = {}) {
     }
   }
 
+  // 7. MORALE: Locker Room Watch (player crossed below 35)
+  // 8. MORALE: Veteran Presence (veteran leader bonus applied this week)
+  if (Array.isArray(players) && players.length > 0) {
+    const ALERT_THRESHOLD = 35;
+    for (const player of players) {
+      if (!player?.id || player?.teamId == null) continue;
+      const morale = Number(player.morale ?? 70);
+      const events = Array.isArray(player.moraleEvents) ? player.moraleEvents : [];
+
+      // 7. Locker Room Watch: player is disgruntled (below alert threshold)
+      if (morale < ALERT_THRESHOLD) {
+        const dedupeKey = `morale-alert-${player.id}-${season}-${week}`;
+        if (!items.some((i) => i.dedupeKey === dedupeKey)) {
+          items.push({
+            id:            dedupeKey,
+            season,
+            week,
+            type:          PULSE_TYPES.GENERAL,
+            headline:      'Locker Room Watch',
+            body:          `${player.name ?? 'A player'} (morale ${morale}) is showing signs of discontent.`,
+            importance:    PULSE_IMPORTANCE.MEDIUM,
+            relatedTeamId: String(player.teamId),
+            relatedPlayerId: String(player.id),
+            source:        'morale',
+            dedupeKey,
+          });
+        }
+      }
+
+      // 8. Veteran Presence: veteran leader bonus applied this exact week
+      const hasVeteranBonusThisWeek = events.some(
+        (e) => e.type === 'VETERAN_LEADER_BONUS' && e.season === season && e.week === week,
+      );
+      if (hasVeteranBonusThisWeek) {
+        const dedupeKey = `veteran-presence-${player.id}-${season}-${week}`;
+        if (!items.some((i) => i.dedupeKey === dedupeKey)) {
+          items.push({
+            id:            dedupeKey,
+            season,
+            week,
+            type:          PULSE_TYPES.GENERAL,
+            headline:      'Veteran Presence',
+            body:          `${player.name ?? 'A veteran'} is providing leadership and raising team morale.`,
+            importance:    PULSE_IMPORTANCE.LOW,
+            relatedTeamId: String(player.teamId),
+            relatedPlayerId: String(player.id),
+            source:        'morale',
+            dedupeKey,
+          });
+        }
+      }
+    }
+  }
+
   // Build the dedupe keys
   return items.map(item => ({
     ...item,
