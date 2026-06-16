@@ -16,6 +16,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { getRestructureSummaryForUI } from "../../core/contracts/restructureEngine.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -143,6 +144,120 @@ function SortHeader({ label, sortKey, currentSort, currentDir, onSort }) {
   );
 }
 
+// ── RestructureModal ──────────────────────────────────────────────────────────
+
+function RestructureModal({ player, team, season, onConfirm, onClose }) {
+  const summary = useMemo(
+    () => getRestructureSummaryForUI(player, team, season),
+    [player, team, season],
+  );
+
+  if (!summary.eligible) {
+    return (
+      <div
+        data-testid="restructure-modal"
+        style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center",
+        }}
+        onClick={onClose}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            background: "var(--surface-elevated)", borderRadius: 14,
+            padding: 24, maxWidth: 360, width: "90%",
+          }}
+        >
+          <div style={{ fontWeight: 800, fontSize: "var(--text-lg)", marginBottom: 12 }}>
+            Cannot Restructure
+          </div>
+          <p style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", marginBottom: 20 }}>
+            {summary.reason}
+          </p>
+          <button className="btn" style={{ width: "100%" }} onClick={onClose}>Close</button>
+        </div>
+      </div>
+    );
+  }
+
+  const { preview } = summary;
+  const isHoldout = Boolean(player?.holdout?.active);
+
+  return (
+    <div
+      data-testid="restructure-modal"
+      style={{
+        position: "fixed", inset: 0, zIndex: 9999,
+        background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "var(--surface-elevated)", borderRadius: 14,
+          padding: 24, maxWidth: 400, width: "92%",
+        }}
+      >
+        <div style={{ fontWeight: 800, fontSize: "var(--text-lg)", marginBottom: 4 }}>
+          {isHoldout ? "Restructure to Resolve Holdout" : "Restructure Contract"}
+        </div>
+        {isHoldout && (
+          <div
+            data-testid="restructure-modal-holdout-context"
+            style={{
+              fontSize: "var(--text-xs)", color: "#FF9F0A", fontWeight: 600,
+              background: "#FF9F0A18", border: "1px solid #FF9F0A44",
+              borderRadius: 6, padding: "4px 10px", marginBottom: 10,
+            }}
+          >
+            Player is on active holdout — restructuring will resolve the dispute.
+          </div>
+        )}
+        <p style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 16 }}>
+          {player.name} · {player.pos} · OVR {player.ovr}
+        </p>
+
+        <div style={{ display: "grid", gap: 8, fontSize: "var(--text-sm)" }}>
+          {[
+            ["Current cap hit", `$${(preview?.currentCapHit ?? 0).toFixed(1)}M`],
+            ["New cap hit", `$${(preview?.newCapHit ?? 0).toFixed(1)}M`],
+            ["Saving this year", `$${(preview?.currentYearSaving ?? 0).toFixed(1)}M`],
+            ["Dead cap per future year", `$${(preview?.deadCapPerFutureYear ?? 0).toFixed(1)}M`],
+            ["Void year dead cap", `$${(preview?.voidYearDeadCap ?? 0).toFixed(1)}M`],
+            ["Expires after season", preview?.expiresAfterSeason ?? "—"],
+            ["Restructures remaining", preview?.restructuresRemaining ?? 0],
+          ].map(([label, value]) => (
+            <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ color: "var(--text-muted)" }}>{label}</span>
+              <span style={{ fontWeight: 700 }}>{value}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+          <button
+            className="btn"
+            style={{ flex: 1, background: "var(--surface-strong)" }}
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            data-testid="restructure-confirm-button"
+            className="btn btn-primary"
+            style={{ flex: 2 }}
+            onClick={() => onConfirm(player)}
+          >
+            {isHoldout ? "Restructure & Resolve Holdout" : "Confirm Restructure"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function RosterManager({ league, actions }) {
@@ -155,6 +270,7 @@ export default function RosterManager({ league, actions }) {
   const [sortKey, setSortKey] = useState("ovr");
   const [sortDir, setSortDir] = useState("desc");
   const [releasing, setReleasing] = useState(null); // playerId pending confirm
+  const [restructureTarget, setRestructureTarget] = useState(null); // player to restructure
   const [error, setError] = useState(null);
 
   const fetchRoster = useCallback(async () => {
@@ -221,6 +337,18 @@ export default function RosterManager({ league, actions }) {
     }
   };
 
+  const handleRestructureConfirm = async (player) => {
+    setRestructureTarget(null);
+    try {
+      await actions.restructureContract(player.id, teamId);
+      setError(null);
+      fetchRoster();
+    } catch (e) {
+      console.error("restructureContract failed:", e);
+      setError(e?.message ?? `Could not restructure ${player?.name ?? "player"}'s contract.`);
+    }
+  };
+
   if (teamId == null) {
     return (
       <div
@@ -238,9 +366,19 @@ export default function RosterManager({ league, actions }) {
   const capUsed = team?.capUsed ?? 0;
   const capTotal = team?.capTotal ?? 255;
   const capRoom = team?.capRoom ?? capTotal - capUsed;
+  const currentSeason = Number(league?.season ?? league?.year ?? 0);
 
   return (
     <div>
+      {restructureTarget && (
+        <RestructureModal
+          player={restructureTarget}
+          team={team}
+          season={currentSeason}
+          onConfirm={handleRestructureConfirm}
+          onClose={() => setRestructureTarget(null)}
+        />
+      )}
       {error && (
         <div
           role="alert"
@@ -527,49 +665,70 @@ export default function RosterManager({ league, actions }) {
                           paddingRight: "var(--space-3)",
                         }}
                       >
-                        {isReleasing ? (
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: "var(--space-1)",
-                              justifyContent: "center",
-                            }}
-                          >
-                            <button
-                              className="btn btn-danger"
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                          {(() => {
+                            const { eligible: canRe } = getRestructureSummaryForUI(player, team, currentSeason);
+                            if (!canRe) return null;
+                            return (
+                              <button
+                                data-testid={`restructure-btn-${player.id}`}
+                                className="btn"
+                                style={{
+                                  fontSize: "var(--text-xs)",
+                                  padding: "2px 8px",
+                                  color: "var(--accent)",
+                                  borderColor: "var(--accent)",
+                                }}
+                                onClick={() => setRestructureTarget(player)}
+                              >
+                                Restructure
+                              </button>
+                            );
+                          })()}
+                          {isReleasing ? (
+                            <div
                               style={{
-                                fontSize: "var(--text-xs)",
-                                padding: "2px 10px",
+                                display: "flex",
+                                gap: "var(--space-1)",
+                                justifyContent: "center",
                               }}
-                              onClick={() => handleRelease(player)}
                             >
-                              Confirm
-                            </button>
+                              <button
+                                className="btn btn-danger"
+                                style={{
+                                  fontSize: "var(--text-xs)",
+                                  padding: "2px 10px",
+                                }}
+                                onClick={() => handleRelease(player)}
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                className="btn"
+                                style={{
+                                  fontSize: "var(--text-xs)",
+                                  padding: "2px 8px",
+                                }}
+                                onClick={() => setReleasing(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
                             <button
                               className="btn"
                               style={{
                                 fontSize: "var(--text-xs)",
-                                padding: "2px 8px",
+                                padding: "2px 10px",
+                                color: "var(--danger)",
+                                borderColor: "var(--danger)",
                               }}
-                              onClick={() => setReleasing(null)}
+                              onClick={() => handleRelease(player)}
                             >
-                              Cancel
+                              Release
                             </button>
-                          </div>
-                        ) : (
-                          <button
-                            className="btn"
-                            style={{
-                              fontSize: "var(--text-xs)",
-                              padding: "2px 10px",
-                              color: "var(--danger)",
-                              borderColor: "var(--danger)",
-                            }}
-                            onClick={() => handleRelease(player)}
-                          >
-                            Release
-                          </button>
-                        )}
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
