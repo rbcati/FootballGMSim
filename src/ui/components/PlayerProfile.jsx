@@ -40,6 +40,7 @@ import { buildPlayerAdvancedStatsView } from "../utils/playerAdvancedStatsViewMo
 import { getPlayerMoraleSummary } from "../../core/mood/playerMoraleEngine.js";
 import { getPlayerAwardSummary, AWARD_LABELS, AWARD_TYPES } from "../../core/awards/awardEngine.js";
 import { getNegotiationContext } from "../../core/contracts/negotiationModifiers.js";
+import { TRACKED_STATS } from "../../core/awards/statLeaderboard.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -1482,6 +1483,37 @@ export default function PlayerProfile({
                           · {negCtx.feedbackLine}
                         </span>
                       )}
+                    </div>
+                  );
+                })()}
+
+                {/* ── All-Time Rank ── */}
+                {playerView && league?.allTimeLeaderboards && (() => {
+                  const pid = String(playerView.id ?? '');
+                  const matches = [];
+                  for (const stat of TRACKED_STATS) {
+                    if (matches.length >= 2) break;
+                    const board = league.allTimeLeaderboards[stat.key];
+                    if (!Array.isArray(board)) continue;
+                    const entry = board.find((e) => String(e.playerId) === pid);
+                    if (entry) matches.push({ rank: entry.rank, label: stat.label });
+                  }
+                  if (!matches.length) return null;
+                  return (
+                    <div
+                      data-testid="player-profile-alltime-rank"
+                      style={{ marginTop: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
+                    >
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>All-Time</span>
+                      {matches.map(({ rank, label }) => (
+                        <span
+                          key={label}
+                          data-testid="player-profile-alltime-rank-entry"
+                          style={{ fontSize: 'var(--text-xs)', color: 'var(--warning)', fontWeight: 700 }}
+                        >
+                          #{rank} {label}
+                        </span>
+                      ))}
                     </div>
                   );
                 })()}

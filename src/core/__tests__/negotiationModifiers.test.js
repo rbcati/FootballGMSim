@@ -184,6 +184,94 @@ describe('computePlayerLeverage', () => {
   });
 });
 
+// ── computePlayerLeverage — HOF status modifiers (Feature B) ────────────────
+
+describe('computePlayerLeverage — HOF modifiers', () => {
+  it('HOF inducted applies +20% modifier', () => {
+    const player = makePlayer({ hofStatus: 'inducted' });
+    const context = { moraleSummary: makeMoraleSummary(70), awardSummary: makeAwardSummary(), currentSeason: 2025 };
+    const result = computePlayerLeverage(player, context);
+    expect(result.multiplier).toBeCloseTo(1 + LEVERAGE_MODIFIERS.HOF_INDUCTED);
+    expect(result.reasons.some((r) => /Hall of Famer/i.test(r))).toBe(true);
+  });
+
+  it('HOF nominee applies +8% modifier', () => {
+    const player = makePlayer({ hofStatus: 'nominee' });
+    const context = { moraleSummary: makeMoraleSummary(70), awardSummary: makeAwardSummary(), currentSeason: 2025 };
+    const result = computePlayerLeverage(player, context);
+    expect(result.multiplier).toBeCloseTo(1 + LEVERAGE_MODIFIERS.HOF_NOMINEE);
+    expect(result.reasons.some((r) => /HOF nominee/i.test(r))).toBe(true);
+  });
+
+  it('HOF eligible applies no modifier', () => {
+    const player = makePlayer({ hofStatus: 'eligible' });
+    const context = { moraleSummary: makeMoraleSummary(70), awardSummary: makeAwardSummary(), currentSeason: 2025 };
+    const result = computePlayerLeverage(player, context);
+    expect(result.multiplier).toBe(1);
+    expect(result.reasons.length).toBe(0);
+  });
+
+  it('hofStatus absent applies no modifier, no crash', () => {
+    const player = makePlayer(); // no hofStatus field
+    const context = { moraleSummary: makeMoraleSummary(70), awardSummary: makeAwardSummary(), currentSeason: 2025 };
+    const result = computePlayerLeverage(player, context);
+    expect(result.multiplier).toBe(1);
+    expect(result.reasons.length).toBe(0);
+  });
+
+  it('hofStatus "none" applies no modifier', () => {
+    const player = makePlayer({ hofStatus: 'none' });
+    const context = { moraleSummary: makeMoraleSummary(70), awardSummary: makeAwardSummary(), currentSeason: 2025 };
+    const result = computePlayerLeverage(player, context);
+    expect(result.multiplier).toBe(1);
+    expect(result.reasons.length).toBe(0);
+  });
+
+  it('MVP + HOF inducted stacks to +35%, capped at +25% by applyNegotiationModifiers', () => {
+    const player = makePlayer({
+      hofStatus: 'inducted',
+      awards: [{ type: 'MVP', season: 2024, dedupeKey: 'MVP_2024' }],
+    });
+    const context = { moraleSummary: makeMoraleSummary(70), awardSummary: makeAwardSummary({ mvpCount: 1 }), currentSeason: 2025 };
+    const leverage = computePlayerLeverage(player, context);
+    // Raw shift: HOF_INDUCTED(0.20) + MVP_RECENT(0.15) = 0.35 — above cap
+    const rawShift = LEVERAGE_MODIFIERS.HOF_INDUCTED + LEVERAGE_MODIFIERS.MVP_RECENT;
+    expect(rawShift).toBeCloseTo(0.35);
+    // multiplier before cap is 1.35
+    expect(leverage.multiplier).toBeCloseTo(1 + rawShift);
+    // After applying with applyNegotiationModifiers, annual is capped at +25%
+    const neutralFranchise = { multiplier: 1, reasons: [] };
+    const base = { baseAnnual: 20, yearsTotal: 3, signingBonus: 5, guaranteedPct: 0.5 };
+    const adjusted = applyNegotiationModifiers(base, leverage, neutralFranchise);
+    expect(adjusted._negotiationShift).toBeCloseTo(LEVERAGE_MODIFIERS.MAX_SHIFT);
+    expect(adjusted.baseAnnual).toBeCloseTo(20 * (1 + LEVERAGE_MODIFIERS.MAX_SHIFT));
+  });
+
+  it('Champion + HOF nominee stacks correctly within cap', () => {
+    const player = makePlayer({
+      hofStatus: 'nominee',
+      awards: [{ type: 'LEAGUE_CHAMPION', season: 2023, dedupeKey: 'CHAMPION_2023' }],
+    });
+    const context = { moraleSummary: makeMoraleSummary(70), awardSummary: makeAwardSummary({ championshipCount: 1 }), currentSeason: 2025 };
+    const leverage = computePlayerLeverage(player, context);
+    // HOF_NOMINEE(0.08) + LEAGUE_CHAMPION_HISTORY(0.08) = 0.16, within cap
+    const expected = LEVERAGE_MODIFIERS.HOF_NOMINEE + LEVERAGE_MODIFIERS.LEAGUE_CHAMPION_HISTORY;
+    expect(leverage.multiplier).toBeCloseTo(1 + expected);
+    expect(expected).toBeLessThan(LEVERAGE_MODIFIERS.MAX_SHIFT);
+  });
+
+  it('Disgruntled morale + HOF inducted: morale discount partially offsets HOF premium, net within cap', () => {
+    const player = makePlayer({ hofStatus: 'inducted', morale: 30 });
+    const context = { moraleSummary: makeMoraleSummary(30), awardSummary: makeAwardSummary(), currentSeason: 2025 };
+    const leverage = computePlayerLeverage(player, context);
+    // HOF_INDUCTED(0.20) + MORALE_DISGRUNTLED(-0.10) = 0.10 net
+    const expected = LEVERAGE_MODIFIERS.HOF_INDUCTED + LEVERAGE_MODIFIERS.MORALE_DISGRUNTLED;
+    expect(leverage.multiplier).toBeCloseTo(1 + expected);
+    expect(expected).toBeGreaterThan(0); // net is still positive
+    expect(Math.abs(expected)).toBeLessThan(LEVERAGE_MODIFIERS.MAX_SHIFT);
+  });
+});
+
 // ── computeFranchiseReputation ────────────────────────────────────────────────
 
 describe('computeFranchiseReputation', () => {

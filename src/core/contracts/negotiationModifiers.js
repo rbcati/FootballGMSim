@@ -24,6 +24,10 @@ export const LEVERAGE_MODIFIERS = Object.freeze({
   ALL_PRO_MULTIPLE: 0.10,
   /** League champion in any season → +8% demand premium */
   LEAGUE_CHAMPION_HISTORY: 0.08,
+  /** Hall of Fame inductee → +20% demand premium */
+  HOF_INDUCTED: 0.20,
+  /** HOF nominee on the ballot → +8% demand premium */
+  HOF_NOMINEE: 0.08,
   /** Disgruntled morale (< 40) → −10% demand */
   MORALE_DISGRUNTLED: -0.10,
   /** Frustrated morale (40–54) → −5% demand */
@@ -78,6 +82,18 @@ export function computePlayerLeverage(player, context = {}) {
 
   const reasons = [];
   let shift = 0;
+
+  // ── HOF status modifier ─────────────────────────────────────────────────
+  // Read directly from player.hofStatus — no import needed (already on player).
+
+  if (player?.hofStatus === 'inducted') {
+    shift += LEVERAGE_MODIFIERS.HOF_INDUCTED;
+    reasons.push('Hall of Famer commands a premium');
+  } else if (player?.hofStatus === 'nominee') {
+    shift += LEVERAGE_MODIFIERS.HOF_NOMINEE;
+    reasons.push('HOF nominee on the market');
+  }
+  // 'eligible' → no modifier; absent / 'none' → no modifier, no crash
 
   // ── Award modifiers ──────────────────────────────────────────────────────
 
