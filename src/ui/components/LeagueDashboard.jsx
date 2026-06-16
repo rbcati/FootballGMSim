@@ -76,6 +76,7 @@ import StandingsCenter from "./StandingsCenter.jsx";
 import SectionSubnav from "./SectionSubnav.jsx";
 import { buildLatestResultsSummary } from "../utils/lastResultSummary.js";
 import { getAppShellContext } from "../utils/appShellContext.js";
+import { TRACKED_STATS } from "../../core/awards/statLeaderboard.js";
 import {
   clampPercent,
   deriveTeamCapSnapshot,
@@ -209,6 +210,7 @@ const BASE_TABS = [
   "Team History",
   "Hall of Fame",
   "Awards & Records",
+  "All-Time Records",
   "Season Recap",
   "Saves",
   "God Mode",
@@ -223,7 +225,7 @@ const BASE_TABS = [
 const NAV_GROUPS = [
   { id: SHELL_SECTIONS.hq, title: "HQ", tabs: ["HQ"] },
   { id: SHELL_SECTIONS.team, title: "Team Management", tabs: ["Team", "Roster Hub", "Roster", "Depth Chart", "Weekly Prep", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center", "💰 Cap"] },
-  { id: SHELL_SECTIONS.league, title: "League Office", tabs: ["League", "Weekly Results", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "Free Agency", "Draft", "History Hub", "Draft History", "History", "Awards & Records", "Season Recap"] },
+  { id: SHELL_SECTIONS.league, title: "League Office", tabs: ["League", "Weekly Results", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "Free Agency", "Draft", "History Hub", "Draft History", "History", "Awards & Records", "All-Time Records", "Season Recap"] },
   { id: SHELL_SECTIONS.news, title: "News", tabs: ["News", "Story", "League Pulse"] },
 ];
 
@@ -519,6 +521,105 @@ function getPhasePriorityTabs(phase) {
   if (phase === "preseason") return ["HQ", "Roster Hub", "Depth Chart", "Training"];
   if (phase === "playoffs") return ["HQ", "Postseason", "Weekly Prep", "Game Plan", "Injuries"];
   return ["HQ", "Weekly Prep", "Game Plan", "Roster", "Transactions"];
+}
+
+// ── AllTimeRecordsPanel ───────────────────────────────────────────────────────
+
+function AllTimeRecordsPanel({ league, onPlayerSelect }) {
+  const [selectedStat, setSelectedStat] = React.useState(TRACKED_STATS[0].key);
+  const leaderboards = league?.allTimeLeaderboards ?? {};
+  const board = leaderboards[selectedStat] ?? [];
+  const statDef = TRACKED_STATS.find((s) => s.key === selectedStat) ?? TRACKED_STATS[0];
+
+  return (
+    <div data-testid="all-time-records-panel" style={{ padding: 'var(--space-4)' }}>
+      <div style={{ marginBottom: 'var(--space-3)' }}>
+        <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 800, marginBottom: 'var(--space-1)' }}>All-Time Records</h2>
+        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', margin: 0 }}>
+          Career totals combining Hall of Fame snapshots and active player stats.
+        </p>
+      </div>
+
+      {/* Stat category selector */}
+      <div
+        data-testid="all-time-records-stat-selector"
+        style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 'var(--space-4)' }}
+      >
+        {TRACKED_STATS.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            data-testid={`stat-tab-${s.key}`}
+            className={`standings-tab${selectedStat === s.key ? ' active' : ''}`}
+            onClick={() => setSelectedStat(s.key)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Leaderboard table */}
+      <div style={{ border: '1px solid var(--hairline)', borderRadius: 8, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-xs)' }}>
+          <thead>
+            <tr style={{ background: 'var(--surface-strong)' }}>
+              <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 700, width: 36 }}>#</th>
+              <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 700 }}>Player</th>
+              <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 700, width: 50 }}>POS</th>
+              <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 700 }}>Team</th>
+              <th style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 700 }}>{statDef.label.replace('Career ', '')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {board.length === 0 ? (
+              <tr>
+                <td colSpan={5} style={{ padding: '20px 10px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No data yet. Complete seasons to populate all-time records.
+                </td>
+              </tr>
+            ) : board.map((entry) => (
+              <tr
+                key={entry.playerId}
+                data-testid="all-time-leaderboard-row"
+                style={{ borderTop: '1px solid var(--hairline)' }}
+              >
+                <td style={{ padding: '6px 10px', color: entry.rank === 1 ? 'var(--warning)' : 'var(--text-muted)', fontWeight: entry.rank === 1 ? 900 : 400 }}>
+                  {entry.rank}
+                </td>
+                <td style={{ padding: '6px 10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="btn-link"
+                      onClick={() => onPlayerSelect?.(entry.playerId)}
+                    >
+                      {entry.playerName}
+                    </button>
+                    {entry.isInducted && (
+                      <span title="Hall of Fame inductee" style={{ color: '#b8860b', fontSize: 11 }}>★</span>
+                    )}
+                    {entry.isActive && !entry.isInducted && (
+                      <span
+                        data-testid="active-badge"
+                        style={{ fontSize: 10, color: 'var(--success)', border: '1px solid var(--success)', borderRadius: 999, padding: '0 4px', lineHeight: 1.6 }}
+                      >
+                        Active
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td style={{ padding: '6px 10px', color: 'var(--text-muted)' }}>{entry.position}</td>
+                <td style={{ padding: '6px 10px', color: 'var(--text-muted)' }}>{entry.teamName}</td>
+                <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>
+                  {Number(entry.value).toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 export default function LeagueDashboard({
@@ -1392,6 +1493,11 @@ export default function LeagueDashboard({
         {activeTab === "Awards & Records" && (
           <TabErrorBoundary label="Awards & Records">
             <AwardsRecordsScreen actions={actions} league={league} onPlayerSelect={handlePlayerSelect} onTeamSelect={handleTeamSelect} onBack={() => setActiveTab("History Hub")} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "All-Time Records" && (
+          <TabErrorBoundary label="All-Time Records">
+            <AllTimeRecordsPanel league={league} onPlayerSelect={handlePlayerSelect} />
           </TabErrorBoundary>
         )}
         {activeTab === "Postseason" && (

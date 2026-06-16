@@ -159,6 +159,7 @@ import { parseWeeklyHeadlines } from '../core/history/NewsEngine.ts';
 import { calculateAwardRaces, selectProBowlers } from '../core/awards-logic.js';
 import { determineSeasonAwards, applySeasonAwards, checkCareerMilestones, getPlayerAwardSummary, AWARD_TYPES as ENGINE_AWARD_TYPES, AWARD_LABELS as ENGINE_AWARD_LABELS } from '../core/awards/awardEngine.js';
 import { generateHofBallot, resolveHofVote, applyHofInductions, ensureHofMeta } from '../core/awards/hofEngine.js';
+import { buildAllLeaderboards } from '../core/awards/statLeaderboard.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
 import { getZeroStats as getZeroSeasonStatsSchema } from '../core/state.js';
@@ -1085,6 +1086,13 @@ function buildViewState() {
     standingsContext,
     coachingMarket: Array.isArray(meta?.coachingMarket) ? meta.coachingMarket : [],
     teams,
+    allTimeLeaderboards: (() => {
+      const allPlayers = cache.getAllPlayers().map((p) => {
+        const t = p.teamId != null ? cache.getTeam(p.teamId) : null;
+        return t ? { ...p, teamName: t.name ?? t.abbr } : p;
+      });
+      return buildAllLeaderboards(Array.isArray(meta?.hofRoster) ? meta.hofRoster : [], allPlayers);
+    })(),
     ...(typeof globalThis !== 'undefined' && globalThis.__DYNASTY_SOAK_PROFILE__ && globalThis.__DYNASTY_SOAK_LAST_BATCH__
       ? { dynastySoakSimBatch: { ...globalThis.__DYNASTY_SOAK_LAST_BATCH__ } }
       : {}),
@@ -7021,6 +7029,7 @@ async function handleGetFreeAgents(payload, id) {
           pos:       p.pos,
           age:       p.age,
           ovr:       p.ovr,
+          hofStatus: p.hofStatus ?? 'none',
           scoutOvr: scoutingView?.estimatedOvr ?? p.ovr,
           scoutUncertaintyBand: scoutingView?.uncertainty ?? 0,
           scoutConfidenceLabel: scoutingView?.confidenceLabel ?? 'Medium confidence',

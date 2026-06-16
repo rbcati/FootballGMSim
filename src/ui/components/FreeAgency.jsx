@@ -1807,14 +1807,17 @@ export default function FreeAgency({
                           {(() => {
                             const leverageLabel = player?.demandProfile?.leverageLabel;
                             if (!leverageLabel || leverageLabel === 'Standard') return null;
+                            const isHofInducted = player?.hofStatus === 'inducted';
+                            const displayLabel = isHofInducted ? 'Hall of Famer' : leverageLabel;
                             const leverageColor = leverageLabel === 'High Leverage' ? 'var(--warning)' : 'var(--success)';
+                            const badgeColor = isHofInducted ? '#b8860b' : leverageColor;
                             const feedbackLine = player?.demandProfile?.feedbackLine;
                             return (
                               <div data-testid="fa-leverage-indicator" style={{ marginBottom: 4 }}>
-                                <span style={{ fontSize: 10, fontWeight: 700, color: leverageColor, border: `1px solid ${leverageColor}`, borderRadius: 999, padding: "0 5px" }}>
-                                  {leverageLabel}
+                                <span data-testid="fa-leverage-label" style={{ fontSize: 10, fontWeight: 700, color: badgeColor, border: `1px solid ${badgeColor}`, borderRadius: 999, padding: "0 5px" }}>
+                                  {displayLabel}
                                 </span>
-                                {feedbackLine && (
+                                {feedbackLine && !isHofInducted && (
                                   <div data-testid="fa-leverage-reason" style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
                                     {feedbackLine}
                                   </div>

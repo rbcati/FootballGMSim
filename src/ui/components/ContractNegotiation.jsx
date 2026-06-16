@@ -6,7 +6,7 @@
 
 import React, { useState, useMemo } from "react";
 import PlayerCard from "./PlayerCard.jsx";
-import { getNegotiationContext } from "../../core/contracts/negotiationModifiers.js";
+import { getNegotiationContext, LEVERAGE_MODIFIERS } from "../../core/contracts/negotiationModifiers.js";
 import { getPlayerMoraleSummary } from "../../core/mood/playerMoraleEngine.js";
 import { getPlayerAwardSummary } from "../../core/awards/awardEngine.js";
 
@@ -278,6 +278,26 @@ export default function ContractNegotiation({
             >
               <span>Holdout Demand Premium</span>
               <span>+{Math.round((player.holdout.demandPremium ?? 0) * 100)}%</span>
+            </div>
+          )}
+          {(player?.hofStatus === 'inducted' || player?.hofStatus === 'nominee') && (
+            <div
+              data-testid="contract-negotiation-hof-premium"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: "var(--text-xs)",
+                marginTop: 6,
+                borderTop: "1px solid #b8860b44",
+                paddingTop: 6,
+                color: "#b8860b",
+                fontWeight: 700,
+              }}
+            >
+              <span>{player.hofStatus === 'inducted' ? 'HOF Demand Premium' : 'HOF Nominee Premium'}</span>
+              <span>+{player.hofStatus === 'inducted'
+                ? Math.round(LEVERAGE_MODIFIERS.HOF_INDUCTED * 100)
+                : Math.round(LEVERAGE_MODIFIERS.HOF_NOMINEE * 100)}%</span>
             </div>
           )}
           {(() => {

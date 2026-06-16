@@ -24,17 +24,20 @@ afterEach(cleanup);
 function FaLeverageIndicator({ player }) {
   const leverageLabel = player?.demandProfile?.leverageLabel;
   if (!leverageLabel || leverageLabel === 'Standard') return <div data-testid="no-leverage" />;
+  const isHofInducted = player?.hofStatus === 'inducted';
+  const displayLabel = isHofInducted ? 'Hall of Famer' : leverageLabel;
   const leverageColor = leverageLabel === 'High Leverage' ? 'var(--warning)' : 'var(--success)';
+  const badgeColor = isHofInducted ? '#b8860b' : leverageColor;
   const feedbackLine = player?.demandProfile?.feedbackLine;
   return (
     <div data-testid="fa-leverage-indicator">
       <span
         data-testid="fa-leverage-label"
-        style={{ color: leverageColor }}
+        style={{ color: badgeColor }}
       >
-        {leverageLabel}
+        {displayLabel}
       </span>
-      {feedbackLine && (
+      {feedbackLine && !isHofInducted && (
         <div data-testid="fa-leverage-reason">{feedbackLine}</div>
       )}
     </div>
@@ -232,5 +235,107 @@ describe('PlayerProfile negotiation profile', () => {
     render(<NegotiationProfile player={player} season={2025} />);
     expect(screen.getByTestId('player-profile-leverage-label').textContent).toBe('High Leverage');
     expect(screen.getByTestId('player-profile-negotiation-reason').textContent).toMatch(/thriving/i);
+  });
+});
+
+// ── FreeAgency HOF badge tests (Feature B) ───────────────────────────────────
+
+describe('FreeAgency leverage badge — HOF status', () => {
+  it('shows "Hall of Famer" label when hofStatus=inducted', () => {
+    const player = {
+      id: 20,
+      hofStatus: 'inducted',
+      demandProfile: { leverageLabel: 'High Leverage', feedbackLine: 'Hall of Famer commands a premium' },
+    };
+    render(<FaLeverageIndicator player={player} />);
+    expect(screen.getByTestId('fa-leverage-label').textContent).toBe('Hall of Famer');
+  });
+
+  it('does not show feedback reason line for HOF inductee (label is self-explanatory)', () => {
+    const player = {
+      id: 21,
+      hofStatus: 'inducted',
+      demandProfile: { leverageLabel: 'High Leverage', feedbackLine: 'Hall of Famer commands a premium' },
+    };
+    render(<FaLeverageIndicator player={player} />);
+    expect(screen.queryByTestId('fa-leverage-reason')).toBeNull();
+  });
+
+  it('shows "High Leverage" (not Hall of Famer) when hofStatus is nominee', () => {
+    const player = {
+      id: 22,
+      hofStatus: 'nominee',
+      demandProfile: { leverageLabel: 'High Leverage', feedbackLine: 'HOF nominee on the market' },
+    };
+    render(<FaLeverageIndicator player={player} />);
+    expect(screen.getByTestId('fa-leverage-label').textContent).toBe('High Leverage');
+    expect(screen.getByTestId('fa-leverage-reason').textContent).toMatch(/HOF nominee/i);
+  });
+
+  it('shows standard label when hofStatus is absent', () => {
+    const player = {
+      id: 23,
+      demandProfile: { leverageLabel: 'High Leverage', feedbackLine: 'Recent MVP award increases his market value' },
+    };
+    render(<FaLeverageIndicator player={player} />);
+    expect(screen.getByTestId('fa-leverage-label').textContent).toBe('High Leverage');
+  });
+
+  it('HOF premium absent from indicator when hofStatus is none', () => {
+    const player = {
+      id: 24,
+      hofStatus: 'none',
+      demandProfile: { leverageLabel: 'Standard', feedbackLine: null },
+    };
+    render(<FaLeverageIndicator player={player} />);
+    expect(screen.getByTestId('no-leverage')).toBeTruthy();
+    expect(screen.queryByTestId('fa-leverage-label')).toBeNull();
+  });
+});
+
+// ── ContractNegotiation HOF premium line tests ────────────────────────────────
+
+import { LEVERAGE_MODIFIERS } from '../../core/contracts/negotiationModifiers.js';
+
+function HofPremiumLine({ player }) {
+  if (!player?.hofStatus || player.hofStatus === 'none' || player.hofStatus === 'eligible') return null;
+  return (
+    <div data-testid="contract-negotiation-hof-premium" style={{ display: 'flex', justifyContent: 'space-between' }}>
+      <span>{player.hofStatus === 'inducted' ? 'HOF Demand Premium' : 'HOF Nominee Premium'}</span>
+      <span>+{player.hofStatus === 'inducted'
+        ? Math.round(LEVERAGE_MODIFIERS.HOF_INDUCTED * 100)
+        : Math.round(LEVERAGE_MODIFIERS.HOF_NOMINEE * 100)}%</span>
+    </div>
+  );
+}
+
+describe('ContractNegotiation HOF premium line', () => {
+  it('shows HOF premium line when hofStatus=inducted', () => {
+    render(<HofPremiumLine player={{ hofStatus: 'inducted' }} />);
+    expect(screen.getByTestId('contract-negotiation-hof-premium')).toBeTruthy();
+    expect(screen.getByTestId('contract-negotiation-hof-premium').textContent).toContain('HOF Demand Premium');
+    expect(screen.getByTestId('contract-negotiation-hof-premium').textContent).toContain('+20%');
+  });
+
+  it('shows HOF nominee premium line when hofStatus=nominee', () => {
+    render(<HofPremiumLine player={{ hofStatus: 'nominee' }} />);
+    expect(screen.getByTestId('contract-negotiation-hof-premium')).toBeTruthy();
+    expect(screen.getByTestId('contract-negotiation-hof-premium').textContent).toContain('HOF Nominee Premium');
+    expect(screen.getByTestId('contract-negotiation-hof-premium').textContent).toContain('+8%');
+  });
+
+  it('HOF premium absent from offer breakdown when hofStatus=none', () => {
+    const { container } = render(<HofPremiumLine player={{ hofStatus: 'none' }} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('HOF premium absent when hofStatus is absent', () => {
+    const { container } = render(<HofPremiumLine player={{}} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('HOF premium absent when hofStatus=eligible', () => {
+    const { container } = render(<HofPremiumLine player={{ hofStatus: 'eligible' }} />);
+    expect(container.firstChild).toBeNull();
   });
 });
