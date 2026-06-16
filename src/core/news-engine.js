@@ -206,6 +206,41 @@ class NewsEngine {
             await this.logNews('AWARD', text, teamId);
         }
     }
+
+    // ── FA Bidding Wars V1 templates ──────────────────────────────────────────
+
+    /** AI team signs a free agent. */
+    static async logFaSignedAi(player, team) {
+        if (!player || !team) return;
+        await this.logNews(
+            'FA_SIGNED_AI',
+            `${player.name} signs with ${team.name}.`,
+            team.id,
+            { playerId: player.id },
+        );
+    }
+
+    /** Player drew competing interest from multiple teams. */
+    static async logFaBiddingWar(player, n, teamIds = []) {
+        if (!player || n < 2) return;
+        await this.logNews(
+            'FA_BIDDING_WAR',
+            `${player.name} drew interest from ${n} teams.`,
+            null,
+            { playerId: player.id, competingTeamIds: teamIds },
+        );
+    }
+
+    /** User was outbid for a player. */
+    static async logFaOutbid(player, winningTeamName, winningTeamId = null) {
+        if (!player) return;
+        await this.logNews(
+            'FA_OUTBID',
+            `You were outbid for ${player.name} by ${winningTeamName}.`,
+            winningTeamId,
+            { playerId: player.id, winningTeamId },
+        );
+    }
 }
 
 

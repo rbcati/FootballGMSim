@@ -149,6 +149,12 @@ import {
   prunePendingOffers,
 } from '../core/freeAgency/pendingOffers.js';
 import {
+  shouldAITeamPursuePlayer,
+  computeAIOffer,
+  resolvePlayerChoice,
+  getAIFaTargets,
+} from '../core/freeAgency/aiFaEngine.js';
+import {
   calculateOffensiveSchemeFit, calculateDefensiveSchemeFit,
   computeTeamSchemeFits, schemeOvrBonus, recalcTeamSchemeFit,
   OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES,
@@ -7117,7 +7123,18 @@ async function handleGetFreeAgents(payload, id) {
     effectiveCapRoom: Math.round((userCapRoom - reservedPendingCap) * 10) / 10,
   };
 
-  post(toUI.FREE_AGENT_DATA, { freeAgents, faDay, faMaxDays, phase: meta.phase, pendingOffers, capSummary }, id);
+  // aiFaEngine V1: count of non-user pending AI offers per player (badge data for UI).
+  // AI bids live on player.offers (not in the pending ledger), so count there.
+  // Amounts are NOT included — the UI only shows the count before resolution.
+  const aiOfferCountByPlayerId = {};
+  for (const p of cache.getAllPlayers()) {
+    if (p.teamId != null && p.status !== 'free_agent') continue;
+    if (!Array.isArray(p.offers) || p.offers.length === 0) continue;
+    const aiCount = p.offers.filter((o) => Number(o?.teamId) !== Number(userTeamId)).length;
+    if (aiCount > 0) aiOfferCountByPlayerId[String(p.id)] = aiCount;
+  }
+
+  post(toUI.FREE_AGENT_DATA, { freeAgents, faDay, faMaxDays, phase: meta.phase, pendingOffers, capSummary, aiOfferCountByPlayerId }, id);
 }
 
 // ── Handler: COACHING ACTIONS ────────────────────────────────────────────────
@@ -10455,6 +10472,183 @@ async function handleAdvanceOffseason(payload, id) {
   post(toUI.STATE_UPDATE, buildViewState());
 }
 
+// ── aiFaEngine V1: inject AI competing offers into pending ledger ─────────────
+
+/**
+ * For each AI team that wants to pursue a free agent, build an offer and
+ * inject it into both player.offers and the pending ledger — the same path
+ * the user's SUBMIT_OFFER takes.  Cap validation mirrors handleSubmitOffer.
+ *
+ * Called once per FA day, before AiLogic.processFreeAgencyDay so the
+ * existing market resolution picks up the AI bids.
+ */
+async function injectAIFaBids(day) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const userTeamId = Number(meta?.userTeamId ?? -1);
+  const season = Number(meta?.season ?? meta?.year ?? 1);
+  const week   = Number(meta?.currentWeek ?? 1);
+
+  const allTeams   = cache.getAllTeams();
+  const allPlayers = cache.getAllPlayers();
+  const freeAgents = allPlayers.filter((p) => !p.teamId || p.status === 'free_agent');
+  if (freeAgents.length === 0) return;
+
+  const userTeam = cache.getTeam(userTeamId);
+
+  // Pre-compute one demand snapshot per FA player using the user-team context.
+  // This is "the market price" — same for every bidding team.
+  const demandByPlayerId = new Map();
+  for (const player of freeAgents) {
+    const snapshot = buildDemandSnapshotForOffer(player, userTeam);
+    const holdoutPremium = player?.holdout?.active ? Number(player.holdout.demandPremium ?? 0) : 0;
+    const adjustedAnnual = Math.round(snapshot.baseAnnual * (1 + holdoutPremium) * 10) / 10;
+    demandByPlayerId.set(player.id, { ...snapshot, baseAnnual: adjustedAnnual });
+  }
+
+  // For each AI team, identify candidates then run shouldAITeamPursuePlayer
+  const aiTargetMap = getAIFaTargets(allTeams, freeAgents, meta, season, week);
+
+  // Track AI cap reservations in-memory — AI bids are NOT written to the
+  // pending ledger (which is for user offer tracking only). Adding AI offers
+  // to the ledger would push it past MAX_LEDGER_ENTRIES and prune the user's
+  // pending offer from the front of the list.
+  const aiReservedCapByTeam = new Map(); // teamId → total $M reserved this pass
+
+  for (const [teamId, candidates] of aiTargetMap) {
+    if (Number(teamId) === userTeamId) continue;
+    const team = cache.getTeam(teamId);
+    if (!team) continue;
+
+    // Compute posture + scheme for this team
+    const posture = (() => {
+      const wins   = Number(team.wins   ?? 0);
+      const losses = Number(team.losses ?? 0);
+      const ties   = Number(team.ties   ?? 0);
+      const total  = wins + losses + ties;
+      if (total < 4) return 'middle';
+      const wp = (wins + ties * 0.5) / total;
+      if (wp >= 0.60) return 'contender';
+      if (wp >= 0.45) return 'playoff_hunt';
+      if (wp >= 0.38) return 'middle';
+      return 'rebuild';
+    })();
+    const scheme = team?.coach?.headCoach?.scheme ?? 'BALANCED';
+
+    for (const player of candidates) {
+      const demandSnapshot = demandByPlayerId.get(player.id);
+      if (!demandSnapshot) continue;
+      const adjustedDemand = demandSnapshot.baseAnnual;
+      if (!adjustedDemand || adjustedDemand <= 0) continue;
+
+      // Effective cap = team cap − AI reservations accumulated this pass
+      const alreadyReserved = aiReservedCapByTeam.get(Number(teamId)) ?? 0;
+      const effectiveCap = Math.max(0, Number(team.capRoom ?? 0) - alreadyReserved);
+
+      const context = { posture, season, week, scheme };
+      if (!shouldAITeamPursuePlayer(team, player, adjustedDemand, effectiveCap, context)) continue;
+
+      const { amount, years } = computeAIOffer(team, player, adjustedDemand, { posture, capSpace: effectiveCap });
+      const capHit = amount;
+
+      if (effectiveCap < capHit) continue;
+
+      const contract = {
+        baseAnnual:   amount,
+        yearsTotal:   years,
+        years,
+        signingBonus: 0,
+      };
+
+      // Update in-memory cap reservation for this AI team
+      aiReservedCapByTeam.set(Number(teamId), alreadyReserved + capHit);
+
+      // Inject into player.offers only (not into the pending ledger)
+      const freshPlayer = cache.getPlayer(player.id);
+      if (!freshPlayer) continue;
+      const existingOffers = Array.isArray(freshPlayer.offers) ? freshPlayer.offers : [];
+      const withoutThisTeam = existingOffers.filter((o) => Number(o?.teamId) !== Number(teamId));
+      cache.updatePlayer(player.id, {
+        offers: [...withoutThisTeam, { teamId, teamName: team.name, contract, timestamp: Date.now() }],
+      });
+    }
+  }
+}
+
+/**
+ * After AiLogic.processFreeAgencyDay runs, check signings against the pending
+ * ledger and emit news/pulse for outbids and bidding wars.
+ *
+ * @param {number}  day
+ * @param {Set}     preBidPlayerIds   – FA player ids before bidding/signing
+ * @param {Map}     aiCountByPlayerId – non-user offer counts snapshotted after
+ *                                      injectAIFaBids but before processFreeAgencyDay
+ *                                      (player.offers are cleared on signing)
+ */
+function emitFaCompetitionEvents(day, preBidPlayerIds, aiCountByPlayerId) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const userTeamId = Number(meta?.userTeamId ?? -1);
+  const season = Number(meta?.season ?? meta?.year ?? 1);
+  const week   = Number(meta?.currentWeek ?? 1);
+
+  const ledger = getPendingOffersLedger();
+
+  // Check which players got signed today
+  for (const pid of preBidPlayerIds) {
+    const player = cache.getPlayer(pid);
+    if (!player) continue;
+    const signedTeamId = (player.teamId != null && player.status !== 'free_agent') ? Number(player.teamId) : null;
+
+    // Bidding war pulse: 3+ total competing bids (AI + possible user) on a player
+    const aiCount = (aiCountByPlayerId instanceof Map ? aiCountByPlayerId.get(pid) : aiCountByPlayerId?.[pid]) ?? 0;
+    const userHadOffer = ledger.some((r) => Number(r.teamId) === userTeamId && Number(r.playerId) === pid && r.status === 'pending');
+    const totalBids = aiCount + (userHadOffer ? 1 : 0);
+    if (totalBids >= 3) {
+      const existingPulse = Array.isArray(meta?.leaguePulseItems) ? meta.leaguePulseItems : [];
+      const biddingWarKey = `fa_bidding_war_${pid}_${season}_${week}`;
+      if (!existingPulse.some((p) => p.dedupeKey === biddingWarKey)) {
+        const newPulse = {
+          season, week,
+          type: 'transaction',
+          headline: `${player.name} drew a bidding war — ${totalBids} teams competing`,
+          importance: 75,
+          dedupeKey: biddingWarKey,
+          relatedPlayerId: pid,
+        };
+        cache.setMeta({ leaguePulseItems: [newPulse, ...existingPulse].slice(0, 200) });
+        NewsEngine.logNews('FA_BIDDING_WAR', `${player.name} drew interest from ${totalBids} teams.`, null, { playerId: pid });
+      }
+    }
+
+    // fa_outbid: user had a pending offer and player signed with a different (AI) team
+    if (signedTeamId != null && signedTeamId !== userTeamId && userHadOffer) {
+      const winningTeam = cache.getTeam(signedTeamId);
+      const winningTeamName = winningTeam?.name ?? `Team ${signedTeamId}`;
+      post(toUI.NOTIFICATION, { level: 'warn', message: `You were outbid for ${player.name} by ${winningTeamName}.` });
+      NewsEngine.logNews('FA_OUTBID', `You were outbid for ${player.name} by ${winningTeamName}.`, signedTeamId, { playerId: pid, winningTeamId: signedTeamId });
+    }
+  }
+
+  // Hot FA market pulse: count signings this day
+  const signingsThisDay = Array.from(preBidPlayerIds).filter((pid) => {
+    const p = cache.getPlayer(pid);
+    return p && p.status !== 'free_agent' && p.teamId != null;
+  }).length;
+  if (signingsThisDay >= 2) {
+    const freshMeta = cache.getMeta();
+    const existingPulse = Array.isArray(freshMeta?.leaguePulseItems) ? freshMeta.leaguePulseItems : [];
+    const hotMarketKey = `fa_market_${season}_${week}`;
+    if (!existingPulse.some((p) => p.dedupeKey === hotMarketKey)) {
+      cache.setMeta({ leaguePulseItems: [{
+        season, week,
+        type: 'transaction',
+        headline: `${signingsThisDay} free agents signed this week`,
+        importance: 60,
+        dedupeKey: hotMarketKey,
+      }, ...existingPulse].slice(0, 200) });
+    }
+  }
+}
+
 // ── Handler: ADVANCE_FREE_AGENCY_DAY ──────────────────────────────────────────
 
 async function handleAdvanceFreeAgencyDay(payload, id) {
@@ -10483,8 +10677,39 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
         return;
     }
 
+    // ── aiFaEngine V1: inject AI competing offers before market resolution ──
+    // Snapshot free-agent player IDs before bids/signings for post-pass events.
+    const preBidFaIds = new Set(
+      cache.getAllPlayers()
+        .filter((p) => !p.teamId || p.status === 'free_agent')
+        .map((p) => p.id),
+    );
+    try {
+      await injectAIFaBids(day);
+    } catch (aiFaErr) {
+      console.warn('[Worker] aiFaEngine injection error (non-fatal):', aiFaErr.message);
+    }
+
+    // Snapshot AI offer counts BEFORE processFreeAgencyDay clears player.offers
+    // on signing. AI bids live on player.offers only (not in the pending ledger).
+    const userTeamIdForFa = Number(meta?.userTeamId ?? -1);
+    const aiCountByPlayerId = new Map();
+    for (const pid of preBidFaIds) {
+      const p = cache.getPlayer(pid);
+      if (!p || !Array.isArray(p.offers)) continue;
+      const aiCount = p.offers.filter((o) => Number(o?.teamId) !== userTeamIdForFa).length;
+      if (aiCount > 0) aiCountByPlayerId.set(pid, aiCount);
+    }
+
     // Process Day
     await AiLogic.processFreeAgencyDay(day);
+
+    // ── aiFaEngine V1: emit competition news/pulse after signings ───────────
+    try {
+      emitFaCompetitionEvents(day, preBidFaIds, aiCountByPlayerId);
+    } catch (aiFaEvtErr) {
+      console.warn('[Worker] aiFaEngine event emission error (non-fatal):', aiFaEvtErr.message);
+    }
 
     // ── Market V2 post-pass ─────────────────────────────────────────────────
     // Reconcile the ledger against today's signings: mark accepted offers,

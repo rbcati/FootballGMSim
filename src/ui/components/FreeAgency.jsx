@@ -990,6 +990,11 @@ export default function FreeAgency({
     return map;
   }, [faState?.pendingOffers]);
 
+  // aiFaEngine V1: competing AI offer counts per player (amounts withheld until resolution).
+  const aiOfferCountByPlayer = useMemo(() => {
+    return faState?.aiOfferCountByPlayerId ?? {};
+  }, [faState?.aiOfferCountByPlayerId]);
+
   const displayed = useMemo(() => {
     const base = filterFreeAgentsForView(evaluatedFaPool, {
       signedIds, posFilter, minOvr, nameFilter, advancedFilters, archetypeFilter, fitTierFilter, roleFilter, positionNeedOnly, needs: topNeeds,
@@ -1776,10 +1781,33 @@ export default function FreeAgency({
                             const offerStatus = offerStatusByPlayer.get(player.id);
                             if (!offerStatus) return null;
                             const tone = OFFER_STATUS_TONE[offerStatus.status] ?? "var(--text-muted)";
+                            const isOutbid = offerStatus.status === 'rejected' && (offerStatus.feedback ?? []).some((f) => typeof f === 'string' && f.includes('signed with'));
+                            const winningTeamName = isOutbid ? (() => { const m = (offerStatus.feedback?.[0] ?? '').match(/signed with (.+?) instead/); return m ? m[1] : null; })() : null;
                             return (
-                              <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: "0 6px" }}>
-                                {OFFER_STATUS_LABEL[offerStatus.status] ?? "Pending"}
-                              </span>
+                              <>
+                                <span data-testid={`fa-offer-status-${player.id}`} style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: "0 6px" }}>
+                                  {OFFER_STATUS_LABEL[offerStatus.status] ?? "Pending"}
+                                </span>
+                                {isOutbid && winningTeamName && (
+                                  <div data-testid={`fa-outbid-${player.id}`} style={{ fontSize: 10, color: "var(--danger)", marginTop: 2 }}>
+                                    Signed with {winningTeamName} — you were outbid
+                                  </div>
+                                )}
+                                {offerStatus.status === 'expired' && (offerStatus.feedback ?? []).some((f) => typeof f === 'string' && f.includes('negotiation window')) && (
+                                  <div data-testid={`fa-back-on-market-${player.id}`} style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+                                    Back on market — all offers rejected
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
+                          {(() => {
+                            const aiCount = aiOfferCountByPlayer[String(player.id)] ?? 0;
+                            if (aiCount === 0) return null;
+                            return (
+                              <div data-testid={`fa-competing-badge-${player.id}`} style={{ fontSize: 10, color: "var(--warning)", marginTop: 2, fontWeight: 600 }}>
+                                {aiCount} other team{aiCount === 1 ? '' : 's'} interested
+                              </div>
                             );
                           })()}
                           <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
