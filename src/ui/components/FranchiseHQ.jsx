@@ -530,6 +530,86 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         ))}
       </div>
 
+      {/* ── TRADE REQUEST ALERTS ─────────────────────────────────────────── */}
+      {(() => {
+        const alerts = Array.isArray(userTeam?.tradeRequestAlerts) ? userTeam.tradeRequestAlerts : [];
+        if (alerts.length === 0) return null;
+        return (
+          <section data-testid="hq-trade-request-alerts" aria-label="Trade request alerts">
+            {alerts.map((alert) => {
+              const isBoiling = safeNum(alert.stonewalledWeeks, 0) >= 4;
+              return (
+                <div
+                  key={alert.playerId}
+                  className="card"
+                  data-testid={`trade-request-alert-${alert.playerId}`}
+                  style={{
+                    margin: '4px 12px',
+                    padding: 'var(--space-3) var(--space-4)',
+                    border: `1px solid ${isBoiling ? '#FF453A44' : '#FF9F0A44'}`,
+                    background: isBoiling ? '#FF453A0E' : '#FF9F0A0E',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: 'var(--text-xs)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 900, color: isBoiling ? '#FF453A' : '#FF9F0A', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                      Trade Request
+                    </span>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      — {alert.playerName} ({alert.pos} · OVR {alert.ovr})
+                    </span>
+                    {isBoiling && (
+                      <span style={{ color: '#FF453A', fontWeight: 700 }}>
+                        · Week {alert.stonewalledWeeks} unresolved
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>
+                    Reason: {alert.reason?.replace(/_/g, ' ') ?? 'undisclosed'}
+                    {alert.stonewalledWeeks > 0 ? ` · ${alert.stonewalledWeeks}w unresolved` : ''}
+                  </div>
+                  {isBoiling && (
+                    <div style={{ color: '#FF453A', fontWeight: 600, marginBottom: 6 }}>
+                      Warning: locker room morale at risk
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{ color: '#34C759', borderColor: '#34C759', fontSize: 'var(--text-xs)', padding: '2px 8px' }}
+                      onClick={() => actions?.honorTradeRequest?.(alert.playerId)}
+                      data-testid={`honor-trade-request-${alert.playerId}`}
+                    >
+                      Honor — List on Block
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{ color: '#0A84FF', borderColor: '#0A84FF', fontSize: 'var(--text-xs)', padding: '2px 8px' }}
+                      onClick={() => actions?.offerExtensionToWithdraw?.(alert.playerId)}
+                      data-testid={`offer-extension-${alert.playerId}`}
+                    >
+                      Offer Extension
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{ color: isBoiling ? '#FF453A' : 'var(--text-muted)', borderColor: isBoiling ? '#FF453A' : 'var(--hairline)', fontSize: 'var(--text-xs)', padding: '2px 8px' }}
+                      onClick={() => actions?.stonewallTradeRequest?.(alert.playerId)}
+                      data-testid={`stonewall-trade-request-${alert.playerId}`}
+                    >
+                      Stonewall
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        );
+      })()}
+
       {/* ── COLLAPSED DRAWER: secondary content ─────────────────────────── */}
       <details className="hq-more-drawer" data-testid="hq-more-drawer">
         <summary className="hq-more-drawer__trigger">Season Pulse &amp; More ▾</summary>

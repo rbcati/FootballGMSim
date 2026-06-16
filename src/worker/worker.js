@@ -129,6 +129,17 @@ import {
   getPlayerMoraleSummary,
 } from '../core/mood/playerMoraleEngine.js';
 import {
+  TRADE_REQUEST_REASONS,
+  TRADE_REQUEST_MORALE_EVENTS,
+  TRADE_REQUEST_MORALE_DELTAS,
+  shouldPlayerRequestTrade,
+  getTradeRequestReason,
+  computeTradeValueModifier,
+  resolveTradeRequest,
+  evaluateWeeklyStonewall,
+  getActiveTradeRequests,
+} from '../core/trades/tradeRequestEngine.js';
+import {
   HOLDOUT_TRIGGERS,
   HOLDOUT_RESOLUTION,
   HOLDOUT_RETURNED_DELTA,
@@ -997,6 +1008,7 @@ function buildViewState() {
     coachHotSeat: t?.coach?.headCoach?.hotSeat ?? false,
     coachHCName: t?.coach?.headCoach?.name ?? null,
     coachHCRating: t?.coach?.headCoach?.overallRating ?? null,
+    tradeRequestAlerts: getActiveTradeRequests(t, roster),
     picks: Array.isArray(t?.picks)
       ? t.picks.map((pk) => ({
         id: pk.id,
@@ -3518,6 +3530,221 @@ async function handleAdvanceWeek(payload, id) {
       }
     } catch (holdoutErr) {
       console.warn('[Worker] Holdout evaluation error (non-fatal):', holdoutErr?.message);
+    }
+  }
+
+  // ── Trade Request Evaluation (regular season only) ───────────────────────────
+  if (meta.phase === 'regular') {
+    try {
+      const trSeasonId  = meta.currentSeasonId ?? meta.season ?? 0;
+      const trAllPlayers = cache.getAllPlayers();
+      const trAllTeams   = cache.getAllTeams();
+      const trUserTeamId = Number(meta.userTeamId ?? -1);
+
+      // Build per-team position depth maps (position → sorted player ids)
+      const teamDepthMaps = {};
+      for (const team of trAllTeams) {
+        const teamPlayers = trAllPlayers.filter((p) => Number(p?.teamId) === Number(team.id));
+        const byPos = {};
+        for (const p of teamPlayers) {
+          if (!byPos[p.pos]) byPos[p.pos] = [];
+          byPos[p.pos].push(p);
+        }
+        for (const pos of Object.keys(byPos)) {
+          byPos[pos].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+        }
+        teamDepthMaps[String(team.id)] = byPos;
+      }
+
+      // Evaluate each player for new trade requests and stonewall progression
+      for (const player of trAllPlayers) {
+        if (!player?.id || player.teamId == null) continue;
+        const team = cache.getTeam(player.teamId);
+        if (!team) continue;
+
+        const teamIdStr = String(team.id);
+        const byPos = teamDepthMaps[teamIdStr] ?? {};
+        const posGroup = byPos[player.pos] ?? [];
+        const depthRank = posGroup.findIndex((p) => Number(p.id) === Number(player.id));
+        const teamScheme = team?.coach?.headCoach?.scheme ?? team?.strategies?.offense ?? 'BALANCED';
+        const isMisfit   = isPositionMisfitForScheme(player?.pos, teamScheme);
+
+        const context = { depthRank: depthRank >= 0 ? depthRank : 0, isPositionMisfitForScheme: isMisfit };
+        const isUserTeam = Number(team.id) === trUserTeamId;
+
+        // ── Stonewall progression for existing pending requests ─────────────
+        if (player.tradeRequest?.status === 'pending') {
+          const { updatedPlayer: swPlayer, moraleEvents: swEvents } = resolveTradeRequest(
+            player, 'stonewall', { season: trSeasonId, week },
+          );
+          cache.updatePlayer(player.id, { tradeRequest: swPlayer.tradeRequest });
+
+          // Apply any morale hits to the player
+          let moralePlayer = cache.getPlayer(player.id) ?? player;
+          for (const evt of swEvents) {
+            moralePlayer = applyMoraleEvent(moralePlayer, evt, { season: trSeasonId, week });
+          }
+          if (swEvents.length > 0) {
+            cache.updatePlayer(player.id, { morale: moralePlayer.morale, moraleEvents: moralePlayer.moraleEvents });
+          }
+
+          // Apply TEAMMATE_TRADE_REQUEST to starters on the same team
+          const stonewalledWeeks = swPlayer.tradeRequest?.stonewalledWeeks ?? 0;
+          const { teamMoraleHit } = evaluateWeeklyStonewall(swPlayer);
+          if (teamMoraleHit !== 0) {
+            const STARTERS_COUNT = { QB: 1, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1 };
+            for (const teammate of trAllPlayers) {
+              if (Number(teammate?.teamId) !== Number(team.id)) continue;
+              if (Number(teammate.id) === Number(player.id)) continue;
+              const tPos = teammate.pos;
+              const tRank = (byPos[tPos] ?? []).findIndex((p) => Number(p.id) === Number(teammate.id));
+              const starterSlots = STARTERS_COUNT[tPos] ?? 1;
+              if (tRank < 0 || tRank >= starterSlots) continue; // only starters
+              const dedupeKey = `teammate_trade_request_${team.id}_${trSeasonId}_${week}`;
+              let tUpdated = cache.getPlayer(teammate.id) ?? teammate;
+              tUpdated = applyMoraleEvent(tUpdated, {
+                type:      TRADE_REQUEST_MORALE_EVENTS.TEAMMATE_TRADE_REQUEST,
+                delta:     teamMoraleHit,
+                season:    trSeasonId,
+                week,
+                reason:    `Teammate ${player.name ?? 'a player'} has an unresolved trade request`,
+                source:    'trade_request_engine',
+                dedupeKey,
+              }, { season: trSeasonId, week });
+              cache.updatePlayer(teammate.id, { morale: tUpdated.morale, moraleEvents: tUpdated.moraleEvents });
+            }
+          }
+
+          // Emit news at week 4 and 7 milestones
+          if (stonewalledWeeks === 4 || stonewalledWeeks === 7) {
+            const boilingItem = {
+              id:       `trade-stonewall-boiling-${player.id}-${trSeasonId}-${stonewalledWeeks}`,
+              headline: `${player.name ?? 'Player'}'s trade situation is getting uncomfortable — ${stonewalledWeeks} weeks unresolved`,
+              body:     `${player.name ?? 'A player'} (${team?.abbr ?? 'FA'}) has had an unresolved trade request for ${stonewalledWeeks} weeks. Locker room morale at risk.`,
+              week,
+              season:   trSeasonId,
+              type:     'TRADE_DRAMA',
+              teamId:   team.id,
+              priority: 'high',
+              dedupeKey: `trade-stonewall-boiling-${player.id}-${trSeasonId}-${stonewalledWeeks}`,
+            };
+            cache.setMeta(addNewsItem(cache.getMeta(), boilingItem));
+
+            // Pulse item at week 4
+            if (stonewalledWeeks === 4) {
+              const pulseMeta2 = cache.getMeta();
+              const tradeDramaPulse = {
+                id:            `trade_drama_${player.id}_${trSeasonId}`,
+                season:        trSeasonId,
+                week,
+                type:          'TRANSACTION',
+                headline:      `${player.name ?? 'Player'} trade situation heating up`,
+                body:          `${player.name ?? 'A player'} (${team?.abbr ?? 'FA'}) has been asking for a trade for ${stonewalledWeeks} weeks with no resolution.`,
+                importance:    80,
+                relatedTeamId: team.id,
+                relatedPlayerId: player.id,
+                source:        'trade_request_engine',
+                dedupeKey:     `trade_drama_${player.id}_${trSeasonId}`,
+              };
+              const updatedPulse = mergeLeaguePulseItems(
+                pulseMeta2.leaguePulse ?? [],
+                [tradeDramaPulse],
+                { maxTimelineLength: 200 },
+              );
+              cache.setMeta({ leaguePulse: updatedPulse });
+            }
+          }
+          continue; // already has a request — don't evaluate new one
+        }
+
+        // ── Check for new trade request ──────────────────────────────────────
+        if (!shouldPlayerRequestTrade(player, team, trSeasonId, week, context)) continue;
+        const reason = getTradeRequestReason(player, team, context, trSeasonId);
+        if (!reason) continue;
+
+        const reasonLabel = TRADE_REQUEST_REASONS[reason]?.label ?? reason;
+        const newRequest = {
+          status:          'pending',
+          requestedSeason: trSeasonId,
+          requestedWeek:   week,
+          stonewalledWeeks: 0,
+          reason,
+        };
+
+        // Apply TRADE_REQUESTED morale event to the player
+        let requestingPlayer = cache.getPlayer(player.id) ?? player;
+        requestingPlayer = applyMoraleEvent(requestingPlayer, {
+          type:      TRADE_REQUEST_MORALE_EVENTS.TRADE_REQUESTED,
+          delta:     TRADE_REQUEST_MORALE_DELTAS.TRADE_REQUESTED,
+          season:    trSeasonId,
+          week,
+          reason:    reasonLabel,
+          source:    'trade_request_engine',
+          dedupeKey: `trade_requested_${player.id}_${trSeasonId}`,
+        }, { season: trSeasonId, week });
+
+        cache.updatePlayer(player.id, {
+          tradeRequest:  newRequest,
+          morale:        requestingPlayer.morale,
+          moraleEvents:  requestingPlayer.moraleEvents,
+        });
+
+        // News item
+        const trNewsItem = {
+          id:       `trade-request-${player.id}-${trSeasonId}-${week}`,
+          headline: `${player.name ?? 'Player'} has requested a trade`,
+          body:     `${player.name ?? 'A player'} (${team?.abbr ?? 'FA'}) formally requested a trade. Reason: ${reasonLabel}.`,
+          week,
+          season:   trSeasonId,
+          type:     'TRADE_REQUEST',
+          teamId:   team.id,
+          priority: 'high',
+          dedupeKey: `trade-request-${player.id}-${trSeasonId}-${week}`,
+        };
+        cache.setMeta(addNewsItem(cache.getMeta(), trNewsItem));
+
+        // AI team auto-resolution
+        if (!isUserTeam) {
+          const ovr = player.ovr ?? 70;
+          if (ovr >= 75) {
+            // Auto-honor: list on trade block
+            cache.updatePlayer(player.id, { tradeRequest: { ...newRequest, status: 'honored' }, onTradeBlock: true });
+          } else if (ovr < 65) {
+            // Auto-stonewall: not worth the drama
+            // Status stays pending, stonewall progression happens next week
+          } else {
+            // Mid-range: try extension if contract reason
+            if (reason === 'contract') {
+              cache.updatePlayer(player.id, { tradeRequest: { ...newRequest, status: 'withdrawn' } });
+            }
+          }
+        }
+
+        // Apply TEAMMATE_TRADE_REQUEST to starters on same team (on request)
+        const STARTERS_COUNT = { QB: 1, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1 };
+        for (const teammate of trAllPlayers) {
+          if (Number(teammate?.teamId) !== Number(team.id)) continue;
+          if (Number(teammate.id) === Number(player.id)) continue;
+          const tPos = teammate.pos;
+          const tRank = (byPos[tPos] ?? []).findIndex((p) => Number(p.id) === Number(teammate.id));
+          const starterSlots = STARTERS_COUNT[tPos] ?? 1;
+          if (tRank < 0 || tRank >= starterSlots) continue;
+          const dedupeKey = `teammate_trade_request_init_${team.id}_${trSeasonId}_${week}`;
+          let tUpdated = cache.getPlayer(teammate.id) ?? teammate;
+          tUpdated = applyMoraleEvent(tUpdated, {
+            type:      TRADE_REQUEST_MORALE_EVENTS.TEAMMATE_TRADE_REQUEST,
+            delta:     TRADE_REQUEST_MORALE_DELTAS.TEAMMATE_TRADE_REQUEST,
+            season:    trSeasonId,
+            week,
+            reason:    `Teammate ${player.name ?? 'a player'} requested a trade`,
+            source:    'trade_request_engine',
+            dedupeKey,
+          }, { season: trSeasonId, week });
+          cache.updatePlayer(teammate.id, { morale: tUpdated.morale, moraleEvents: tUpdated.moraleEvents });
+        }
+      }
+    } catch (trErr) {
+      console.warn('[Worker] Trade request evaluation error (non-fatal):', trErr?.message);
     }
   }
 
@@ -9485,6 +9712,127 @@ async function handleUpdatePlayerManagement({ playerId, teamId, updates = {} }, 
   post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 
+// ── Handler: HONOR_TRADE_REQUEST ──────────────────────────────────────────────
+
+async function handleHonorTradeRequest({ playerId }, id) {
+  const numericId = Number(playerId);
+  const player    = cache.getPlayer(numericId);
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+  if (!player.tradeRequest) { post(toUI.ERROR, { message: 'No active trade request' }, id); return; }
+
+  const meta     = ensureDynastyMeta(cache.getMeta());
+  const season   = meta.currentSeasonId ?? meta.season ?? 0;
+  const week     = meta.currentWeek ?? 0;
+  const team     = cache.getTeam(player.teamId);
+
+  const { updatedPlayer, moraleEvents } = resolveTradeRequest(player, 'honor', { season, week });
+
+  let p = updatedPlayer;
+  for (const evt of moraleEvents) {
+    p = applyMoraleEvent(p, evt, { season, week });
+  }
+  cache.updatePlayer(player.id, {
+    tradeRequest:  p.tradeRequest,
+    onTradeBlock:  p.onTradeBlock,
+    morale:        p.morale,
+    moraleEvents:  p.moraleEvents,
+  });
+
+  const newsItem = {
+    id:       `trade-honored-${player.id}-${season}-${week}`,
+    headline: `${team?.name ?? 'Team'} lists ${player.name ?? 'Player'} on the trade block`,
+    body:     `${team?.name ?? 'The team'} has agreed to honor ${player.name ?? 'the player'}'s trade request.`,
+    week,
+    season,
+    type:     'TRADE_REQUEST',
+    teamId:   team?.id ?? null,
+    priority: 'medium',
+    dedupeKey: `trade-honored-${player.id}-${season}-${week}`,
+  };
+  cache.setMeta(addNewsItem(cache.getMeta(), newsItem));
+
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
+// ── Handler: STONEWALL_TRADE_REQUEST ─────────────────────────────────────────
+
+async function handleStonewallTradeRequest({ playerId }, id) {
+  const numericId = Number(playerId);
+  const player    = cache.getPlayer(numericId);
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+  if (!player.tradeRequest) { post(toUI.ERROR, { message: 'No active trade request' }, id); return; }
+
+  const meta   = ensureDynastyMeta(cache.getMeta());
+  const season = meta.currentSeasonId ?? meta.season ?? 0;
+  const week   = meta.currentWeek ?? 0;
+
+  const { updatedPlayer, moraleEvents } = resolveTradeRequest(player, 'stonewall', { season, week });
+
+  let p = updatedPlayer;
+  for (const evt of moraleEvents) {
+    p = applyMoraleEvent(p, evt, { season, week });
+  }
+  cache.updatePlayer(player.id, {
+    tradeRequest:  p.tradeRequest,
+    morale:        p.morale,
+    moraleEvents:  p.moraleEvents,
+  });
+
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
+// ── Handler: OFFER_EXTENSION_TO_WITHDRAW ─────────────────────────────────────
+
+async function handleOfferExtensionToWithdraw({ playerId }, id) {
+  const numericId = Number(playerId);
+  const player    = cache.getPlayer(numericId);
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+  if (!player.tradeRequest) { post(toUI.ERROR, { message: 'No active trade request' }, id); return; }
+
+  // Extension eligibility: must have <= 2 contract years remaining
+  const yearsLeft = Number(player.contractYearsLeft ?? player.contract?.yearsRemaining ?? 1);
+  if (yearsLeft > 2) {
+    post(toUI.ERROR, { message: 'Player is not eligible for extension (> 2 years remaining)' }, id);
+    return;
+  }
+
+  const meta   = ensureDynastyMeta(cache.getMeta());
+  const season = meta.currentSeasonId ?? meta.season ?? 0;
+  const week   = meta.currentWeek ?? 0;
+  const team   = cache.getTeam(player.teamId);
+
+  const { updatedPlayer, moraleEvents } = resolveTradeRequest(player, 'extend', { season, week });
+
+  let p = updatedPlayer;
+  for (const evt of moraleEvents) {
+    p = applyMoraleEvent(p, evt, { season, week });
+  }
+  cache.updatePlayer(player.id, {
+    tradeRequest:  p.tradeRequest,
+    morale:        p.morale,
+    moraleEvents:  p.moraleEvents,
+  });
+
+  const newsItem = {
+    id:       `trade-withdrawn-ext-${player.id}-${season}-${week}`,
+    headline: `${player.name ?? 'Player'} withdraws trade request after extension talks`,
+    body:     `${player.name ?? 'A player'} will remain with ${team?.name ?? 'the team'} after an extension offer was tabled.`,
+    week,
+    season,
+    type:     'TRADE_REQUEST',
+    teamId:   team?.id ?? null,
+    priority: 'medium',
+    dedupeKey: `trade-withdrawn-ext-${player.id}-${season}-${week}`,
+  };
+  cache.setMeta(addNewsItem(cache.getMeta(), newsItem));
+
+  await flushDirty();
+  // Signal to UI that extension flow should be initiated
+  post(toUI.STATE_UPDATE, { ...buildViewState(), extensionRedirect: { playerId: numericId } }, id);
+}
+
 
 async function handleAssignMentor({ mentorId, menteeId, teamId }, id) {
   const team = cache.getTeam(teamId);
@@ -12701,6 +13049,9 @@ async function handleMessage(event) {
       case toWorker.COUNTER_INCOMING_TRADE: return await handleCounterIncomingTrade(payload, id);
       case toWorker.TOGGLE_TRADE_BLOCK: return await handleToggleTradeBlock(payload, id);
       case toWorker.UPDATE_PLAYER_MANAGEMENT: return await handleUpdatePlayerManagement(payload, id);
+      case toWorker.HONOR_TRADE_REQUEST:         return await handleHonorTradeRequest(payload, id);
+      case toWorker.STONEWALL_TRADE_REQUEST:     return await handleStonewallTradeRequest(payload, id);
+      case toWorker.OFFER_EXTENSION_TO_WITHDRAW: return await handleOfferExtensionToWithdraw(payload, id);
       case toWorker.ASSIGN_MENTOR: return await handleAssignMentor(payload, id);
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);

@@ -52,6 +52,7 @@ import {
 } from './trades/tradePositionalNeeds.js';
 import { getActiveCapHit } from './contracts/contractObligations.js';
 import { applyContractCapBurdenModifiers } from './trades/tradeFinancialModifiers.js';
+import { computeTradeValueModifier } from './trades/tradeRequestEngine.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,15 @@ export function calculatePlayerValue(player) {
   // consumer mixing the two valued a R1 pick at ~5× an elite player. Routing
   // through getAssetValue puts players and picks on the SAME scale. The strong
   // contract penalty now lives inside getAssetValue.
-  return adjustTradeValueForMarketRealism(player, getAssetValue(player));
+  const baseValue = adjustTradeValueForMarketRealism(player, getAssetValue(player));
+
+  // Apply trade request modifier outside the ±25% negotiationModifiers cap.
+  // Stonewall/block penalty makes the player cheaper for acquiring teams.
+  const trMod = computeTradeValueModifier(player);
+  if (trMod && trMod.modifier !== 0) {
+    return Math.max(0, baseValue * (1 + trMod.modifier));
+  }
+  return baseValue;
 }
 
 // ── Roster Analysis ───────────────────────────────────────────────────────────

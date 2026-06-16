@@ -606,6 +606,46 @@ export default function RosterManager({ league, actions }) {
                         }}
                       >
                         {player.name}
+                        {player.onTradeBlock && (
+                          <span
+                            data-testid={`trade-block-badge-${player.id}`}
+                            style={{
+                              marginLeft: 5,
+                              display: 'inline-block',
+                              padding: '1px 6px',
+                              borderRadius: 'var(--radius-pill)',
+                              background: '#0A84FF22',
+                              color: '#0A84FF',
+                              fontWeight: 700,
+                              fontSize: '0.7em',
+                              textTransform: 'uppercase',
+                              letterSpacing: '.05em',
+                              verticalAlign: 'middle',
+                            }}
+                          >
+                            Block
+                          </span>
+                        )}
+                        {player.tradeRequest?.status === 'pending' && (
+                          <span
+                            data-testid={`trade-request-badge-${player.id}`}
+                            style={{
+                              marginLeft: 5,
+                              display: 'inline-block',
+                              padding: '1px 6px',
+                              borderRadius: 'var(--radius-pill)',
+                              background: '#FF9F0A22',
+                              color: '#FF9F0A',
+                              fontWeight: 700,
+                              fontSize: '0.7em',
+                              textTransform: 'uppercase',
+                              letterSpacing: '.05em',
+                              verticalAlign: 'middle',
+                            }}
+                          >
+                            Wants Out
+                          </span>
+                        )}
                       </td>
                       <td
                         style={{
