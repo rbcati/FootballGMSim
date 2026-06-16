@@ -67,6 +67,10 @@ export const toWorker = Object.freeze({
   RESPOND_TRADE:      'RESPOND_TRADE',     // { tradeId, accepted }
   TOGGLE_TRADE_BLOCK: 'TOGGLE_TRADE_BLOCK', // { playerId, teamId }
   UPDATE_PLAYER_MANAGEMENT: 'UPDATE_PLAYER_MANAGEMENT', // { playerId, teamId, updates }
+  // Trade Requests V1
+  HONOR_TRADE_REQUEST:          'HONOR_TRADE_REQUEST',          // { playerId }
+  STONEWALL_TRADE_REQUEST:      'STONEWALL_TRADE_REQUEST',      // { playerId }
+  OFFER_EXTENSION_TO_WITHDRAW:  'OFFER_EXTENSION_TO_WITHDRAW',  // { playerId }
   ASSIGN_MENTOR: 'ASSIGN_MENTOR', // { mentorId, menteeId, teamId }
 
   /** Contracts */

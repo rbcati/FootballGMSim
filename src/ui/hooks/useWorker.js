@@ -667,6 +667,12 @@ export function useWorker() {
       request(toWorker.TOGGLE_TRADE_BLOCK, { playerId, teamId }),
     updatePlayerManagement: (playerId, teamId, updates) =>
       request(toWorker.UPDATE_PLAYER_MANAGEMENT, { playerId, teamId, updates }),
+    honorTradeRequest: (playerId) =>
+      request(toWorker.HONOR_TRADE_REQUEST, { playerId }),
+    stonewallTradeRequest: (playerId) =>
+      request(toWorker.STONEWALL_TRADE_REQUEST, { playerId }),
+    offerExtensionToWithdraw: (playerId) =>
+      request(toWorker.OFFER_EXTENSION_TO_WITHDRAW, { playerId }),
     assignMentor: (mentorId, menteeId, teamId) =>
       request(toWorker.ASSIGN_MENTOR, { mentorId, menteeId, teamId }, { silent: true }),
 

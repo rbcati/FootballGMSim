@@ -55,6 +55,12 @@ export const MORALE_EVENTS = Object.freeze({
   // Contract system V1
   EXTENSION_SIGNED:          'EXTENSION_SIGNED',
   RESTRUCTURE_RESOLVED:      'RESTRUCTURE_RESOLVED',
+  // Trade Request V1
+  TRADE_REQUESTED:                   'TRADE_REQUESTED',
+  TRADE_REQUEST_HONORED:             'TRADE_REQUEST_HONORED',
+  TRADE_REQUEST_WITHDRAWN_EXTENSION: 'TRADE_REQUEST_WITHDRAWN_EXTENSION',
+  TRADE_REQUEST_STONEWALLED:         'TRADE_REQUEST_STONEWALLED',
+  TEAMMATE_TRADE_REQUEST:            'TEAMMATE_TRADE_REQUEST',
 });
 
 // ── Delta constants ────────────────────────────────────────────────────────────
@@ -77,6 +83,12 @@ export const MORALE_DELTAS = Object.freeze({
   // Contract system V1
   [MORALE_EVENTS.EXTENSION_SIGNED]:            5,
   [MORALE_EVENTS.RESTRUCTURE_RESOLVED]:        8,
+  // Trade Request V1
+  [MORALE_EVENTS.TRADE_REQUESTED]:                   -5,
+  [MORALE_EVENTS.TRADE_REQUEST_HONORED]:             +6,
+  [MORALE_EVENTS.TRADE_REQUEST_WITHDRAWN_EXTENSION]: +4,
+  [MORALE_EVENTS.TRADE_REQUEST_STONEWALLED]:         -4,
+  [MORALE_EVENTS.TEAMMATE_TRADE_REQUEST]:            -2,
 });
 
 // ── Morale label thresholds ────────────────────────────────────────────────────

@@ -1543,6 +1543,60 @@ export default function PlayerProfile({
                   </div>
                 )}
 
+                {/* ── Trade Request Status ── */}
+                {playerView?.tradeRequest && (
+                  <div
+                    data-testid="player-profile-trade-request"
+                    style={{
+                      marginTop: 'var(--space-2)',
+                      padding: 'var(--space-3)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid #FF9F0A44',
+                      background: '#FF9F0A0E',
+                      fontSize: 'var(--text-xs)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontWeight: 900, color: '#FF9F0A', textTransform: 'uppercase', letterSpacing: '.07em', fontSize: 'var(--text-xs)' }}>
+                        Trade Requested
+                      </span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
+                        — {playerView.tradeRequest.reason?.replace(/_/g, ' ') ?? 'undisclosed'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      <span style={{ color: 'var(--text-subtle)' }}>Status: {playerView.tradeRequest.status}</span>
+                      {(playerView.tradeRequest.stonewalledWeeks ?? 0) > 0 && (
+                        <span style={{ color: '#FF9F0A', fontWeight: 700 }}>{playerView.tradeRequest.stonewalledWeeks}w unresolved</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── On Trade Block Badge ── */}
+                {playerView?.onTradeBlock && (
+                  <div
+                    data-testid="player-profile-trade-block"
+                    style={{
+                      marginTop: 'var(--space-2)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '3px 10px',
+                      borderRadius: 'var(--radius-pill)',
+                      background: '#0A84FF22',
+                      border: '1px solid #0A84FF55',
+                      color: '#0A84FF',
+                      fontWeight: 700,
+                      fontSize: 'var(--text-xs)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '.07em',
+                    }}
+                  >
+                    On Trade Block
+                  </div>
+                )}
+
                 {!isProspect && playerView && (
                   <div
                     data-testid="player-profile-dev-arc"

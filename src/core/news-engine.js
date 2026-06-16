@@ -307,6 +307,26 @@ export const createNewsItem = (type, data, week, season) => {
             body: (d) => `${d?.teamName ?? 'The team'} refused to deal ${d?.playerName ?? 'the player'}, leaving them frustrated.`,
             priority: 'medium',
         },
+        trade_request: {
+            headline: (d) => `${d?.playerName ?? 'Player'} has requested a trade`,
+            body: (d) => `${d?.playerName ?? 'A player'} (${d?.teamAbbr ?? 'FA'}) formally requested a trade. Reason: ${d?.reasonLabel ?? 'undisclosed'}.`,
+            priority: 'high',
+        },
+        trade_request_honored: {
+            headline: (d) => `${d?.teamName ?? 'Team'} lists ${d?.playerName ?? 'Player'} on the trade block`,
+            body: (d) => `${d?.teamName ?? 'The team'} has agreed to honor ${d?.playerName ?? 'the player'}’s trade request and is actively seeking a deal.`,
+            priority: 'medium',
+        },
+        trade_request_resolved: {
+            headline: (d) => `${d?.playerName ?? 'Player'} withdraws trade request after extension talks`,
+            body: (d) => `${d?.playerName ?? 'A player'} will remain with ${d?.teamName ?? 'the team'} after an extension offer was put on the table.`,
+            priority: 'medium',
+        },
+        trade_stonewall_boiling: {
+            headline: (d) => `${d?.playerName ?? 'Player'}’s trade situation is getting uncomfortable`,
+            body: (d) => `${d?.playerName ?? 'A player'} (${d?.teamAbbr ?? 'FA'}) has had an unresolved trade request for ${d?.weeks ?? 0} weeks. Locker room morale is at risk.`,
+            priority: 'high',
+        },
         holdout_declared: {
             headline: (d) => `${d?.playerName ?? 'Player'} declares holdout`,
             body: (d) => `${d?.playerName ?? 'A player'} has declared a holdout. Morale: ${d?.morale ?? '?'}.`,
