@@ -169,6 +169,10 @@ export const toWorker = Object.freeze({
 
   /** Recovery */
   REQUEST_FULL_STATE: 'REQUEST_FULL_STATE', // {} — force full hydration snapshot
+
+  /** Scouting */
+  GET_SCOUTING_BOARD:           'GET_SCOUTING_BOARD',           // {} — get team-specific draft board
+  UPDATE_SCOUTING_ALLOCATION:   'UPDATE_SCOUTING_ALLOCATION',   // { allocations: { [target]: points } }
 });
 
 // ─────────────────────────────────────────────
@@ -276,6 +280,10 @@ export const toUI = Object.freeze({
 
   /** League news response */
   NEWS_DATA:          'NEWS_DATA',           // { news: [], error?: string }
+
+  /** Scouting */
+  SCOUTING_BOARD:               'SCOUTING_BOARD',               // { board: RankedProspect[] }
+  SCOUTING_ALLOCATION_RESULT:   'SCOUTING_ALLOCATION_RESULT',   // { valid, errors, allocations }
 
   /**
    * IndexedDB version conflict / blocked event — the UI must reload the page
