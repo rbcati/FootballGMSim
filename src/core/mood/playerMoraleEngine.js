@@ -52,6 +52,9 @@ export const MORALE_EVENTS = Object.freeze({
   COACH_FIRED_OC:            'COACH_FIRED_OC',
   COACH_FIRED_DC:            'COACH_FIRED_DC',
   SCHEME_CHANGE:             'SCHEME_CHANGE',
+  // Contract system V1
+  EXTENSION_SIGNED:          'EXTENSION_SIGNED',
+  RESTRUCTURE_RESOLVED:      'RESTRUCTURE_RESOLVED',
 });
 
 // ── Delta constants ────────────────────────────────────────────────────────────
@@ -71,6 +74,9 @@ export const MORALE_DELTAS = Object.freeze({
   [MORALE_EVENTS.COACH_FIRED_OC]:             -4,
   [MORALE_EVENTS.COACH_FIRED_DC]:             -4,
   [MORALE_EVENTS.SCHEME_CHANGE]:              -3,
+  // Contract system V1
+  [MORALE_EVENTS.EXTENSION_SIGNED]:            5,
+  [MORALE_EVENTS.RESTRUCTURE_RESOLVED]:        8,
 });
 
 // ── Morale label thresholds ────────────────────────────────────────────────────

@@ -870,6 +870,45 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         );
       })()}
 
+      {/* ── Dead Cap Panel — shown only when team has dead cap items ── */}
+      {(() => {
+        const deadCapItems = Array.isArray(userTeam?.deadCapItems) ? userTeam.deadCapItems : [];
+        if (deadCapItems.length === 0) return null;
+        const totalDeadCap = deadCapItems.reduce((sum, item) => sum + safeNum(item?.amount, 0), 0);
+        const capRoom = safeNum(userTeam?.capRoom, 0);
+        return (
+          <SectionCard
+            data-testid="franchise-hq-dead-cap-panel"
+            title="Dead Cap"
+            style={{ margin: '0 12px 12px', padding: '10px 14px' }}
+          >
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 8 }}>
+              Total dead cap this season:{' '}
+              <strong style={{ color: totalDeadCap > capRoom * 0.10 ? 'var(--danger)' : 'var(--text)' }}>
+                ${totalDeadCap.toFixed(1)}M
+              </strong>
+            </div>
+            {deadCapItems.map((item, idx) => (
+              <div
+                key={`${item.playerId ?? idx}-${item.season ?? 0}`}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: 'var(--text-xs)',
+                  padding: '4px 0',
+                  borderTop: idx === 0 ? 'none' : '1px solid var(--hairline)',
+                }}
+              >
+                <span>{item.playerName ?? 'Unknown'}</span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  ${safeNum(item.amount, 0).toFixed(1)}M · exp. {item.expiresAfterSeason ?? '—'}
+                </span>
+              </div>
+            ))}
+          </SectionCard>
+        );
+      })()}
+
       {lineupToast ? <p className="app-inline-toast" role="status" aria-live="polite">{lineupToast}</p> : null}
 
       {showGate ? (

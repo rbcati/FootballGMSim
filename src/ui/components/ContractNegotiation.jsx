@@ -9,6 +9,7 @@ import PlayerCard from "./PlayerCard.jsx";
 import { getNegotiationContext, LEVERAGE_MODIFIERS } from "../../core/contracts/negotiationModifiers.js";
 import { getPlayerMoraleSummary } from "../../core/mood/playerMoraleEngine.js";
 import { getPlayerAwardSummary } from "../../core/awards/awardEngine.js";
+import { canRestructure } from "../../core/contracts/restructureEngine.js";
 
 const CAP_TOTAL = 301.2; // hard cap in $M
 
@@ -80,6 +81,8 @@ export default function ContractNegotiation({
   onOffer,
   onSignImmediately,
   onClose,
+  userTeam,
+  onNavigateToRoster,
 }) {
   const [years, setYears] = useState(3);
   const [annual, setAnnual] = useState(Math.max(0.8, Math.round((player.baseAnnual || 4) * 10) / 10));
@@ -315,6 +318,34 @@ export default function ContractNegotiation({
             );
           })()}
           <CapImpactBar capRoom={capRoom} capHitThisYear={capHitThisYear} />
+          {(() => {
+            if (!userTeam || !onNavigateToRoster) return null;
+            const { eligible } = canRestructure(player, userTeam);
+            if (!eligible) return null;
+            return (
+              <div
+                data-testid="contract-negotiation-restructure-hint"
+                style={{
+                  marginTop: 8, fontSize: "var(--text-xs)",
+                  color: "var(--accent)", fontStyle: "italic",
+                  borderTop: "1px solid var(--hairline)", paddingTop: 6,
+                }}
+              >
+                Tip: Consider{" "}
+                <button
+                  onClick={onNavigateToRoster}
+                  style={{
+                    background: "none", border: "none", padding: 0,
+                    color: "var(--accent)", fontStyle: "italic",
+                    fontSize: "inherit", cursor: "pointer", textDecoration: "underline",
+                  }}
+                >
+                  restructuring {player.name}
+                </button>
+                {" "}to create cap room.
+              </div>
+            );
+          })()}
         </div>
 
         {/* Action buttons */}

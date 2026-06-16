@@ -686,6 +686,10 @@ export function useWorker() {
     restructureContract: (playerId, teamId) =>
       request(toWorker.RESTRUCTURE_CONTRACT, { playerId, teamId }),
 
+    /** Get restructure eligibility + preview for a player (returns a Promise). */
+    getRestructureSummary: (playerId, teamId) =>
+      request(toWorker.GET_RESTRUCTURE_SUMMARY, { playerId, teamId }, { silent: true }),
+
     /** Applies the franchise tag to a pending free agent (returns a Promise) */
     applyFranchiseTag: (playerId, teamId) =>
       request(toWorker.APPLY_FRANCHISE_TAG, { playerId, teamId }),

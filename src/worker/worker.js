@@ -98,6 +98,19 @@ import { getTeamContextForNegotiation } from '../core/teamContext/negotiationCon
 import { evaluateContractOffer, summarizeNegotiationStance } from '../core/contracts/negotiation.js';
 import { computeRestructureOutcome, shouldPreserveChemistryOnReturn, isContractRestructureEligible } from '../core/contracts/restructure.js';
 import {
+  AI_EXTENSION_FACTORS,
+  shouldAIExtendPlayer,
+  computeAIExtensionOffer,
+  willPlayerAcceptAIExtension,
+  getAIExtensionTargets,
+} from '../core/contracts/aiExtensionEngine.js';
+import {
+  canRestructure,
+  computeRestructure,
+  applyRestructure,
+  getRestructureSummaryForUI,
+} from '../core/contracts/restructureEngine.js';
+import {
   normalizeContractDetails,
   repairLegacyPlayerContract,
   normalizeLoadedLeagueContracts,
@@ -8869,70 +8882,151 @@ async function handleRestructureContract({ playerId, teamId }, id) {
   let player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
-  // Only players with at least 2 years remaining can be restructured
-  const contract = player.contract ?? {
-    years:       player.years       ?? 1,
-    yearsTotal:  player.yearsTotal  ?? player.years ?? 1,
-    baseAnnual:  player.baseAnnual  ?? 0,
-    signingBonus:player.signingBonus ?? 0,
-    guaranteedPct:player.guaranteedPct ?? 0.5,
-  };
+  const team = cache.getTeam(resolvedTeamId);
+  const currentSeason = Number(meta?.year ?? 0);
+  const currentWeek   = Number(meta?.currentWeek ?? 0);
 
-  const eligible = isContractRestructureEligible({ ...player, contract }, { currentSeason: meta?.year });
-  if (!eligible) {
-    post(toUI.ERROR, { message: 'Cannot restructure: requires veteran player, 2+ years remaining, and unused restructure slots.' }, id);
-    return;
+  // Hydrate contract with safe defaults
+  const contract = player.contract ?? {
+    years:        player.years        ?? 1,
+    yearsTotal:   player.yearsTotal   ?? player.years ?? 1,
+    baseAnnual:   player.baseAnnual   ?? 0,
+    signingBonus: player.signingBonus ?? 0,
+    guaranteedPct: player.guaranteedPct ?? 0.5,
+  };
+  const playerForCheck = { ...player, contract };
+
+  // ── Eligibility: restructureEngine takes precedence; fall back to legacy check
+  const restructureCheck = canRestructure(playerForCheck, team);
+  if (!restructureCheck.eligible) {
+    // Also check the legacy path (veteran eligibility, last-season guard)
+    const legacyEligible = isContractRestructureEligible(playerForCheck, { currentSeason });
+    if (!legacyEligible) {
+      post(toUI.ERROR, { message: restructureCheck.reason || 'Cannot restructure: requires veteran player, 2+ years remaining, and unused restructure slots.' }, id);
+      return;
+    }
   }
+
   const restructureCount = Number(contract?.restructureCount ?? 0);
 
-  const maxConvertPct = Constants.SALARY_CAP.RESTRUCTURE_MAX_CONVERT_PCT;
-  const outcome = computeRestructureOutcome(contract, maxConvertPct);
-  const convertAmount = outcome.convertAmount;
+  // ── Compute restructure using new engine
+  const yearsLeft  = Number(contract?.yearsRemaining ?? contract?.years ?? contract?.yearsLeft ?? 1);
+  const yearsTotal = Number(contract?.yearsTotal ?? contract?.years ?? yearsLeft);
+  const baseAnnual = Number(contract?.baseAnnual ?? 0);
+  const sigBonus   = Number(contract?.signingBonus ?? 0);
+  const currentCapHit = Math.round((baseAnnual + sigBonus / Math.max(1, yearsTotal)) * 100) / 100;
 
-  if (convertAmount <= 0) {
+  const preview = computeRestructure(playerForCheck, currentCapHit, yearsLeft, currentSeason);
+
+  if (preview.conversionAmount <= 0) {
     post(toUI.ERROR, { message: 'Cannot restructure: no base salary to convert.' }, id);
     return;
   }
 
-  // New contract values after restructure
-  const newBase = outcome.newBase;
-  const newSigningBonus = outcome.newSigningBonus;
+  // ── Apply immutably then write to cache
+  const { updatedPlayer, updatedTeam } = applyRestructure(playerForCheck, team ?? {}, preview, currentSeason);
 
-  const newContract = {
-    ...contract,
-    baseAnnual:   newBase,
-    signingBonus: newSigningBonus,
-    restructureCount: restructureCount + 1,
-    lastRestructureSeason: Number(meta?.year ?? 0),
-  };
+  // ── Holdout resolution path
+  const isHoldout = Boolean(player?.holdout?.active);
+  let finalPlayer = updatedPlayer;
 
-  cache.updatePlayer(player.id, { contract: newContract });
+  if (isHoldout) {
+    finalPlayer = resolveHoldout(finalPlayer, HOLDOUT_RESOLUTION.GM_SIGNED, currentSeason, currentWeek);
+    finalPlayer = applyMoraleEvent(finalPlayer, {
+      type:      MORALE_EVENTS.RESTRUCTURE_RESOLVED,
+      delta:     MORALE_DELTAS[MORALE_EVENTS.RESTRUCTURE_RESOLVED],
+      season:    currentSeason,
+      week:      currentWeek,
+      reason:    'Holdout resolved via contract restructure',
+      source:    'restructure_engine',
+      dedupeKey: `restructure_resolved_${player.id}_${currentSeason}`,
+    }, { season: currentSeason, week: currentWeek });
+  } else {
+    // Regular restructure: morale bump (EXTENSION_SIGNED delta +4 as spec states "+4")
+    finalPlayer = applyMoraleEvent(finalPlayer, {
+      type:      MORALE_EVENTS.EXTENSION_SIGNED,
+      delta:     4,
+      season:    currentSeason,
+      week:      currentWeek,
+      reason:    'Contract restructured — team invested in keeping player',
+      source:    'restructure_engine',
+      dedupeKey: `restructure_morale_${player.id}_${currentSeason}`,
+    }, { season: currentSeason, week: currentWeek });
+  }
+
+  cache.updatePlayer(player.id, {
+    contract:     finalPlayer.contract,
+    holdout:      finalPlayer.holdout,
+    morale:       finalPlayer.morale,
+    moraleEvents: finalPlayer.moraleEvents,
+  });
+
+  // Persist dead cap items on team
+  if (Array.isArray(updatedTeam?.deadCapItems)) {
+    cache.updateTeam(resolvedTeamId, { deadCapItems: updatedTeam.deadCapItems });
+  }
+
   recalculateTeamCap(resolvedTeamId);
 
   await Transactions.add({
-    type: 'RESTRUCTURE', seasonId: meta.currentSeasonId,
-    week: meta.currentWeek, teamId: resolvedTeamId,
-    details: { playerId: player.id, convertAmount, newBase, newSigningBonus },
+    type:     'RESTRUCTURE',
+    seasonId: meta.currentSeasonId,
+    week:     currentWeek,
+    teamId:   resolvedTeamId,
+    details: {
+      playerId:        player.id,
+      conversionAmount: preview.conversionAmount,
+      currentYearSaving: preview.currentYearSaving,
+      newBase:          finalPlayer.contract.baseAnnual,
+      newSigningBonus:  finalPlayer.contract.signingBonus,
+      holdoutResolved:  isHoldout,
+    },
   });
+
+  if (isHoldout) {
+    await NewsEngine.logNews(
+      'TRANSACTION',
+      `${player.name ?? 'Unknown'} ends holdout after contract restructure.`,
+      resolvedTeamId,
+    );
+  }
 
   await flushDirty();
 
-  const updatedTeam = cache.getTeam(resolvedTeamId);
   post(toUI.STATE_UPDATE, {
     roster: buildRosterView(resolvedTeamId),
     ...buildViewState(),
     restructureResult: {
-      playerName:    player.name,
-      convertAmount,
-      newBase,
-      newSigningBonus,
-      oldCapHit: outcome.oldCapHit,
-      newCapHit: outcome.newCapHit,
-      capSavingsThisYear: outcome.capSavingsThisYear,
-      futureAnnualBonusDelta: outcome.futureAnnualBonusDelta,
-      restructureCount: restructureCount + 1,
+      playerName:          player.name,
+      conversionAmount:    preview.conversionAmount,
+      currentYearSaving:   preview.currentYearSaving,
+      deadCapPerFutureYear: preview.deadCapPerFutureYear,
+      voidYearDeadCap:     preview.voidYearDeadCap,
+      newCapHit:           preview.newCapHit,
+      expiresAfterSeason:  preview.expiresAfterSeason,
+      newBase:             finalPlayer.contract.baseAnnual,
+      newSigningBonus:     finalPlayer.contract.signingBonus,
+      restructureCount:    restructureCount + 1,
+      holdoutResolved:     isHoldout,
     },
   }, id);
+}
+
+// ── Handler: GET_RESTRUCTURE_SUMMARY ─────────────────────────────────────────
+
+function handleGetRestructureSummary({ playerId, teamId }, id) {
+  const teamCtx = resolveTeamContext(teamId);
+  if (!teamCtx.ok) { post(toUI.ERROR, { message: teamCtx.message }, id); return; }
+  const { meta, teamId: resolvedTeamId } = teamCtx;
+
+  const player = cache.getPlayer(playerId);
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+
+  const team   = cache.getTeam(resolvedTeamId);
+  const season = Number(meta?.year ?? 0);
+
+  const summary = getRestructureSummaryForUI(player, team, season);
+  post(toUI.STATE_UPDATE, { restructureSummary: { playerId, ...summary } }, id);
 }
 
 // ── Draft helpers ─────────────────────────────────────────────────────────────
@@ -10150,6 +10244,142 @@ async function handleAdvanceOffseason(payload, id) {
     if (team.id !== meta.userTeamId) {
       await AiLogic.processExtensions(team.id);
     }
+  }
+
+  // ── Step 1a: posture-aware AI extensions (aiExtensionEngine V1) ───────────
+  // Runs AFTER AiLogic.processExtensions so we skip players already signed.
+  // Before FA opens (injectAIFaBids runs in handleAdvanceFreeAgencyDay).
+  try {
+    const extSeason = Number(meta?.season ?? meta?.year ?? 0);
+    const extWeek   = Number(meta?.currentWeek ?? 0);
+    const userTeamId = Number(meta?.userTeamId ?? -1);
+
+    // Identify user's division for news filtering
+    const userTeamObj = cache.getTeam(userTeamId);
+    const userDiv  = userTeamObj?.div  ?? null;
+    const userConf = userTeamObj?.conf ?? null;
+
+    // Pre-compute demand snapshots for all expiring players (same as injectAIFaBids)
+    const allPlayers = cache.getAllPlayers();
+    const expiringPlayers = allPlayers.filter((p) => {
+      const yrs = Number(p?.contractYearsLeft ?? p?.contract?.yearsRemaining ?? p?.contract?.years ?? 2);
+      return yrs <= 1 && p?.teamId != null && Number(p.teamId) !== userTeamId;
+    });
+    const extDemandMap = new Map();
+    const extUserTeam = cache.getTeam(userTeamId);
+    for (const p of expiringPlayers) {
+      const snap = buildDemandSnapshotForOffer(p, extUserTeam);
+      const holdoutPremium = p?.holdout?.active ? Number(p.holdout.demandPremium ?? 0) : 0;
+      extDemandMap.set(p.id, { baseAnnual: Math.round(snap.baseAnnual * (1 + holdoutPremium) * 10) / 10 });
+    }
+
+    for (const aiTeam of allTeams) {
+      if (Number(aiTeam.id) === userTeamId) continue;
+
+      // Derive posture from season-end record (same pattern as injectAIFaBids)
+      const wins   = Number(aiTeam.wins   ?? 0);
+      const losses = Number(aiTeam.losses ?? 0);
+      const ties   = Number(aiTeam.ties   ?? 0);
+      const total  = wins + losses + ties;
+      let posture = 'middle';
+      if (total >= 4) {
+        const wp = (wins + ties * 0.5) / total;
+        if (wp >= 0.60) posture = 'contender';
+        else if (wp >= 0.45) posture = 'playoff_hunt';
+        else if (wp >= 0.38) posture = 'middle';
+        else posture = 'rebuild';
+      }
+
+      const teamCap = Number(aiTeam.capRoom ?? 0);
+      const roster  = cache.getPlayersByTeam(aiTeam.id);
+
+      const targets = getAIExtensionTargets(aiTeam, roster, posture, teamCap, {
+        demandByPlayerId: extDemandMap,
+      });
+
+      for (const player of targets) {
+        const demandSnap = extDemandMap.get(player.id);
+        if (!demandSnap) continue;
+        const adjustedDemand = demandSnap.baseAnnual;
+        if (!adjustedDemand || adjustedDemand <= 0) continue;
+
+        const freshTeam = cache.getTeam(aiTeam.id);
+        const freshCap  = Number(freshTeam?.capRoom ?? 0);
+
+        const offer = computeAIExtensionOffer(aiTeam, player, adjustedDemand, posture, freshCap);
+
+        const moraleSummary = getPlayerMoraleSummary(player);
+        const accepted = willPlayerAcceptAIExtension(player, offer, adjustedDemand, moraleSummary);
+
+        if (!accepted) continue;
+
+        // Apply contract (immutable-style: update player fields)
+        const newContract = {
+          ...(player.contract ?? {}),
+          baseAnnual:          offer.amount,
+          yearsTotal:          offer.years,
+          years:               offer.years,
+          signingBonus:        offer.signingBonus,
+          startYear:           extSeason,
+          restructureCount:    Number(player.contract?.restructureCount ?? 0),
+        };
+
+        // Apply EXTENSION_SIGNED morale event
+        const extPlayer = applyMoraleEvent(
+          { ...player, contract: newContract, negotiationStatus: 'SIGNED', extensionDecision: 'extended' },
+          {
+            type:      MORALE_EVENTS.EXTENSION_SIGNED,
+            delta:     MORALE_DELTAS[MORALE_EVENTS.EXTENSION_SIGNED],
+            season:    extSeason,
+            week:      extWeek,
+            reason:    'Extended by team before free agency',
+            source:    'ai_extension',
+            dedupeKey: `extension_signed_${player.id}_${extSeason}`,
+          },
+          { season: extSeason, week: extWeek },
+        );
+
+        cache.updatePlayer(player.id, {
+          contract:          extPlayer.contract,
+          negotiationStatus: 'SIGNED',
+          extensionDecision: 'extended',
+          morale:            extPlayer.morale,
+          moraleEvents:      extPlayer.moraleEvents,
+        });
+
+        recalculateTeamCap(aiTeam.id);
+
+        await Transactions.add({
+          type:     'EXTEND',
+          seasonId: meta?.currentSeasonId,
+          week:     extWeek,
+          teamId:   aiTeam.id,
+          details:  { playerId: player.id, contract: newContract, source: 'ai_extension_engine' },
+        });
+
+        // News: only for division rivals or players previously on the user's roster
+        const isRival = userConf != null && aiTeam.conf === userConf && aiTeam.div === userDiv;
+        const wasPreviouslyRostered = Number(player.lastTeamId) === userTeamId ||
+          (Array.isArray(player.careerTeamIds) && player.careerTeamIds.includes(userTeamId));
+
+        if (isRival || wasPreviouslyRostered) {
+          const newsItem = createNewsItem(
+            'transaction',
+            {
+              headline: `${player.name ?? 'Unknown'} re-signs with ${aiTeam.name ?? `Team ${aiTeam.id}`} on a ${offer.years}-year deal.`,
+              teamId:   aiTeam.id,
+              playerId: player.id,
+              type:     'ai_extension_signed',
+            },
+            extWeek,
+            extSeason,
+          );
+          cache.setMeta(addNewsItem(cache.getMeta(), newsItem));
+        }
+      }
+    }
+  } catch (extErr) {
+    console.warn('[Worker] aiExtensionEngine pass error (non-fatal):', extErr.message);
   }
 
   // ── Step 1b: AI staff carousel / continuity decisions ───────────────────
@@ -12378,7 +12608,8 @@ async function handleMessage(event) {
       case toWorker.ASSIGN_MENTOR: return await handleAssignMentor(payload, id);
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);
-      case toWorker.RESTRUCTURE_CONTRACT: return await handleRestructureContract(payload, id);
+      case toWorker.RESTRUCTURE_CONTRACT:     return await handleRestructureContract(payload, id);
+      case toWorker.GET_RESTRUCTURE_SUMMARY:  return handleGetRestructureSummary(payload, id);
       case toWorker.APPLY_FRANCHISE_TAG:  return await handleApplyFranchiseTag(payload, id);
       case toWorker.RELOCATE_TEAM:        return await handleRelocateTeam(payload, id);
       case toWorker.GET_BOX_SCORE:        return await handleGetBoxScore(payload, id);
