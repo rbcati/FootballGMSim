@@ -227,6 +227,17 @@ import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonality
 import { applyTeamCultureWeek, classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../core/teamCulture.js';
 import { selectCultureAlerts } from '../core/broadcastNarrative.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
+import {
+  computeSeed,
+  computeScoutedRange,
+  processWeeklyScoutingForTeam,
+  processAIScoutingForTeam,
+  getDraftBoardForTeam,
+  computeGlobalBuzz,
+  finalizeProspectReveal,
+  allocateScoutingPoints,
+  REGIONS as SCOUTING_REGIONS,
+} from '../core/draft/scoutingEngine.js';
 import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule, enrichArchivedGamePayload, mergeArchivedGameWithScheduleResult } from '../core/gameArchive.js';
 import {
   DEFAULT_LEAGUE_ECONOMY,
@@ -1097,6 +1108,11 @@ function buildViewState() {
     settings: normalizeLeagueSettings(meta?.settings ?? {}),
     economy: normalizeLeagueEconomy(meta?.economy ?? {}, { year: meta?.year }),
     tradeDeadline,
+    scoutingWeeksRemaining: meta?.scoutingWeeksRemaining ?? null,
+    scoutingBudget: (() => {
+      const uTeam = cache.getTeam(meta?.userTeamId);
+      return uTeam?.scoutingBudget ?? null;
+    })(),
     godMode: !!meta?.commissionerMode,
     commissionerMode: !!meta?.commissionerMode,
     commissionerEverEnabled: !!meta?.commissionerEverEnabled,
@@ -9173,7 +9189,7 @@ function buildDraftStateView() {
         pos:       p.pos,
         age:       p.age,
         ovr:       scouting?.estimatedOvr ?? fogReport.estimated ?? p.ovr,
-        trueOvr:   p.ovr,
+        // trueOvr intentionally not exposed to UI
         potential: scouting?.estimatedPotential ?? (p.potential ?? null),
         truePotential: p.potential ?? null,
         scoutingConfidence: fogReport.confidence ?? scouting?.confidence ?? 0.75,
@@ -9534,9 +9550,20 @@ async function handleStartDraft(payload, id) {
     scoutingBudget,
     fogStrength: Number(getLeagueSetting('scoutingFogStrength', 50)),
   });
+  if (!meta.scoutingWeeksRemaining) cache.setMeta({ scoutingWeeksRemaining: 8 });
   prospects.forEach(p => {
-    cache.setPlayer({ ...p, teamId: null, status: 'draft_eligible' });
+    // Assign region deterministically
+    const regionIdx = (Number(p.id) || 0) % SCOUTING_REGIONS.length;
+    const region = SCOUTING_REGIONS[regionIdx];
+    cache.setPlayer({ ...p, teamId: null, status: 'draft_eligible', trueOvr: p.ovr, scoutedRanges: {}, scoutingPoints: 0, region });
   });
+
+  // Initialize scoutingBudget for all teams
+  const allTeamsForScouting = cache.getAllTeams();
+  for (const t of allTeamsForScouting) {
+    if (!t.scoutingBudget) cache.updateTeam(t.id, { scoutingBudget: { weeklyPoints: 10, allocations: {}, spentThisSeason: 0 } });
+    if (!t.scoutingLog) cache.updateTeam(t.id, { scoutingLog: [] });
+  }
 
   const champId  = meta.championTeamId ?? null;
   // Seeded RNG (mulberry32) + schedule so the SoS tiebreaker and any coin-flip
@@ -9630,6 +9657,36 @@ async function handleMakeDraftPick({ playerId }, id) {
 
   _executeDraftPick(currentPickIndex, player.id, currentPick.teamId);
   await logDraftPickTransaction(ensureDynastyMeta(cache.getMeta()), currentPick, player.id);
+
+  // ── Scouting reveal ───────────────────────────────────────────────────────
+  try {
+    const revealPlayer = cache.getPlayer(player.id);
+    const revealTeam = cache.getTeam(currentPick.teamId);
+    if (revealPlayer?.trueOvr != null) {
+      const reveal = finalizeProspectReveal(revealPlayer, currentPick.teamId);
+      const scoutedRange = revealPlayer.scoutedRanges?.[currentPick.teamId] ?? { low: 40, high: 99 };
+      const logEntry = {
+        season: meta?.year ?? 2025,
+        prospectId: player.id,
+        name: player.name,
+        predictedRange: scoutedRange,
+        trueOvr: reveal.trueOvr,
+        draftRound: currentPick.round,
+        hit: reveal.wasAccurate,
+      };
+      const currentLog = Array.isArray(revealTeam?.scoutingLog) ? revealTeam.scoutingLog : [];
+      cache.updateTeam(currentPick.teamId, { scoutingLog: [...currentLog, logEntry] });
+
+      if (!reveal.wasAccurate && reveal.delta > 5) {
+        await NewsEngine.logNews('SCOUTING', `${player.name} fell short of your scouting report (projected ${scoutedRange.low}–${scoutedRange.high}, true OVR ${reveal.trueOvr}).`, currentPick.teamId, { type: 'scouting_bust' });
+      } else if (!reveal.wasAccurate && reveal.delta < -5) {
+        await NewsEngine.logNews('SCOUTING', `${player.name} exceeded your scouting report (projected ${scoutedRange.low}–${scoutedRange.high}, true OVR ${reveal.trueOvr}).`, currentPick.teamId, { type: 'scouting_hit' });
+      }
+    }
+  } catch (revealErr) {
+    console.warn('[Worker] Scouting reveal error (non-fatal):', revealErr.message);
+  }
+
   await flushDirty();
 
   // Priority 3: Auto-transition when the last pick is made.
@@ -10684,6 +10741,7 @@ async function handleAdvanceOffseason(payload, id) {
     contractMarketMemory: {},
     offseasonFaMovements: [],
     pendingOffers: [],
+    scoutingWeeksRemaining: 8,
   });
 
   // AUTO-SAVE: phase transition — flush all progression/retirement changes before notifying UI.
@@ -10961,6 +11019,44 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
       faMeta = addNewsItem(faMeta, event);
     }
     cache.setMeta({ newsItems: faMeta.newsItems });
+
+    // ── Weekly Scouting (draft prep) ──────────────────────────────────────────
+    try {
+      const scoutMeta = cache.getMeta();
+      if (Number(scoutMeta?.scoutingWeeksRemaining ?? 0) > 0) {
+        const scoutUserTeam = cache.getTeam(scoutMeta.userTeamId);
+        const draftProspects = cache.getAllPlayers().filter(p => p.status === 'draft_eligible');
+        const scoutSeason = Number(scoutMeta?.season ?? scoutMeta?.year ?? 2025);
+        const scoutWeek = Number(scoutMeta?.currentWeek ?? 1);
+
+        if (draftProspects.length > 0 && scoutUserTeam) {
+          const userBudget = scoutUserTeam.scoutingBudget ?? { weeklyPoints: 10, allocations: {}, spentThisSeason: 0 };
+          const { updatedProspects: uProspects, updatedBudget } = processWeeklyScoutingForTeam(
+            { ...scoutUserTeam, scoutingBudget: userBudget }, draftProspects, scoutSeason, scoutWeek
+          );
+          for (const p of uProspects) cache.updatePlayer(p.id, { scoutedRanges: p.scoutedRanges, scoutingPoints: p.scoutingPoints });
+          cache.updateTeam(scoutUserTeam.id, { scoutingBudget: updatedBudget });
+        }
+
+        // AI scouting
+        for (const aiTeam of cache.getAllTeams()) {
+          if (aiTeam.id === scoutMeta.userTeamId) continue;
+          const freshProspects = cache.getAllPlayers().filter(p => p.status === 'draft_eligible');
+          if (freshProspects.length === 0) break;
+          const aiUpdated = processAIScoutingForTeam(aiTeam, freshProspects, scoutSeason, scoutWeek);
+          for (const p of aiUpdated) {
+            if (p.scoutedRanges !== freshProspects.find(fp => fp.id === p.id)?.scoutedRanges) {
+              cache.updatePlayer(p.id, { scoutedRanges: p.scoutedRanges, scoutingPoints: p.scoutingPoints });
+            }
+          }
+        }
+
+        const remaining = Number(scoutMeta?.scoutingWeeksRemaining ?? 0) - 1;
+        cache.setMeta({ scoutingWeeksRemaining: remaining });
+      }
+    } catch (scoutErr) {
+      console.warn('[Worker] Weekly scouting error (non-fatal):', scoutErr.message);
+    }
 
     // Increment Day
     const nextDay = day + 1;
@@ -12645,6 +12741,10 @@ async function handleMessage(event) {
       case toWorker.GET_PLAYER_DRAFT_CONTEXT: return await handleGetPlayerDraftContext(payload, id);
       case toWorker.REQUEST_FULL_STATE:  return post(toUI.FULL_STATE, buildViewState(), id);
 
+      // ── Scouting ──────────────────────────────────────────────────────────
+      case toWorker.GET_SCOUTING_BOARD:          return await handleGetScoutingBoard(payload, id);
+      case toWorker.UPDATE_SCOUTING_ALLOCATION:  return await handleUpdateScoutingAllocation(payload, id);
+
       default:
         console.warn(`[Worker] Unknown message type: ${type}`);
         post(toUI.ERROR, { message: `Unknown message type: ${type}` }, id);
@@ -12653,6 +12753,40 @@ async function handleMessage(event) {
     console.error(`[Worker] Unhandled error in handler for "${type}":`, err);
     post(toUI.ERROR, { message: err.message, stack: err.stack }, id);
   }
+}
+
+// ── Handler: GET_SCOUTING_BOARD ───────────────────────────────────────────────
+async function handleGetScoutingBoard(payload, id) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  if (!meta) return post(toUI.ERROR, { message: 'No league loaded' }, id);
+  const userTeam = cache.getTeam(meta.userTeamId);
+  if (!userTeam) return post(toUI.ERROR, { message: 'User team not found' }, id);
+  const prospects = cache.getAllPlayers().filter(p => p.status === 'draft_eligible');
+  const board = getDraftBoardForTeam(prospects, meta.userTeamId, userTeam);
+  post(toUI.SCOUTING_BOARD, { board }, id);
+}
+
+// ── Handler: UPDATE_SCOUTING_ALLOCATION ──────────────────────────────────────
+async function handleUpdateScoutingAllocation({ allocations }, id) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  if (!meta) return post(toUI.ERROR, { message: 'No league loaded' }, id);
+
+  if (Number(meta?.scoutingWeeksRemaining ?? -1) === 0) {
+    return post(toUI.SCOUTING_ALLOCATION_RESULT, { valid: false, errors: ['Scouting allocations locked (draft prep complete)'] }, id);
+  }
+
+  const userTeam = cache.getTeam(meta.userTeamId);
+  if (!userTeam) return post(toUI.ERROR, { message: 'User team not found' }, id);
+
+  const budget = userTeam.scoutingBudget ?? { weeklyPoints: 10, allocations: {}, spentThisSeason: 0 };
+  const result = allocateScoutingPoints(budget, allocations ?? {});
+
+  if (result.valid) {
+    cache.updateTeam(meta.userTeamId, { scoutingBudget: { ...budget, allocations: allocations ?? {} } });
+    await flushDirty();
+  }
+
+  post(toUI.SCOUTING_ALLOCATION_RESULT, { valid: result.valid, errors: result.errors, allocations: result.valid ? allocations : budget.allocations }, id);
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

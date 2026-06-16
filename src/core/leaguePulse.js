@@ -386,6 +386,26 @@ export function generateLeaguePulseItems(meta, data = {}) {
     }
   }
 
+  // ── Draft buzz pulse (during draft prep / free agency phases) ────────────────
+  if (meta?.scoutingWeeksRemaining > 0 || meta?.phase === 'draft') {
+    const draftProspects = players.filter(p => p.status === 'draft_eligible');
+    const highBuzzCount = draftProspects.filter(p => Number(p.scoutingPoints ?? 0) >= 40).length;
+    if (highBuzzCount > 0) {
+      const buzzKey = `draft_buzz_${season}_${week}`;
+      if (!items.some(i => i.dedupeKey === buzzKey)) {
+        items.push({
+          id: buzzKey,
+          type: PULSE_TYPES.DRAFT,
+          headline: `${highBuzzCount} prospect${highBuzzCount === 1 ? '' : 's'} drawing heavy scouting interest`,
+          season,
+          week,
+          importance: 55,
+          dedupeKey: buzzKey,
+        });
+      }
+    }
+  }
+
   // Build the dedupe keys
   return items.map(item => ({
     ...item,
