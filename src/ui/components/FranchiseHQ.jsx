@@ -14,6 +14,7 @@ import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay 
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildGameBookDestination } from '../utils/managementScreenRouting.js';
 import ChronicleHeadlineBanner from './ChronicleHeadlineBanner.tsx';
+import CombineDashboard from './CombineDashboard.jsx';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -694,6 +695,15 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
 
       {/* ── TRADE DEADLINE BANNER ─────────────────────────────────────────── */}
       <HQDeadlineBanner week={safeNum(league?.week, 1)} />
+
+      {/* ── DRAFT COMBINE DASHBOARD ─────────────────────────────────────── */}
+      {league?.phase === 'draft_combine' && Array.isArray(league?.combineProspects) && (
+        <CombineDashboard
+          prospects={league.combineProspects}
+          combineInvitesLeft={league.combineInvitesLeft ?? 0}
+          actions={actions}
+        />
+      )}
 
       {/* ── COLLAPSED DRAWER: secondary content ─────────────────────────── */}
       <details className="hq-more-drawer" data-testid="hq-more-drawer">

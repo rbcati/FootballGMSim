@@ -183,6 +183,10 @@ export const toWorker = Object.freeze({
   /** Scouting */
   GET_SCOUTING_BOARD:           'GET_SCOUTING_BOARD',           // {} — get team-specific draft board
   UPDATE_SCOUTING_ALLOCATION:   'UPDATE_SCOUTING_ALLOCATION',   // { allocations: { [target]: points } }
+
+  /** Draft Combine */
+  RUN_COMBINE_WORKOUT:          'RUN_COMBINE_WORKOUT',          // { prospectId }
+  ADVANCE_COMBINE_WEEK:         'ADVANCE_COMBINE_WEEK',         // {} — transition draft_combine → draft
 });
 
 // ─────────────────────────────────────────────
@@ -294,6 +298,10 @@ export const toUI = Object.freeze({
   /** Scouting */
   SCOUTING_BOARD:               'SCOUTING_BOARD',               // { board: RankedProspect[] }
   SCOUTING_ALLOCATION_RESULT:   'SCOUTING_ALLOCATION_RESULT',   // { valid, errors, allocations }
+
+  /** Draft Combine */
+  COMBINE_WORKOUT_RESULT:       'COMBINE_WORKOUT_RESULT',       // { success, combineInvitesLeft, prospect, performanceCard }
+  COMBINE_WEEK_OPEN:            'COMBINE_WEEK_OPEN',            // { prospectCount }
 
   /**
    * IndexedDB version conflict / blocked event — the UI must reload the page

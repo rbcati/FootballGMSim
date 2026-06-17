@@ -790,6 +790,14 @@ export function useWorker() {
     advanceFreeAgencyDay: () =>
       send(toWorker.ADVANCE_FREE_AGENCY_DAY),
 
+    /** Run a private combine workout for a prospect. Returns a Promise. */
+    runCombineWorkout: (prospectId) =>
+      request(toWorker.RUN_COMBINE_WORKOUT, { prospectId }),
+
+    /** Advance past combine week into the draft phase. */
+    advanceCombineWeek: () =>
+      send(toWorker.ADVANCE_COMBINE_WEEK),
+
     /** Finalise offseason → generate new schedule → Week 1. */
     startNewSeason: () => send(toWorker.START_NEW_SEASON),
 
