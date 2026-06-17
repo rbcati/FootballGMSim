@@ -28,6 +28,51 @@ function safeNum(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+// Weeks matching DEADLINE_CONFIG.tension_start_week and deadline_week
+const HQ_DEADLINE_TENSION_WEEK = 8;
+const HQ_DEADLINE_FINAL_WEEK   = 10;
+
+function HQDeadlineBanner({ week }) {
+  if (week < HQ_DEADLINE_TENSION_WEEK || week > HQ_DEADLINE_FINAL_WEEK) return null;
+
+  const isDeadlineWeek = week === HQ_DEADLINE_FINAL_WEEK;
+
+  return (
+    <div
+      data-testid="hq-deadline-banner"
+      data-deadline-state={isDeadlineWeek ? 'crimson' : 'amber'}
+      style={{
+        margin: '4px 12px',
+        padding: 'var(--space-3) var(--space-4)',
+        border: `1px solid ${isDeadlineWeek ? 'rgba(255,69,58,0.5)' : 'rgba(255,159,10,0.5)'}`,
+        background: isDeadlineWeek ? 'rgba(255,69,58,0.08)' : 'rgba(255,159,10,0.07)',
+        borderRadius: 'var(--radius-md)',
+        fontSize: 'var(--text-xs)',
+        borderLeft: isDeadlineWeek ? '3px solid var(--danger, #FF453A)' : '3px solid var(--warning, #FF9F0A)',
+        animation: isDeadlineWeek ? 'hq-deadline-pulse 2s ease-in-out infinite' : 'none',
+      }}
+    >
+      <strong style={{ display: 'block', color: isDeadlineWeek ? 'var(--danger, #FF453A)' : 'var(--warning, #FF9F0A)', marginBottom: 2 }}>
+        {isDeadlineWeek ? '🚨 DEADLINE WEEK' : '⚠️ Trade Deadline Approaching — Week 10'}
+      </strong>
+      <span style={{ color: 'var(--text-muted)' }}>
+        {isDeadlineWeek
+          ? 'The trade window closes at the end of this week. Front offices are making aggressive moves.'
+          : 'Market volatility is HIGH. Contenders are overpaying for stars.'}
+      </span>
+      <style>{`
+        @keyframes hq-deadline-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          [data-deadline-state="crimson"] { animation: none !important; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 function formatRecordInline(record) {
   if (!record || record === '—') return '0-0';
   return record;
@@ -646,6 +691,9 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           </div>
         );
       })()}
+
+      {/* ── TRADE DEADLINE BANNER ─────────────────────────────────────────── */}
+      <HQDeadlineBanner week={safeNum(league?.week, 1)} />
 
       {/* ── COLLAPSED DRAWER: secondary content ─────────────────────────── */}
       <details className="hq-more-drawer" data-testid="hq-more-drawer">

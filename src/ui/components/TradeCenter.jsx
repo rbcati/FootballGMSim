@@ -863,9 +863,9 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
                       </div>
                     ) : null}
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Button size="sm" disabled={tradeLocked || isAccepting} onClick={() => handleAcceptIncomingTrade(offer)}>{isAccepting ? "Accepting…" : "Accept"}</Button>
-                      <Button size="sm" variant="secondary" disabled={tradeLocked} onClick={() => actions?.rejectIncomingTrade?.(offer.id)}>Reject</Button>
-                      <Button size="sm" variant="outline" disabled={tradeLocked} onClick={() => startCounterOffer(offer)}>Counter</Button>
+                      <Button size="sm" disabled={tradeLocked || isAccepting} title={tradeLocked ? "Trades locked until the offseason." : undefined} onClick={() => handleAcceptIncomingTrade(offer)}>{isAccepting ? "Accepting…" : "Accept"}</Button>
+                      <Button size="sm" variant="secondary" disabled={tradeLocked} title={tradeLocked ? "Trades locked until the offseason." : undefined} onClick={() => actions?.rejectIncomingTrade?.(offer.id)}>Reject</Button>
+                      <Button size="sm" variant="outline" disabled={tradeLocked} title={tradeLocked ? "Trades locked until the offseason." : undefined} onClick={() => startCounterOffer(offer)}>Counter</Button>
                       <Button size="sm" variant="outline" onClick={() => setTargetId(Number(offer.offeringTeamId))}>Open Team</Button>
                     </div>
                   </div>
@@ -928,9 +928,9 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
                   )}
                   {!isCountering && (
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <Button size="sm" disabled={tradeLocked || blockAction === 'accepting'} onClick={() => handleAcceptBlockOffer(offer)}>{blockAction === 'accepting' ? "Accepting…" : "Accept"}</Button>
+                      <Button size="sm" disabled={tradeLocked || blockAction === 'accepting'} title={tradeLocked ? "Trades locked until the offseason." : undefined} onClick={() => handleAcceptBlockOffer(offer)}>{blockAction === 'accepting' ? "Accepting…" : "Accept"}</Button>
                       <Button size="sm" variant="secondary" disabled={!!blockAction} onClick={() => handleRejectBlockOffer(offer)}>Reject</Button>
-                      <Button size="sm" variant="outline" disabled={tradeLocked} onClick={() => handleCounterBlockOffer(offer)}>Counter</Button>
+                      <Button size="sm" variant="outline" disabled={tradeLocked} title={tradeLocked ? "Trades locked until the offseason." : undefined} onClick={() => handleCounterBlockOffer(offer)}>Counter</Button>
                       <Button size="sm" variant="outline" onClick={() => setTargetId(Number(offer.aiTeamId))}>Open Team</Button>
                     </div>
                   )}
