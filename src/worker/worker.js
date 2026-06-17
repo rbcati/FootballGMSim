@@ -257,6 +257,11 @@ import {
   allocateScoutingPoints,
   REGIONS as SCOUTING_REGIONS,
 } from '../core/draft/scoutingEngine.js';
+import {
+  generateCombineMetricsForClass,
+  applyPrivateWorkout,
+  getAIDraftBoardAdjustment,
+} from '../core/draft/combineEngine.js';
 import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule, enrichArchivedGamePayload, mergeArchivedGameWithScheduleResult } from '../core/gameArchive.js';
 import {
   DEFAULT_LEAGUE_ECONOMY,
@@ -1132,6 +1137,23 @@ function buildViewState() {
     economy: normalizeLeagueEconomy(meta?.economy ?? {}, { year: meta?.year }),
     tradeDeadline,
     scoutingWeeksRemaining: meta?.scoutingWeeksRemaining ?? null,
+    combineInvitesLeft: meta?.combineInvitesLeft ?? 0,
+    combineProspectsReady: meta?.combineProspectsReady ?? false,
+    combineProspects: (() => {
+      if (meta?.phase !== 'draft_combine') return null;
+      const userTeamId = meta.userTeamId;
+      return cache.getAllPlayers()
+        .filter(p => p.status === 'draft_eligible')
+        .sort((a, b) => (b.combineMetrics?.combineGrade ?? 0) - (a.combineMetrics?.combineGrade ?? 0))
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          pos: p.pos,
+          combineMetrics: p.combineMetrics ?? null,
+          workoutCompleted: p.workoutCompleted ?? false,
+          verifiedOvr: p.workoutCompleted ? (p.scoutedRanges?.[userTeamId]?.low ?? null) : null,
+        }));
+    })(),
     scoutingBudget: (() => {
       const uTeam = cache.getTeam(meta?.userTeamId);
       return uTeam?.scoutingBudget ?? null;
@@ -5007,6 +5029,8 @@ async function handleSimToPhase({ targetPhase }, id) {
       } else if (currentMeta.phase === 'free_agency') {
         validateLeagueFlowState({ stage: 'free_agency' });
         await handleAdvanceFreeAgencyDay({}, null);
+      } else if (currentMeta.phase === 'draft_combine') {
+        await handleAdvanceCombineWeek({}, null);
       } else if (currentMeta.phase === 'draft') {
         // Auto-sim all draft picks. The draft pipeline itself is responsible
         // for transitioning into the next season (handleSimDraftPick and
@@ -10395,8 +10419,8 @@ async function handleStartDraft(payload, id) {
     return;
   }
 
-  // Accept 'draft' (new pipeline) and 'offseason' (legacy saves).
-  if (!['draft', 'offseason'].includes(meta.phase)) {
+  // Accept 'draft' (new pipeline), 'draft_combine' (combine→draft transition), and 'offseason' (legacy saves).
+  if (!['draft', 'draft_combine', 'offseason'].includes(meta.phase)) {
     post(toUI.DRAFT_STATE, { notStarted: true }, id);
     return;
   }
@@ -10650,7 +10674,9 @@ async function handleSimDraftPick(payload, id) {
         const hoardPenalty = dupDepth > 0
           ? Math.min(3.6, dupDepth * 1.75) * (eliteProspectReduction < 0.95 ? 0.42 : 1)
           : 0;
-        const val = Number(boardScore?.score ?? 0) + (needBoost * eliteProspectReduction) - hoardPenalty;
+        const combineAdj = getAIDraftBoardAdjustment(p);
+        const combineBonus = combineAdj.slots * 0.1;
+        const val = Number(boardScore?.score ?? 0) + (needBoost * eliteProspectReduction) - hoardPenalty + combineBonus;
 
         if (val > bestValue) {
             bestValue = val;
@@ -11832,7 +11858,8 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
     if (day > maxDays) {
         // FA is already over — ensure the phase advanced correctly (idempotent).
         if (meta.phase === 'free_agency') {
-            cache.setMeta({ phase: 'draft' });
+            cache.setMeta({ phase: 'draft_combine', combineInvitesLeft: 6, combineProspectsReady: false });
+            _initCombineWeek();
             await flushDirty();
         }
         post(toUI.NOTIFICATION, { level: 'info', message: 'Free Agency period is over.' });
@@ -11971,24 +11998,93 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
               .join(', ');
             post(toUI.NOTIFICATION, { level: 'info', message: `Comp picks awarded for ${meta.year} draft: ${preview}${compAwards.length > 4 ? '…' : ''}.` });
         }
-        updates.phase = 'draft';
+        updates.phase = 'draft_combine';
+        updates.combineInvitesLeft = 6;
+        updates.combineProspectsReady = false;
     }
 
     cache.setMeta(updates);
+
+    if (isComplete) {
+        _initCombineWeek();
+    }
 
     await flushDirty();
 
     post(toUI.NOTIFICATION, { level: 'info', message: `Free Agency Day ${day} Complete.` });
 
     if (isComplete) {
-        // Explicitly signal phase change so UI can redirect
-        post(toUI.OFFSEASON_PHASE, { phase: 'draft', message: 'Free Agency Complete. Draft is now open.' });
+        post(toUI.OFFSEASON_PHASE, { phase: 'draft_combine', message: 'Free Agency Complete. Draft Combine Week is now open.' });
     }
 
     // Refresh views
     post(toUI.STATE_UPDATE, buildViewState());
     // Also trigger FA list refresh
     await handleGetFreeAgents({}, null);
+}
+
+function _initCombineWeek() {
+    try {
+        const combineMeta = cache.getMeta();
+        if (combineMeta.combineProspectsReady) return;
+        const draftProspects = cache.getAllPlayers().filter(p => p.status === 'draft_eligible');
+        if (draftProspects.length === 0) {
+            cache.setMeta({ phase: 'draft' });
+            return;
+        }
+        const combineSeason = Number(combineMeta.year ?? combineMeta.season ?? 2025);
+        const updated = generateCombineMetricsForClass(draftProspects, combineSeason);
+        for (const p of updated) {
+            if (p.combineMetrics !== null) {
+                cache.updatePlayer(p.id, { combineMetrics: p.combineMetrics, workoutCompleted: p.workoutCompleted ?? false });
+            }
+        }
+        cache.setMeta({ combineProspectsReady: true });
+        const freshMeta = cache.getMeta();
+        const prospectCount = draftProspects.length;
+        let metaWithNews = addNewsItem(freshMeta, {
+            id: `combine_week_open_${combineSeason}`,
+            headline: `Draft Combine Week is underway. ${prospectCount} prospects are being evaluated.`,
+            body: `${prospectCount} draft prospects have completed combine testing. Evaluators are releasing results.`,
+            week: freshMeta.currentWeek ?? 1,
+            season: combineSeason,
+            type: 'combine_week_open',
+            category: 'MILESTONE',
+            priority: 80,
+        });
+        for (const p of updated) {
+            if (!p.combineMetrics) continue;
+            const grade = p.combineMetrics.combineGrade;
+            if (grade > 8.5) {
+                metaWithNews = addNewsItem(metaWithNews, {
+                    id: `combine_freak_${p.id}_${combineSeason}`,
+                    headline: `${p.name} posts elite combine numbers (grade: ${grade.toFixed(1)}).`,
+                    body: `Expect teams to reach for him on draft day.`,
+                    week: freshMeta.currentWeek ?? 1,
+                    season: combineSeason,
+                    type: 'combine_athletic_freak',
+                    category: 'SCOUTING',
+                    priority: 75,
+                    playerId: p.id,
+                });
+            } else if (grade < 4.0) {
+                metaWithNews = addNewsItem(metaWithNews, {
+                    id: `combine_bust_${p.id}_${combineSeason}`,
+                    headline: `${p.name}'s combine raises questions (grade: ${grade.toFixed(1)}).`,
+                    body: `Could slide on draft day.`,
+                    week: freshMeta.currentWeek ?? 1,
+                    season: combineSeason,
+                    type: 'combine_bust',
+                    category: 'SCOUTING',
+                    priority: 65,
+                    playerId: p.id,
+                });
+            }
+        }
+        cache.setMeta({ newsItems: metaWithNews.newsItems });
+    } catch (err) {
+        console.warn('[Worker] Combine init error (non-fatal):', err.message);
+    }
 }
 
 /**
@@ -13629,6 +13725,10 @@ async function handleMessage(event) {
       case toWorker.GET_SCOUTING_BOARD:          return await handleGetScoutingBoard(payload, id);
       case toWorker.UPDATE_SCOUTING_ALLOCATION:  return await handleUpdateScoutingAllocation(payload, id);
 
+      // ── Draft Combine ──────────────────────────────────────────────────────
+      case toWorker.RUN_COMBINE_WORKOUT:    return await handleRunCombineWorkout(payload, id);
+      case toWorker.ADVANCE_COMBINE_WEEK:   return await handleAdvanceCombineWeek(payload, id);
+
       default:
         console.warn(`[Worker] Unknown message type: ${type}`);
         post(toUI.ERROR, { message: `Unknown message type: ${type}` }, id);
@@ -13671,6 +13771,107 @@ async function handleUpdateScoutingAllocation({ allocations }, id) {
   }
 
   post(toUI.SCOUTING_ALLOCATION_RESULT, { valid: result.valid, errors: result.errors, allocations: result.valid ? allocations : budget.allocations }, id);
+}
+
+// ── Handler: RUN_COMBINE_WORKOUT ─────────────────────────────────────────────
+
+async function handleRunCombineWorkout({ prospectId }, id) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  if (!meta) return post(toUI.ERROR, { message: 'No league loaded' }, id);
+
+  if (meta.phase !== 'draft_combine') {
+    return post(toUI.COMBINE_WORKOUT_RESULT, { success: false, error: 'WRONG_STAGE' }, id);
+  }
+  const invitesLeft = Number(meta.combineInvitesLeft ?? 0);
+  if (invitesLeft <= 0) {
+    return post(toUI.COMBINE_WORKOUT_RESULT, { success: false, error: 'NO_INVITES_LEFT' }, id);
+  }
+  const prospect = cache.getPlayer(prospectId);
+  if (!prospect || prospect.status !== 'draft_eligible') {
+    return post(toUI.COMBINE_WORKOUT_RESULT, { success: false, error: 'PROSPECT_NOT_FOUND' }, id);
+  }
+  if (prospect.workoutCompleted) {
+    return post(toUI.COMBINE_WORKOUT_RESULT, { success: false, error: 'ALREADY_COMPLETED' }, id);
+  }
+
+  const userTeamId = meta.userTeamId;
+  const season = Number(meta.year ?? meta.season ?? 2025);
+  const updatedProspect = applyPrivateWorkout(prospect, userTeamId, season);
+  cache.updatePlayer(prospect.id, {
+    workoutCompleted: updatedProspect.workoutCompleted,
+    scoutedRanges: updatedProspect.scoutedRanges,
+  });
+  cache.setMeta({ combineInvitesLeft: invitesLeft - 1 });
+
+  const metrics = updatedProspect.combineMetrics ?? prospect.combineMetrics ?? {};
+  const trueOvr = updatedProspect.trueOvr ?? updatedProspect.ovr ?? 60;
+  const forty = metrics.fortyYardDash ?? '—';
+  const bench = metrics.benchPressReps ?? '—';
+  const grade = metrics.combineGrade ?? 5;
+  const speedNote = typeof forty === 'number'
+    ? forty <= 4.38 ? 'elite speed'
+    : forty <= 4.50 ? 'above-average speed'
+    : forty <= 4.65 ? 'adequate athleticism' : 'below-average speed'
+    : 'unknown athleticism';
+  const gradeNote = grade >= 8.5 ? 'Evaluators flagged as an athletic freak.'
+    : grade >= 7.0 ? 'Strong overall athletic profile.'
+    : grade >= 5.0 ? 'Solid combine showing.'
+    : grade >= 4.0 ? 'Below expectations.'
+    : 'Evaluators have concerns about athleticism.';
+  const performanceCard = `${prospect.name} completed private drills. Posted a ${forty}s forty and ${bench} bench reps. Showed ${speedNote}. ${gradeNote} True OVR confirmed at ${trueOvr}.`;
+
+  const workoutNews = {
+    id: `combine_workout_${prospect.id}_${season}`,
+    headline: `${prospect.name} completes a private workout. True OVR confirmed at ${trueOvr}.`,
+    body: performanceCard,
+    week: meta.currentWeek ?? 1,
+    season,
+    type: 'combine_private_workout',
+    category: 'SCOUTING',
+    priority: 60,
+    playerId: prospect.id,
+  };
+  cache.setMeta(addNewsItem(cache.getMeta(), workoutNews));
+
+  const userTeam = cache.getTeam(userTeamId);
+  if (userTeam) {
+    const scoutLog = Array.isArray(userTeam.scoutingLog) ? userTeam.scoutingLog : [];
+    cache.updateTeam(userTeamId, {
+      scoutingLog: [...scoutLog, { type: 'combine_workout', playerId: prospect.id, playerName: prospect.name, season, trueOvr }].slice(-100),
+    });
+  }
+
+  await flushDirty();
+  post(toUI.COMBINE_WORKOUT_RESULT, {
+    success: true,
+    combineInvitesLeft: invitesLeft - 1,
+    prospect: {
+      name: updatedProspect.name,
+      position: updatedProspect.pos,
+      trueOvr,
+      combineMetrics: updatedProspect.combineMetrics ?? prospect.combineMetrics,
+      workoutCompleted: true,
+    },
+    performanceCard,
+  }, id);
+  post(toUI.STATE_UPDATE, buildViewState());
+}
+
+// ── Handler: ADVANCE_COMBINE_WEEK ────────────────────────────────────────────
+
+async function handleAdvanceCombineWeek(payload, id) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  if (!meta) return post(toUI.ERROR, { message: 'No league loaded' }, id);
+
+  if (meta.phase !== 'draft_combine') {
+    return post(toUI.ERROR, { message: 'Not in draft combine phase' }, id);
+  }
+
+  cache.setMeta({ phase: 'draft' });
+  await flushDirty();
+
+  post(toUI.OFFSEASON_PHASE, { phase: 'draft', message: 'Combine Week complete. Draft is now open.' });
+  post(toUI.STATE_UPDATE, buildViewState());
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
