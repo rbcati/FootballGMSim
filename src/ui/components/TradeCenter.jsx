@@ -417,6 +417,10 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   const [previewPlayer, setPreviewPlayer] = useState(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const incomingOffers = useMemo(() => Array.isArray(league?.incomingTradeOffers) ? league.incomingTradeOffers : [], [league?.incomingTradeOffers]);
+  const inboundOffers  = useMemo(() => Array.isArray(league?.inboundTradeOffers)  ? league.inboundTradeOffers  : [], [league?.inboundTradeOffers]);
+  const [blockCounterOfferId, setBlockCounterOfferId] = useState(null);
+  const [blockCounterResult, setBlockCounterResult]   = useState(null);
+  const [blockAction, setBlockAction]                 = useState(null); // 'accepting' | 'countering' | null
   const lastAppliedSeedRef = useRef(null);
 
   const otherTeams = useMemo(() => (league?.teams ?? []).filter(t => t.id !== myTeamId).sort((a, b) => a.name.localeCompare(b.name)), [league?.teams, myTeamId]);
@@ -680,6 +684,59 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     await fetchRosters(targetId);
   };
 
+  const handleAcceptBlockOffer = async (offer) => {
+    if (!offer?.offerId || tradeLocked || !actions?.acceptTradeOffer) return;
+    if (blockAction) return;
+    setBlockAction('accepting');
+    try {
+      const resp = await actions.acceptTradeOffer(offer.offerId);
+      setBlockCounterResult(resp?.payload ?? { accepted: true });
+      setBlockCounterOfferId(null);
+    } catch (e) {
+      console.error(e);
+      setBlockCounterResult({ accepted: false, reason: 'Trade failed.' });
+    } finally {
+      setBlockAction(null);
+    }
+  };
+
+  const handleRejectBlockOffer = async (offer) => {
+    if (!offer?.offerId || !actions?.rejectTradeOffer) return;
+    setBlockAction('rejecting_' + offer.offerId);
+    try {
+      await actions.rejectTradeOffer(offer.offerId);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBlockAction(null);
+    }
+  };
+
+  const handleCounterBlockOffer = async (offer) => {
+    if (!offer?.offerId || tradeLocked) return;
+    setBlockCounterOfferId(offer.offerId);
+    setBlockCounterResult(null);
+  };
+
+  const handleSubmitBlockCounter = async (offer) => {
+    if (!offer?.offerId || !actions?.counterTradeOffer) return;
+    setBlockAction('countering');
+    try {
+      // Counter: user keeps target player, but offers a different bundle
+      // For simplicity in the counter flow we send the same original bundle back
+      // (the full counter UI with asset pickers is in the dedicated counter modal)
+      const counterPlayerIds = [Number(offer.targetPlayerId)];
+      const resp = await actions.counterTradeOffer(offer.offerId, counterPlayerIds, []);
+      setBlockCounterResult(resp?.payload ?? { accepted: false, counterStatus: 'unknown' });
+      setBlockCounterOfferId(null);
+    } catch (e) {
+      console.error(e);
+      setBlockCounterResult({ accepted: false, reason: 'Counter failed.' });
+    } finally {
+      setBlockAction(null);
+    }
+  };
+
   return (
     <div className="app-screen-stack">
     <ScreenHeader
@@ -815,6 +872,71 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
                 );
               })()
             ))}
+          </div>
+        </div>
+      )}
+      {/* ── Inbound Trade Block Offers ── */}
+      {inboundOffers.length > 0 && (
+        <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <strong style={{ fontSize: "var(--text-sm)" }}>Trade block offers</strong>
+            <Badge variant="outline" style={{ background: "rgba(10,132,255,0.12)", borderColor: "rgba(10,132,255,0.4)", color: "var(--accent)" }}>
+              {inboundOffers.length} inbound
+            </Badge>
+          </div>
+          {blockCounterResult && (
+            <div style={{ marginBottom: 8, padding: "8px 10px", borderRadius: "var(--radius-md)", fontSize: "var(--text-xs)", background: blockCounterResult.accepted ? "rgba(52,199,89,0.1)" : "rgba(255,69,58,0.08)", border: `1px solid ${blockCounterResult.accepted ? "rgba(52,199,89,0.4)" : "rgba(255,69,58,0.4)"}`, color: blockCounterResult.accepted ? "var(--success)" : "var(--danger)" }}>
+              {blockCounterResult.accepted
+                ? `Trade completed! ${blockCounterResult.reason ?? ''}`
+                : `${blockCounterResult.counterStatus === 'counter' ? 'Team improved their offer — check below.' : blockCounterResult.reason ?? 'Offer rejected.'}`}
+              <button style={{ marginLeft: 8, background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "var(--text-xs)" }} onClick={() => setBlockCounterResult(null)}>✕</button>
+            </div>
+          )}
+          <div style={{ display: "grid", gap: 8 }}>
+            {inboundOffers.slice(0, 5).map(offer => {
+              const isCountering = blockCounterOfferId === offer.offerId;
+              return (
+                <div key={offer.offerId} style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px 12px", display: "grid", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <strong style={{ fontSize: "var(--text-sm)" }}>
+                      {offer.aiTeamName} — {offer.targetPlayerName} ({offer.targetPlayerPos}, {offer.targetPlayerOvr} OVR)
+                    </strong>
+                    <Badge variant="outline" style={{ fontSize: 10 }}>{offer.aggression}</Badge>
+                  </div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                    They offer: {[
+                      ...(offer.offerPlayers ?? []).map(p => `${p.name ?? 'Player'} (${p.pos ?? '?'}, ${p.ovr ?? '?'})`),
+                      ...(offer.offerPicks ?? []).map(pk => `Rd ${pk.round ?? '?'} pick`),
+                    ].join(', ') || 'No assets listed'}
+                  </div>
+                  <div style={{ display: "flex", gap: "var(--space-2)", fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
+                    <span>Bundle value: <strong>{(offer.bundleValue ?? 0).toLocaleString()}</strong></span>
+                    <span>·</span>
+                    <span>Offer value: <strong>{(offer.acquisitionValue ?? 0).toLocaleString()}</strong></span>
+                    <span>·</span>
+                    <span>Wk {offer.createdWeek} → Wk {offer.expiresWeek}</span>
+                  </div>
+                  {isCountering && (
+                    <div style={{ padding: "8px 10px", border: "1px solid var(--accent)", borderRadius: "var(--radius-md)", background: "rgba(10,132,255,0.06)", fontSize: "var(--text-xs)" }}>
+                      <div style={{ marginBottom: 6, color: "var(--text-muted)" }}>Counter mode — submit with current target player for a quick counter, or open Trade Builder to customize your bundle.</div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <Button size="sm" disabled={blockAction === 'countering'} onClick={() => handleSubmitBlockCounter(offer)}>{blockAction === 'countering' ? "Sending…" : "Quick Counter"}</Button>
+                        <Button size="sm" variant="outline" onClick={() => { setTargetId(Number(offer.aiTeamId)); setBlockCounterOfferId(null); }}>Open Builder</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setBlockCounterOfferId(null)}>Cancel</Button>
+                      </div>
+                    </div>
+                  )}
+                  {!isCountering && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <Button size="sm" disabled={tradeLocked || blockAction === 'accepting'} onClick={() => handleAcceptBlockOffer(offer)}>{blockAction === 'accepting' ? "Accepting…" : "Accept"}</Button>
+                      <Button size="sm" variant="secondary" disabled={!!blockAction} onClick={() => handleRejectBlockOffer(offer)}>Reject</Button>
+                      <Button size="sm" variant="outline" disabled={tradeLocked} onClick={() => handleCounterBlockOffer(offer)}>Counter</Button>
+                      <Button size="sm" variant="outline" onClick={() => setTargetId(Number(offer.aiTeamId))}>Open Team</Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

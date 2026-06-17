@@ -362,6 +362,31 @@ export const createNewsItem = (type, data, week, season) => {
             body: (d) => `The ${d?.season ?? 'season'} Hall of Fame class has been announced: ${d?.names ?? 'several legends'}.`,
             priority: 'high',
         },
+        trade_offer_received: {
+            headline: (d) => `${d?.aiTeamName ?? 'A team'} makes offer for ${d?.playerName ?? 'Player'}`,
+            body: (d) => `${d?.aiTeamName ?? 'An AI franchise'} has submitted an inbound offer for ${d?.playerName ?? 'a player'} on your trade block.`,
+            priority: 'medium',
+        },
+        trade_offer_expired: {
+            headline: (d) => `${d?.aiTeamName ?? 'A team'} withdrew their offer for ${d?.playerName ?? 'Player'}`,
+            body: (d) => `The offer from ${d?.aiTeamName ?? 'an AI team'} for ${d?.playerName ?? 'a player'} has expired.`,
+            priority: 'low',
+        },
+        trade_block_accepted: {
+            headline: (d) => `${d?.playerName ?? 'Player'} traded to ${d?.aiTeamName ?? 'Team'}`,
+            body: (d) => `You accepted the offer and ${d?.playerName ?? 'a player'} is now with ${d?.aiTeamName ?? 'another franchise'}.`,
+            priority: 'medium',
+        },
+        trade_counter_accepted: {
+            headline: (d) => `${d?.aiTeamName ?? 'Team'} accepts your counter offer`,
+            body: (d) => `${d?.aiTeamName ?? 'The opposing team'} agreed to your revised terms for ${d?.playerName ?? 'the player'}.`,
+            priority: 'medium',
+        },
+        trade_counter_rejected: {
+            headline: (d) => `${d?.aiTeamName ?? 'Team'} rejected your counter offer`,
+            body: (d) => `${d?.aiTeamName ?? 'The opposing team'} turned down your revised terms for ${d?.playerName ?? 'the player'}.`,
+            priority: 'medium',
+        },
     };
     const template = templates[type];
     if (!template) return null;
