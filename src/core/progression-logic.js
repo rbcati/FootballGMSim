@@ -25,6 +25,7 @@ import { calculateOvr } from './player.js';
 import { Constants } from './constants.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer } from './development/personalitySystem.js';
 import { getDevelopmentRateModifier } from './coaching-philosophy-effects.js';
+import { getCoachSchemeMultiplier, isPositionMisfitForScheme } from './coaching/coachingEngine.js';
 
 // ── Progression probability constants (Task 10) ───────────────────────────────
 // Defined here so they can be tuned without hunting for magic numbers inline.
@@ -98,6 +99,32 @@ const PHYSICAL_TRAITS = {
 // deep into his decline phase. Mental traits (awareness, route running, etc.)
 // always retain the 40 floor — an old player loses a step, not his football IQ.
 const AGE_FLOOR_TRAITS = new Set(['speed', 'acceleration', 'agility', 'jumping']);
+
+/**
+ * Resolve the scheme-fit development multiplier for a player on a team.
+ *
+ * - team.coach.headCoach absent (old saves or no coach hired) → 1.0 safe fallback
+ * - Position is a scheme misfit → 0.90  (development slowed)
+ * - Position fits or is unaffected by the scheme → coach-quality multiplier
+ *   from getCoachSchemeMultiplier (1.08 / 1.00 / 0.94 / 0.88 by rating tier)
+ */
+export function resolveSchemeMultiplier(player, team) {
+  const hc = team?.coach?.headCoach;
+  if (!hc) return 1.0;
+  if (isPositionMisfitForScheme(player.pos, hc.scheme)) return 0.90;
+  return getCoachSchemeMultiplier(hc.overallRating);
+}
+
+/**
+ * Apply scheme multiplier and morale bonus to a base OVR delta, clamped to [-5, +5].
+ *
+ * moraleBonus: +0.5 if morale >= 70, -0.5 if morale <= 30, 0 otherwise.
+ * finalDelta = round(baseOvrDelta * schemeMultiplier + moraleBonus), clamped [-5, +5].
+ */
+export function computeProgressionFinalDelta(baseOvrDelta, schemeMultiplier, moraleScore) {
+  const moraleBonus = moraleScore >= 70 ? 0.5 : moraleScore <= 30 ? -0.5 : 0;
+  return Math.max(-5, Math.min(5, Math.round(baseOvrDelta * schemeMultiplier + moraleBonus)));
+}
 
 /**
  * Build a per-trait minimum-rating function for a player's age. For physical
@@ -207,6 +234,8 @@ export function processPlayerProgression(players, options = {}) {
   const teamRosters = options?.teamRosters ?? {};
   // teamCoaches: map of teamId → team.staff (for coaching philosophy dev modifier)
   const teamCoaches = options?.teamCoaches ?? {};
+  // teams: map of teamId → full team object (for scheme-fit multiplier via team.coach)
+  const teams = options?.teams ?? {};
   const gainers    = []; // players with progressionDelta >= +4
   const regressors = []; // players with progressionDelta <= -3
   const breakouts  = []; // explicit Breakout Season events (for news)
@@ -352,6 +381,11 @@ export function processPlayerProgression(players, options = {}) {
             : ovrDelta + (damp * direction);
         }
       }
+      // ── Scheme-fit multiplier + morale bonus (applied last, hard cap ±5) ─────
+      const team = teams[player.teamId] ?? null;
+      const schemeMultiplier = resolveSchemeMultiplier(player, team);
+      const moraleScore = player.morale ?? 70;
+      ovrDelta = computeProgressionFinalDelta(ovrDelta, schemeMultiplier, moraleScore);
       nudgeRatingsBy(player, ovrDelta);
     }
 
