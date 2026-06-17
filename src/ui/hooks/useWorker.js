@@ -673,6 +673,17 @@ export function useWorker() {
       request(toWorker.STONEWALL_TRADE_REQUEST, { playerId }),
     offerExtensionToWithdraw: (playerId) =>
       request(toWorker.OFFER_EXTENSION_TO_WITHDRAW, { playerId }),
+    // AI Trade Block Marketplace
+    acceptTradeOffer: (offerId) =>
+      request(toWorker.ACCEPT_TRADE_OFFER, { offerId }),
+    rejectTradeOffer: (offerId) =>
+      request(toWorker.REJECT_TRADE_OFFER, { offerId }),
+    counterTradeOffer: (offerId, counterPlayers, counterPicks) =>
+      request(toWorker.COUNTER_TRADE_OFFER, { offerId, counterPlayers, counterPicks }),
+    initiateTradeBlock: (playerId) =>
+      request(toWorker.INITIATE_TRADE_BLOCK, { playerId }),
+    removeFromTradeBlock: (playerId) =>
+      request(toWorker.REMOVE_FROM_TRADE_BLOCK, { playerId }),
     assignMentor: (mentorId, menteeId, teamId) =>
       request(toWorker.ASSIGN_MENTOR, { mentorId, menteeId, teamId }, { silent: true }),
 

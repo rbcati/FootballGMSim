@@ -200,6 +200,13 @@ import { derivePlayerVisibleRatingsPatch } from './playerDerivedRatings.js';
 import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, evaluateCounterOffer } from '../core/trade-logic.js';
 import { generateInboundOffersToUser } from '../core/trades/tradeBlockGenerator.js';
+import {
+  buildAITradeOffer,
+  getAITradeBlockTargets,
+  shouldAIUpdateOffer,
+  improveAIOffer,
+  evaluateCounterOffer as evaluateAIBlockCounterOffer,
+} from '../core/trades/aiTradeEngine.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot, buildHallOfFameInducteeRow, syncHallOfFameAfterRecordBook } from '../core/league-memory.js';
 import { buildPlayerSeasonStatsArchiveRows } from '../core/playerSeasonStatsArchive.js';
@@ -1102,6 +1109,7 @@ function buildViewState() {
     newsItems: Array.isArray(meta?.newsItems) ? meta.newsItems : [],
     ownerGoals: Array.isArray(meta?.ownerGoals) ? meta.ownerGoals : [],
     incomingTradeOffers: Array.isArray(meta?.incomingTradeOffers) ? meta.incomingTradeOffers : [],
+    inboundTradeOffers: (Array.isArray(meta?.inboundTradeOffers) ? meta.inboundTradeOffers : []).filter(o => o?.status === 'pending'),
     lastTradeActivityWeek: Number(meta?.lastTradeActivityWeek ?? 0),
     retiredPlayers: Array.isArray(meta?.retiredPlayers) ? meta.retiredPlayers : [],
     records: meta?.records ?? null,
@@ -3278,6 +3286,103 @@ async function handleAdvanceWeek(payload, id) {
     } catch (tradeErr) {
       // Trade engine errors should never crash the week advance.
       console.warn('[Worker] AI trade engine error (non-fatal):', tradeErr.message);
+    }
+
+    // ── AI Trade Block Marketplace pursuit ──────────────────────────────────
+    // Generate / refresh inbound offers for user's trade-block players.
+    try {
+      const blockMeta      = ensureDynastyMeta(cache.getMeta());
+      const blockSeason    = blockMeta.currentSeasonId ?? blockMeta.season ?? 0;
+      const blockWeek      = Number(blockMeta.currentWeek ?? 0);
+      const allTeams       = cache.getAllTeams();
+      const allPlayers     = cache.getAllPlayers();
+      const userTeamId     = Number(blockMeta.userTeamId);
+      const userTeam       = cache.getTeam(userTeamId);
+
+      if (userTeam) {
+        const allPicks      = Array.isArray(blockMeta.draftPicks) ? blockMeta.draftPicks : [];
+        const existingOffers = Array.isArray(blockMeta.inboundTradeOffers) ? blockMeta.inboundTradeOffers : [];
+
+        // Expire stale pending offers
+        const liveOffers = existingOffers.filter(o => {
+          if (o.status !== 'pending') return true; // keep non-pending (accepted/rejected)
+          return !shouldAIUpdateOffer(o, null, blockSeason, blockWeek);
+        });
+
+        // Get AI teams that should pursue block players this week
+        const pursuits = getAITradeBlockTargets(userTeam, allPlayers, allTeams, blockSeason, blockWeek);
+
+        const newOffers   = [];
+        const pulseItems  = [];
+
+        for (const { aiTeam, targetPlayerId } of pursuits) {
+          const targetPlayer = cache.getPlayer(Number(targetPlayerId));
+          if (!targetPlayer?.onTradeBlock) continue;
+
+          // Check if this AI team already has a pending offer for this player
+          const existing = liveOffers.find(
+            o => o.status === 'pending' && Number(o.aiTeamId) === Number(aiTeam.id) && Number(o.targetPlayerId) === Number(targetPlayerId),
+          );
+
+          const seed = ((Number(aiTeam.id) * 9973 + Number(targetPlayerId) * 1009 + blockSeason * 17 + blockWeek * 3) >>> 0);
+
+          if (existing) {
+            // Optionally improve the offer
+            const improved = improveAIOffer(existing, targetPlayer, aiTeam, allPlayers, allPicks, blockSeason, blockWeek, seed);
+            if (improved) {
+              const idx = liveOffers.indexOf(existing);
+              liveOffers[idx] = improved;
+            }
+          } else {
+            const offer = buildAITradeOffer(targetPlayer, aiTeam, allPlayers, allPicks, blockSeason, blockWeek, seed);
+            if (offer) newOffers.push(offer);
+          }
+        }
+
+        // Add new offers (cap at 12 pending total)
+        const combined = [...liveOffers, ...newOffers];
+        const pendingCount = combined.filter(o => o.status === 'pending').length;
+        const capped = pendingCount > 12
+          ? [...combined.filter(o => o.status !== 'pending'), ...combined.filter(o => o.status === 'pending').slice(0, 12)]
+          : combined;
+
+        if (newOffers.length > 0) {
+          for (const offer of newOffers) {
+            NewsEngine.logNews(
+              'TRADE_BLOCK_OFFER',
+              `${offer.aiTeamAbbrev} interested in ${offer.targetPlayerName} — inbound offer received`,
+              userTeamId,
+              { offerId: offer.offerId, aiTeamId: offer.aiTeamId, playerId: offer.targetPlayerId },
+            );
+          }
+
+          // League pulse: buzz when 2+ teams are pursuing the same player
+          const blockPlayers = allPlayers.filter(p => Number(p?.teamId) === userTeamId && p?.onTradeBlock);
+          for (const bp of blockPlayers) {
+            const pursuersCount = capped.filter(o => o.status === 'pending' && Number(o.targetPlayerId) === Number(bp.id)).length;
+            if (pursuersCount >= 2) {
+              pulseItems.push({
+                id:       `trade_buzz_${bp.id}_s${blockSeason}w${blockWeek}`,
+                type:     'trade_market',
+                headline: `${pursuersCount} teams pursuing ${bp.name ?? 'trade block player'}`,
+                body:     `Multiple franchises have submitted offers for ${bp.name ?? 'a trade block player'} (${bp.pos ?? '??'}, OVR ${bp.ovr ?? '?'}).`,
+                week:     blockWeek,
+                season:   blockSeason,
+                teamId:   userTeamId,
+              });
+            }
+          }
+        }
+
+        const metaUpdate = { inboundTradeOffers: capped };
+        if (pulseItems.length > 0) {
+          const freshMeta   = ensureDynastyMeta(cache.getMeta());
+          metaUpdate.leaguePulse = mergeLeaguePulseItems(freshMeta.leaguePulse ?? [], pulseItems);
+        }
+        cache.setMeta(metaUpdate);
+      }
+    } catch (blockErr) {
+      console.warn('[Worker] AI trade block marketplace error (non-fatal):', blockErr.message);
     }
   }
 
@@ -9833,6 +9938,244 @@ async function handleOfferExtensionToWithdraw({ playerId }, id) {
   post(toUI.STATE_UPDATE, { ...buildViewState(), extensionRedirect: { playerId: numericId } }, id);
 }
 
+// ── Handler: INITIATE_TRADE_BLOCK ─────────────────────────────────────────────
+
+async function handleInitiateTradeBlock({ playerId }, id) {
+  const numericId = Number(playerId);
+  const player    = cache.getPlayer(numericId);
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+
+  const meta    = ensureDynastyMeta(cache.getMeta());
+  const userTeamId = Number(meta.userTeamId);
+  if (Number(player.teamId) !== userTeamId) {
+    post(toUI.ERROR, { message: 'Player is not on your roster' }, id);
+    return;
+  }
+
+  cache.updatePlayer(numericId, { onTradeBlock: true });
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
+// ── Handler: REMOVE_FROM_TRADE_BLOCK ─────────────────────────────────────────
+
+async function handleRemoveFromTradeBlock({ playerId }, id) {
+  const numericId = Number(playerId);
+  const player    = cache.getPlayer(numericId);
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+
+  const meta    = ensureDynastyMeta(cache.getMeta());
+  const userTeamId = Number(meta.userTeamId);
+  if (Number(player.teamId) !== userTeamId) {
+    post(toUI.ERROR, { message: 'Player is not on your roster' }, id);
+    return;
+  }
+
+  cache.updatePlayer(numericId, { onTradeBlock: false });
+
+  // Expire any pending inbound offers for this player
+  const existing = Array.isArray(meta.inboundTradeOffers) ? meta.inboundTradeOffers : [];
+  const updated  = existing.map(o =>
+    o.status === 'pending' && Number(o.targetPlayerId) === numericId
+      ? { ...o, status: 'expired' }
+      : o,
+  );
+  cache.setMeta({ inboundTradeOffers: updated });
+
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
+// ── Handler: ACCEPT_TRADE_OFFER ───────────────────────────────────────────────
+
+async function handleAcceptTradeOffer({ offerId }, id) {
+  const latestMeta = ensureDynastyMeta(cache.getMeta());
+
+  const deadline = getTradeDeadlineSnapshot(latestMeta);
+  if (!isTradeWindowOpen({ week: deadline.currentWeek, phase: deadline.phase, settings: latestMeta?.settings, commissionerMode: deadline.canOverride })) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'deadline', reason: `Trade deadline passed after Week ${deadline.deadlineWeek}.` }, id);
+    return;
+  }
+
+  const offers  = Array.isArray(latestMeta.inboundTradeOffers) ? latestMeta.inboundTradeOffers : [];
+  const offer   = offers.find(o => o?.offerId === offerId && o?.status === 'pending');
+  if (!offer) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, reason: 'Offer expired or no longer available.' }, id);
+    return;
+  }
+
+  const userTeamId  = Number(latestMeta.userTeamId);
+  const aiTeamId    = Number(offer.aiTeamId);
+
+  // Build offering/receiving bundles
+  const offerPlayerIds = (offer.offerPlayers ?? []).map(p => Number(p.id));
+  const offerPickIds   = (offer.offerPicks   ?? []).map(p => String(p.id));
+
+  const offering  = { playerIds: offerPlayerIds,           pickIds: offerPickIds };           // AI gives
+  const receiving = { playerIds: [Number(offer.targetPlayerId)], pickIds: [] };                // AI gets
+
+  const legality = evaluateTradeLegality({
+    fromTeamId: userTeamId,
+    toTeamId:   aiTeamId,
+    offering:   receiving,   // user gives target player
+    receiving:  offering,    // user gets AI's bundle
+    phase:      latestMeta?.phase,
+  });
+  if (!legality.ok) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'cap', reason: legality.reason }, id);
+    return;
+  }
+
+  // Execute: user gives the target player, receives the AI bundle
+  await executeAcceptedTrade({
+    fromTeamId: userTeamId,
+    toTeamId:   aiTeamId,
+    offering:   receiving,    // user gives
+    receiving:  offering,     // user gets
+  });
+
+  // Mark offer accepted
+  const updatedOffers = offers.map(o => o.offerId === offerId ? { ...o, status: 'accepted' } : o);
+  cache.setMeta({ inboundTradeOffers: updatedOffers });
+
+  await flushDirty();
+  post(toUI.TRADE_RESPONSE, { accepted: true, reason: 'Trade completed.' }, id);
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
+// ── Handler: REJECT_TRADE_OFFER ───────────────────────────────────────────────
+
+async function handleRejectTradeOffer({ offerId }, id) {
+  const latestMeta = ensureDynastyMeta(cache.getMeta());
+  const offers     = Array.isArray(latestMeta.inboundTradeOffers) ? latestMeta.inboundTradeOffers : [];
+  const offer      = offers.find(o => o?.offerId === offerId && o?.status === 'pending');
+  if (!offer) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, reason: 'Offer not found.' }, id);
+    return;
+  }
+
+  const updatedOffers = offers.map(o => o.offerId === offerId ? { ...o, status: 'rejected' } : o);
+  cache.setMeta({ inboundTradeOffers: updatedOffers });
+  await flushDirty();
+  post(toUI.TRADE_RESPONSE, { accepted: false, reason: 'Offer rejected.' }, id);
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
+// ── Handler: COUNTER_TRADE_OFFER ──────────────────────────────────────────────
+
+async function handleCounterTradeOffer({ offerId, counterPlayers, counterPicks }, id) {
+  const latestMeta = ensureDynastyMeta(cache.getMeta());
+
+  const deadline = getTradeDeadlineSnapshot(latestMeta);
+  if (!isTradeWindowOpen({ week: deadline.currentWeek, phase: deadline.phase, settings: latestMeta?.settings, commissionerMode: deadline.canOverride })) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'deadline', reason: `Trade deadline passed after Week ${deadline.deadlineWeek}.` }, id);
+    return;
+  }
+
+  const offers = Array.isArray(latestMeta.inboundTradeOffers) ? latestMeta.inboundTradeOffers : [];
+  const offer  = offers.find(o => o?.offerId === offerId && o?.status === 'pending');
+  if (!offer) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, reason: 'Offer expired or no longer available.' }, id);
+    return;
+  }
+
+  const userTeamId = Number(latestMeta.userTeamId);
+  const aiTeamId   = Number(offer.aiTeamId);
+  const aiTeam     = cache.getTeam(aiTeamId);
+
+  // What the AI receives in the counter (user's proposed bundle)
+  const counterPlayerIds = Array.isArray(counterPlayers) ? counterPlayers.map(Number) : [Number(offer.targetPlayerId)];
+  const counterPickIds   = Array.isArray(counterPicks)   ? counterPicks.map(String)  : [];
+  const userBundle = { playerIds: counterPlayerIds, pickIds: counterPickIds };
+
+  // What the AI gives in the original offer
+  const aiBundle = {
+    playerIds: (offer.offerPlayers ?? []).map(p => Number(p.id)),
+    pickIds:   (offer.offerPicks   ?? []).map(p => String(p.id)),
+  };
+
+  // Pre-compute values for the pure evaluator
+  const valContext = {
+    week:          Number(latestMeta?.currentWeek ?? 1),
+    currentSeason: latestMeta?.year ?? latestMeta?.currentSeasonId ?? 0,
+  };
+  const aiReceivesValue = calcAssetBundleValue(userBundle, valContext);
+  const aiGivesValue    = calcAssetBundleValue(aiBundle,   valContext);
+
+  const seed   = ((Number(aiTeamId) * 7001 + Number(offer.targetPlayerId) * 3017 + Number(latestMeta?.currentWeek ?? 0)) >>> 0);
+  const result = evaluateAIBlockCounterOffer(offer, { aiReceivesValue, aiGivesValue }, aiTeam, seed);
+
+  if (result === 'accept') {
+    const legality = evaluateTradeLegality({
+      fromTeamId: userTeamId,
+      toTeamId:   aiTeamId,
+      offering:   userBundle,
+      receiving:  aiBundle,
+      phase:      latestMeta?.phase,
+    });
+    if (!legality.ok) {
+      post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'cap', reason: legality.reason }, id);
+      return;
+    }
+
+    await executeAcceptedTrade({
+      fromTeamId: userTeamId,
+      toTeamId:   aiTeamId,
+      offering:   userBundle,
+      receiving:  aiBundle,
+    });
+    const updatedOffers = offers.map(o => o.offerId === offerId ? { ...o, status: 'accepted' } : o);
+    cache.setMeta({ inboundTradeOffers: updatedOffers });
+    await flushDirty();
+    post(toUI.TRADE_RESPONSE, { accepted: true, counterStatus: 'accept', reason: 'Counter accepted — trade completed.' }, id);
+    post(toUI.STATE_UPDATE, buildViewState(), id);
+    return;
+  }
+
+  if (result === 'counter') {
+    // Build an improved offer as the AI's counter-counter
+    const allPlayers = cache.getAllPlayers();
+    const allPicks   = Array.isArray(latestMeta.draftPicks) ? latestMeta.draftPicks : [];
+    const season     = latestMeta.currentSeasonId ?? latestMeta.season ?? 0;
+    const week       = Number(latestMeta.currentWeek ?? 0);
+    const targetPlayer = cache.getPlayer(Number(offer.targetPlayerId));
+
+    const improved = aiTeam && targetPlayer
+      ? improveAIOffer(offer, targetPlayer, aiTeam, allPlayers, allPicks, season, week, seed)
+      : null;
+
+    const updatedOffers = offers.map(o => {
+      if (o.offerId !== offerId) return o;
+      return improved
+        ? { ...improved, offerId: o.offerId }   // keep same offerId so UI can track it
+        : { ...o, lastCounterResponse: 'counter', counterWeek: week };
+    });
+    cache.setMeta({ inboundTradeOffers: updatedOffers });
+    await flushDirty();
+    post(toUI.TRADE_RESPONSE, {
+      accepted: false,
+      counterStatus: 'counter',
+      reason: 'The team came back with an improved offer.',
+      offerValue:   Math.round(aiReceivesValue),
+      receiveValue: Math.round(aiGivesValue),
+    }, id);
+    post(toUI.STATE_UPDATE, buildViewState(), id);
+    return;
+  }
+
+  // reject
+  const updatedOffers = offers.map(o => o.offerId === offerId ? { ...o, status: 'rejected' } : o);
+  cache.setMeta({ inboundTradeOffers: updatedOffers });
+  await flushDirty();
+  post(toUI.TRADE_RESPONSE, {
+    accepted: false,
+    counterStatus: 'reject',
+    reason: 'The team rejected the counter offer.',
+    offerValue: Math.round(aiReceivesValue),
+  }, id);
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
 
 async function handleAssignMentor({ mentorId, menteeId, teamId }, id) {
   const team = cache.getTeam(teamId);
@@ -13055,6 +13398,12 @@ async function handleMessage(event) {
       case toWorker.STONEWALL_TRADE_REQUEST:     return await handleStonewallTradeRequest(payload, id);
       case toWorker.OFFER_EXTENSION_TO_WITHDRAW: return await handleOfferExtensionToWithdraw(payload, id);
       case toWorker.ASSIGN_MENTOR: return await handleAssignMentor(payload, id);
+      // AI Trade Block Marketplace
+      case toWorker.ACCEPT_TRADE_OFFER:      return await handleAcceptTradeOffer(payload, id);
+      case toWorker.REJECT_TRADE_OFFER:      return await handleRejectTradeOffer(payload, id);
+      case toWorker.COUNTER_TRADE_OFFER:     return await handleCounterTradeOffer(payload, id);
+      case toWorker.INITIATE_TRADE_BLOCK:    return await handleInitiateTradeBlock(payload, id);
+      case toWorker.REMOVE_FROM_TRADE_BLOCK: return await handleRemoveFromTradeBlock(payload, id);
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);
       case toWorker.RESTRUCTURE_CONTRACT:     return await handleRestructureContract(payload, id);

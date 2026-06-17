@@ -610,6 +610,43 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         );
       })()}
 
+      {/* ── INBOUND TRADE BLOCK OFFERS badge ────────────────────────────── */}
+      {(() => {
+        const inboundOffers = Array.isArray(league?.inboundTradeOffers) ? league.inboundTradeOffers : [];
+        if (inboundOffers.length === 0) return null;
+        return (
+          <div
+            style={{
+              margin: '4px 12px',
+              padding: '6px var(--space-4)',
+              border: '1px solid rgba(10,132,255,0.35)',
+              background: 'rgba(10,132,255,0.07)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 'var(--text-xs)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+            data-testid="hq-inbound-trade-offers-badge"
+          >
+            <span style={{ fontWeight: 700, color: '#0A84FF' }}>Trade Block</span>
+            <span style={{ color: 'var(--text-muted)' }}>
+              {inboundOffers.length} inbound {inboundOffers.length === 1 ? 'offer' : 'offers'} — review in Trade Center
+            </span>
+            {typeof onNavigate === 'function' && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{ marginLeft: 'auto', color: '#0A84FF', borderColor: 'rgba(10,132,255,0.35)', fontSize: 'var(--text-xs)', padding: '2px 8px' }}
+                onClick={() => onNavigate('Trade')}
+              >
+                View
+              </button>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ── COLLAPSED DRAWER: secondary content ─────────────────────────── */}
       <details className="hq-more-drawer" data-testid="hq-more-drawer">
         <summary className="hq-more-drawer__trigger">Season Pulse &amp; More ▾</summary>

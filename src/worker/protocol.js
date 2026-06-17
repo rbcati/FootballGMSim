@@ -72,6 +72,12 @@ export const toWorker = Object.freeze({
   STONEWALL_TRADE_REQUEST:      'STONEWALL_TRADE_REQUEST',      // { playerId }
   OFFER_EXTENSION_TO_WITHDRAW:  'OFFER_EXTENSION_TO_WITHDRAW',  // { playerId }
   ASSIGN_MENTOR: 'ASSIGN_MENTOR', // { mentorId, menteeId, teamId }
+  // AI Trade Block Marketplace
+  ACCEPT_TRADE_OFFER:      'ACCEPT_TRADE_OFFER',      // { offerId }
+  REJECT_TRADE_OFFER:      'REJECT_TRADE_OFFER',      // { offerId }
+  COUNTER_TRADE_OFFER:     'COUNTER_TRADE_OFFER',     // { offerId, counterPlayers, counterPicks }
+  INITIATE_TRADE_BLOCK:    'INITIATE_TRADE_BLOCK',    // { playerId }
+  REMOVE_FROM_TRADE_BLOCK: 'REMOVE_FROM_TRADE_BLOCK', // { playerId }
 
   /** Contracts */
   GET_EXTENSION_ASK:  'GET_EXTENSION_ASK', // { playerId }
