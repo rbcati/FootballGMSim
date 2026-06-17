@@ -297,6 +297,16 @@ export const createNewsItem = (type, data, week, season) => {
             body: () => 'A deal was reached between the two franchises.',
             priority: 'low',
         },
+        rival_trade_division: {
+            headline: (d) => `⚠️ DIVISION RIVAL: ${d?.acquiringTeam ?? 'Team'} acquires ${d?.playerName ?? 'Player'} from ${d?.departingTeam ?? 'Team'}`,
+            body: () => 'Your division just got stronger.',
+            priority: 'high',
+        },
+        rival_trade_conference: {
+            headline: (d) => `${d?.acquiringTeam ?? 'Team'} acquires ${d?.playerName ?? 'Player'} — a conference rival just made a move.`,
+            body: () => 'A conference rival strengthened their roster.',
+            priority: 'medium',
+        },
         morale_drop: {
             headline: (d) => `Locker Room Watch: ${d?.playerName ?? 'Player'} disgruntled`,
             body: (d) => `${d?.playerName ?? 'A player'} (${d?.teamAbbr ?? 'FA'}) morale has collapsed to ${d?.morale ?? 0}. A volatile situation worth monitoring.`,
