@@ -262,6 +262,11 @@ import {
   applyPrivateWorkout,
   getAIDraftBoardAdjustment,
 } from '../core/draft/combineEngine.js';
+import {
+  findDraftTradeUpOpportunity,
+  applyDraftTradeUp,
+  DRAFT_TRADE_CONFIG,
+} from '../core/draft/draftTradeEngine.js';
 import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule, enrichArchivedGamePayload, mergeArchivedGameWithScheduleResult } from '../core/gameArchive.js';
 import {
   DEFAULT_LEAGUE_ECONOMY,
@@ -9759,6 +9764,7 @@ function buildDraftStateView() {
       rank: recommended.rank,
     } : null,
     pendingTradeProposal: meta.pendingDraftTradeProposal ?? null,
+    lastTradeUpTicker:    meta.draftLastTradeUp ?? null,
   };
 }
 
@@ -10627,6 +10633,65 @@ async function handleSimDraftPick(payload, id) {
     // Pause at user's pick
     if (pick.teamId === userTeamId) break;
 
+    // ── Draft trade-up: AI-to-AI ─────────────────────────────────────────────
+    // Before the AI makes its pick, check whether another AI team wants to trade
+    // up for this slot.  Evaluates once per pick (guarded by draftTradeUpEvaluatedPickIdx).
+    try {
+      const allActivePlayers = cache.getAllPlayers();
+      const tuState = {
+        meta:        ensureDynastyMeta(cache.getMeta()),
+        teams:       cache.getAllTeams(),
+        rosters:     allActivePlayers.filter((p) => p.status !== 'draft_eligible'),
+        draftPool:   allActivePlayers.filter((p) => p.status === 'draft_eligible').sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0)),
+        futurePicks: cache.getAllDraftPicks(),
+      };
+      const tuOpportunity = findDraftTradeUpOpportunity(tuState);
+      if (tuOpportunity?.type === 'ai_to_ai') {
+        const tuResult = applyDraftTradeUp(tuOpportunity, tuState);
+        // Apply swapped picks back into the live draftState
+        const liveMeta = cache.getMeta();
+        const liveDS = liveMeta?.draftState;
+        if (liveDS) {
+          tuResult.state.meta.draftState.picks.forEach((pk, idx) => {
+            if (liveDS.picks[idx] && liveDS.picks[idx].teamId !== pk.teamId) {
+              liveDS.picks[idx].teamId = pk.teamId;
+            }
+          });
+          // Mark evaluated, store ticker, persist trade record
+          const existingOffers3 = Array.isArray(liveMeta.tradeOffers) ? liveMeta.tradeOffers : [];
+          const tuRecord = tuResult.state.meta.tradeOffers[tuResult.state.meta.tradeOffers.length - 1];
+          cache.setMeta({
+            draftState: liveDS,
+            tradeOffers: tuRecord ? [...existingOffers3, tuRecord] : existingOffers3,
+            draftLastTradeUp: tuResult.ticker,
+            draftTradeUpEvaluatedPickIdx: currentPickIndex,
+          });
+          // Transfer any future pick ownership
+          if (tuOpportunity.package?.futurePick) {
+            const fp = tuOpportunity.package.futurePick;
+            const existing = cache.getDraftPick(fp.id);
+            if (existing) {
+              cache.updateDraftPick(fp.id, { ...existing, currentOwner: tuOpportunity.sellerTeamId, teamId: tuOpportunity.sellerTeamId });
+            }
+          }
+          // Emit news headline
+          if (tuResult.headline) {
+            await NewsEngine.logNews(
+              tuResult.headline.type,
+              tuResult.headline.text,
+              null,
+              { category: tuResult.headline.category, priority: tuResult.headline.priority, detail: tuResult.headline.detail, buyerTeamId: tuOpportunity.buyerTeamId, sellerTeamId: tuOpportunity.sellerTeamId },
+            );
+          }
+          // After trade: pick.teamId has changed — refresh local reference
+          pick.teamId = tuOpportunity.buyerTeamId;
+        }
+      }
+    } catch (tuErr) {
+      console.warn('[Worker] Draft trade-up evaluation error (non-fatal):', tuErr.message);
+    }
+    // ── End draft trade-up ────────────────────────────────────────────────────
+
     // AI selects by weighted board value (need, scheme fit, upside, combine/interview risk).
     const team = cache.getTeam(pick.teamId);
     const strategy = buildAiTeamStrategy({
@@ -10737,9 +10802,56 @@ async function handleSimDraftPick(payload, id) {
   if (postSimDraft) {
     const nextPick = postSimDraft.picks[postSimDraft.currentPickIndex];
     if (nextPick && nextPick.teamId === postSimMeta.userTeamId) {
-      const proposal = generateDraftTradeUpProposal();
-      if (proposal) {
-        post(toUI.DRAFT_TRADE_OFFER, { proposal });
+      // First, try the combine-grade based trade-up engine (new, richer logic)
+      let userProposal = null;
+      if (!postSimMeta.pendingDraftTradeProposal) {
+        try {
+          const allActivePlayers2 = cache.getAllPlayers();
+          const tuState2 = {
+            meta:        ensureDynastyMeta(cache.getMeta()),
+            teams:       cache.getAllTeams(),
+            rosters:     allActivePlayers2.filter((p) => p.status !== 'draft_eligible'),
+            draftPool:   allActivePlayers2.filter((p) => p.status === 'draft_eligible').sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0)),
+            futurePicks: cache.getAllDraftPicks(),
+          };
+          const tuOpp2 = findDraftTradeUpOpportunity(tuState2);
+          if (tuOpp2?.type === 'ai_to_user') {
+            const buyerT = cache.getTeam(tuOpp2.buyerTeamId);
+            const futurePkLabel = tuOpp2.package?.futurePick
+              ? ` + a future Round ${tuOpp2.package.futurePick.round} pick`
+              : '';
+            userProposal = {
+              origin:          'draft_trade_up',
+              aiTeamId:        tuOpp2.buyerTeamId,
+              aiTeamName:      buyerT?.name  ?? `Team ${tuOpp2.buyerTeamId}`,
+              aiTeamAbbr:      buyerT?.abbr  ?? '???',
+              aiPickOverall:   tuOpp2.package?.currentPickPackage?.overall ?? null,
+              aiPickRound:     tuOpp2.package?.currentPickPackage?.round   ?? null,
+              sweetenerRound:  tuOpp2.package?.futurePick?.round           ?? 0,
+              futurePkLabel,
+              tradeMode:       'draft_trade_up',
+              targetProspect: {
+                id:          tuOpp2.targetProspect.id,
+                name:        tuOpp2.targetProspect.name,
+                pos:         tuOpp2.targetProspect.pos,
+                ovr:         tuOpp2.targetProspect.ovr,
+                combineGrade: tuOpp2.targetProspect.combineMetrics?.combineGrade ?? null,
+              },
+              userPickOverall: nextPick.overall,
+              userPickRound:   nextPick.round,
+            };
+            cache.setMeta({ pendingDraftTradeProposal: userProposal, draftTradeUpEvaluatedPickIdx: postSimDraft.currentPickIndex });
+          }
+        } catch (tuErr2) {
+          console.warn('[Worker] Draft trade-up user offer error (non-fatal):', tuErr2.message);
+        }
+      }
+      // Fall back to legacy simple proposal (OVR-based, no combine grade check)
+      if (!userProposal && !postSimMeta.pendingDraftTradeProposal) {
+        userProposal = generateDraftTradeUpProposal();
+      }
+      if (userProposal) {
+        post(toUI.DRAFT_TRADE_OFFER, { proposal: userProposal });
       }
     }
   }
@@ -10826,7 +10938,13 @@ async function handleAcceptDraftTrade({ proposal }, id) {
 // ── Handler: REJECT_DRAFT_TRADE ─────────────────────────────────────────────
 
 async function handleRejectDraftTrade(payload, id) {
-  cache.setMeta({ pendingDraftTradeProposal: null });
+  // Mark current pick as evaluated so the engine won't re-propose after decline
+  const rejectMeta = cache.getMeta();
+  const currentIdx = rejectMeta?.draftState?.currentPickIndex ?? -1;
+  cache.setMeta({
+    pendingDraftTradeProposal: null,
+    draftTradeUpEvaluatedPickIdx: currentIdx,
+  });
   post(toUI.DRAFT_TRADE_RESULT, { accepted: false }, id);
 }
 
