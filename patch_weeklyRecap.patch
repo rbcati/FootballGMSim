@@ -1,0 +1,15 @@
+--- src/ui/utils/weeklyLeagueRecap.js
++++ src/ui/utils/weeklyLeagueRecap.js
+@@ -91,7 +91,11 @@
+     if (biggestUpset && biggestUpset.delta > 0.15) {
+       const winner = teamLabel(teamMap.get(biggestUpset.winnerId));
+       const loser = teamLabel(teamMap.get(biggestUpset.loserId));
+-      bullets.push(`Biggest upset: ${winner} knocked off ${loser}.`);
++      if (biggestUpset.delta > 0.3) {
++        bullets.push(`Stunning upset: ${winner} shocked the league by taking down ${loser}.`);
++      } else {
++        bullets.push(`Biggest upset: ${winner} knocked off ${loser}.`);
++      }
+     }
+
+     const closest = completedGames
