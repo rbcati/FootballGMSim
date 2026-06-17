@@ -83,6 +83,15 @@ export function isTradeWindowOpen(currentWeek) {
   return currentWeek <= DEADLINE_CONFIG.deadline_week;
 }
 
+export function isRival(teamAId, teamBId, allTeams) {
+  const a = allTeams.find(t => t.id === teamAId);
+  const b = allTeams.find(t => t.id === teamBId);
+  if (!a || !b) return { isRival: false };
+  if (a.div === b.div && a.conf === b.conf) return { isRival: true, rivalType: 'division' };
+  if (a.conf === b.conf) return { isRival: true, rivalType: 'conference' };
+  return { isRival: false };
+}
+
 export function getWeeklyAttemptCount(currentWeek) {
   if (currentWeek < TRADING_WEEKS.start || currentWeek > TRADING_WEEKS.end) return 0;
   if (currentWeek === 8) return DEADLINE_CONFIG.attempts_by_week.week_8;
@@ -343,7 +352,7 @@ export function runWeeklyAIToAITrading(allTeams, allRosters, allPicks, season, w
 
 // ── applyAIToAITrade ───────────────────────────────────────────────────────────
 
-export function applyAIToAITrade(trade, state) {
+export function applyAIToAITrade(trade, state, userTeamId = null) {
   // state: { teams, rosters, picks, meta }
   const { teamAId, teamBId, playerId, offeredPicks, offeredPlayers } = trade;
 
@@ -406,5 +415,21 @@ export function applyAIToAITrade(trade, state) {
   const existingTradeOffers = Array.isArray(state.meta?.tradeOffers) ? state.meta.tradeOffers : [];
   const meta = { ...state.meta, tradeOffers: [...existingTradeOffers, tradeRecord] };
 
-  return { teams, rosters, picks, meta };
+  let rivalAlert = null;
+  if (userTeamId !== null) {
+    const allTeams = state.teams ?? [];
+    const rivalCheckA = isRival(userTeamId, teamAId, allTeams);
+    const rivalCheckB = isRival(userTeamId, teamBId, allTeams);
+    const rival = rivalCheckA.isRival ? rivalCheckA : rivalCheckB.isRival ? rivalCheckB : null;
+    if (rival) {
+      rivalAlert = {
+        rivalType: rival.rivalType,
+        acquiringTeam: trade.teamAName,
+        departingTeam: trade.teamBName,
+        playerName: trade.playerName,
+      };
+    }
+  }
+
+  return { teams, rosters, picks, meta, rivalAlert };
 }

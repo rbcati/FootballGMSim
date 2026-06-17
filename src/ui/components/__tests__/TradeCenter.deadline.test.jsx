@@ -30,7 +30,7 @@ const MOCK_ACTIONS = {
   save: vi.fn(),
 };
 
-function makeLeague({ week, userWins = 0, userLosses = 0, deadlineWeek = 9, phase = 'regular' } = {}) {
+function makeLeague({ week, userWins = 0, userLosses = 0, deadlineWeek = 9, phase = 'regular', inboundOffers = [] } = {}) {
   const userTeam = makeTeam(1, userWins, userLosses, { abbr: 'CHI' });
   const aiTeam   = makeTeam(2, 4, 6,                  { abbr: 'DET' });
   return {
@@ -41,7 +41,27 @@ function makeLeague({ week, userWins = 0, userLosses = 0, deadlineWeek = 9, phas
     userTeamId: 1,
     teams: [userTeam, aiTeam],
     incomingTradeOffers: [],
+    inboundTradeOffers: inboundOffers,
     settings: { tradeDeadlineWeek: deadlineWeek },
+  };
+}
+
+function makeInboundOffer({ ovr = 85, targetPlayerName = 'Star WR' } = {}) {
+  return {
+    offerId: 'offer-test-1',
+    aiTeamId: 2,
+    aiTeamName: 'Team 2',
+    targetPlayerName,
+    targetPlayerPos: 'WR',
+    targetPlayerOvr: ovr,
+    offerPlayers: [{ name: 'Backup QB', pos: 'QB', ovr: 72 }],
+    offerPicks: [],
+    bundleValue: 8000,
+    acquisitionValue: 10000,
+    createdWeek: 8,
+    expiresWeek: 10,
+    aggression: 'normal',
+    status: 'pending',
   };
 }
 
@@ -108,5 +128,68 @@ describe('TradeCenter — deadline pressure badge', () => {
     const html = renderToString(<TradeCenter league={league} actions={MOCK_ACTIONS} />);
     // explanation references upgrade, deadline, or upgrades
     expect(html).toMatch(/urgently|deadline|week/i);
+  });
+});
+
+// ── Task A — Deadline Premium Badge on inbound offer card ──────────────────────
+
+describe('TradeCenter — deadline premium badge on inbound offer', () => {
+  const BADGE_TEXT = '+25% Deadline Demand';
+
+  it('badge renders when player.ovr >= 82 AND week 8 (deadline window start)', () => {
+    const league = makeLeague({ week: 8, inboundOffers: [makeInboundOffer({ ovr: 85 })] });
+    const html = renderToString(<TradeCenter league={league} actions={MOCK_ACTIONS} />);
+    expect(html).toContain(BADGE_TEXT);
+  });
+
+  it('badge renders when player.ovr >= 82 AND week 10 (deadline window end)', () => {
+    const league = makeLeague({ week: 10, inboundOffers: [makeInboundOffer({ ovr: 82 })] });
+    const html = renderToString(<TradeCenter league={league} actions={MOCK_ACTIONS} />);
+    expect(html).toContain(BADGE_TEXT);
+  });
+
+  it('badge does NOT render when player.ovr < 82 on week 9', () => {
+    const league = makeLeague({ week: 9, inboundOffers: [makeInboundOffer({ ovr: 81 })] });
+    const html = renderToString(<TradeCenter league={league} actions={MOCK_ACTIONS} />);
+    expect(html).not.toContain(BADGE_TEXT);
+  });
+
+  it('badge does NOT render on week 7 (before deadline window)', () => {
+    const league = makeLeague({ week: 7, inboundOffers: [makeInboundOffer({ ovr: 90 })] });
+    const html = renderToString(<TradeCenter league={league} actions={MOCK_ACTIONS} />);
+    expect(html).not.toContain(BADGE_TEXT);
+  });
+
+  it('badge does NOT render on week 11 (post-deadline)', () => {
+    const league = makeLeague({ week: 11, inboundOffers: [makeInboundOffer({ ovr: 90 })] });
+    const html = renderToString(<TradeCenter league={league} actions={MOCK_ACTIONS} />);
+    expect(html).not.toContain(BADGE_TEXT);
+  });
+
+  it('badge appears on requested player section, not offered player section', () => {
+    const league = makeLeague({ week: 9, inboundOffers: [makeInboundOffer({ ovr: 88, targetPlayerName: 'Elite WR' })] });
+    const html = renderToString(<TradeCenter league={league} actions={MOCK_ACTIONS} />);
+    // Badge must appear near the target player name (requested player)
+    const badgeIdx = html.indexOf(BADGE_TEXT);
+    const targetIdx = html.indexOf('Elite WR');
+    expect(badgeIdx).toBeGreaterThan(-1);
+    // Badge appears after the target player name in the DOM
+    expect(Math.abs(badgeIdx - targetIdx)).toBeLessThan(300);
+    // offered player name does not have badge nearby
+    const offeredPlayerIdx = html.indexOf('Backup QB');
+    expect(Math.abs(badgeIdx - offeredPlayerIdx)).toBeGreaterThan(100);
+  });
+
+  it('badge label text is "🔥 +25% Deadline Demand"', () => {
+    const league = makeLeague({ week: 9, inboundOffers: [makeInboundOffer({ ovr: 85 })] });
+    const html = renderToString(<TradeCenter league={league} actions={MOCK_ACTIONS} />);
+    expect(html).toContain('🔥 +25% Deadline Demand');
+  });
+
+  it('badge uses warning color (amber, not error red or success green)', () => {
+    const league = makeLeague({ week: 9, inboundOffers: [makeInboundOffer({ ovr: 85 })] });
+    const html = renderToString(<TradeCenter league={league} actions={MOCK_ACTIONS} />);
+    // The badge element uses the amber warning colour token (#FF9F0A / rgba(255,159,10,...))
+    expect(html).toMatch(/FF9F0A|255,159,10/);
   });
 });

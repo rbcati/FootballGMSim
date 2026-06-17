@@ -22,6 +22,7 @@ import {
   getTradeDeadlinePressure,
   DEADLINE_POSTURE,
 } from "../../core/trades/tradeDeadlinePressure.js";
+import { isDeadlineWindow } from "../../core/trades/aiToAiTradeEngine.js";
 import { buildTradeAssetDisplay } from "../utils/tradeAssetDisplay.js";
 import { getTradeLockReason } from "../utils/tradeLockReason.js";
 import { getBudgetLabel, toneToCssColor } from "../utils/transactionMarket.js";
@@ -899,7 +900,11 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
                 <div key={offer.offerId} style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px 12px", display: "grid", gap: 6 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <strong style={{ fontSize: "var(--text-sm)" }}>
-                      {offer.aiTeamName} — {offer.targetPlayerName} ({offer.targetPlayerPos}, {offer.targetPlayerOvr} OVR)
+                      {offer.aiTeamName} — {offer.targetPlayerName}
+                      {offer.targetPlayerOvr >= 82 && isDeadlineWindow(league?.week ?? 1) && (
+                        <span style={{ display: "inline-block", marginLeft: 6, padding: "1px 6px", borderRadius: "9999px", background: "rgba(255,159,10,0.15)", border: "1px solid rgba(255,159,10,0.4)", color: "#FF9F0A", fontSize: "var(--text-xs)", fontWeight: 700, whiteSpace: "nowrap" }}>🔥 +25% Deadline Demand</span>
+                      )}
+                      {" "}({offer.targetPlayerPos}, {offer.targetPlayerOvr} OVR)
                     </strong>
                     <Badge variant="outline" style={{ fontSize: 10 }}>{offer.aggression}</Badge>
                   </div>

@@ -199,7 +199,7 @@ import { buildTeamDevelopmentFocusMap as buildCanonicalDevelopmentFocusMap } fro
 import { derivePlayerVisibleRatingsPatch } from './playerDerivedRatings.js';
 import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, evaluateCounterOffer } from '../core/trade-logic.js';
-import { runWeeklyAIToAITrading, TRADING_WEEKS, DEADLINE_CONFIG } from '../core/trades/aiToAiTradeEngine.js';
+import { runWeeklyAIToAITrading, TRADING_WEEKS, DEADLINE_CONFIG, isRival } from '../core/trades/aiToAiTradeEngine.js';
 import { generateInboundOffersToUser } from '../core/trades/tradeBlockGenerator.js';
 import {
   buildAITradeOffer,
@@ -3504,6 +3504,39 @@ async function handleAdvanceWeek(payload, id) {
             dedupeKey: `ai_trade_${trade.teamAId}_${trade.teamBId}_${ai2aiSeason}_${week}`,
           };
           cache.setMeta({ leaguePulse: mergeLeaguePulseItems(pulseMeta.leaguePulse ?? [], [pulseItem]) });
+
+          // Rival trade alert
+          if (meta.userTeamId != null) {
+            const rivalAllTeams = cache.getAllTeams();
+            const rivalCheckA = isRival(meta.userTeamId, trade.teamAId, rivalAllTeams);
+            const rivalCheckB = isRival(meta.userTeamId, trade.teamBId, rivalAllTeams);
+            const rival = rivalCheckA.isRival ? rivalCheckA : rivalCheckB.isRival ? rivalCheckB : null;
+            if (rival) {
+              const rivalAlertData = {
+                rivalType: rival.rivalType,
+                acquiringTeam: trade.teamAName,
+                departingTeam: trade.teamBName,
+                playerName: trade.playerName,
+              };
+              const rivalNewsTemplate = rival.rivalType === 'division' ? 'rival_trade_division' : 'rival_trade_conference';
+              const rivalNewsItem = createNewsItem(rivalNewsTemplate, rivalAlertData, week, ai2aiSeason);
+              if (rivalNewsItem) cache.setMeta(addNewsItem(cache.getMeta(), rivalNewsItem));
+              if (rival.rivalType === 'division') {
+                const rivalPulseMeta = cache.getMeta();
+                const rivalPulseItem = {
+                  id: `rival_div_trade_${trade.offerId}`,
+                  type: 'rival_trade',
+                  headline: `${trade.teamAName} strengthens your division`,
+                  body: `${trade.teamAName} acquires ${trade.playerName} from ${trade.teamBName}.`,
+                  week,
+                  season: ai2aiSeason,
+                  importance: 85,
+                  dedupeKey: `rival_division_trade_${trade.offerId}`,
+                };
+                cache.setMeta({ leaguePulse: mergeLeaguePulseItems(rivalPulseMeta.leaguePulse ?? [], [rivalPulseItem]) });
+              }
+            }
+          }
         }
       } catch (ai2aiErr) {
         console.warn('[Worker] Pure AI-to-AI trade engine error (non-fatal):', ai2aiErr.message);
