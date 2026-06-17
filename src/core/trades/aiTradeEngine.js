@@ -253,7 +253,7 @@ export function buildAITradeOffer(targetPlayer, aiTeam, aiPlayers, aiPicks, seas
  * Returns true if the AI's existing offer should be expired or refreshed
  * this week (offer is past its expiry window, or from a prior season).
  *
- * @param {object} existingOffer – offer from meta.inboundTradeOffers
+ * @param {object} existingOffer – offer from meta.tradeOffers (isBlockOffer=true)
  * @param {object} _targetPlayer – reserved for future player-state check
  * @param {number} season
  * @param {number} week

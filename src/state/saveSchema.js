@@ -1,4 +1,4 @@
-export const CURRENT_SAVE_SCHEMA_VERSION = 5.6;
+export const CURRENT_SAVE_SCHEMA_VERSION = 5.7;
 
 function migratePreVersioned(meta = {}) {
   return {
@@ -34,6 +34,35 @@ function migrateV3ToV4(meta = {}) {
   };
 }
 
+function migrateV56ToV57(meta = {}) {
+  // Already migrated
+  if (Array.isArray(meta.tradeOffers)) return { ...meta, saveVersion: 5.7 };
+
+  const legacy = [];
+  const seenIds = new Set();
+
+  if (Array.isArray(meta.incomingTradeOffers)) {
+    for (const o of meta.incomingTradeOffers) {
+      const id = o?.offerId ?? o?.id ?? String(Math.random());
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+      legacy.push({ ...o, offerId: o.offerId ?? o.id ?? id, origin: 'legacy', targetTeamId: meta.userTeamId ?? null, isBlockOffer: false, status: o.status ?? 'pending' });
+    }
+  }
+
+  if (Array.isArray(meta.inboundTradeOffers)) {
+    for (const o of meta.inboundTradeOffers) {
+      const id = o?.offerId ?? o?.id ?? String(Math.random());
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+      legacy.push({ ...o, offerId: o.offerId ?? o.id ?? id, origin: 'legacy', targetTeamId: meta.userTeamId ?? null, isBlockOffer: true, status: o.status ?? 'pending' });
+    }
+  }
+
+  const { inboundTradeOffers: _ib, incomingTradeOffers: _ic, ...rest } = meta;
+  return { ...rest, tradeOffers: legacy, saveVersion: 5.7 };
+}
+
 const MIGRATIONS = {
   0: migratePreVersioned,
   1: migrateV1ToV2,
@@ -46,6 +75,7 @@ const MIGRATIONS = {
   5.3: migrateV53ToV54,
   5.4: migrateV54ToV55,
   5.5: migrateV55ToV56,
+  5.6: migrateV56ToV57,
 };
 
 function migrateV4ToV5(meta = {}) {

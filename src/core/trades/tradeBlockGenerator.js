@@ -559,7 +559,7 @@ export function generateInboundOffersToUser(leagueState = {}, userTeamId, option
   if (!tradeWindowAllowsOffers(windowSnapshot)) return [];
 
   const existingOffers = pruneStaleInboundOffers(
-    options.existingOffers ?? meta?.incomingTradeOffers ?? [],
+    options.existingOffers ?? (Array.isArray(meta?.tradeOffers) ? meta.tradeOffers.filter(o => !o?.isBlockOffer && o?.origin !== 'ai_to_ai') : []),
     { meta, teams, players },
     userId,
     { maxActiveOffers: 6 },

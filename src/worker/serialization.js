@@ -134,7 +134,7 @@ const DELTA_SCALAR_FIELDS = [
  * The full updated array is included in the delta when it changes.
  */
 const DELTA_ARRAY_FIELDS = [
-  'newsItems', 'ownerGoals', 'incomingTradeOffers', 'retiredPlayers',
+  'newsItems', 'ownerGoals', 'tradeOffers', 'retiredPlayers',
   'leagueHistory', 'franchiseChronicle', 'franchiseSeasonReviews',
   'hallOfFameClasses', 'weeklyHeadlines', 'commissionerLog',
   'seasonStorylines',
