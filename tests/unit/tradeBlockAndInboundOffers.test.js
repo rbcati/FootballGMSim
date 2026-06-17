@@ -170,7 +170,7 @@ describe('proactive inbound offers', () => {
 
     const fullInboxLeague = makeLeague();
     const existing = generateInboundOffersToUser(fullInboxLeague, 1, { rngGateChance: 1 })[0];
-    const withInbox = { ...fullInboxLeague, meta: { ...fullInboxLeague.meta, incomingTradeOffers: [existing] } };
+    const withInbox = { ...fullInboxLeague, meta: { ...fullInboxLeague.meta, tradeOffers: [{ ...existing, isBlockOffer: false, origin: 'ai_pursuit' }] } };
     expect(generateInboundOffersToUser(withInbox, 1, { rngGateChance: 1, maxActiveOffers: 1 })).toEqual([]);
   });
 
@@ -218,13 +218,13 @@ describe('proactive inbound offers', () => {
   it('appends safely, avoids duplicate regeneration, and clears at deadline or phase transition', () => {
     const league = makeLeague();
     const generated = generateInboundOffersToUser(league, 1, { rngGateChance: 1 });
-    const incomingTradeOffers = [...generated, ...league.meta.incomingTradeOffers].slice(0, 6);
-    expect(incomingTradeOffers).toHaveLength(1);
+    const tradeOffers = generated.map(o => ({ ...o, isBlockOffer: false, origin: 'ai_pursuit' }));
+    expect(tradeOffers).toHaveLength(1);
 
-    const withExisting = { ...league, meta: { ...league.meta, incomingTradeOffers } };
+    const withExisting = { ...league, meta: { ...league.meta, tradeOffers } };
     expect(generateInboundOffersToUser(withExisting, 1, { rngGateChance: 1 })).toEqual([]);
-    expect(pruneStaleInboundOffers(incomingTradeOffers, { ...league, meta: { ...league.meta, currentWeek: 10 } }, 1)).toEqual([]);
-    expect(pruneStaleInboundOffers(incomingTradeOffers, { ...league, meta: { ...league.meta, phase: 'offseason' } }, 1)).toEqual([]);
+    expect(pruneStaleInboundOffers(tradeOffers, { ...league, meta: { ...league.meta, currentWeek: 10 } }, 1)).toEqual([]);
+    expect(pruneStaleInboundOffers(tradeOffers, { ...league, meta: { ...league.meta, phase: 'offseason' } }, 1)).toEqual([]);
   });
 
   it('does not use raw Math.random in the new module', () => {
