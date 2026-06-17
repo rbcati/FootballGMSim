@@ -199,7 +199,7 @@ import { buildTeamDevelopmentFocusMap as buildCanonicalDevelopmentFocusMap } fro
 import { derivePlayerVisibleRatingsPatch } from './playerDerivedRatings.js';
 import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, evaluateCounterOffer } from '../core/trade-logic.js';
-import { runWeeklyAIToAITrading, TRADING_WEEKS } from '../core/trades/aiToAiTradeEngine.js';
+import { runWeeklyAIToAITrading, TRADING_WEEKS, DEADLINE_CONFIG } from '../core/trades/aiToAiTradeEngine.js';
 import { generateInboundOffersToUser } from '../core/trades/tradeBlockGenerator.js';
 import {
   buildAITradeOffer,
@@ -1112,6 +1112,7 @@ function buildViewState() {
     tradeOffers: Array.isArray(meta?.tradeOffers) ? meta.tradeOffers : [],
     incomingTradeOffers: (Array.isArray(meta?.tradeOffers) ? meta.tradeOffers : []).filter(o => !o?.isBlockOffer && o?.origin !== 'ai_to_ai'),
     inboundTradeOffers: (Array.isArray(meta?.tradeOffers) ? meta.tradeOffers : []).filter(o => !!o?.isBlockOffer && o?.status === 'pending'),
+    tradeWindowOpen: isTradeWindowOpen({ week: meta?.currentWeek ?? 1, phase: meta?.phase, settings: meta?.settings, commissionerMode: !!meta?.commissionerMode }),
     lastTradeActivityWeek: Number(meta?.lastTradeActivityWeek ?? 0),
     retiredPlayers: Array.isArray(meta?.retiredPlayers) ? meta.retiredPlayers : [],
     records: meta?.records ?? null,
@@ -3507,6 +3508,19 @@ async function handleAdvanceWeek(payload, id) {
       } catch (ai2aiErr) {
         console.warn('[Worker] Pure AI-to-AI trade engine error (non-fatal):', ai2aiErr.message);
       }
+    }
+  }
+
+  if (week === DEADLINE_CONFIG.deadline_week && meta.phase === 'regular') {
+    try {
+      NewsEngine.logNews(
+        'deadline_day',
+        'The trade deadline has passed. No further moves can be made until the offseason.',
+        null,
+        { category: 'MILESTONE', severity: 'high', priority: 90 },
+      );
+    } catch (deadlineNewsErr) {
+      console.warn('[Worker] Deadline news error (non-fatal):', deadlineNewsErr.message);
     }
   }
 
@@ -10071,6 +10085,11 @@ async function handleInitiateTradeBlock({ playerId }, id) {
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   const meta    = ensureDynastyMeta(cache.getMeta());
+  const deadline = getTradeDeadlineSnapshot(meta);
+  if (!isTradeWindowOpen({ week: deadline.currentWeek, phase: deadline.phase, settings: meta?.settings, commissionerMode: deadline.canOverride })) {
+    post(toUI.ERROR, { error: 'TRADES_LOCKED', message: 'Trade window is closed.' }, id);
+    return;
+  }
   const userTeamId = Number(meta.userTeamId);
   if (Number(player.teamId) !== userTeamId) {
     post(toUI.ERROR, { message: 'Player is not on your roster' }, id);
@@ -10172,6 +10191,11 @@ async function handleAcceptTradeOffer({ offerId }, id) {
 
 async function handleRejectTradeOffer({ offerId }, id) {
   const latestMeta = ensureDynastyMeta(cache.getMeta());
+  const deadline = getTradeDeadlineSnapshot(latestMeta);
+  if (!isTradeWindowOpen({ week: deadline.currentWeek, phase: deadline.phase, settings: latestMeta?.settings, commissionerMode: deadline.canOverride })) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'deadline', reason: 'Trade window is closed.' }, id);
+    return;
+  }
   const offers     = getInboundOffers(latestMeta);
   const offer      = offers.find(o => o?.offerId === offerId && o?.status === 'pending');
   if (!offer) {

@@ -32,6 +32,36 @@ export const TRADING_WEEKS = Object.freeze({ start: 1, end: 10 });
 
 export const MAX_EVAL_DURATION_MS = 10;
 
+export const DEADLINE_CONFIG = Object.freeze({
+  deadline_week:        10,
+  tension_start_week:   8,
+  deadline_spike_week:  8,
+  attempts_by_week: Object.freeze({
+    default:   3,
+    week_8:    6,
+    week_9_10: 10,
+  }),
+  max_eval_ms_deadline: 15,
+});
+
+export const DEADLINE_VALUATION_MODIFIERS = Object.freeze({
+  contender: Object.freeze({
+    trigger: Object.freeze({ incoming_ovr_min: 82, incoming_age_max: 29 }),
+    incoming_player_multiplier: 1.25,
+    outgoing_pick_multiplier:   0.85,
+  }),
+  rebuilder: Object.freeze({
+    trigger: Object.freeze({ outgoing_age_min: 29, outgoing_ovr_min: 80 }),
+    outgoing_player_multiplier: 0.80,
+    incoming_pick_multiplier:   1.20,
+  }),
+});
+
+export const DEADLINE_RANK_THRESHOLDS = Object.freeze({
+  contender_top_n:    8,
+  rebuilder_bottom_n: 8,
+});
+
 // ── Seeded LCG ─────────────────────────────────────────────────────────────────
 
 function lcgStep(seed) {
@@ -40,6 +70,58 @@ function lcgStep(seed) {
 
 function lcgRandom(seed) {
   return lcgStep(seed) / 0x100000000;
+}
+
+// ── Deadline window helpers ────────────────────────────────────────────────────
+
+export function isDeadlineWindow(currentWeek) {
+  return currentWeek >= DEADLINE_CONFIG.tension_start_week &&
+         currentWeek <= DEADLINE_CONFIG.deadline_week;
+}
+
+export function isTradeWindowOpen(currentWeek) {
+  return currentWeek <= DEADLINE_CONFIG.deadline_week;
+}
+
+export function getWeeklyAttemptCount(currentWeek) {
+  if (currentWeek < TRADING_WEEKS.start || currentWeek > TRADING_WEEKS.end) return 0;
+  if (currentWeek === 8) return DEADLINE_CONFIG.attempts_by_week.week_8;
+  if (currentWeek >= 9)  return DEADLINE_CONFIG.attempts_by_week.week_9_10;
+  return DEADLINE_CONFIG.attempts_by_week.default;
+}
+
+export function computeDeadlineValuationModifier(team, player, role, allTeams, currentWeek) {
+  if (!isDeadlineWindow(currentWeek) || !team || !Array.isArray(allTeams) || allTeams.length === 0) {
+    return { incomingMultiplier: 1.0, outgoingMultiplier: 1.0 };
+  }
+
+  const sorted = [...allTeams].sort((a, b) => (b.overallRating ?? b.ovr ?? 0) - (a.overallRating ?? a.ovr ?? 0));
+  const idx = sorted.findIndex(t => t.id === team.id);
+  if (idx === -1) return { incomingMultiplier: 1.0, outgoingMultiplier: 1.0 };
+
+  const n = allTeams.length;
+
+  if (role === 'buyer' && idx < DEADLINE_RANK_THRESHOLDS.contender_top_n) {
+    const { incoming_ovr_min, incoming_age_max } = DEADLINE_VALUATION_MODIFIERS.contender.trigger;
+    if (Number(player?.ovr ?? 0) >= incoming_ovr_min && Number(player?.age ?? 99) <= incoming_age_max) {
+      return {
+        incomingMultiplier: DEADLINE_VALUATION_MODIFIERS.contender.incoming_player_multiplier,
+        outgoingMultiplier: DEADLINE_VALUATION_MODIFIERS.contender.outgoing_pick_multiplier,
+      };
+    }
+  }
+
+  if (role === 'seller' && idx >= n - DEADLINE_RANK_THRESHOLDS.rebuilder_bottom_n) {
+    const { outgoing_age_min, outgoing_ovr_min } = DEADLINE_VALUATION_MODIFIERS.rebuilder.trigger;
+    if (Number(player?.age ?? 0) >= outgoing_age_min && Number(player?.ovr ?? 0) >= outgoing_ovr_min) {
+      return {
+        incomingMultiplier: DEADLINE_VALUATION_MODIFIERS.rebuilder.outgoing_player_multiplier,
+        outgoingMultiplier: DEADLINE_VALUATION_MODIFIERS.rebuilder.incoming_pick_multiplier,
+      };
+    }
+  }
+
+  return { incomingMultiplier: 1.0, outgoingMultiplier: 1.0 };
 }
 
 // ── classifyTeam ───────────────────────────────────────────────────────────────
@@ -124,11 +206,14 @@ export function computeCapImpact(team, incomingPlayer, outgoingPlayer) {
 
 // ── validateTradeBalance ───────────────────────────────────────────────────────
 
-export function validateTradeBalance(contenderGives, contenderReceives, rebuilderGives, rebuilderReceives) {
-  const contenderIncoming = Number(contenderReceives ?? 0);
-  const contenderOutgoing = Number(contenderGives    ?? 0);
-  const rebuilderIncoming = Number(rebuilderReceives ?? 0);
-  const rebuilderOutgoing = Number(rebuilderGives    ?? 0);
+export function validateTradeBalance(contenderGives, contenderReceives, rebuilderGives, rebuilderReceives, deadlineModifiers) {
+  const cMods = deadlineModifiers?.contender ?? null;
+  const rMods = deadlineModifiers?.rebuilder ?? null;
+
+  const contenderIncoming = Number(contenderReceives ?? 0) * (cMods?.incomingMultiplier ?? 1.0);
+  const contenderOutgoing = Number(contenderGives    ?? 0) * (cMods?.outgoingMultiplier ?? 1.0);
+  const rebuilderIncoming = Number(rebuilderReceives ?? 0) * (rMods?.outgoingMultiplier ?? 1.0);
+  const rebuilderOutgoing = Number(rebuilderGives    ?? 0) * (rMods?.incomingMultiplier ?? 1.0);
 
   if (contenderIncoming <= contenderOutgoing * VALUE_FORMULAS.contender.incoming_threshold) {
     return { valid: false, reason: 'contender_threshold_not_met' };
@@ -143,6 +228,7 @@ export function validateTradeBalance(contenderGives, contenderReceives, rebuilde
 
 export function attemptAIToAITrade(allTeams, allRosters, allPicks, season, week, seed, usedPairs = new Set()) {
   const startTime = Date.now();
+  const evalBudgetMs = isDeadlineWindow(week) ? DEADLINE_CONFIG.max_eval_ms_deadline : MAX_EVAL_DURATION_MS;
 
   const contenders = allTeams.filter(t => classifyTeam(t, allTeams) === 'contender');
   const rebuilders  = allTeams.filter(t => classifyTeam(t, allTeams) === 'rebuilder');
@@ -161,7 +247,7 @@ export function attemptAIToAITrade(allTeams, allRosters, allPicks, season, week,
   const pairKey = `${Math.min(teamA.id, teamB.id)}_${Math.max(teamA.id, teamB.id)}`;
   if (usedPairs.has(pairKey)) return null;
 
-  if (Date.now() - startTime > MAX_EVAL_DURATION_MS) return null;
+  if (Date.now() - startTime > evalBudgetMs) return null;
 
   // Find Team A's severe starter gap
   const rosterA = (allRosters ?? []).filter(p => Number(p?.teamId) === Number(teamA.id));
@@ -188,12 +274,17 @@ export function attemptAIToAITrade(allTeams, allRosters, allPicks, season, week,
   const capB = computeCapImpact(teamB, contenderAsset.player ?? null, rebuilderAsset.player);
   if (!capA.isLegal || !capB.isLegal) return null;
 
-  // Value balance check
+  // Deadline valuation modifiers (deterministic, no Math.random)
+  const contenderMods = computeDeadlineValuationModifier(teamA, rebuilderAsset.player, 'buyer', allTeams, week);
+  const rebuilderMods = computeDeadlineValuationModifier(teamB, rebuilderAsset.player, 'seller', allTeams, week);
+  const deadlineModifiers = { contender: contenderMods, rebuilder: rebuilderMods };
+
+  // Value balance check with optional deadline modifiers
   // Team A (contender) gives: contenderAsset.value; receives: rebuilderAsset.value
-  const balance = validateTradeBalance(contenderAsset.value, rebuilderAsset.value, rebuilderAsset.value, contenderAsset.value);
+  const balance = validateTradeBalance(contenderAsset.value, rebuilderAsset.value, rebuilderAsset.value, contenderAsset.value, deadlineModifiers);
   if (!balance.valid) return null;
 
-  if (Date.now() - startTime > MAX_EVAL_DURATION_MS) return null;
+  if (Date.now() - startTime > evalBudgetMs) return null;
 
   const seedHex = (seed >>> 0).toString(16).padStart(8, '0');
   const offerId = `ai2ai_${teamA.id}_${teamB.id}_s${season}w${week}_${seedHex}`;
@@ -224,16 +315,19 @@ export function attemptAIToAITrade(allTeams, allRosters, allPicks, season, week,
 // ── runWeeklyAIToAITrading ─────────────────────────────────────────────────────
 
 export function runWeeklyAIToAITrading(allTeams, allRosters, allPicks, season, week, seed) {
+  if (!isTradeWindowOpen(week)) return [];
+
   const startTime = Date.now();
+  const maxAttempts = getWeeklyAttemptCount(week);
+  if (maxAttempts === 0) return [];
 
-  if (week < TRADING_WEEKS.start || week > TRADING_WEEKS.end) return [];
-
+  const evalBudgetMs = isDeadlineWindow(week) ? DEADLINE_CONFIG.max_eval_ms_deadline : MAX_EVAL_DURATION_MS;
   const trades = [];
   const usedPairs = new Set();
 
-  for (let i = 0; i < MAX_TRADES_PER_WEEK; i++) {
+  for (let i = 0; i < maxAttempts; i++) {
     const elapsed = Date.now() - startTime;
-    if (elapsed > MAX_EVAL_DURATION_MS * MAX_TRADES_PER_WEEK) break;
+    if (elapsed > evalBudgetMs * maxAttempts) break;
 
     const attemptSeed = (seed + i * 7919) >>> 0;
     const trade = attemptAIToAITrade(allTeams, allRosters, allPicks, season, week, attemptSeed, usedPairs);
