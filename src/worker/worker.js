@@ -10914,8 +10914,10 @@ async function handleAdvanceOffseason(payload, id) {
       const teamId = Number(team.id);
       teamRosters[teamId] = playersByTeamId.get(teamId) || [];
     }
+    const teamsById = {};
+    for (const team of allTeams) teamsById[Number(team.id)] = team;
     for (const player of legacyPlayers) player.season = Number(meta?.year ?? 2025);
-    legacyProgression = processPlayerProgression(legacyPlayers, { teamEnvironments, teamRosters, teamCoaches });
+    legacyProgression = processPlayerProgression(legacyPlayers, { teamEnvironments, teamRosters, teamCoaches, teams: teamsById });
   }
 
   const evolvedLeaders = summarizeOffseasonEvolutionLeaders(offseasonEvolution, playersById);
