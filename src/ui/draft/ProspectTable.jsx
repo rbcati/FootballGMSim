@@ -78,7 +78,7 @@ function DraftBoard({
         isDraftComplete={board.isDraftComplete}
       />
 
-      <DraftTicker completedPicks={board.completedPicks} />
+      <DraftTicker completedPicks={board.completedPicks} tradeUpTicker={board.lastTradeUpTicker} />
 
       {board.pickOrder.length === 0 && (
         <div style={{ marginBottom: "var(--space-4)", padding: "var(--space-3)", borderRadius: "var(--radius-md)", background: "rgba(255,69,58,0.1)", border: "1px solid var(--danger)", color: "var(--danger)", fontSize: "var(--text-sm)" }}>

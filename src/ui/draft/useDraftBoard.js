@@ -35,6 +35,7 @@ export function useDraftBoard({ draftState, onDraftPlayer, onSimToMyPick, league
     pendingTradeProposal = null,
     recommendedPick = null,
     userBigBoard = [],
+    lastTradeUpTicker = null,
   } = draftState ?? {};
 
   useEffect(() => {
@@ -180,6 +181,7 @@ export function useDraftBoard({ draftState, onDraftPlayer, onSimToMyPick, league
     currentPick, isUserPick, isDraftComplete,
     prospects, completedPicks, upcomingPicks,
     pendingTradeProposal, recommendedPick,
+    lastTradeUpTicker,
     sortedByOvr, sortedProspects,
     compareIds, setCompareIds, showComparison, setShowComparison,
     toggleCompare, comparePlayerA, comparePlayerB,
