@@ -470,6 +470,7 @@ export default function ContractCenter({ league, actions, compact = false, onNav
           player={extensionPlayer}
           teamId={team?.id}
           actions={actions}
+          currentSeason={league?.seasonId ?? league?.year ?? null}
           cacheScopeKey={buildLeagueCacheScopeKey(league)}
           onClose={() => setExtensionPlayer(null)}
           onComplete={async (_payload, signedContract) => {
