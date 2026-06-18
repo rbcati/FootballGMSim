@@ -319,6 +319,17 @@ import {
   buildScheduleBuffer,
 } from './serialization.js';
 import { sortStandingsRows } from '../views/standingsView.js';
+import {
+  isWaiverWindowOpen,
+  buildWaiverPriorityList,
+  sendPlayerToWaivers,
+  canTeamClaimWaiverPlayer,
+  submitWaiverClaim,
+  findHighestPriorityClaim,
+  processWaivers,
+  shouldAIClaimWaiverPlayer,
+  generateAIWaiverClaims,
+} from '../core/transactions/waiverEngine.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -1181,6 +1192,28 @@ function buildViewState() {
     ...(typeof globalThis !== 'undefined' && globalThis.__DYNASTY_SOAK_PROFILE__ && globalThis.__DYNASTY_SOAK_LAST_BATCH__
       ? { dynastySoakSimBatch: { ...globalThis.__DYNASTY_SOAK_LAST_BATCH__ } }
       : {}),
+    // ── Waiver Wire ──────────────────────────────────────────────────────────
+    waiverWindowOpen: isWaiverWindowOpen(meta?.currentWeek ?? 0),
+    waiverPriorityPosition: (() => {
+      const list = meta?.waiverPriorityList ?? [];
+      const idx = list.findIndex(id => String(id) === String(meta?.userTeamId));
+      return idx >= 0 ? idx + 1 : null;
+    })(),
+    waiverPlayers: cache.getAllPlayers()
+      .filter(p => p.waiverStatus === 'ACTIVE')
+      .map(p => ({
+        id: p.id,
+        name: p.name,
+        pos: p.pos,
+        ovr: p.ovr,
+        age: p.age,
+        waiverContract: p.waiverContract ?? null,
+        previousTeamId: p.previousTeamId ?? null,
+        waiverWeekExpires: p.waiverWeekExpires ?? null,
+      })),
+    userWaiverClaims: (meta?.activeWaiverClaims ?? [])
+      .filter(c => String(c.teamId) === String(meta?.userTeamId))
+      .map(c => String(c.playerId)),
   };
 }
 
@@ -2123,6 +2156,9 @@ async function handleLoadSave({ leagueId }, id) {
         commissionerMode: !!meta?.commissionerMode,
         commissionerEverEnabled: !!meta?.commissionerEverEnabled,
         commissionerLog: Array.isArray(meta?.commissionerLog) ? meta.commissionerLog : [],
+        // Waiver wire meta hydration (safe defaults for older saves)
+        waiverPriorityList: meta?.waiverPriorityList ?? [],
+        activeWaiverClaims: meta?.activeWaiverClaims ?? [],
       });
 
       if (meta?.simSession?.status === 'running') {
@@ -2981,6 +3017,89 @@ async function handleAdvanceWeek(payload, id) {
 
   const week        = meta.currentWeek;
   const seasonId    = meta.currentSeasonId;
+
+  // ── Waiver Wire Processing (Weeks 11-14) ──────────────────────────────────
+  if (meta.phase === 'regular' && isWaiverWindowOpen(week)) {
+    // Initialize priority list once at start of week 11 (or if missing)
+    if (!meta.waiverPriorityList || meta.waiverPriorityList.length === 0) {
+      const allTeamsForWaiver = cache.getAllTeams();
+      const priority = buildWaiverPriorityList(allTeamsForWaiver);
+      cache.setMeta({ waiverPriorityList: priority });
+      meta.waiverPriorityList = priority;
+    }
+    const waiverActiveWaiverClaims = meta.activeWaiverClaims ?? [];
+    const waiverPriorityList = meta.waiverPriorityList ?? [];
+    const waiverAllPlayers = cache.getAllPlayers();
+    const waiverAllTeams = cache.getAllTeams();
+
+    // Generate AI claims for this week
+    const claimsAfterAI = generateAIWaiverClaims({
+      teams: waiverAllTeams,
+      players: waiverAllPlayers,
+      waiverPriorityList,
+      activeWaiverClaims: waiverActiveWaiverClaims,
+      currentWeek: week,
+      userTeamId: meta.userTeamId,
+    });
+
+    // Process waivers (award expired waiver players)
+    const waiverResult = processWaivers({
+      players: waiverAllPlayers,
+      teams: waiverAllTeams,
+      activeWaiverClaims: claimsAfterAI,
+      waiverPriorityList,
+      currentWeek: week,
+    });
+
+    // Apply player changes to cache for processed waiver players
+    const processedPlayerIds = new Set([
+      ...waiverResult.awards.map(a => a.playerId),
+      ...waiverResult.clearances.map(c => c.playerId),
+    ]);
+    for (const p of waiverResult.players) {
+      if (!processedPlayerIds.has(p.id)) continue;
+      const orig = waiverAllPlayers.find(ap => ap.id === p.id);
+      if (!orig) continue;
+      // Build the patch: only changed fields
+      const patch = {};
+      for (const key of Object.keys(p)) {
+        if (p[key] !== orig[key]) patch[key] = p[key];
+      }
+      // Also clear fields that were deleted
+      for (const key of ['waiverStatus', 'waiverWeekExpires', 'waiverContract', 'previousTeamId']) {
+        if (key in orig && !(key in p)) patch[key] = null;
+      }
+      if (Object.keys(patch).length > 0) {
+        cache.updatePlayer(p.id, patch);
+        // Recalculate cap for teams affected by waiver awards
+        if (patch.teamId != null) {
+          recalculateTeamCap(patch.teamId);
+        }
+      }
+    }
+
+    // Emit news for awards and clearances
+    for (const award of waiverResult.awards) {
+      await NewsEngine.logWaiverAward(award.teamName, award.playerName, award.teamId);
+      // Check if user was outbid on this player
+      const userClaim = waiverActiveWaiverClaims.find(
+        c => String(c.playerId) === String(award.playerId) && String(c.teamId) === String(meta.userTeamId)
+      );
+      if (userClaim && String(award.teamId) !== String(meta.userTeamId)) {
+        await NewsEngine.logWaiverOutbid(award.playerName, award.teamName, award.teamId);
+      }
+    }
+    for (const clearance of waiverResult.clearances) {
+      await NewsEngine.logWaiverClear(clearance.playerName);
+    }
+
+    // Update meta with new priority list and remaining claims
+    cache.setMeta({
+      waiverPriorityList: waiverResult.waiverPriorityList,
+      activeWaiverClaims: waiverResult.activeWaiverClaims,
+    });
+  }
+
   const schedule    = expandSchedule(meta.schedule);
   const tradeDeadline = getTradeDeadlineSnapshot(meta);
 
@@ -7288,6 +7407,30 @@ async function releasePlayerWithValidation({ playerId, teamId }) {
   const holdoutReleasePlayer = player.holdout?.active
     ? resolveHoldout(player, HOLDOUT_RESOLUTION.GM_RELEASED, meta.currentSeasonId ?? meta.season ?? 0, meta.currentWeek ?? 0)
     : player;
+
+  // ── Waiver Wire: send to waivers instead of immediate FA during weeks 11-14 ──
+  if (isWaiverWindowOpen(meta.currentWeek ?? 0)) {
+    const waiverPlayer = sendPlayerToWaivers(holdoutReleasePlayer, meta.currentWeek, teamId);
+    cache.updatePlayer(player.id, {
+      teamId: null,
+      status: 'waiver',
+      offers: [],
+      holdout: holdoutReleasePlayer.holdout,
+      waiverStatus: waiverPlayer.waiverStatus,
+      waiverWeekExpires: waiverPlayer.waiverWeekExpires,
+      waiverContract: waiverPlayer.waiverContract,
+      previousTeamId: waiverPlayer.previousTeamId,
+    });
+    recalculateTeamCap(teamId);
+    ensureTeamDepthChart(teamId, { phase: cache.getPhase() });
+    await Transactions.add({
+      type: 'RELEASE', seasonId: meta.currentSeasonId,
+      week: meta.currentWeek, teamId, details: { playerId: player.id, toWaivers: true },
+    });
+    await NewsEngine.logTransaction('RELEASE', { teamId, playerId: player.id });
+    return { ok: true, playerId: player.id };
+  }
+
   cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [], holdout: holdoutReleasePlayer.holdout });
   recalculateTeamCap(teamId);
   // Repair the depth chart so the released player's ID is stripped from any
@@ -7350,6 +7493,53 @@ async function handleBulkReleasePlayers({ teamId, playerIds }, id) {
   await flushDirty();
   post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
   post(toUI.SUCCESS, { ok: true, released }, id);
+}
+
+// ── Handler: SUBMIT_WAIVER_CLAIM ──────────────────────────────────────────────
+
+async function handleSubmitWaiverClaim({ playerId }, id) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const week = meta.currentWeek ?? 0;
+  if (!isWaiverWindowOpen(week)) {
+    post(toUI.ERROR, { message: 'WAIVERS_CLOSED' }, id);
+    return;
+  }
+  const player = cache.getPlayer(Number(playerId));
+  if (!player || player.waiverStatus !== 'ACTIVE') {
+    post(toUI.ERROR, { message: 'PLAYER_NOT_ON_WAIVERS' }, id);
+    return;
+  }
+  const userTeam = cache.getTeam(meta.userTeamId);
+  if (!canTeamClaimWaiverPlayer(userTeam, player)) {
+    post(toUI.ERROR, { message: 'INSUFFICIENT_CAP_SPACE' }, id);
+    return;
+  }
+  const existingClaims = meta.activeWaiverClaims ?? [];
+  const dup = existingClaims.find(
+    c => String(c.playerId) === String(playerId) && String(c.teamId) === String(meta.userTeamId)
+  );
+  if (dup) {
+    post(toUI.ERROR, { message: 'CLAIM_ALREADY_EXISTS' }, id);
+    return;
+  }
+  const newClaim = { playerId: String(playerId), teamId: meta.userTeamId, submittedWeek: week, origin: 'user' };
+  const updatedClaims = submitWaiverClaim(existingClaims, newClaim);
+  cache.setMeta({ activeWaiverClaims: updatedClaims });
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
+// ── Handler: CANCEL_WAIVER_CLAIM ──────────────────────────────────────────────
+
+async function handleCancelWaiverClaim({ playerId }, id) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const existingClaims = meta.activeWaiverClaims ?? [];
+  const updated = existingClaims.filter(
+    c => !(String(c.playerId) === String(playerId) && String(c.teamId) === String(meta.userTeamId))
+  );
+  cache.setMeta({ activeWaiverClaims: updated });
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 
 // ── Handler: GET_ROSTER ───────────────────────────────────────────────────────
@@ -13765,6 +13955,8 @@ async function handleMessage(event) {
       case toWorker.WITHDRAW_OFFER:     return await handleWithdrawOffer(payload, id);
       case toWorker.RELEASE_PLAYER:     return await handleReleasePlayer(payload, id);
       case toWorker.BULK_RELEASE_PLAYERS: return await handleBulkReleasePlayers(payload, id);
+      case toWorker.SUBMIT_WAIVER_CLAIM: return await handleSubmitWaiverClaim(payload, id);
+      case toWorker.CANCEL_WAIVER_CLAIM: return await handleCancelWaiverClaim(payload, id);
       case toWorker.UPDATE_SETTINGS:    return await handleUpdateSettings(payload, id);
       case toWorker.TOGGLE_COMMISSIONER_MODE: return await handleToggleCommissionerMode(payload, id);
       case toWorker.APPLY_COMMISSIONER_ACTIONS: return await handleApplyCommissionerActions(payload, id);

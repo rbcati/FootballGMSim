@@ -187,6 +187,10 @@ export const toWorker = Object.freeze({
   /** Draft Combine */
   RUN_COMBINE_WORKOUT:          'RUN_COMBINE_WORKOUT',          // { prospectId }
   ADVANCE_COMBINE_WEEK:         'ADVANCE_COMBINE_WEEK',         // {} — transition draft_combine → draft
+
+  /** Waiver Wire */
+  SUBMIT_WAIVER_CLAIM:          'SUBMIT_WAIVER_CLAIM',          // { playerId }
+  CANCEL_WAIVER_CLAIM:          'CANCEL_WAIVER_CLAIM',          // { playerId }
 });
 
 // ─────────────────────────────────────────────
@@ -309,6 +313,9 @@ export const toUI = Object.freeze({
    * window.location.reload() directly, so they post this message instead.
    */
   RELOAD_REQUIRED:    'RELOAD_REQUIRED',     // { reason }
+
+  /** Waiver Wire */
+  WAIVER_DATA:        'WAIVER_DATA',         // { waiverPlayers, userWaiverClaims, waiverWindowOpen, waiverPriorityPosition }
 });
 
 /**

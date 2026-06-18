@@ -434,4 +434,27 @@ export const buildMoraleDropDedupeKey = (playerId, season, week) =>
 export const buildTradeRequestDeniedDedupeKey = (playerId, season, week) =>
     `trade-request-denied-${playerId}-${season}-${week}`;
 
+// ── Waiver Wire News Methods ─────────────────────────────────────────────────
+
+/**
+ * Log a waiver claim award news item.
+ */
+NewsEngine.logWaiverAward = async function logWaiverAward(teamName, playerName, teamId) {
+    await NewsEngine.logNews('TRANSACTION', `WAIVER CLAIM: ${teamName} awarded ${playerName}.`, teamId, { priority: 'medium' });
+};
+
+/**
+ * Log a waiver clearance news item (player cleared to free agency).
+ */
+NewsEngine.logWaiverClear = async function logWaiverClear(playerName) {
+    await NewsEngine.logNews('TRANSACTION', `${playerName} cleared waivers and is now a free agent.`, null, { priority: 'low' });
+};
+
+/**
+ * Log a waiver outbid news item (user was bypassed by higher priority team).
+ */
+NewsEngine.logWaiverOutbid = async function logWaiverOutbid(playerName, teamName, teamId) {
+    await NewsEngine.logNews('TRANSACTION', `You were bypassed on a waiver claim for ${playerName}; ${teamName} held higher priority.`, teamId, { priority: 'medium' });
+};
+
 export default NewsEngine;

@@ -205,6 +205,9 @@ export function processWaivers({ players, teams, activeWaiverClaims, waiverPrior
 
     const winner = findHighestPriorityClaim(validClaims, priorityList);
 
+    // Fields to delete (remove from player object) after waiver processing
+    const WAIVER_CLEAR_FIELDS = ['waiverStatus', 'waiverWeekExpires', 'waiverContract', 'previousTeamId'];
+
     if (winner) {
       // Award player to winning team
       const winningTeam = allTeams.find(t => String(t.id) === String(winner.teamId));
@@ -212,10 +215,7 @@ export function processWaivers({ players, teams, activeWaiverClaims, waiverPrior
         teamId: winner.teamId,
         status: 'active',
         contract: player.waiverContract ? { ...player.waiverContract } : player.contract,
-        waiverStatus: null,
-        waiverWeekExpires: null,
-        waiverContract: null,
-        previousTeamId: null,
+        _clearFields: WAIVER_CLEAR_FIELDS,
       });
 
       awards.push({
@@ -236,10 +236,7 @@ export function processWaivers({ players, teams, activeWaiverClaims, waiverPrior
       playerUpdates.set(playerId, {
         teamId: null,
         status: 'free_agent',
-        waiverStatus: null,
-        waiverWeekExpires: null,
-        waiverContract: null,
-        previousTeamId: null,
+        _clearFields: WAIVER_CLEAR_FIELDS,
       });
 
       clearances.push({
@@ -253,13 +250,13 @@ export function processWaivers({ players, teams, activeWaiverClaims, waiverPrior
   const newPlayers = allPlayers.map(p => {
     const patch = playerUpdates.get(p.id);
     if (!patch) return p;
-    // Merge patch, removing null-valued keys to keep objects clean
-    const merged = { ...p };
-    for (const [key, val] of Object.entries(patch)) {
-      if (val === null) {
+    const { _clearFields, ...fieldPatch } = patch;
+    // Merge regular field updates
+    const merged = { ...p, ...fieldPatch };
+    // Delete waiver-specific fields that should be removed from the player object
+    if (Array.isArray(_clearFields)) {
+      for (const key of _clearFields) {
         delete merged[key];
-      } else {
-        merged[key] = val;
       }
     }
     return merged;
