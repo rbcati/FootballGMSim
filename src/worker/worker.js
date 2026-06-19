@@ -96,6 +96,11 @@ import {
 } from '../core/contract-market.js';
 import { getTeamContextForNegotiation } from '../core/teamContext/negotiationContext.js';
 import { evaluateContractOffer, summarizeNegotiationStance } from '../core/contracts/negotiation.js';
+import {
+  hydratePlayerAgent,
+  evaluateAgentNegotiation,
+  shouldEscalateSharkPressure,
+} from '../core/contracts/agentNegotiationEngine.js';
 import { computeRestructureOutcome, shouldPreserveChemistryOnReturn, isContractRestructureEligible } from '../core/contracts/restructure.js';
 import {
   AI_EXTENSION_FACTORS,
@@ -1759,7 +1764,13 @@ function hydratePlayerDevelopmentFields(player = {}) {
 
 function hydrateAllPlayersForDevelopment() {
   for (const p of cache.getAllPlayers()) {
-    cache.updatePlayer(p.id, hydratePlayerDevelopmentFields(p));
+    const devFields = hydratePlayerDevelopmentFields(p);
+    // Lazily attach agent + negotiationState for legacy saves missing these fields.
+    const agentHydrated = hydratePlayerAgent(p);
+    const agentPatch    = {};
+    if (!p.agent)           agentPatch.agent           = agentHydrated.agent;
+    if (!p.negotiationState) agentPatch.negotiationState = agentHydrated.negotiationState;
+    cache.updatePlayer(p.id, { ...devFields, ...agentPatch });
   }
 }
 
@@ -3932,7 +3943,13 @@ async function handleAdvanceWeek(payload, id) {
 
         // Trigger evaluation: only for non-holdout players
         const moraleSummary = getPlayerMoraleSummary(player);
-        const trigger = evaluateHoldoutTriggers(player, holdoutSeasonId, week, { moraleSummary });
+        let trigger = evaluateHoldoutTriggers(player, holdoutSeasonId, week, { moraleSummary });
+        // Shark final-year pressure: increase effective holdout trigger weight 25%
+        // by re-evaluating with a tighter morale sensitivity (score scaled down 20%).
+        if (!trigger && shouldEscalateSharkPressure({ player, currentSeasonPhase: meta.phase, currentSeason: holdoutSeasonId })) {
+          const sharkMorale = { ...moraleSummary, score: Math.round(moraleSummary.score * 0.8) };
+          trigger = evaluateHoldoutTriggers(player, holdoutSeasonId, week, { moraleSummary: sharkMorale });
+        }
         if (trigger) {
           const withHoldout = applyHoldout(player, trigger, holdoutSeasonId, week);
           cache.updatePlayer(player.id, { holdout: withHoldout.holdout });
@@ -7732,7 +7749,7 @@ async function handleGetFreeAgents(payload, id) {
         });
         const detailTone = userOffer
           ? userOffer.teamId === topBid?.teamId
-            ? (offers.length >= 3 ? 'You’re leading, but another team is close' : 'Your bid leads')
+            ? (offers.length >= 3 ? "You're leading, but another team is close" : 'Your bid leads')
             : (userTrailReason || 'Another team currently leads')
           : (offers.length >= 2 ? 'Warm market' : 'Open market');
         const knownMarket = offers.length > 0 || !!userOffer || !!topBid;
@@ -8540,9 +8557,39 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
   const inSeason = ['regular', 'preseason', 'playoffs'].includes(ensureDynastyMeta(cache.getMeta())?.phase);
   const contractPersonality = contractPersonalityModifier(player.personalityProfile ?? ensurePersonalityProfile(player));
   if (inSeason && ((player.personality?.moneyPriority ?? 0.6) > 0.75 || contractPersonality.inSeasonNegotiationPenalty > 0)) {
-    post(toUI.EXTENSION_RESPONSE, { status: 'declined', reason: 'Won’t negotiate in-season', reasons }, id);
+    post(toUI.EXTENSION_RESPONSE, { status: 'declined', reason: 'Won\'t negotiate in-season', reasons }, id);
     return;
   }
+
+  // ── Agent negotiation overlay ─────────────────────────────────────────────
+  {
+    const agentSeason   = Number(meta?.currentSeasonId ?? meta?.season ?? 0);
+    const allTeams      = cache.getAllTeams();
+    const sortedTeams   = [...allTeams].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
+    const rankIdx       = sortedTeams.findIndex(t => Number(t.id) === Number(resolvedTeamId));
+    const teamPowerRank = rankIdx >= 0 ? rankIdx + 1 : 16;
+    const agentResult   = evaluateAgentNegotiation({
+      player,
+      offer:              { salary: offeredAnnual },
+      baseFairMarketValue: Number(requested?.baseAnnual ?? 0),
+      teamContext:        { teamPowerRankPosition: teamPowerRank },
+      currentSeason:      agentSeason,
+    });
+    if (agentResult.updatedPlayer?.negotiationState !== player?.negotiationState) {
+      cache.updatePlayer(playerId, { negotiationState: agentResult.updatedPlayer.negotiationState });
+    }
+    if (!agentResult.accepted) {
+      post(toUI.EXTENSION_RESPONSE, {
+        status:       'declined',
+        reason:       agentResult.feedbackText ?? 'Agent rejected the offer',
+        reasons:      [agentResult.rationale ?? ''].filter(Boolean),
+        rejectionCode: agentResult.rejectionCode,
+        agentFeedback: agentResult.feedbackText,
+      }, id);
+      return;
+    }
+  }
+  // ── End agent overlay ─────────────────────────────────────────────────────
 
   if (annualGap >= -0.2 && yearsGap >= -1 && offeredGuarantee >= 0.45) {
     const newCapHit = (contract.baseAnnual || 0) + ((contract.signingBonus || 0) / (contract.yearsTotal || 1));
@@ -9661,6 +9708,34 @@ async function handleRestructureContract({ playerId, teamId }, id) {
     post(toUI.ERROR, { message: 'Cannot restructure: no base salary to convert.' }, id);
     return;
   }
+
+  // ── Agent negotiation overlay ─────────────────────────────────────────────
+  {
+    const rstSeason     = Number(meta?.year ?? 0);
+    const rstAllTeams   = cache.getAllTeams();
+    const rstSorted     = [...rstAllTeams].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
+    const rstRankIdx    = rstSorted.findIndex(t => Number(t.id) === Number(resolvedTeamId));
+    const rstTeamRank   = rstRankIdx >= 0 ? rstRankIdx + 1 : 16;
+    const rstAgentResult = evaluateAgentNegotiation({
+      player,
+      offer:              { salary: baseAnnual },
+      baseFairMarketValue: baseAnnual,
+      teamContext:        { teamPowerRankPosition: rstTeamRank },
+      currentSeason:      rstSeason,
+    });
+    if (rstAgentResult.updatedPlayer?.negotiationState !== player?.negotiationState) {
+      cache.updatePlayer(playerId, { negotiationState: rstAgentResult.updatedPlayer.negotiationState });
+    }
+    if (!rstAgentResult.accepted) {
+      post(toUI.ERROR, {
+        message:       rstAgentResult.feedbackText ?? 'Agent blocked the restructure',
+        agentFeedback: rstAgentResult.feedbackText,
+        rejectionCode: rstAgentResult.rejectionCode,
+      }, id);
+      return;
+    }
+  }
+  // ── End agent overlay ─────────────────────────────────────────────────────
 
   // ── Apply immutably then write to cache
   const { updatedPlayer, updatedTeam } = applyRestructure(playerForCheck, team ?? {}, preview, currentSeason);

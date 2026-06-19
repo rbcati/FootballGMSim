@@ -4,11 +4,19 @@ import { Button } from "@/components/ui/button";
 import { formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatting.js";
 import { buildRouteRequestKey } from "../utils/requestLoopGuard.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
+import { getAgentBadgeMeta, hydratePlayerAgent } from "../../core/contracts/agentNegotiationEngine.js";
+
+const AGENT_TONE_CLASSES = {
+  shark:       'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400',
+  loyalist:    'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-400',
+  ring_chaser: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400',
+};
 
 export default function ExtensionNegotiationModal({
   player,
   actions,
   teamId,
+  currentSeason = null,
   cacheScopeKey = "global",
   onClose,
   onComplete,
@@ -36,6 +44,14 @@ export default function ExtensionNegotiationModal({
     setAsk(askData ?? null);
     setOffer(askData ?? null);
   }, [askData]);
+
+  const agentHydrated = useMemo(() => hydratePlayerAgent(player), [player]);
+  const agentBadge    = useMemo(() => getAgentBadgeMeta(agentHydrated), [agentHydrated]);
+  const isFrozen      = useMemo(
+    () => currentSeason != null &&
+          agentHydrated?.negotiationState?.negotiationsFrozenUntilSeason === currentSeason,
+    [agentHydrated, currentSeason],
+  );
 
   const askYears = toFiniteNumber(ask?.years, null);
   const askBaseAnnual = toFiniteNumber(ask?.baseAnnual, null);
@@ -108,6 +124,28 @@ export default function ExtensionNegotiationModal({
           <h3 style={{ marginTop: 0, marginBottom: "var(--space-2)" }}>
             Extend {player.name}
           </h3>
+          <span
+            className={`text-xs font-semibold px-2 py-0.5 rounded ${AGENT_TONE_CLASSES[agentBadge.tone] ?? ''}`}
+            style={{ display: 'inline-block', marginBottom: 'var(--space-2)' }}
+          >
+            {agentBadge.label}
+          </span>
+          {isFrozen && (
+            <div
+              style={{
+                border: '1px solid rgba(239,68,68,0.5)',
+                background: 'rgba(239,68,68,0.10)',
+                borderRadius: 'var(--radius-md)',
+                padding: 'var(--space-3) var(--space-4)',
+                marginBottom: 'var(--space-3)',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text)',
+                fontWeight: 600,
+              }}
+            >
+              🚨 Negotiations Frozen: This agent has locked down talks after an insulting opening offer.
+            </div>
+          )}
           {statusNode}
 
           {loading ? (
@@ -153,9 +191,24 @@ export default function ExtensionNegotiationModal({
               >
                 Includes {formatMoneyM(toFiniteNumber(offer?.signingBonus, askSigningBonus))} signing bonus
               </div>
-              {response?.reason && (
+              {response?.rejectionCode === 'NEGOTIATIONS_FROZEN' && (
+                <div
+                  style={{
+                    marginBottom: 10,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    border: '1px solid rgba(239,68,68,0.5)',
+                    background: 'rgba(239,68,68,0.10)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: 'var(--space-2) var(--space-3)',
+                  }}
+                >
+                  🚨 Negotiations Frozen: This agent has locked down talks after an insulting opening offer.
+                </div>
+              )}
+              {response?.reason && response?.rejectionCode !== 'NEGOTIATIONS_FROZEN' && (
                 <div style={{ marginBottom: 10, fontSize: 12, color: response.status === 'accepted' ? 'var(--success)' : 'var(--warning)' }}>
-                  {response.reason}
+                  {response.agentFeedback ?? response.reason}
                   {Array.isArray(response.reasons) && response.reasons.length > 0 ? ` · ${response.reasons.join(', ')}` : ''}
                 </div>
               )}

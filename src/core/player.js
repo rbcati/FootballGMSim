@@ -8,6 +8,7 @@ import { generateTraits } from './traits.js';
 import { generateFaceConfig } from './face.js';
 import { generatePersonalityProfile, ensurePersonalityProfile, contractPersonalityModifier } from './development/personalitySystem.js';
 import { generateCollegeStats, generateInterviewReport, getScoutingRangeFromProfile, simulateCombineResults } from './draft/draftScouting.js';
+import { generateDeterministicAgentProfile } from './contracts/agentNegotiationEngine.js';
 
 const CONTRACT_DEFAULT = {
   salary: 2,
@@ -489,6 +490,10 @@ traits: generateTraits(pos, playerOvr),
         trueRatings: { ...ratings },
         visibleRatings: { ...ratings },
     };
+
+    // Assign deterministic agent profile so new players always have agent data.
+    player.agent           = generateDeterministicAgentProfile(player);
+    player.negotiationState = { negotiationsFrozenUntilSeason: null };
 
     initProgressionStats(player);
     tagAbilities(player);
