@@ -255,6 +255,12 @@ import {
   compactRetiredPlayerHistory,
   createDefaultRecordBook,
 } from '../core/history/historyEngine.js';
+import {
+  isEligibleForRingOfHonor,
+  inductPlayerToRingOfHonor,
+  updateLeagueTeamAllTimeLeaders,
+  buildRingOfHonorNotification,
+} from '../core/history/legacyEngine.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonalityModifier } from '../core/development/personalitySystem.js';
 import { applyTeamCultureWeek, classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../core/teamCulture.js';
 import { selectCultureAlerts } from '../core/broadcastNarrative.js';
@@ -1228,6 +1234,16 @@ function buildViewState() {
     userWaiverClaims: (meta?.activeWaiverClaims ?? [])
       .filter(c => String(c.teamId) === String(meta?.userTeamId))
       .map(c => String(c.playerId)),
+    // ── Franchise Legacy ─────────────────────────────────────────────────────
+    ringOfHonor: (() => {
+      const t = cache.getTeam(meta?.userTeamId);
+      return Array.isArray(t?.ringOfHonor) ? t.ringOfHonor : [];
+    })(),
+    allTimeLeaders: (() => {
+      const t = cache.getTeam(meta?.userTeamId);
+      return t?.allTimeLeaders ?? { passingYards: null, rushingYards: null, receivingYards: null, sacks: null };
+    })(),
+    pendingRohCandidates: Array.isArray(meta?.pendingRohCandidates) ? meta.pendingRohCandidates : [],
   };
 }
 
@@ -6733,6 +6749,58 @@ async function handleUpdateFranchiseChronicle({ entries }, id) {
   post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 
+// ── Handler: INDUCT_PLAYER_TO_ROH ─────────────────────────────────────────────
+
+async function handleInductPlayerToRoh({ playerId, teamId }, id) {
+  const meta = getSafeMeta();
+  if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
+
+  const numTeamId = Number(teamId);
+  const team = cache.getTeam(numTeamId);
+  if (!team) {
+    post(toUI.ERROR, { message: 'Team not found for Ring of Honor induction.' }, id);
+    return;
+  }
+
+  let player = cache.getPlayer(playerId);
+  if (!player) {
+    try { player = await Players.load(playerId); } catch (_) { player = null; }
+  }
+  if (!player) {
+    post(toUI.ERROR, { message: 'Player not found for Ring of Honor induction.' }, id);
+    return;
+  }
+
+  // Prevent duplicate induction
+  const existing = Array.isArray(team.ringOfHonor) ? team.ringOfHonor : [];
+  if (existing.some((m) => String(m?.id) === String(playerId))) {
+    post(toUI.ERROR, { message: 'Player is already in the Ring of Honor.' }, id);
+    return;
+  }
+
+  const inductionYear = Number(meta?.year ?? 2025);
+  const updatedTeam = inductPlayerToRingOfHonor(team, player, inductionYear);
+  cache.updateTeam(numTeamId, { ringOfHonor: updatedTeam.ringOfHonor });
+
+  // Clear pending ROH candidate notification for this player
+  const pending = Array.isArray(meta?.pendingRohCandidates) ? meta.pendingRohCandidates : [];
+  const filtered = pending.filter((c) => String(c.playerId) !== String(playerId));
+  cache.setMeta({ pendingRohCandidates: filtered });
+
+  // Optional news item
+  try {
+    await NewsEngine.logNews(
+      'FRANCHISE',
+      `${player.name} (${player.pos}) has been inducted into the franchise Ring of Honor!`,
+      numTeamId,
+      { category: 'ring_of_honor', playerId: String(playerId) },
+    );
+  } catch (_) { /* non-fatal */ }
+
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
 async function handleResetLeague(payload, id) {
   _saveIsExplicitlyLoaded = false;
   await clearAllData();
@@ -12019,6 +12087,35 @@ async function handleAdvanceOffseason(payload, id) {
     cache.setMeta({ hallOfFame: updated.hallOfFame });
   }
 
+  // ── ROH eligibility: queue candidates for user-team retiring players ──────
+  {
+    const userTeamId = Number(meta?.userTeamId ?? -1);
+    const rohYear = Number(meta?.year ?? 2025);
+    const userTeam = cache.getTeam(userTeamId);
+    if (userTeam) {
+      const existingCandidates = Array.isArray(meta?.pendingRohCandidates) ? meta.pendingRohCandidates : [];
+      const existingIds = new Set(existingCandidates.map((c) => String(c.playerId)));
+      const existingRoh = new Set(
+        Array.isArray(userTeam.ringOfHonor) ? userTeam.ringOfHonor.map((m) => String(m?.id ?? '')) : []
+      );
+      const newCandidates = [...existingCandidates];
+      for (const ret of retirements) {
+        if (Number(ret?.teamId) !== userTeamId) continue;
+        const retiredPlayer = cache.getPlayer(ret.id);
+        if (!retiredPlayer) continue;
+        if (existingIds.has(String(retiredPlayer.id))) continue;
+        if (existingRoh.has(String(retiredPlayer.id))) continue;
+        if (isEligibleForRingOfHonor(retiredPlayer, userTeam, rohYear, userTeamId)) {
+          const notif = buildRingOfHonorNotification(retiredPlayer, userTeam);
+          newCandidates.push(notif);
+        }
+      }
+      if (newCandidates.length !== existingCandidates.length) {
+        cache.setMeta({ pendingRohCandidates: newCandidates });
+      }
+    }
+  }
+
   // ── Step 4: Generate news items for chaotic offseason events ──────────────
 
   // "Breakout Seasons" — individual high-priority news per breakout (up to 3)
@@ -13272,6 +13369,20 @@ async function handleStartNewSeason(payload, id) {
     }),
   });
 
+  // ── Update franchise all-time leaders once per season rollover ──────────
+  try {
+    const allPlayersForLeaders = cache.getAllPlayers();
+    const allTeamsForLeaders   = cache.getAllTeams();
+    const updatedTeams = updateLeagueTeamAllTimeLeaders(allTeamsForLeaders, allPlayersForLeaders);
+    for (const t of updatedTeams) {
+      if (t?.id != null && t?.allTimeLeaders) {
+        cache.updateTeam(t.id, { allTimeLeaders: t.allTimeLeaders });
+      }
+    }
+  } catch (leadersErr) {
+    console.error('[Worker] All-time leaders update failed (non-fatal):', leadersErr);
+  }
+
   await flushDirty(); // AUTO-SAVE: phase transition — new season initialized to preseason.
 
   // Broadcast SEASON_START so the UI can force-switch to Standings/Dashboard.
@@ -14178,6 +14289,7 @@ async function handleMessage(event) {
       case toWorker.APPLY_FRANCHISE_TAG:  return await handleApplyFranchiseTag(payload, id);
       case toWorker.RELOCATE_TEAM:        return await handleRelocateTeam(payload, id);
       case toWorker.GET_BOX_SCORE:        return await handleGetBoxScore(payload, id);
+      case toWorker.INDUCT_PLAYER_TO_ROH: return await handleInductPlayerToRoh(payload, id);
       case toWorker.UPDATE_STRATEGY:    return await handleUpdateStrategy(payload, id);
 
       // ── Draft & Offseason ──────────────────────────────────────────────────

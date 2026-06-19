@@ -191,6 +191,9 @@ export const toWorker = Object.freeze({
   /** Waiver Wire */
   SUBMIT_WAIVER_CLAIM:          'SUBMIT_WAIVER_CLAIM',          // { playerId }
   CANCEL_WAIVER_CLAIM:          'CANCEL_WAIVER_CLAIM',          // { playerId }
+
+  /** Franchise Legacy — Ring of Honor */
+  INDUCT_PLAYER_TO_ROH:         'INDUCT_PLAYER_TO_ROH',         // { playerId, teamId }
 });
 
 // ─────────────────────────────────────────────

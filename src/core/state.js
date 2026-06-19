@@ -519,6 +519,25 @@ export const State = {
     migrated.ownerGoals = migrated?.ownerGoals ?? [];
     migrated.retiredPlayers = migrated?.retiredPlayers ?? [];
 
+    // ── Franchise Legacy — Ring of Honor & All-Time Leaders ─────────────────
+    // Backward-compatible: old saves get empty/null safe defaults per team.
+    migrated.teams = migrated.teams.map((team) => {
+      if (!team) return team;
+      const t = { ...team };
+      if (!Array.isArray(t.ringOfHonor)) t.ringOfHonor = [];
+      if (!t.allTimeLeaders || typeof t.allTimeLeaders !== 'object') {
+        t.allTimeLeaders = { passingYards: null, rushingYards: null, receivingYards: null, sacks: null };
+      } else {
+        t.allTimeLeaders = {
+          passingYards:   t.allTimeLeaders.passingYards   ?? null,
+          rushingYards:   t.allTimeLeaders.rushingYards   ?? null,
+          receivingYards: t.allTimeLeaders.receivingYards ?? null,
+          sacks:          t.allTimeLeaders.sacks          ?? null,
+        };
+      }
+      return t;
+    });
+
     // ── History Ledger & Record Book (historyEngine schema) ─────────────────
     // Backward-compatible: old saves hydrate safely with empty/null defaults.
     migrated.historyLedger = Array.isArray(migrated.historyLedger)
