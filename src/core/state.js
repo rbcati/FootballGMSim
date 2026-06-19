@@ -519,6 +519,27 @@ export const State = {
     migrated.ownerGoals = migrated?.ownerGoals ?? [];
     migrated.retiredPlayers = migrated?.retiredPlayers ?? [];
 
+    // ── History Ledger & Record Book (historyEngine schema) ─────────────────
+    // Backward-compatible: old saves hydrate safely with empty/null defaults.
+    migrated.historyLedger = Array.isArray(migrated.historyLedger)
+      ? migrated.historyLedger
+      : [];
+    if (!migrated.recordBook || typeof migrated.recordBook !== 'object') {
+      migrated.recordBook = {};
+    }
+    if (!migrated.recordBook.singleGame || typeof migrated.recordBook.singleGame !== 'object') {
+      migrated.recordBook = {
+        ...migrated.recordBook,
+        singleGame: { passingYards: null, passingTds: null, rushingYards: null, sacks: null },
+      };
+    }
+    if (!migrated.recordBook.singleSeasonBests || typeof migrated.recordBook.singleSeasonBests !== 'object') {
+      migrated.recordBook = {
+        ...migrated.recordBook,
+        singleSeasonBests: { passingYards: null, passingTds: null, rushingYards: null, sacks: null },
+      };
+    }
+
     // Ensure records structure exists
     if (!migrated.records) {
       migrated.records = {};
