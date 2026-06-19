@@ -247,6 +247,14 @@ import {
   POSITION_PAY_SCALARS,
 } from '../core/trades/assetValuation.js';
 import { archiveCompletedSeasonIfNeeded, ensureLeagueHistoryContainer } from '../core/leagueHistory.js';
+import {
+  buildLeagueYearSummary,
+  appendHistoryLedger,
+  updateSingleGameRecordsFromBatch,
+  updateSingleSeasonRecords,
+  compactRetiredPlayerHistory,
+  createDefaultRecordBook,
+} from '../core/history/historyEngine.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonalityModifier } from '../core/development/personalitySystem.js';
 import { applyTeamCultureWeek, classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../core/teamCulture.js';
 import { selectCultureAlerts } from '../core/broadcastNarrative.js';
@@ -1146,6 +1154,7 @@ function buildViewState() {
     playerSeasonStatsArchive: meta?.playerSeasonStatsArchive ?? {},
     teamCulture: meta?.teamCulture ?? {},
     leagueHistory: Array.isArray(meta?.leagueHistory) ? meta.leagueHistory.slice(-60) : [],
+    historyLedger: Array.isArray(meta?.historyLedger) ? meta.historyLedger : [],
     franchiseAwards: Array.isArray(meta?.franchiseAwards) ? meta.franchiseAwards : [],
     franchiseChronicle: Array.isArray(meta?.franchiseChronicle) ? meta.franchiseChronicle.slice(-340) : [],
     franchiseSeasonReviews: Array.isArray(meta?.franchiseSeasonReviews) ? meta.franchiseSeasonReviews.slice(-40) : [],
@@ -3335,6 +3344,46 @@ async function handleAdvanceWeek(payload, id) {
         teamDriveStats: res.teamDriveStats ?? null,
       });
     }
+  }
+
+  // ── Single-game record tracking (historyEngine) ───────────────────────────
+  // Evaluate completed game stat lines from this week against all-time highs.
+  // Runs after applyGameResultToCache so scores/stats are already committed.
+  try {
+    const currentMeta = cache.getMeta();
+    const existingRb = currentMeta.recordBook ?? {};
+    const defaultRb = createDefaultRecordBook();
+    const rbForHistory = {
+      singleGame: existingRb.singleGame ?? defaultRb.singleGame,
+      singleSeasonBests: existingRb.singleSeasonBests ?? defaultRb.singleSeasonBests,
+    };
+
+    const allStatLines = [];
+    for (const res of results) {
+      const boxScore = res.boxScore ?? {};
+      const rawH = res.home ?? res.homeTeamId;
+      const rawA = res.away ?? res.awayTeamId;
+      const hId = Number(typeof rawH === 'object' ? rawH?.id : rawH);
+      const aId = Number(typeof rawA === 'object' ? rawA?.id : rawA);
+      for (const [pid, entry] of Object.entries(boxScore.home ?? {})) {
+        allStatLines.push({ playerId: pid, playerName: entry.name, position: entry.pos, teamId: hId, stats: entry.stats ?? {} });
+      }
+      for (const [pid, entry] of Object.entries(boxScore.away ?? {})) {
+        allStatLines.push({ playerId: pid, playerName: entry.name, position: entry.pos, teamId: aId, stats: entry.stats ?? {} });
+      }
+    }
+
+    const contextResolver = (statLine) => ({
+      season: currentMeta.year,
+      teamName: cache.getTeam(statLine.teamId)?.name ?? 'Unknown',
+    });
+
+    const updatedRb = updateSingleGameRecordsFromBatch(rbForHistory, allStatLines, contextResolver);
+    if (updatedRb !== rbForHistory) {
+      cache.setMeta({ recordBook: { ...existingRb, ...updatedRb } });
+    }
+  } catch (historyGameErr) {
+    console.warn('[Worker] Single-game record update failed (non-fatal):', historyGameErr.message);
   }
 
   // --- Advance week / phase ---
@@ -12976,6 +13025,59 @@ async function archiveSeason(seasonId) {
     let memoryMeta = { ...meta, leagueHistory: historyRows };
     memoryMeta = updateFranchiseHistory(memoryMeta, seasonSummary, teams);
     memoryMeta = updateRecordBook(memoryMeta, { allPlayers: cache.getAllPlayers() });
+
+    // ── History Ledger & Record Book (historyEngine) ──────────────────────────
+    try {
+      const defaultRb = createDefaultRecordBook();
+      const existingRb = memoryMeta.recordBook ?? {};
+      let historyRb = {
+        singleGame: existingRb.singleGame ?? defaultRb.singleGame,
+        singleSeasonBests: existingRb.singleSeasonBests ?? defaultRb.singleSeasonBests,
+      };
+
+      // 1. Update single-season bests from players before stat reset
+      const allPlayersForHistory = cache.getAllPlayers();
+      const teamNameResolverFn = (tid) => (cache.getTeam(tid)?.name ?? 'Unknown');
+      historyRb = updateSingleSeasonRecords(historyRb, allPlayersForHistory, year, teamNameResolverFn);
+
+      // 2. Build year summary from champion, runner-up, and award winners
+      const champScore = championshipGame
+        ? { homeScore: championshipGame.homeScore, awayScore: championshipGame.awayScore }
+        : {};
+      const yearSummary = buildLeagueYearSummary({
+        season: year,
+        championshipResult: {
+          championTeamId: championId ?? null,
+          championName: champion?.name ?? 'Unknown',
+          runnerUpName: runnerUpTeamFromFinal?.name ?? 'Unknown',
+          ...champScore,
+        },
+        awards: {
+          mvpName: awards?.mvp?.name ?? 'Unknown',
+          opoyName: awards?.opoy?.name ?? 'Unknown',
+          dpoyName: awards?.dpoy?.name ?? 'Unknown',
+        },
+      });
+
+      // 3. Append to ledger (replaces same-year entry if rerun)
+      const updatedLedger = appendHistoryLedger(memoryMeta.historyLedger ?? [], yearSummary);
+
+      // 4. Compact retired non-honored players conservatively
+      const compactedRetired = compactRetiredPlayerHistory(
+        Array.isArray(memoryMeta.retiredPlayers) ? memoryMeta.retiredPlayers : [],
+        historyRb,
+      );
+
+      memoryMeta = {
+        ...memoryMeta,
+        historyLedger: updatedLedger,
+        retiredPlayers: compactedRetired,
+        recordBook: { ...existingRb, ...historyRb },
+      };
+    } catch (historyEngineErr) {
+      console.error('[Worker] History engine season rollover failed (non-fatal):', historyEngineErr);
+    }
+
     const hofArchiveTeamAbbrMap = {};
     teams.forEach((t) => { hofArchiveTeamAbbrMap[t.id] = t.abbr; });
     const hofSync = syncHallOfFameAfterRecordBook(memoryMeta, cache.getAllPlayers(), year, { teams, teamAbbrMap: hofArchiveTeamAbbrMap });
@@ -13056,8 +13158,10 @@ async function archiveSeason(seasonId) {
 
     cache.setMeta({
       leagueHistory: memoryMeta.leagueHistory,
+      historyLedger: Array.isArray(memoryMeta.historyLedger) ? memoryMeta.historyLedger : [],
       franchiseHistoryByTeam: memoryMeta.franchiseHistoryByTeam,
       recordBook: memoryMeta.recordBook,
+      retiredPlayers: Array.isArray(memoryMeta.retiredPlayers) ? memoryMeta.retiredPlayers : [],
       seasonStorylines: memoryMeta.seasonStorylines,
       history: archivedLeagueView.history,
       hallOfFame: memoryMeta.hallOfFame,
