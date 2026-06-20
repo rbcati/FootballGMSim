@@ -16,6 +16,7 @@ import { buildGameBookDestination } from '../utils/managementScreenRouting.js';
 import ChronicleHeadlineBanner from './ChronicleHeadlineBanner.tsx';
 import CombineDashboard from './CombineDashboard.jsx';
 import FranchiseLegacyView from './FranchiseLegacyView.jsx';
+import FranchiseBrandHQ from './FranchiseBrandHQ.jsx';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -1085,16 +1086,36 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         );
       })()}
 
-      {/* ── Franchise Legacy: Ring of Honor & All-Time Leaders ── */}
+      {/* ── Championship Wall ── */}
       {(() => {
-        const rohMembers   = Array.isArray(league?.ringOfHonor) ? league.ringOfHonor : [];
-        const atLeaders    = league?.allTimeLeaders ?? null;
-        const rohCandidates = Array.isArray(league?.pendingRohCandidates) ? league.pendingRohCandidates : [];
-        const hasLegacyData = rohMembers.length > 0 || rohCandidates.length > 0;
+        const champYears = Array.isArray(league?.championshipYears) ? league.championshipYears : [];
+        if (champYears.length === 0) return null;
+        return (
+          <div style={{ padding: '0 12px', marginBottom: 4 }}>
+            <FranchiseBrandHQ championshipYears={champYears} />
+          </div>
+        );
+      })()}
+
+      {/* ── Franchise Legacy: Ring of Honor, Retired Numbers & All-Time Leaders ── */}
+      {(() => {
+        const rohMembers         = Array.isArray(league?.ringOfHonor) ? league.ringOfHonor : [];
+        const atLeaders          = league?.allTimeLeaders ?? null;
+        const rohCandidates      = Array.isArray(league?.pendingRohCandidates) ? league.pendingRohCandidates : [];
+        const retiredNums        = Array.isArray(league?.retiredNumbers) ? league.retiredNumbers : [];
+        const retiredNumDisplay  = Array.isArray(league?.retiredNumberDisplay) ? league.retiredNumberDisplay : [];
+        const hasLegacyData = rohMembers.length > 0 || rohCandidates.length > 0 || retiredNums.length > 0;
 
         const handleInduct = (playerId, teamId) => {
           if (actions?.send) {
             actions.send('INDUCT_PLAYER_TO_ROH', { playerId, teamId });
+          }
+        };
+
+        const handleRetireNumber = (playerId, jerseyNumber) => {
+          if (actions?.send) {
+            const userTeamId = league?.userTeamId ?? league?.teams?.[0]?.id;
+            actions.send('RETIRE_JERSEY_NUMBER', { teamId: userTeamId, playerId });
           }
         };
 
@@ -1106,7 +1127,10 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
               ringOfHonor={rohMembers}
               allTimeLeaders={atLeaders}
               pendingRohCandidates={rohCandidates}
+              retiredNumbers={retiredNums}
+              retiredNumberDisplay={retiredNumDisplay}
               onInduct={handleInduct}
+              onRetireNumber={handleRetireNumber}
             />
           </div>
         );

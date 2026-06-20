@@ -194,6 +194,9 @@ export const toWorker = Object.freeze({
 
   /** Franchise Legacy — Ring of Honor */
   INDUCT_PLAYER_TO_ROH:         'INDUCT_PLAYER_TO_ROH',         // { playerId, teamId }
+
+  /** Franchise Legacy — Jersey Retirement */
+  RETIRE_JERSEY_NUMBER:         'RETIRE_JERSEY_NUMBER',         // { teamId, playerId }
 });
 
 // ─────────────────────────────────────────────
