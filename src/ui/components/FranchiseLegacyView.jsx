@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import React from 'react';
 import { SectionCard } from './ScreenSystem.jsx';
+import LegendsBrowser from './LegendsBrowser.jsx';
 
 function safeNum(v, fb = 0) {
   const n = Number(v);
@@ -355,7 +356,7 @@ export default function FranchiseLegacyView({
         </SectionCard>
       )}
 
-      {/* Ring of Honor gallery */}
+      {/* Ring of Honor — Legends Browser replaces the flat card grid */}
       <SectionCard
         title="Ring of Honor"
         subtitle="Franchise legends inducted into the Ring of Honor."
@@ -363,22 +364,11 @@ export default function FranchiseLegacyView({
         data-testid="roh-gallery-section"
       >
         {hasMembers ? (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-              gap: 10,
-            }}
-          >
-            {ringOfHonor.map((member) => (
-              <RohCard
-                key={member.id ?? member.name}
-                member={member}
-                onRetireNumber={onRetireNumber}
-                retiredNumbers={retiredNumbers}
-              />
-            ))}
-          </div>
+          <LegendsBrowser
+            ringOfHonor={ringOfHonor}
+            retiredNumbers={retiredNumbers}
+            onRetireNumber={onRetireNumber}
+          />
         ) : (
           <p
             data-testid="roh-empty-state"
