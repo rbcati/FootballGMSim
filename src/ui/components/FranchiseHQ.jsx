@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { autoBuildDepthChart, depthWarnings } from '../../core/depthChart.js';
 import { markWeeklyPrepStep, deriveWeeklyPrepState } from '../utils/weeklyPrep.js';
@@ -15,6 +15,7 @@ import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildGameBookDestination } from '../utils/managementScreenRouting.js';
 import ChronicleHeadlineBanner from './ChronicleHeadlineBanner.tsx';
 import CombineDashboard from './CombineDashboard.jsx';
+import FranchiseLegacyView from './FranchiseLegacyView.jsx';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -1081,6 +1082,33 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
               </div>
             ))}
           </SectionCard>
+        );
+      })()}
+
+      {/* ── Franchise Legacy: Ring of Honor & All-Time Leaders ── */}
+      {(() => {
+        const rohMembers   = Array.isArray(league?.ringOfHonor) ? league.ringOfHonor : [];
+        const atLeaders    = league?.allTimeLeaders ?? null;
+        const rohCandidates = Array.isArray(league?.pendingRohCandidates) ? league.pendingRohCandidates : [];
+        const hasLegacyData = rohMembers.length > 0 || rohCandidates.length > 0;
+
+        const handleInduct = (playerId, teamId) => {
+          if (actions?.send) {
+            actions.send('INDUCT_PLAYER_TO_ROH', { playerId, teamId });
+          }
+        };
+
+        if (!hasLegacyData && !atLeaders) return null;
+
+        return (
+          <div style={{ padding: '0 12px', marginBottom: 4 }}>
+            <FranchiseLegacyView
+              ringOfHonor={rohMembers}
+              allTimeLeaders={atLeaders}
+              pendingRohCandidates={rohCandidates}
+              onInduct={handleInduct}
+            />
+          </div>
         );
       })()}
 
