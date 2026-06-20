@@ -538,6 +538,16 @@ export const State = {
       return t;
     });
 
+    // ── Team Identity — Retired Numbers & Championship Years ─────────────────
+    // Backward-compatible: old saves hydrate safely with empty arrays.
+    migrated.teams = migrated.teams.map((team) => {
+      if (!team) return team;
+      const t = { ...team };
+      if (!Array.isArray(t.retiredNumbers)) t.retiredNumbers = [];
+      if (!Array.isArray(t.championshipYears)) t.championshipYears = [];
+      return t;
+    });
+
     // ── History Ledger & Record Book (historyEngine schema) ─────────────────
     // Backward-compatible: old saves hydrate safely with empty/null defaults.
     migrated.historyLedger = Array.isArray(migrated.historyLedger)

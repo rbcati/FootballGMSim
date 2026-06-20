@@ -261,6 +261,14 @@ import {
   updateLeagueTeamAllTimeLeaders,
   buildRingOfHonorNotification,
 } from '../core/history/legacyEngine.js';
+import {
+  appendChampionshipYear,
+  retireJerseyNumber,
+  isRetiredNumber,
+  findAvailableJerseyNumber,
+  buildRetiredNumberDisplay,
+  derivePreferredJerseyNumber,
+} from '../core/history/teamIdentityEngine.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonalityModifier } from '../core/development/personalitySystem.js';
 import { applyTeamCultureWeek, classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../core/teamCulture.js';
 import { selectCultureAlerts } from '../core/broadcastNarrative.js';
@@ -1244,6 +1252,20 @@ function buildViewState() {
       return t?.allTimeLeaders ?? { passingYards: null, rushingYards: null, receivingYards: null, sacks: null };
     })(),
     pendingRohCandidates: Array.isArray(meta?.pendingRohCandidates) ? meta.pendingRohCandidates : [],
+    // ── Team Identity — Retired Numbers & Championship Wall ──────────────────
+    retiredNumbers: (() => {
+      const t = cache.getTeam(meta?.userTeamId);
+      return Array.isArray(t?.retiredNumbers) ? t.retiredNumbers : [];
+    })(),
+    championshipYears: (() => {
+      const t = cache.getTeam(meta?.userTeamId);
+      return Array.isArray(t?.championshipYears) ? t.championshipYears : [];
+    })(),
+    retiredNumberDisplay: (() => {
+      const t = cache.getTeam(meta?.userTeamId);
+      const roh = Array.isArray(t?.ringOfHonor) ? t.ringOfHonor : [];
+      return buildRetiredNumberDisplay(t ?? {}, roh);
+    })(),
   };
 }
 
@@ -3450,6 +3472,14 @@ async function handleAdvanceWeek(payload, id) {
         post(toUI.NOTIFICATION, { level: 'info', message: `🏆 ${champ.name} win the Super Bowl! Season complete.` });
         await NewsEngine.logAward('SUPER_BOWL', champ);
         const titleNews = createNewsItem('championship_won', { teamName: champ?.name, season: meta?.season, teamId: champ?.id }, week, meta?.season);
+        // ── Championship Wall: record title year on the winning team ────────────
+        const champYear = Number(meta?.year ?? meta?.season ?? 0);
+        if (champYear > 0 && Number.isFinite(wId)) {
+          const champUpdated = appendChampionshipYear(champ, champYear);
+          if (champUpdated !== champ) {
+            cache.updateTeam(wId, { championshipYears: champUpdated.championshipYears });
+          }
+        }
         cache.setMeta(addNewsItem(cache.getMeta(), titleNews));
       }
     }
@@ -6801,6 +6831,62 @@ async function handleInductPlayerToRoh({ playerId, teamId }, id) {
   post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 
+// ── Handler: RETIRE_JERSEY_NUMBER ─────────────────────────────────────────────
+
+async function handleRetireJerseyNumber({ teamId, playerId }, id) {
+  const meta = getSafeMeta();
+  if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
+
+  const numTeamId = Number(teamId);
+  const team = cache.getTeam(numTeamId);
+  if (!team) {
+    post(toUI.ERROR, { message: 'Team not found for jersey retirement.' }, id);
+    return;
+  }
+
+  // Find the player in the Ring of Honor or retired pool
+  let player = cache.getPlayer(playerId);
+  if (!player) {
+    // Check retiredPlayers in meta
+    const retired = Array.isArray(meta?.retiredPlayers) ? meta.retiredPlayers : [];
+    player = retired.find((p) => String(p?.id) === String(playerId)) ?? null;
+  }
+  if (!player) {
+    try { player = await Players.load(playerId); } catch (_) { player = null; }
+  }
+  if (!player) {
+    post(toUI.ERROR, { message: 'Player not found for jersey retirement.' }, id);
+    return;
+  }
+
+  const jerseyNum = Number(player?.jerseyNumber);
+  if (!Number.isFinite(jerseyNum) || jerseyNum < 1 || jerseyNum > 99) {
+    post(toUI.ERROR, { message: `Player does not have a valid jersey number (got ${player?.jerseyNumber ?? 'none'}).` }, id);
+    return;
+  }
+
+  // Check for duplicate
+  if (isRetiredNumber(team, jerseyNum)) {
+    post(toUI.ERROR, { message: `#${jerseyNum} is already retired by this franchise.` }, id);
+    return;
+  }
+
+  const updatedTeam = retireJerseyNumber(team, player);
+  cache.updateTeam(numTeamId, { retiredNumbers: updatedTeam.retiredNumbers });
+
+  try {
+    await NewsEngine.logNews(
+      'FRANCHISE',
+      `The ${team.name} retire #${jerseyNum} in honor of ${player.name}.`,
+      numTeamId,
+      { category: 'jersey_retirement', playerId: String(playerId), jerseyNumber: jerseyNum },
+    );
+  } catch (_) { /* non-fatal */ }
+
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
 async function handleResetLeague(payload, id) {
   _saveIsExplicitlyLoaded = false;
   await clearAllData();
@@ -6856,6 +6942,19 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
 
   const oldTeamId = player.teamId;
   const continuity = getOffseasonReturnSnapshot(player.id, resolvedTeamId, meta);
+
+  // ── Jersey number guard: avoid retired numbers on sign ────────────────────
+  const signTeam = cache.getTeam(resolvedTeamId);
+  const signRetiredNums = Array.isArray(signTeam?.retiredNumbers) ? signTeam.retiredNumbers : [];
+  const signRosterNums = cache.getPlayersByTeam(resolvedTeamId)
+    .map((p) => Number(p.jerseyNumber))
+    .filter((n) => Number.isFinite(n));
+  const signExistingNum = Number(player.jerseyNumber);
+  const signPreferred = (Number.isFinite(signExistingNum) && signExistingNum >= 1 && signExistingNum <= 99)
+    ? signExistingNum
+    : derivePreferredJerseyNumber(player.pos ?? '', player.id ?? '');
+  const signAssignedNum = findAvailableJerseyNumber(signPreferred, signRetiredNums, signRosterNums);
+
   cache.updatePlayer(player.id, {
     teamId: resolvedTeamId,
     contract,
@@ -6868,6 +6967,7 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
       teamId: Number(resolvedTeamId),
       season: Number(meta?.year ?? 0),
     } : player?.chemistryContinuity,
+    ...(signAssignedNum != null ? { jerseyNumber: signAssignedNum } : {}),
   });
   recordOffseasonFaMovement({
     player,
@@ -10174,10 +10274,24 @@ function _executeDraftPick(pickIndex, playerId, teamId) {
   // Sign player to slotted rookie contract — value determined by overall pick position
   const overallPick = pk?.overall ?? (pickIndex + 1);
   const draftYear = meta?.year ?? 2025;
+
+  // ── Jersey number guard: avoid retired numbers ────────────────────────────
+  const draftTeam = cache.getTeam(teamId);
+  const retiredNums = Array.isArray(draftTeam?.retiredNumbers) ? draftTeam.retiredNumbers : [];
+  const rosterNums = cache.getPlayersByTeam(teamId)
+    .map((p) => Number(p.jerseyNumber))
+    .filter((n) => Number.isFinite(n));
+  const existingNum = Number(player.jerseyNumber);
+  const preferredNum = (Number.isFinite(existingNum) && existingNum >= 1 && existingNum <= 99)
+    ? existingNum
+    : derivePreferredJerseyNumber(player.pos ?? '', player.id ?? '');
+  const assignedNum = findAvailableJerseyNumber(preferredNum, retiredNums, rosterNums);
+
   cache.updatePlayer(playerId, {
     teamId,
     status: 'active',
     contract: generateSlottedRookieContract(overallPick, draftYear),
+    ...(assignedNum != null ? { jerseyNumber: assignedNum } : {}),
   });
 
   recalculateTeamCap(teamId);
@@ -14290,6 +14404,7 @@ async function handleMessage(event) {
       case toWorker.RELOCATE_TEAM:        return await handleRelocateTeam(payload, id);
       case toWorker.GET_BOX_SCORE:        return await handleGetBoxScore(payload, id);
       case toWorker.INDUCT_PLAYER_TO_ROH: return await handleInductPlayerToRoh(payload, id);
+      case toWorker.RETIRE_JERSEY_NUMBER: return await handleRetireJerseyNumber(payload, id);
       case toWorker.UPDATE_STRATEGY:    return await handleUpdateStrategy(payload, id);
 
       // ── Draft & Offseason ──────────────────────────────────────────────────

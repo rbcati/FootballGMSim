@@ -14,11 +14,13 @@ function formatStatValue(v) {
 
 // ── Ring of Honor gallery ─────────────────────────────────────────────────────
 
-function RohCard({ member }) {
+function RohCard({ member, onRetireNumber, retiredNumbers = [] }) {
   const { name, position, jerseyNumber, yearsPlayedWithTeam, accolades, inductionYear,
           totalPassingYards, totalRushingYards, totalReceivingYards, totalSacks } = member;
 
   const hasStats = totalPassingYards || totalRushingYards || totalReceivingYards || totalSacks;
+  const numRetired = jerseyNumber != null && Array.isArray(retiredNumbers) && retiredNumbers.includes(Number(jerseyNumber));
+  const canRetire  = jerseyNumber != null && !numRetired && typeof onRetireNumber === 'function';
 
   return (
     <div
@@ -93,6 +95,92 @@ function RohCard({ member }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {numRetired && (
+        <span
+          data-testid="jersey-retired-badge"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 3,
+            fontSize: 'var(--text-xs, 11px)',
+            color: 'var(--warning, #f59e0b)',
+            fontWeight: 700,
+          }}
+        >
+          ★ #{jerseyNumber} Retired
+        </span>
+      )}
+
+      {canRetire && (
+        <button
+          data-testid="retire-number-button"
+          type="button"
+          onClick={() => onRetireNumber(member.id, member.jerseyNumber)}
+          style={{
+            marginTop: 2,
+            padding: '4px 10px',
+            borderRadius: 'var(--radius-sm, 4px)',
+            background: 'transparent',
+            color: 'var(--warning, #f59e0b)',
+            border: '1px solid rgba(245, 158, 11, 0.35)',
+            fontSize: 'var(--text-xs, 11px)',
+            fontWeight: 600,
+            cursor: 'pointer',
+            alignSelf: 'flex-start',
+          }}
+        >
+          Retire #{jerseyNumber}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Retired Numbers panel ─────────────────────────────────────────────────────
+
+function RetiredNumbersPanel({ retiredNumberDisplay }) {
+  const items = Array.isArray(retiredNumberDisplay) ? retiredNumberDisplay : [];
+
+  return (
+    <div data-testid="retired-numbers-panel">
+      {items.length > 0 ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {items.map(({ jerseyNumber, surname }) => (
+            <span
+              key={jerseyNumber}
+              data-testid="retired-number-badge"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '3px 10px',
+                borderRadius: '6px',
+                background: 'rgba(245, 158, 11, 0.08)',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+                color: 'var(--warning, #f59e0b)',
+                fontSize: 'var(--text-sm, 13px)',
+                fontWeight: 700,
+                letterSpacing: '0.03em',
+              }}
+            >
+              #{jerseyNumber}{surname ? ` ${surname.toUpperCase()}` : ''}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p
+          data-testid="retired-numbers-empty"
+          style={{
+            margin: 0,
+            color: 'var(--text-muted)',
+            fontSize: 'var(--text-sm, 13px)',
+            textAlign: 'center',
+            padding: 'var(--space-4, 16px) 0',
+          }}
+        >
+          No retired numbers yet.
+        </p>
       )}
     </div>
   );
@@ -218,21 +306,27 @@ function InductionPromptCard({ candidate, onInduct, onDismiss }) {
 // ── Main FranchiseLegacyView ───────────────────────────────────────────────────
 
 /**
- * FranchiseLegacyView — Ring of Honor gallery + franchise leaders panel.
+ * FranchiseLegacyView — Ring of Honor gallery + franchise leaders + retired numbers.
  *
  * Props:
  *   ringOfHonor          {Object[]} - Array of ROH members
  *   allTimeLeaders       {Object}   - { passingYards, rushingYards, receivingYards, sacks }
  *   pendingRohCandidates {Object[]} - Pending induction notifications
+ *   retiredNumbers       {number[]} - Array of retired jersey numbers
+ *   retiredNumberDisplay {Object[]} - Display objects: { jerseyNumber, surname }
  *   onInduct             {Function} - (playerId, teamId) => void
  *   onDismissCandidate   {Function} - (playerId) => void (optional)
+ *   onRetireNumber       {Function} - (playerId, jerseyNumber) => void (optional)
  */
 export default function FranchiseLegacyView({
   ringOfHonor = [],
   allTimeLeaders = null,
   pendingRohCandidates = [],
+  retiredNumbers = [],
+  retiredNumberDisplay = [],
   onInduct,
   onDismissCandidate,
+  onRetireNumber,
 }) {
   const hasCandidates = Array.isArray(pendingRohCandidates) && pendingRohCandidates.length > 0;
   const hasMembers    = Array.isArray(ringOfHonor) && ringOfHonor.length > 0;
@@ -277,7 +371,12 @@ export default function FranchiseLegacyView({
             }}
           >
             {ringOfHonor.map((member) => (
-              <RohCard key={member.id ?? member.name} member={member} />
+              <RohCard
+                key={member.id ?? member.name}
+                member={member}
+                onRetireNumber={onRetireNumber}
+                retiredNumbers={retiredNumbers}
+              />
             ))}
           </div>
         ) : (
@@ -294,6 +393,16 @@ export default function FranchiseLegacyView({
             No members yet. Legends earn their place here after retirement.
           </p>
         )}
+      </SectionCard>
+
+      {/* Retired Numbers panel */}
+      <SectionCard
+        title="Retired Numbers"
+        subtitle="Jersey numbers retired by this franchise."
+        variant="compact"
+        data-testid="retired-numbers-section"
+      >
+        <RetiredNumbersPanel retiredNumberDisplay={retiredNumberDisplay} />
       </SectionCard>
 
       {/* All-time franchise leaders */}
