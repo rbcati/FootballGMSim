@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { ScreenHeader, SectionCard } from './ScreenSystem.jsx';
+import HonorsCenter from './HonorsCenter.jsx';
 
-const TABS = ['Honor Roll', 'Record Book'];
+const TABS = ['Honor Roll', 'Record Book', 'Honors'];
 
 const RECORD_LABELS = {
   passingYards: 'Passing Yards',
@@ -162,6 +163,7 @@ export default function HistoryCenter({ league }) {
   const historyLedger = league?.historyLedger ?? [];
   const recordBook = league?.recordBook ?? null;
   const userTeamId = league?.userTeamId ?? null;
+  const currentSeasonHonors = league?.currentSeasonHonors ?? null;
 
   return (
     <div className="app-screen-stack">
@@ -176,6 +178,9 @@ export default function HistoryCenter({ league }) {
         )}
         {activeTab === 'Record Book' && (
           <RecordBookTab recordBook={recordBook} />
+        )}
+        {activeTab === 'Honors' && (
+          <HonorsCenter honors={currentSeasonHonors} />
         )}
       </div>
     </div>

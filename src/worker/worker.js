@@ -194,6 +194,7 @@ import { parseWeeklyHeadlines } from '../core/history/NewsEngine.ts';
 import { calculateAwardRaces, selectProBowlers } from '../core/awards-logic.js';
 import { determineSeasonAwards, applySeasonAwards, checkCareerMilestones, getPlayerAwardSummary, AWARD_TYPES as ENGINE_AWARD_TYPES, AWARD_LABELS as ENGINE_AWARD_LABELS } from '../core/awards/awardEngine.js';
 import { generateHofBallot, resolveHofVote, applyHofInductions, ensureHofMeta } from '../core/awards/hofEngine.js';
+import { rankPrestigeCandidates, selectAllProTeams, selectProBowlTeams, mergeHonorsIntoPlayers, buildSeasonHonorsSummary } from '../core/awards/prestigeEngine.js';
 import { buildAllLeaderboards } from '../core/awards/statLeaderboard.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
@@ -1170,6 +1171,7 @@ function buildViewState() {
     leagueHistory: Array.isArray(meta?.leagueHistory) ? meta.leagueHistory.slice(-60) : [],
     historyLedger: Array.isArray(meta?.historyLedger) ? meta.historyLedger : [],
     franchiseAwards: Array.isArray(meta?.franchiseAwards) ? meta.franchiseAwards : [],
+    currentSeasonHonors: meta?.currentSeasonHonors ?? null,
     franchiseChronicle: Array.isArray(meta?.franchiseChronicle) ? meta.franchiseChronicle.slice(-340) : [],
     franchiseSeasonReviews: Array.isArray(meta?.franchiseSeasonReviews) ? meta.franchiseSeasonReviews.slice(-40) : [],
     seasonStorylines: Array.isArray(meta?.seasonStorylines) ? meta.seasonStorylines : [],
@@ -1806,7 +1808,8 @@ function hydratePlayerDevelopmentFields(player = {}) {
   };
   const developmentHistory = Array.isArray(player?.developmentHistory) ? player.developmentHistory : [];
   const injuryHistory = Array.isArray(player?.injuryHistory) ? player.injuryHistory : [];
-  return { personalityProfile: profile, mentorship, developmentHistory, injuryHistory };
+  const honorsHistory = Array.isArray(player?.honorsHistory) ? player.honorsHistory : [];
+  return { personalityProfile: profile, mentorship, developmentHistory, injuryHistory, honorsHistory };
 }
 
 function hydrateAllPlayersForDevelopment() {
@@ -13136,6 +13139,31 @@ async function archiveSeason(seasonId) {
       }
     } catch (hofErr) {
       console.error('[Worker] HOF Engine V1 failed (non-fatal):', hofErr);
+    }
+
+    // ── Prestige Engine V1: Pro Bowl & All-Pro honor selection ───────────────
+    try {
+      const allPlayersForPrestige = cache.getAllPlayers();
+      const teamResolverForPrestige = (teamId) => cache.getTeam(teamId) ?? null;
+      const rankedCandidates = rankPrestigeCandidates(allPlayersForPrestige, teamResolverForPrestige, year);
+      const allProAssignments = selectAllProTeams(rankedCandidates, year);
+      const proBowlAssignments = selectProBowlTeams(rankedCandidates, year);
+      const allPrestigeAssignments = [...allProAssignments, ...proBowlAssignments];
+
+      const updatedPlayersPrestige = mergeHonorsIntoPlayers(allPlayersForPrestige, allPrestigeAssignments, year);
+      for (let i = 0; i < updatedPlayersPrestige.length; i++) {
+        if (updatedPlayersPrestige[i] !== allPlayersForPrestige[i]) {
+          cache.updatePlayer(updatedPlayersPrestige[i].id, {
+            honorsHistory: updatedPlayersPrestige[i].honorsHistory,
+            accolades: updatedPlayersPrestige[i].accolades,
+          });
+        }
+      }
+
+      const honorsSummary = buildSeasonHonorsSummary(updatedPlayersPrestige, allPrestigeAssignments, teamResolverForPrestige);
+      cache.setMeta({ currentSeasonHonors: honorsSummary });
+    } catch (prestigeErr) {
+      console.error('[Worker] Prestige Engine V1 failed (non-fatal):', prestigeErr);
     }
 
     // ── Record Book: check for broken single-season & all-time records ──────

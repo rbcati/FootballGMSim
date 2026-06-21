@@ -5,6 +5,8 @@
  * All outputs are immutable new objects.
  */
 
+import { getPriorSeasonPrestigePremium } from '../awards/prestigeEngine.js';
+
 // ── Archetype constants ───────────────────────────────────────────────────────
 
 export const AGENT_ARCHETYPES = Object.freeze({
@@ -170,6 +172,22 @@ export function computeAgentExpectedSalary({ player, baseFairMarketValue, teamCo
     } else {
       modifier  = 0;
       rationale = 'Ring Chaser open to negotiation at fair market value';
+    }
+  }
+
+  // Apply prior-season prestige premium (Pro Bowl / All-Pro leverage)
+  const currentSeason = teamContext?.currentSeason;
+  if (currentSeason != null) {
+    const { hasPremium, multiplier, type } = getPriorSeasonPrestigePremium(hydrated, currentSeason);
+    if (hasPremium) {
+      const prestigeBonus = multiplier - 1.0;
+      const extraSharkAllPro =
+        archetype === AGENT_ARCHETYPES.SHARK &&
+        (type === 'FIRST_TEAM_ALL_PRO' || type === 'SECOND_TEAM_ALL_PRO')
+          ? 0.05
+          : 0;
+      modifier += prestigeBonus + extraSharkAllPro;
+      rationale += `; prestige premium +${((prestigeBonus + extraSharkAllPro) * 100).toFixed(1)}% (${type})`;
     }
   }
 

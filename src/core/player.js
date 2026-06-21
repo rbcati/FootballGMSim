@@ -467,6 +467,7 @@ traits: generateTraits(pos, playerOvr),
         offers: [], // FA offers
         onTradeBlock: false,
         awards: [],
+        honorsHistory: [],
         personality: generatePersonality(),
         personalityProfile,
         mentorship: { mentorId: null, menteeIds: [], maxMentees: 2 },
