@@ -196,6 +196,7 @@ import { calculateAwardRaces, selectProBowlers } from '../core/awards-logic.js';
 import { determineSeasonAwards, applySeasonAwards, checkCareerMilestones, getPlayerAwardSummary, AWARD_TYPES as ENGINE_AWARD_TYPES, AWARD_LABELS as ENGINE_AWARD_LABELS } from '../core/awards/awardEngine.js';
 import { generateHofBallot, resolveHofVote, applyHofInductions, ensureHofMeta } from '../core/awards/hofEngine.js';
 import { rankPrestigeCandidates, selectAllProTeams, selectProBowlTeams, mergeHonorsIntoPlayers, buildSeasonHonorsSummary } from '../core/awards/prestigeEngine.js';
+import { buildAwardHistoryEntry, appendAwardHistory, hydrateAwardHistory } from '../core/awards/awardHistory.js';
 import { buildAllLeaderboards } from '../core/awards/statLeaderboard.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
@@ -1185,6 +1186,7 @@ function buildViewState() {
     historyLedger: Array.isArray(meta?.historyLedger) ? meta.historyLedger : [],
     franchiseAwards: Array.isArray(meta?.franchiseAwards) ? meta.franchiseAwards : [],
     currentSeasonHonors: meta?.currentSeasonHonors ?? null,
+    awardHistory: Array.isArray(meta?.awardHistory) ? meta.awardHistory : [],
     franchiseChronicle: Array.isArray(meta?.franchiseChronicle) ? meta.franchiseChronicle.slice(-340) : [],
     franchiseSeasonReviews: Array.isArray(meta?.franchiseSeasonReviews) ? meta.franchiseSeasonReviews.slice(-40) : [],
     seasonStorylines: Array.isArray(meta?.seasonStorylines) ? meta.seasonStorylines : [],
@@ -12981,6 +12983,11 @@ async function archiveSeason(seasonId) {
     // Flush accolade writes to DB
     await flushDirty();
 
+    // Captured across the award + prestige blocks below to build the compact
+    // meta.awardHistory ledger (Awards & Honors Expansion V2) once both run.
+    let awardResultsForHistory = null;
+    let prestigeAssignmentsForHistory = [];
+
     // ── Awards Engine V1: structured player.awards + meta.franchiseAwards ────
     try {
       const allPlayersForAwards = cache.getAllPlayers();
@@ -12989,6 +12996,7 @@ async function archiveSeason(seasonId) {
         coaches: staffRows,
         championTeamId: championId,
       });
+      awardResultsForHistory = awardResults;
 
       const playerMapForAwards = new Map(allPlayersForAwards.map(p => [String(p.id), p]));
       const currentMeta = cache.getMeta();
@@ -13189,6 +13197,7 @@ async function archiveSeason(seasonId) {
       const allProAssignments = selectAllProTeams(rankedCandidates, year);
       const proBowlAssignments = selectProBowlTeams(rankedCandidates, year);
       const allPrestigeAssignments = [...allProAssignments, ...proBowlAssignments];
+      prestigeAssignmentsForHistory = allPrestigeAssignments;
 
       const updatedPlayersPrestige = mergeHonorsIntoPlayers(allPlayersForPrestige, allPrestigeAssignments, year);
       for (let i = 0; i < updatedPlayersPrestige.length; i++) {
@@ -13204,6 +13213,26 @@ async function archiveSeason(seasonId) {
       cache.setMeta({ currentSeasonHonors: honorsSummary });
     } catch (prestigeErr) {
       console.error('[Worker] Prestige Engine V1 failed (non-fatal):', prestigeErr);
+    }
+
+    // ── Award History V2: compact, replay-safe per-season award ledger ───────
+    try {
+      if (awardResultsForHistory) {
+        const teamResolverForHistory = (teamId) => cache.getTeam(teamId) ?? null;
+        const historyEntry = buildAwardHistoryEntry({
+          year,
+          seasonId,
+          awardResults: awardResultsForHistory,
+          prestigeAssignments: prestigeAssignmentsForHistory,
+          stats: populatedStats,
+          teamResolver: teamResolverForHistory,
+        });
+        const currentAwardHistory = hydrateAwardHistory(cache.getMeta());
+        cache.setMeta({ awardHistory: appendAwardHistory(currentAwardHistory, historyEntry) });
+        await flushDirty();
+      }
+    } catch (awardHistoryErr) {
+      console.error('[Worker] Award History V2 failed (non-fatal):', awardHistoryErr);
     }
 
     // ── Record Book: check for broken single-season & all-time records ──────

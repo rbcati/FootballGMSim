@@ -125,16 +125,21 @@ function ChampionsArchivePane({ seasons, champions, awards }: ChampionsArchivePa
       });
     }
 
-    // Overlay awards
+    // Overlay awards. Tolerates both the legacy SeasonAwardWinner shape
+    // (mvpName/opoyName/dpoyName) and the Awards V2 awardHistory shape
+    // (awards.MVP.playerName, etc.).
     for (const a of awards) {
       const year = num(a.year, 0);
       if (!year) continue;
       const existing = byYear.get(year);
-      if (existing) {
-        if (a.mvpName && existing.mvp === '—') existing.mvp = a.mvpName;
-        if (a.opoyName && existing.opoy === '—') existing.opoy = a.opoyName;
-        if (a.dpoyName && existing.dpoy === '—') existing.dpoy = a.dpoyName;
-      }
+      if (!existing) continue;
+      const v2 = (a as { awards?: { MVP?: { playerName?: string }; OPOY?: { playerName?: string }; DPOY?: { playerName?: string } } }).awards;
+      const mvpName = a.mvpName ?? v2?.MVP?.playerName;
+      const opoyName = a.opoyName ?? v2?.OPOY?.playerName;
+      const dpoyName = a.dpoyName ?? v2?.DPOY?.playerName;
+      if (mvpName && existing.mvp === '—') existing.mvp = mvpName;
+      if (opoyName && existing.opoy === '—') existing.opoy = opoyName;
+      if (dpoyName && existing.dpoy === '—') existing.dpoy = dpoyName;
     }
 
     return [...byYear.values()].sort((a, b) => b.year - a.year);

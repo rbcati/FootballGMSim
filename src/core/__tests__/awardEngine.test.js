@@ -92,6 +92,34 @@ describe('determineSeasonAwards', () => {
     expect(roty.playerId).toBe(20);
   });
 
+  it('returns split Offensive & Defensive Rookie of the Year (V2)', () => {
+    const players = [
+      { id: 30, year: season, age: 22 }, // rookie QB
+      { id: 31, year: season, age: 22 }, // rookie LB (defense)
+      { id: 32, year: season - 2, age: 25 }, // veteran, ineligible
+    ];
+    const stats = [
+      makeQBStats(30, 1, 3900, 30),
+      makeLBStats(31, 1, 130, 12),
+      makeQBStats(32, 2, 5200, 44),
+    ];
+    const { playerAwards } = determineSeasonAwards(players, teams, season, { stats });
+    const oroy = playerAwards.find(a => a.type === AWARD_TYPES.OFF_ROOKIE_OF_YEAR);
+    const droy = playerAwards.find(a => a.type === AWARD_TYPES.DEF_ROOKIE_OF_YEAR);
+    expect(oroy).toBeTruthy();
+    expect(oroy.playerId).toBe(30); // offensive rookie, not the veteran QB
+    expect(droy).toBeTruthy();
+    expect(droy.playerId).toBe(31); // defensive rookie via defensive production
+  });
+
+  it('omits split rookie awards when no rookies at that side of the ball', () => {
+    const players = [{ id: 40, year: season, age: 22 }]; // lone offensive rookie
+    const stats = [makeQBStats(40, 1, 3800, 29), makeLBStats(41, 2, 100, 9)];
+    const { playerAwards } = determineSeasonAwards(players, teams, season, { stats });
+    expect(playerAwards.find(a => a.type === AWARD_TYPES.OFF_ROOKIE_OF_YEAR)).toBeTruthy();
+    expect(playerAwards.find(a => a.type === AWARD_TYPES.DEF_ROOKIE_OF_YEAR)).toBeFalsy();
+  });
+
   it('emits LEAGUE_CHAMPION franchise award when championTeamId provided', () => {
     const stats = [makeQBStats(1, 1, 4800, 38)];
     const { franchiseAwards } = determineSeasonAwards([], teams, season, { stats, championTeamId: 1 });

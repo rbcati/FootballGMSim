@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { ScreenHeader, SectionCard } from './ScreenSystem.jsx';
 import HonorsCenter from './HonorsCenter.jsx';
+import { summarizeSeasonAwards } from '../../core/awards/awardHistory.js';
 
-const TABS = ['Honor Roll', 'Record Book', 'Honors'];
+const TABS = ['Honor Roll', 'Awards', 'Record Book', 'Honors'];
 
 const RECORD_LABELS = {
   passingYards: 'Passing Yards',
@@ -157,6 +158,60 @@ function RecordBookTab({ recordBook }) {
   );
 }
 
+function SeasonAwardsTab({ awardHistory }) {
+  const entries = Array.isArray(awardHistory) ? awardHistory : [];
+  const seasons = [...entries]
+    .map((e) => summarizeSeasonAwards(e))
+    .filter((s) => s.year != null)
+    .sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+
+  if (seasons.length === 0) {
+    return (
+      <SectionCard title="Season Awards">
+        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }} data-testid="season-awards-empty">
+          No awards recorded yet. Complete a season to populate the award history.
+        </p>
+      </SectionCard>
+    );
+  }
+
+  return (
+    <SectionCard title="Season Awards">
+      <div data-testid="season-awards-panel" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+        {seasons.map((s) => (
+          <div
+            key={s.year}
+            data-testid={`season-awards-${s.year}`}
+            style={{ borderBottom: '1px solid var(--border-subtle, var(--border))', paddingBottom: 'var(--space-2)' }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', marginBottom: 4 }}>{s.year}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', fontSize: 'var(--text-sm)' }}>
+              {s.majorAwards.length === 0 ? (
+                <span style={{ color: 'var(--text-muted)' }}>No major award winners recorded.</span>
+              ) : (
+                s.majorAwards.map((a) => (
+                  <span key={a.key} style={{ color: 'var(--text)' }}>
+                    <strong>{a.label}:</strong> {a.playerName}
+                    {a.pos ? ` (${a.pos}${a.teamAbbr ? ` · ${a.teamAbbr}` : ''})` : ''}
+                  </span>
+                ))
+              )}
+            </div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 4 }}>
+              All-Pro: {s.firstTeamCount} 1st · {s.secondTeamCount} 2nd · Pro Bowl: {s.proBowlCount}
+            </div>
+            {s.leaders.length > 0 && (
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 2 }}>
+                Leaders — {s.leaders.map((l) => `${l.label}: ${l.playerName} (${l.value})`).join(' · ')}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
 export default function HistoryCenter({ league }) {
   const [activeTab, setActiveTab] = useState(TABS[0]);
 
@@ -164,6 +219,7 @@ export default function HistoryCenter({ league }) {
   const recordBook = league?.recordBook ?? null;
   const userTeamId = league?.userTeamId ?? null;
   const currentSeasonHonors = league?.currentSeasonHonors ?? null;
+  const awardHistory = league?.awardHistory ?? [];
 
   return (
     <div className="app-screen-stack">
@@ -175,6 +231,9 @@ export default function HistoryCenter({ league }) {
       <div role="tabpanel">
         {activeTab === 'Honor Roll' && (
           <HonorRollTab historyLedger={historyLedger} userTeamId={userTeamId} />
+        )}
+        {activeTab === 'Awards' && (
+          <SeasonAwardsTab awardHistory={awardHistory} />
         )}
         {activeTab === 'Record Book' && (
           <RecordBookTab recordBook={recordBook} />

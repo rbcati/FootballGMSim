@@ -18,6 +18,16 @@ describe('league memory helpers', () => {
     expect(Array.isArray(meta.hallOfFame.classes)).toBe(true);
   });
 
+  it('hydrates awardHistory to a safe array for old saves and preserves existing ledgers', () => {
+    // old save: no awardHistory field
+    expect(ensureLeagueMemoryMeta({ year: 2030 }).awardHistory).toEqual([]);
+    // malformed value coerced to default
+    expect(ensureLeagueMemoryMeta({ awardHistory: 'oops' }).awardHistory).toEqual([]);
+    // existing ledger preserved
+    const existing = [{ year: 2029, awards: {}, allPro: { firstTeam: [], secondTeam: [] }, proBowl: [], leaders: {} }];
+    expect(ensureLeagueMemoryMeta({ awardHistory: existing }).awardHistory).toBe(existing);
+  });
+
   it('persists franchise timeline milestones and totals', () => {
     let meta = ensureLeagueMemoryMeta({});
     const season = buildSeasonArchiveSummary({

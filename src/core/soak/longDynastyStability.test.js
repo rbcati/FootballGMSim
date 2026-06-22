@@ -42,6 +42,11 @@ import {
   buildLegendTimeline,
   buildLegendProfileMetrics,
 } from '../history/legendsBrowserEngine.js';
+import {
+  getCareerHonorCounts,
+  aggregateCareerHonors,
+  summarizeSeasonAwards,
+} from '../awards/awardHistory.js';
 
 // ── Shared invariant assertions ───────────────────────────────────────────────
 
@@ -58,6 +63,11 @@ function assertCoreInvariants(summary, state) {
   expect(summary.duplicateLedgerYears).toBe(0);
   expect(summary.duplicateRetiredNumberKeys).toBe(0);
   expect(summary.duplicateMediaStoryIds).toBe(0);
+  expect(summary.duplicateAwardHistoryYears).toBe(0);
+
+  // award history stays serializable + honor counts finite
+  expect(() => assertSerializable(state.meta.awardHistory, 'awardHistory')).not.toThrow();
+  expect(Number.isFinite(summary.maxCareerHonorCount)).toBe(true);
 
   // every team retains valid owner + persona profiles
   for (const team of state.teams) {
@@ -245,6 +255,86 @@ describe('Long-Dynasty Soak V2 — C. 50-season dynasty integrity', () => {
   it('full 50-season soak passes the core invariant battery', () => {
     const { state, summaries } = runSoak({ seasons: 50 });
     assertCoreInvariants(summaries[summaries.length - 1], state);
+  });
+});
+
+// ── C2. Award history (Awards & Honors Expansion V2) ────────────────────────────
+
+describe('Long-Dynasty Soak V2 — C2. award history bounded & duplicate-free', () => {
+  it('appends exactly one award-history entry per season, no duplicate years', () => {
+    const { state, summaries } = runSoak({ seasons: 50 });
+
+    // grows at most one per season
+    for (let i = 0; i < summaries.length; i++) {
+      expect(summaries[i].awardHistoryCount).toBe(i + 1);
+      expect(summaries[i].duplicateAwardHistoryYears).toBe(0);
+    }
+    expect(state.meta.awardHistory).toHaveLength(50);
+
+    // unique, sorted year keys
+    const years = state.meta.awardHistory.map((e) => e.year);
+    expect(new Set(years).size).toBe(years.length);
+    expect([...years].sort((a, b) => a - b)).toEqual(years);
+  });
+
+  it('award entries are serializable with stable player/team snapshots', () => {
+    const { state } = runSoak({ seasons: 25 });
+    expect(() => assertSerializable(state.meta.awardHistory, 'awardHistory')).not.toThrow();
+
+    for (const entry of state.meta.awardHistory) {
+      expect(entry.awards).toBeTruthy();
+      const mvp = entry.awards.MVP;
+      if (mvp) {
+        expect(mvp.playerId).toBeTruthy();
+        expect(typeof mvp.playerName).toBe('string');
+      }
+      expect(Array.isArray(entry.allPro.firstTeam)).toBe(true);
+      expect(Array.isArray(entry.proBowl)).toBe(true);
+      // league leaders present & finite when set
+      for (const v of Object.values(entry.leaders)) {
+        if (v) expect(Number.isFinite(v.value)).toBe(true);
+      }
+    }
+  });
+
+  it('career honor counts remain finite and serializable', () => {
+    const { state } = runSoak({ seasons: 50 });
+    const agg = aggregateCareerHonors(state.meta.awardHistory);
+    expect(agg.size).toBeGreaterThan(0);
+    for (const [pid, counts] of agg) {
+      expect(() => assertSerializable(counts, `honors_${pid}`)).not.toThrow();
+      for (const v of Object.values(counts)) {
+        expect(Number.isFinite(v)).toBe(true);
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(50);
+      }
+      // single-player helper agrees with the aggregate
+      expect(getCareerHonorCounts(state.meta.awardHistory, pid)).toEqual(counts);
+    }
+  });
+
+  it('re-running a completed season does not duplicate its award-history entry', () => {
+    const state = createSoakLeague({ seed: SOAK_SEED });
+    advanceSoakSeason(state);
+    const afterOne = jsonClone(state.meta.awardHistory);
+    expect(afterOne).toHaveLength(1);
+
+    // Re-point the year/season back and advance again → replaces, never appends.
+    const replayYear = afterOne[0].year;
+    state.meta.year = replayYear;
+    state.meta.season -= 1;
+    state.meta.currentSeasonId = `s${state.meta.season}`;
+    advanceSoakSeason(state);
+
+    const replayed = state.meta.awardHistory.filter((e) => e.year === replayYear);
+    expect(replayed).toHaveLength(1);
+  });
+
+  it('summaries degrade safely on missing/empty award history', () => {
+    expect(() => summarizeSeasonAwards(undefined)).not.toThrow();
+    expect(summarizeSeasonAwards(undefined).majorAwards).toEqual([]);
+    expect(getCareerHonorCounts([], 'nobody').mvp).toBe(0);
+    expect(aggregateCareerHonors(null).size).toBe(0);
   });
 });
 
