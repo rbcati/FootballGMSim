@@ -4,6 +4,7 @@
 // Import dependencies
 import { Constants } from './constants.js';
 import { ensureFaceConfig } from './face.js';
+import { determineInitialPersona } from './ai/frontOfficePersonaEngine.js';
 
 export let state = null;
 
@@ -546,6 +547,19 @@ export const State = {
       if (!Array.isArray(t.retiredNumbers)) t.retiredNumbers = [];
       if (!Array.isArray(t.championshipYears)) t.championshipYears = [];
       return t;
+    });
+
+    // ── Front Office Persona — deterministic hydration for old saves ──────────
+    // Never random-assigned; same save always derives the same initial persona.
+    migrated.teams = migrated.teams.map((team) => {
+      if (!team) return team;
+      if (team.frontOffice && typeof team.frontOffice === 'object' && team.frontOffice.persona) {
+        return team;
+      }
+      return {
+        ...team,
+        frontOffice: determineInitialPersona(team, { allTeams: migrated.teams }),
+      };
     });
 
     // ── History Ledger & Record Book (historyEngine schema) ─────────────────

@@ -11,6 +11,7 @@
  */
 
 import { getAssetValue } from './assetValuation.js';
+import { applyTradePersonaModifier } from '../ai/frontOfficePersonaEngine.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -288,9 +289,14 @@ export function attemptAIToAITrade(allTeams, allRosters, allPicks, season, week,
   const rebuilderMods = computeDeadlineValuationModifier(teamB, rebuilderAsset.player, 'seller', allTeams, week);
   const deadlineModifiers = { contender: contenderMods, rebuilder: rebuilderMods };
 
-  // Value balance check with optional deadline modifiers
-  // Team A (contender) gives: contenderAsset.value; receives: rebuilderAsset.value
-  const balance = validateTradeBalance(contenderAsset.value, rebuilderAsset.value, rebuilderAsset.value, contenderAsset.value, deadlineModifiers);
+  // Value balance check with persona overlays applied before deadline modifiers.
+  // Each side's perceived value is adjusted by their front-office philosophy.
+  const contenderGivesValue   = applyTradePersonaModifier(teamA, contenderAsset, contenderAsset.value, { direction: 'giving' });
+  const contenderReceivesValue = applyTradePersonaModifier(teamA, rebuilderAsset, rebuilderAsset.value, { direction: 'receiving' });
+  const rebuilderGivesValue   = applyTradePersonaModifier(teamB, rebuilderAsset, rebuilderAsset.value, { direction: 'giving' });
+  const rebuilderReceivesValue = applyTradePersonaModifier(teamB, contenderAsset, contenderAsset.value, { direction: 'receiving' });
+
+  const balance = validateTradeBalance(contenderGivesValue, contenderReceivesValue, rebuilderGivesValue, rebuilderReceivesValue, deadlineModifiers);
   if (!balance.valid) return null;
 
   if (Date.now() - startTime > evalBudgetMs) return null;

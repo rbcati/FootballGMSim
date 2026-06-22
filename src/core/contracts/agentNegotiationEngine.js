@@ -6,6 +6,7 @@
  */
 
 import { getPriorSeasonPrestigePremium } from '../awards/prestigeEngine.js';
+import { shouldCapHoarderWalkAway, getRetentionPremium } from '../ai/frontOfficePersonaEngine.js';
 
 // ── Archetype constants ───────────────────────────────────────────────────────
 
@@ -227,6 +228,24 @@ export function evaluateAgentNegotiation({
   const { expectedSalary, modifier, rationale, hardReject } =
     computeAgentExpectedSalary({ player: hydrated, baseFairMarketValue, teamContext });
 
+  // 2a. CAP_HOARDER front office: walk away when a Shark demands above threshold
+  if (agent.archetype === AGENT_ARCHETYPES.SHARK) {
+    const teamFrontOffice = teamContext?.frontOffice;
+    if (teamFrontOffice && shouldCapHoarderWalkAway(
+      { frontOffice: teamFrontOffice },
+      { sharkPremiumPct: modifier },
+    )) {
+      return {
+        accepted:       false,
+        expectedSalary,
+        rationale:      'Cap Hoarder front office rejects Shark premium demand',
+        rejectionCode:  'CAP_HOARDER_BUDGET_LIMIT',
+        feedbackText:   "Our front office has strict budget parameters. The agent’s premium exceeds what we can allocate.",
+        updatedPlayer:  hydrated,
+      };
+    }
+  }
+
   // 2. Ring Chaser hard reject on losing team
   if (hardReject) {
     return {
@@ -282,8 +301,25 @@ export function evaluateAgentNegotiation({
     };
   }
 
-  // 5. General case: compare offer to expectedSalary
-  const accepted = offerSalary >= expectedSalary;
+  // 5. General case: compare offer to expectedSalary.
+  // PLAYER_LOYALIST: homegrown stars accept a modestly lower effective floor
+  // because they want to stay — the team's loyalty is worth something to them.
+  let effectiveExpectedSalary = expectedSalary;
+  {
+    const teamFrontOffice = teamContext?.frontOffice;
+    if (teamFrontOffice) {
+      const premium = getRetentionPremium(
+        { frontOffice: teamFrontOffice, id: teamContext?.teamId },
+        hydrated,
+        { teamId: teamContext?.teamId },
+      );
+      if (premium > 1.0) {
+        effectiveExpectedSalary = expectedSalary / premium;
+      }
+    }
+  }
+
+  const accepted = offerSalary >= effectiveExpectedSalary;
   return {
     accepted,
     expectedSalary,

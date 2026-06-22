@@ -347,6 +347,7 @@ import {
   buildScheduleBuffer,
 } from './serialization.js';
 import { sortStandingsRows } from '../views/standingsView.js';
+import { determineInitialPersona, maybeDriftPersona } from '../core/ai/frontOfficePersonaEngine.js';
 import {
   isWaiverWindowOpen,
   buildWaiverPriorityList,
@@ -1065,6 +1066,7 @@ function buildViewState() {
     coachHotSeat: t?.coach?.headCoach?.hotSeat ?? false,
     coachHCName: t?.coach?.headCoach?.name ?? null,
     coachHCRating: t?.coach?.headCoach?.overallRating ?? null,
+    frontOffice: t?.frontOffice ?? null,
     tradeRequestAlerts: getActiveTradeRequests(t, roster),
     picks: Array.isArray(t?.picks)
       ? t.picks.map((pk) => ({
@@ -13441,6 +13443,33 @@ async function handleStartNewSeason(payload, id) {
   const newSeason   = (meta.season ?? 1)    + 1;
   const newSeasonId = `s${newSeason}`;
   const nextEconomy = projectNextSeasonEconomy(meta?.economy ?? {}, newYear);
+
+  // ── Front office persona drift (offseason, deterministic) ───────────────────
+  // Evaluate once per year before records reset. WIN_NOW + 2 missed postseasons
+  // drifts to PATIENT_BUILDER. Uses playoffSeeds from the completed season.
+  try {
+    const playoffTeamIds = new Set(
+      Object.values(meta.playoffSeeds ?? {}).flatMap(seeds =>
+        Array.isArray(seeds) ? seeds.map(s => s.teamId) : [],
+      ),
+    );
+    for (const team of cache.getAllTeams()) {
+      const needsHydration = !team.frontOffice?.persona;
+      if (needsHydration) {
+        cache.updateTeam(team.id, {
+          frontOffice: determineInitialPersona(team, { allTeams: cache.getAllTeams() }),
+        });
+        continue;
+      }
+      const madePostseason = playoffTeamIds.has(team.id);
+      const updatedProfile = maybeDriftPersona(team, { madePostseason });
+      if (updatedProfile !== null) {
+        cache.updateTeam(team.id, { frontOffice: updatedProfile });
+      }
+    }
+  } catch (personaDriftErr) {
+    console.error('[Worker] Front office persona drift failed (non-fatal):', personaDriftErr);
+  }
 
   // Reset team records and roll dead money forward
   for (const team of cache.getAllTeams()) {

@@ -28,6 +28,7 @@ import { getTradeLockReason } from "../utils/tradeLockReason.js";
 import { getBudgetLabel, toneToCssColor } from "../utils/transactionMarket.js";
 import { logCompletedTradeAction, persistFranchiseChronicle } from "../utils/franchiseChronicle.js";
 import { getPickBaseValueFromMatrix } from "../../core/trades/tradeValuationModifiers.js";
+import FrontOfficeBadge from "./FrontOfficeBadge.jsx";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -966,6 +967,9 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
               <span className="trade-target-pill__label">Working with</span>
               <strong>{liveTheirTeam.name}</strong>
               <span>{liveTheirTeam.wins ?? 0}-{liveTheirTeam.losses ?? 0}{(liveTheirTeam.ties ?? 0) ? `-${liveTheirTeam.ties}` : ""} · OVR {liveTheirTeam.ovr ?? "—"}</span>
+              {liveTheirTeam.frontOffice?.persona && (
+                <FrontOfficeBadge persona={liveTheirTeam.frontOffice.persona} />
+              )}
             </div>
           )}
           {targetId && <Button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting || tradeLocked}>{submitting ? "Evaluating…" : counterOfferId ? "Send Counter" : "Propose Trade"}</Button>}
