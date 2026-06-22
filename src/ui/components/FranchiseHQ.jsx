@@ -17,6 +17,7 @@ import ChronicleHeadlineBanner from './ChronicleHeadlineBanner.tsx';
 import CombineDashboard from './CombineDashboard.jsx';
 import FranchiseLegacyView from './FranchiseLegacyView.jsx';
 import FranchiseBrandHQ from './FranchiseBrandHQ.jsx';
+import JobSecurityCard from './JobSecurityCard.jsx';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -799,7 +800,32 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
               Front Office
             </button>
           </article>
+
+          <JobSecurityCard ownerProfile={league?.userOwnerPressure} />
         </div>
+
+        {/* Franchise termination notice (blocking, shown when user is fired) */}
+        {league?.userFranchiseTerminated && (
+          <div
+            data-testid="franchise-terminated-notice"
+            role="alert"
+            style={{
+              margin: '8px 12px',
+              padding: 'var(--space-4)',
+              border: '2px solid var(--danger, #FF453A)',
+              background: 'rgba(255,69,58,0.10)',
+              borderRadius: 'var(--radius-md)',
+            }}
+          >
+            <strong style={{ display: 'block', color: 'var(--danger, #FF453A)', marginBottom: 4 }}>
+              🚨 Franchise Dismissed
+            </strong>
+            <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', margin: 0 }}>
+              The ownership group has terminated your tenure as General Manager due to repeated failure
+              to meet the team mandate. Load a previous save or start a new franchise to continue.
+            </p>
+          </div>
+        )}
 
         {/* League quick navigation */}
         <nav

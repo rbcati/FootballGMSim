@@ -349,6 +349,15 @@ import {
 import { sortStandingsRows } from '../views/standingsView.js';
 import { determineInitialPersona, maybeDriftPersona } from '../core/ai/frontOfficePersonaEngine.js';
 import {
+  buildOwnerProfile,
+  determineInitialMandate,
+  evaluateMandate,
+  applyHotSeatDelta,
+  shouldFireFrontOffice,
+  buildAIFiringOutcome,
+  getHotSeatStatus,
+} from '../core/meta/ownerPressureEngine.js';
+import {
   isWaiverWindowOpen,
   buildWaiverPriorityList,
   sendPlayerToWaivers,
@@ -1067,6 +1076,7 @@ function buildViewState() {
     coachHCName: t?.coach?.headCoach?.name ?? null,
     coachHCRating: t?.coach?.headCoach?.overallRating ?? null,
     frontOffice: t?.frontOffice ?? null,
+    owner: t?.owner ?? null,
     tradeRequestAlerts: getActiveTradeRequests(t, roster),
     picks: Array.isArray(t?.picks)
       ? t.picks.map((pk) => ({
@@ -1205,6 +1215,18 @@ function buildViewState() {
     scoutingBudget: (() => {
       const uTeam = cache.getTeam(meta?.userTeamId);
       return uTeam?.scoutingBudget ?? null;
+    })(),
+    userFranchiseTerminated: !!(meta?.userFranchiseTerminated),
+    userOwnerPressure: (() => {
+      const uTeam = cache.getTeam(meta?.userTeamId);
+      const ownerProfile = uTeam?.owner ?? null;
+      if (!ownerProfile) return null;
+      return {
+        mandate:          ownerProfile.mandate,
+        hotSeatRating:    ownerProfile.hotSeatRating ?? 25,
+        seasonsUnderGoal: ownerProfile.seasonsUnderGoal ?? 0,
+        status:           getHotSeatStatus(ownerProfile),
+      };
     })(),
     godMode: !!meta?.commissionerMode,
     commissionerMode: !!meta?.commissionerMode,
@@ -13469,6 +13491,62 @@ async function handleStartNewSeason(payload, id) {
     }
   } catch (personaDriftErr) {
     console.error('[Worker] Front office persona drift failed (non-fatal):', personaDriftErr);
+  }
+
+  // ── Owner mandate evaluation (once per season, before records reset) ────────
+  // Guard: skip if already evaluated for this completed season to prevent
+  // double-application on save reload or handleStartNewSeason re-entry.
+  try {
+    const completedSeasonId = meta.currentSeasonId;
+    const alreadyEvaluated = meta.ownerPressureEvaluatedForSeason === completedSeasonId;
+
+    if (!alreadyEvaluated && completedSeasonId) {
+      const playoffTeamIdsForOwner = new Set(
+        Object.values(meta.playoffSeeds ?? {}).flatMap(seeds =>
+          Array.isArray(seeds) ? seeds.map(s => s.teamId) : [],
+        ),
+      );
+      const allTeamsSnapshot = cache.getAllTeams();
+
+      for (const team of allTeamsSnapshot) {
+        // Hydrate owner profile if missing
+        if (!team.owner?.mandate) {
+          const mandate = determineInitialMandate(team, { allTeams: allTeamsSnapshot });
+          cache.updateTeam(team.id, { owner: buildOwnerProfile(mandate) });
+        }
+        const hydratedTeam = cache.getTeam(team.id);
+        if (!hydratedTeam?.owner?.mandate) continue;
+
+        const teamRoster = cache.getPlayersByTeam(team.id);
+        const evaluation = evaluateMandate(hydratedTeam, {
+          allTeams: allTeamsSnapshot,
+          playoffTeamIds: playoffTeamIdsForOwner,
+          teamRoster,
+        });
+        const updatedOwner = applyHotSeatDelta(hydratedTeam.owner, evaluation);
+
+        if (shouldFireFrontOffice(updatedOwner)) {
+          if (team.id === meta.userTeamId) {
+            // User team fired: set termination flag
+            cache.updateTeam(team.id, { owner: updatedOwner });
+            cache.setMeta({ userFranchiseTerminated: true });
+          } else {
+            // AI team fired: reset owner pressure and drift persona
+            const firingOutcome = buildAIFiringOutcome(hydratedTeam, { allTeams: allTeamsSnapshot });
+            cache.updateTeam(team.id, {
+              owner: firingOutcome.newOwnerProfile,
+              frontOffice: { persona: firingOutcome.newPersona, missedPostseasonStreak: 0 },
+            });
+          }
+        } else {
+          cache.updateTeam(team.id, { owner: updatedOwner });
+        }
+      }
+
+      cache.setMeta({ ownerPressureEvaluatedForSeason: completedSeasonId });
+    }
+  } catch (ownerPressureErr) {
+    console.error('[Worker] Owner pressure evaluation failed (non-fatal):', ownerPressureErr);
   }
 
   // Reset team records and roll dead money forward

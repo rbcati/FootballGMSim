@@ -5,6 +5,10 @@
 import { Constants } from './constants.js';
 import { ensureFaceConfig } from './face.js';
 import { determineInitialPersona } from './ai/frontOfficePersonaEngine.js';
+import {
+  buildOwnerProfile,
+  determineInitialMandate,
+} from './meta/ownerPressureEngine.js';
 
 export let state = null;
 
@@ -548,6 +552,19 @@ export const State = {
       if (!Array.isArray(t.championshipYears)) t.championshipYears = [];
       return t;
     });
+
+    // ── Owner Mandate — deterministic hydration for old saves ────────────────
+    // Backward-compatible: old saves get a safe owner profile derived from real
+    // team signals. Same save always derives the same initial mandate.
+    migrated.teams = migrated.teams.map((team) => {
+      if (!team) return team;
+      if (team.owner && typeof team.owner === 'object' && team.owner.mandate) return team;
+      const mandate = determineInitialMandate(team, { allTeams: migrated.teams });
+      return { ...team, owner: buildOwnerProfile(mandate) };
+    });
+
+    // ── User franchise termination flag — backward-compatible default ────────
+    migrated.userFranchiseTerminated = migrated.userFranchiseTerminated ?? false;
 
     // ── Front Office Persona — deterministic hydration for old saves ──────────
     // Never random-assigned; same save always derives the same initial persona.
