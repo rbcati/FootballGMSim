@@ -61,6 +61,7 @@ import {
 } from './dirtyFlushAccumulator.js';
 import { cache }          from '../db/cache.js';
 import { generateLeaguePulseItems, mergeLeaguePulseItems } from '../core/leaguePulse.js';
+import { buildMediaNarratives } from '../core/news/mediaNarrativeEngine.js';
 import {
   Meta, Teams, Players, Rosters, Games,
   Seasons, PlayerStats, Transactions, DraftPicks,
@@ -1191,6 +1192,7 @@ function buildViewState() {
     hofRoster: Array.isArray(meta?.hofRoster) ? meta.hofRoster.slice(-100) : [],
     hofBallot: meta?.hofBallot ?? null,
     weeklyHeadlines: Array.isArray(meta?.weeklyHeadlines) ? meta.weeklyHeadlines.slice(-40) : [],
+    leaguePulse: Array.isArray(meta?.leaguePulse) ? meta.leaguePulse.slice(-100) : [],
     settings: normalizeLeagueSettings(meta?.settings ?? {}),
     economy: normalizeLeagueEconomy(meta?.economy ?? {}, { year: meta?.year }),
     tradeDeadline,
@@ -1278,6 +1280,20 @@ function buildViewState() {
       return t?.allTimeLeaders ?? { passingYards: null, rushingYards: null, receivingYards: null, sacks: null };
     })(),
     pendingRohCandidates: Array.isArray(meta?.pendingRohCandidates) ? meta.pendingRohCandidates : [],
+    mediaStories: (() => {
+      const leagueCtx = {
+        teams,
+        standings: standingsRows,
+        week: meta?.currentWeek ?? 1,
+        year: meta?.year,
+        season: meta?.year,
+        newsItems: Array.isArray(meta?.newsItems) ? meta.newsItems : [],
+        currentSeasonHonors: meta?.currentSeasonHonors ?? null,
+        leaguePulse: Array.isArray(meta?.leaguePulse) ? meta.leaguePulse.slice(-100) : [],
+        userTeamId: meta?.userTeamId,
+      };
+      return buildMediaNarratives(leagueCtx);
+    })(),
     // ── Team Identity — Retired Numbers & Championship Wall ──────────────────
     retiredNumbers: (() => {
       const t = cache.getTeam(meta?.userTeamId);
