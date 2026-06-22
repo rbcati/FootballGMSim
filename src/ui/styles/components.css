@@ -1259,3 +1259,111 @@ details[open] .app-hq-background-section__summary span { transform: rotate(180de
 .profile-tab-row::-webkit-scrollbar, .roster-tab-row::-webkit-scrollbar { display: none; }
 .profile-tab-row .standings-tab.active, .roster-tab-row .standings-tab.active { color: var(--accent); font-weight: 700; border-bottom: 2px solid var(--accent); }
 .profile-tab-row .standings-tab:not(.active), .roster-tab-row .standings-tab:not(.active) { color: var(--text-muted); border-bottom: 2px solid transparent; }
+
+/* ── Live Game gamecast primitives (LiveGame.jsx) ───────────────────────────
+   Compact, broadcast-style polish for the week-advance simulation panel.     */
+.lg-scorebug {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px var(--mobile-card-pad-x, var(--space-4));
+  background: linear-gradient(180deg, var(--surface-strong), var(--surface));
+  border-bottom: 1px solid var(--hairline-strong);
+  box-shadow: var(--shadow-sm);
+}
+.lg-scorebug__team { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lg-scorebug__team:last-child { justify-content: flex-end; }
+.lg-scorebug__team.has-ball .lg-scorebug__abbr::after {
+  content: "•"; margin-left: 4px; color: var(--warning);
+}
+.lg-scorebug__abbr { font-weight: 800; font-size: var(--text-sm); letter-spacing: -0.3px; }
+.lg-scorebug__score { font-weight: 900; font-size: var(--text-xl); color: var(--text); font-variant-numeric: tabular-nums; }
+.lg-scorebug__center { display: grid; justify-items: center; gap: 2px; text-align: center; }
+.lg-scorebug__clock { font-weight: 800; font-size: var(--text-xs); color: var(--text); }
+.lg-scorebug__poss { font-size: 10px; color: var(--text-subtle); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+
+.lg-final-card {
+  border: 1.5px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: var(--space-3);
+  background: linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
+  text-align: center;
+}
+.lg-final-card__badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  padding: 2px 12px;
+  margin-bottom: 8px;
+}
+.lg-final-card__score { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.lg-final-card__team { display: flex; align-items: center; gap: 8px; opacity: 0.66; }
+.lg-final-card__team.is-winner { opacity: 1; }
+.lg-final-card__abbr { font-weight: 800; font-size: var(--text-md); color: var(--text); }
+.lg-final-card__pts { font-weight: 900; font-size: 1.8rem; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1; }
+.lg-final-card__sep { color: var(--text-subtle); font-weight: 700; }
+.lg-final-card__recap { margin-top: 8px; font-size: var(--text-xs); color: var(--text-muted); font-style: italic; }
+.lg-final-card__cta {
+  margin-top: 10px;
+  min-height: var(--mobile-btn-h, 40px);
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 800;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.lg-final-card__cta:hover { background: var(--accent-hover); }
+
+.lg-key-moments { margin-bottom: var(--space-3); }
+.lg-key-moments__label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--text-subtle); margin-bottom: 5px; }
+.lg-key-moments__list { display: flex; flex-wrap: wrap; gap: 5px; }
+.lg-key-moments__item {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  padding: 3px 9px;
+  background: var(--surface-strong);
+  border: 1px solid var(--hairline);
+  color: var(--text-muted);
+}
+.lg-key-moments__item--score { border-color: rgba(52,199,89,.4); color: #8fe6ab; }
+
+.lg-play--scoring { color: var(--text); }
+.lg-play--turnover { border-left: 2px solid var(--danger); padding-left: 6px; }
+.lg-play--sack { border-left: 2px solid var(--warning); padding-left: 6px; }
+.lg-play--latest { background: rgba(124,196,255,.07); border-radius: 6px; padding-left: 6px; }
+
+/* ── Activity toast stack (ActivityToastStack.jsx) ──────────────────────────
+   Compact replacement for stacked full-width alert cards on mobile HQ.        */
+.activity-toast-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 12px 6px;
+}
+.activity-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: var(--m-text-xs, 0.72rem);
+  color: var(--text-muted);
+  background: var(--surface-strong);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+.activity-toast__dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.activity-toast__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
