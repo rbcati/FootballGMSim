@@ -1158,6 +1158,7 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
               pendingRohCandidates={rohCandidates}
               retiredNumbers={retiredNums}
               retiredNumberDisplay={retiredNumDisplay}
+              awardHistory={league?.awardHistory ?? []}
               onInduct={handleInduct}
               onRetireNumber={handleRetireNumber}
             />

@@ -28,6 +28,8 @@ export const AWARD_TYPES = Object.freeze({
   COACH_OF_YEAR: 'COACH_OF_YEAR',
   COMEBACK_PLAYER: 'COMEBACK_PLAYER',
   ROOKIE_OF_YEAR: 'ROOKIE_OF_YEAR',
+  OFF_ROOKIE_OF_YEAR: 'OFF_ROOKIE_OF_YEAR',
+  DEF_ROOKIE_OF_YEAR: 'DEF_ROOKIE_OF_YEAR',
   LEAGUE_CHAMPION: 'LEAGUE_CHAMPION',
   ALL_PRO_QB: 'ALL_PRO_QB',
   ALL_PRO_RB: 'ALL_PRO_RB',
@@ -49,6 +51,8 @@ export const AWARD_LABELS = Object.freeze({
   [AWARD_TYPES.COACH_OF_YEAR]: 'Coach of the Year',
   [AWARD_TYPES.COMEBACK_PLAYER]: 'Comeback Player of the Year',
   [AWARD_TYPES.ROOKIE_OF_YEAR]: 'Rookie of the Year',
+  [AWARD_TYPES.OFF_ROOKIE_OF_YEAR]: 'Offensive Rookie of the Year',
+  [AWARD_TYPES.DEF_ROOKIE_OF_YEAR]: 'Defensive Rookie of the Year',
   [AWARD_TYPES.LEAGUE_CHAMPION]: 'League Champion',
   [AWARD_TYPES.ALL_PRO_QB]: 'First Team All-Pro QB',
   [AWARD_TYPES.ALL_PRO_RB]: 'First Team All-Pro RB',
@@ -336,6 +340,15 @@ export function determineSeasonAwards(players, teams, season, context) {
   const rookieRows = rows.filter(isRookie);
   const rotyWinner = topByScore(rookieRows, r => rotyScore(r, teamById));
 
+  // Offensive / Defensive Rookie of the Year (V2). Only considers true rookies
+  // (player.year === season). Offensive rookies use the offensive production
+  // formula (rotyScore); defensive rookies use defensive production (dpoyScore).
+  // Both are additive — ROOKIE_OF_YEAR above is retained for backward compat.
+  const offRookieRows = rookieRows.filter(r => OFF_SKILL_POS.has(String(r?.pos ?? '').toUpperCase()));
+  const defRookieRows = rookieRows.filter(r => DEF_POS.has(String(r?.pos ?? '').toUpperCase()));
+  const offRotyWinner = topByScore(offRookieRows, r => rotyScore(r, teamById));
+  const defRotyWinner = topByScore(defRookieRows, dpoyScore);
+
   // COMEBACK_PLAYER: age 28+, biggest positive OVR delta from previous season careerStats
   const comebackWinner = (() => {
     const candidates = offRows.filter(r => {
@@ -379,6 +392,8 @@ export function determineSeasonAwards(players, teams, season, context) {
   push(AWARD_TYPES.OFFENSIVE_POY, offpoyWinner);
   push(AWARD_TYPES.DEFENSIVE_POY, dpoyWinner);
   push(AWARD_TYPES.ROOKIE_OF_YEAR, rotyWinner);
+  push(AWARD_TYPES.OFF_ROOKIE_OF_YEAR, offRotyWinner);
+  push(AWARD_TYPES.DEF_ROOKIE_OF_YEAR, defRotyWinner);
   push(AWARD_TYPES.COMEBACK_PLAYER, comebackWinner);
 
   // ── Franchise awards ──────────────────────────────────────────────────────

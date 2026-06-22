@@ -69,6 +69,12 @@ import {
   buildSeasonHonorsSummary,
 } from '../core/awards/prestigeEngine.js';
 import {
+  buildAwardHistoryEntry,
+  appendAwardHistory,
+  hydrateAwardHistory,
+  getCareerHonorCounts,
+} from '../core/awards/awardHistory.js';
+import {
   buildMediaNarratives,
   MEDIA_STORY_MAX,
 } from '../core/news/mediaNarrativeEngine.js';
@@ -253,6 +259,7 @@ export function createSoakLeague(opts = {}) {
     weeklyHeadlines: [],
     leaguePulse: [],
     currentSeasonHonors: null,
+    awardHistory: [],
     newsItems: [],
   };
 
@@ -448,6 +455,51 @@ function applyPrestigeHonors(state) {
   meta.currentSeasonHonors = buildSeasonHonorsSummary(allPlayers, assignments, teamResolver);
 }
 
+/**
+ * Award History V2 (currentSeasonHonors' historical companion). Builds a compact
+ * meta.awardHistory entry for the completed season by composing prestige
+ * selections with a synthesized MVP/OPOY/DPOY + league-leader set, and appends it
+ * idempotently (replace-by-year) so the ledger stays bounded and duplicate-free.
+ */
+function applyAwardHistory(state) {
+  const { teams, meta } = state;
+  const allPlayers = [];
+  for (const t of teams) for (const p of t.roster) allPlayers.push({ ...p, teamId: t.id });
+  const teamResolver = (teamId) => teams.find((t) => t.id === teamId) ?? null;
+
+  const ranked = rankPrestigeCandidates(allPlayers, teamResolver, meta.year);
+  const allProAssignments = selectAllProTeams(ranked, meta.year);
+  const proBowlAssignments = selectProBowlTeams(ranked, meta.year);
+  const prestigeAssignments = [...allProAssignments, ...proBowlAssignments];
+
+  const toAward = (type, cand) =>
+    cand
+      ? { type, playerId: cand.player.id, name: cand.player.name, pos: cand.player.pos, teamId: cand.teamId, score: cand.score }
+      : null;
+  const top = (arr) => (Array.isArray(arr) && arr[0] ? arr[0] : null);
+  const skill = [...(ranked.RB ?? []), ...(ranked.WR ?? [])].sort((a, b) => b.score - a.score);
+  const playerAwards = [
+    toAward('MVP', top(ranked.QB)),
+    toAward('OFFENSIVE_POY', top(skill)),
+    toAward('DEFENSIVE_POY', top(ranked.DL)),
+  ].filter(Boolean);
+
+  const allProTeam = allProAssignments.filter((a) => a.type === 'FIRST_TEAM_ALL_PRO');
+  const stats = allPlayers.map((p) => ({
+    playerId: p.id, name: p.name, pos: p.pos, teamId: p.teamId, totals: p.stats?.season ?? {},
+  }));
+
+  const entry = buildAwardHistoryEntry({
+    year: meta.year,
+    seasonId: meta.currentSeasonId,
+    awardResults: { playerAwards, franchiseAwards: [], allProTeam },
+    prestigeAssignments,
+    stats,
+    teamResolver,
+  });
+  meta.awardHistory = appendAwardHistory(hydrateAwardHistory(meta), entry);
+}
+
 /** Append capped weekly headlines + league pulse for the completed season. */
 function applyNewsCaps(state, champion) {
   const { meta } = state;
@@ -510,6 +562,7 @@ export function advanceSoakSeason(state) {
   applyOwnerPressureRollover(state);
   applyHistoryAndLegacy(state, champion);
   applyPrestigeHonors(state);
+  applyAwardHistory(state);
   applyNewsCaps(state, champion);
   rolloverToNextSeason(state);
   return state;
@@ -645,6 +698,24 @@ export function buildInvariantSummary(state) {
     if (e?.championTeamId != null && !teamIds.has(e.championTeamId)) invalidReferences += 1;
   }
 
+  // Award history ledger: bounded, duplicate-free by year, finite honor counts.
+  const awardHistory = Array.isArray(meta.awardHistory) ? meta.awardHistory : [];
+  const awardYears = new Set();
+  let duplicateAwardHistoryYears = 0;
+  let maxCareerHonorCount = 0;
+  for (const e of awardHistory) {
+    if (awardYears.has(e?.year)) duplicateAwardHistoryYears += 1;
+    else awardYears.add(e?.year);
+  }
+  // Spot-check career honor aggregation stays finite for any awarded player.
+  const sampleMvp = awardHistory[awardHistory.length - 1]?.awards?.MVP?.playerId ?? null;
+  if (sampleMvp != null) {
+    const counts = getCareerHonorCounts(awardHistory, sampleMvp);
+    for (const v of Object.values(counts)) {
+      if (Number.isFinite(v)) maxCareerHonorCount = Math.max(maxCareerHonorCount, v);
+    }
+  }
+
   // Playoff seed reference validity
   for (const seeds of Object.values(meta.playoffSeeds ?? {})) {
     if (!Array.isArray(seeds)) continue;
@@ -673,6 +744,9 @@ export function buildInvariantSummary(state) {
     invalidPersonaProfiles,
     historyLedgerCount: ledger.length,
     duplicateLedgerYears,
+    awardHistoryCount: awardHistory.length,
+    duplicateAwardHistoryYears,
+    maxCareerHonorCount,
     retiredNumbersCount,
     ringOfHonorCount,
     prestigeHonorCount: countPrestigeHonors(meta.currentSeasonHonors),

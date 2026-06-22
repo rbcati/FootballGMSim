@@ -34,6 +34,7 @@ export function createLeagueMemoryDefaults() {
   return {
     leagueHistory: [],
     seasonStorylines: [],
+    awardHistory: [],
     hallOfFame: { schemaVersion: 1, classes: [], index: {} },
     franchiseHistoryByTeam: {},
     recordBook: {
@@ -62,6 +63,7 @@ export function ensureLeagueMemoryMeta(meta = {}) {
     ...meta,
     leagueHistory: Array.isArray(meta.leagueHistory) ? meta.leagueHistory : defaults.leagueHistory,
     seasonStorylines: Array.isArray(meta.seasonStorylines) ? meta.seasonStorylines : defaults.seasonStorylines,
+    awardHistory: Array.isArray(meta.awardHistory) ? meta.awardHistory : defaults.awardHistory,
     hallOfFame: {
       schemaVersion: meta?.hallOfFame?.schemaVersion ?? defaults.hallOfFame.schemaVersion,
       classes: Array.isArray(meta?.hallOfFame?.classes) ? meta.hallOfFame.classes : defaults.hallOfFame.classes,

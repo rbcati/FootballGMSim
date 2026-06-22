@@ -325,6 +325,7 @@ export default function FranchiseLegacyView({
   pendingRohCandidates = [],
   retiredNumbers = [],
   retiredNumberDisplay = [],
+  awardHistory = [],
   onInduct,
   onDismissCandidate,
   onRetireNumber,
@@ -367,6 +368,7 @@ export default function FranchiseLegacyView({
           <LegendsBrowser
             ringOfHonor={ringOfHonor}
             retiredNumbers={retiredNumbers}
+            awardHistory={awardHistory}
             onRetireNumber={onRetireNumber}
           />
         ) : (

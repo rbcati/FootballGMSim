@@ -7,6 +7,7 @@ import {
   buildLegendTimeline,
   buildLegendProfileMetrics,
 } from '../../core/history/legendsBrowserEngine.js';
+import { getCareerHonorCounts } from '../../core/awards/awardHistory.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -440,7 +441,65 @@ function AccoladeTimeline({ timeline }) {
   );
 }
 
-function LegendProfile({ legend }) {
+const HONOR_BADGE_DEFS = [
+  { key: 'mvp', label: 'MVP' },
+  { key: 'opoy', label: 'OPOY' },
+  { key: 'dpoy', label: 'DPOY' },
+  { key: 'oroy', label: 'OROY' },
+  { key: 'droy', label: 'DROY' },
+  { key: 'allPro', label: 'All-Pro' },
+  { key: 'proBowl', label: 'Pro Bowl' },
+];
+
+/**
+ * Career honor counts derived from the league award-history ledger. Renders
+ * nothing when the ledger is empty or the legend earned no tracked honors, so the
+ * panel degrades gracefully for old saves and unmatched player refs.
+ */
+function CareerHonors({ honors }) {
+  if (!honors) return null;
+  const badges = HONOR_BADGE_DEFS
+    .map(({ key, label }) => ({ label, count: Number(honors[key] ?? 0) }))
+    .filter((b) => b.count > 0);
+  if (badges.length === 0) return null;
+
+  return (
+    <div data-testid="legend-career-honors">
+      <div
+        style={{
+          fontSize: 'var(--text-xs, 11px)',
+          fontWeight: 700,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          marginBottom: 6,
+        }}
+      >
+        Career Honors
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {badges.map((b) => (
+          <span
+            key={b.label}
+            data-testid={`honor-count-${b.label.replace(/\s+/g, '-').toLowerCase()}`}
+            style={{
+              fontSize: 'var(--text-xs, 11px)',
+              fontWeight: 700,
+              background: 'var(--chip-bg, rgba(99,102,241,0.10))',
+              color: 'var(--chip-text, var(--primary, #6366f1))',
+              borderRadius: 'var(--radius-sm, 4px)',
+              padding: '2px 8px',
+            }}
+          >
+            {b.count}× {b.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LegendProfile({ legend, honors }) {
   if (!legend) {
     return (
       <div
@@ -535,6 +594,9 @@ function LegendProfile({ legend }) {
         </div>
       </div>
 
+      {/* Career Honors (from league award history) */}
+      <CareerHonors honors={honors} />
+
       {/* Career Metric Sheet */}
       <MetricSheet metrics={metrics} />
 
@@ -576,8 +638,9 @@ function LegendProfile({ legend }) {
  *   retiredNumbers {number[]}  - Array of retired jersey numbers (for badge display)
  *   onRetireNumber {Function}  - (playerId, jerseyNumber) => void (optional)
  */
-export default function LegendsBrowser({ ringOfHonor = [], retiredNumbers = [], onRetireNumber }) {
+export default function LegendsBrowser({ ringOfHonor = [], retiredNumbers = [], awardHistory = [], onRetireNumber }) {
   const roh = Array.isArray(ringOfHonor) ? ringOfHonor : [];
+  const ledger = Array.isArray(awardHistory) ? awardHistory : [];
 
   const [selectedId, setSelectedId] = useState(null);
   const [activeFilter, setActiveFilter] = useState('ALL');
@@ -599,6 +662,10 @@ export default function LegendsBrowser({ ringOfHonor = [], retiredNumbers = [], 
   }, [filteredLegends]);
 
   const selectedLegend = findLegendById(roh, selectedId);
+  const selectedHonors = useMemo(
+    () => (selectedLegend?.id != null && ledger.length > 0 ? getCareerHonorCounts(ledger, selectedLegend.id) : null),
+    [ledger, selectedLegend],
+  );
 
   if (roh.length === 0) {
     return (
@@ -679,7 +746,7 @@ export default function LegendsBrowser({ ringOfHonor = [], retiredNumbers = [], 
 
       {/* Pane B — Legend Profile */}
       <div data-testid="pane-profile">
-        <LegendProfile legend={selectedLegend} />
+        <LegendProfile legend={selectedLegend} honors={selectedHonors} />
       </div>
     </div>
   );
