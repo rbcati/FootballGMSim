@@ -19,6 +19,7 @@ import CombineDashboard from './CombineDashboard.jsx';
 import FranchiseLegacyView from './FranchiseLegacyView.jsx';
 import FranchiseBrandHQ from './FranchiseBrandHQ.jsx';
 import JobSecurityCard from './JobSecurityCard.jsx';
+import ActivityToastStack from './ActivityToastStack.jsx';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -434,6 +435,20 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
   }, [command.weekLabel]);
 
   const teamDisplayName = userTeam?.name ?? userTeam?.abbr ?? 'My Team';
+
+  // Collapse transient roster / simulation notices into one compact strip
+  // instead of stacking oversized full-width alert cards.
+  const activityMessages = useMemo(() => {
+    const out = [];
+    if (busy || simulating) out.push({ id: 'sim', text: 'Simulating week — resolving games…', tone: 'info' });
+    const roster = Array.isArray(userTeam?.roster) ? userTeam.roster : [];
+    const injuredCount = roster.filter((p) => safeNum(p?.injuryWeeksRemaining, 0) > 0).length;
+    if (injuredCount > 0) {
+      out.push({ id: 'inj', text: `${injuredCount} player${injuredCount === 1 ? '' : 's'} on the injury report`, tone: injuredCount > 2 ? 'warning' : 'info' });
+    }
+    if (lineupToast) out.push({ id: 'lineup', text: lineupToast, tone: lineupToast.includes('valid') ? 'ok' : 'warning' });
+    return out;
+  }, [busy, simulating, userTeam?.roster, lineupToast]);
 
   return (
     <div
@@ -1166,7 +1181,7 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         );
       })()}
 
-      {lineupToast ? <p className="app-inline-toast" role="status" aria-live="polite">{lineupToast}</p> : null}
+      <ActivityToastStack messages={activityMessages} />
 
       {showGate ? (
         <div style={{ padding: '0 12px', marginBottom: 8 }}>

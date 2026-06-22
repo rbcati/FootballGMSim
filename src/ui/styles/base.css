@@ -114,6 +114,24 @@
   --modal-bg: rgba(10, 12, 16, 0.95);
   --modal-backdrop: rgba(0, 0, 0, 0.7);
 
+  /* ── Mobile UX tokens (compact, sports-native, safe-area aware) ──────────
+     Used by HQ, live game and postgame screens to keep mobile spacing tight
+     and to keep primary controls clear of iOS Safari / PWA chrome.          */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --mobile-card-pad-x: 14px;
+  --mobile-card-pad-y: 12px;
+  --mobile-btn-h: 44px;
+  --mobile-btn-h-compact: 38px;
+  /* Height reserved for the in-app bottom nav so sticky footers clear it. */
+  --bottom-nav-h: 64px;
+  --sticky-footer-gap: calc(var(--bottom-nav-h) + var(--safe-bottom) + 8px);
+  /* Mobile type scale (slightly tighter than desktop). */
+  --m-text-xs: 0.72rem;
+  --m-text-sm: 0.82rem;
+  --m-text-base: 0.9rem;
+  --m-text-lg: 1.05rem;
+
   /* shadcn/ui CSS variable mappings */
   --background: 222 47% 6%;
   --foreground: 213 31% 91%;

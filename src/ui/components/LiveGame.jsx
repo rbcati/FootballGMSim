@@ -134,6 +134,13 @@ function QuarterScores({ homeAbbr, awayAbbr, quarterScores }) {
   );
 }
 
+// ── Numeric helper ─────────────────────────────────────────────────────────────
+
+function safeScore(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 // ── Palette helper ─────────────────────────────────────────────────────────────
 
 function teamColor(abbr = "") {
@@ -361,6 +368,90 @@ function PendingCard({ game, teamById, userTeamId }) {
         {away.abbr} @ {home.abbr}
       </div>
       <TeamBadge abbr={home.abbr} size={32} isUser={Number(home.id) === numericUserTeamId} />
+    </div>
+  );
+}
+
+// ── Mobile sticky scorebug ────────────────────────────────────────────────────
+// Compact broadcast-style score strip for the user's in-progress game.
+
+function MobileScorebug({ awayAbbr, homeAbbr, awayScore, homeScore, quarter, homeHasBall }) {
+  const awayColor = teamColor(awayAbbr);
+  const homeColor = teamColor(homeAbbr);
+  const possessor = homeHasBall ? homeAbbr : awayAbbr;
+  return (
+    <div className="lg-scorebug" data-testid="live-scorebug">
+      <div className={`lg-scorebug__team${homeHasBall ? '' : ' has-ball'}`}>
+        <span className="lg-scorebug__abbr" style={{ color: awayColor }}>{awayAbbr}</span>
+        <span className="lg-scorebug__score">{awayScore}</span>
+      </div>
+      <div className="lg-scorebug__center">
+        <span className="lg-scorebug__clock">Q{quarter}</span>
+        <span className="lg-scorebug__poss" aria-label={`Possession: ${possessor}`}>
+          {homeHasBall ? '◄' : '►'} {possessor} ball
+        </span>
+      </div>
+      <div className={`lg-scorebug__team${homeHasBall ? ' has-ball' : ''}`}>
+        <span className="lg-scorebug__score">{homeScore}</span>
+        <span className="lg-scorebug__abbr" style={{ color: homeColor }}>{homeAbbr}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Final result card (broadcast "FINAL" framing) ─────────────────────────────
+
+function LiveFinalCard({ framing, recapGame, recapText, onOpenBoxScore }) {
+  if (!framing) return null;
+  const toneColor =
+    framing.tone === 'win' ? 'var(--success)' : framing.tone === 'loss' ? 'var(--danger)' : 'var(--warning)';
+  const awayWinner = !framing.tied && !framing.homeWon;
+  const homeWinner = !framing.tied && framing.homeWon;
+  return (
+    <div className="lg-final-card" data-testid="live-final-card" style={{ borderColor: `${toneColor}55` }}>
+      <div className="lg-final-card__badge" style={{ color: toneColor, borderColor: `${toneColor}66` }}>
+        {framing.label}
+      </div>
+      <div className="lg-final-card__score">
+        <div className={`lg-final-card__team${awayWinner ? ' is-winner' : ''}`}>
+          <span className="lg-final-card__abbr">{recapGame.awayAbbr}</span>
+          <span className="lg-final-card__pts">{framing.awayScore}</span>
+        </div>
+        <span className="lg-final-card__sep">–</span>
+        <div className={`lg-final-card__team${homeWinner ? ' is-winner' : ''}`}>
+          <span className="lg-final-card__pts">{framing.homeScore}</span>
+          <span className="lg-final-card__abbr">{recapGame.homeAbbr}</span>
+        </div>
+      </div>
+      {recapText ? <div className="lg-final-card__recap">{recapText}</div> : null}
+      {framing.gameId != null ? (
+        <button
+          type="button"
+          className="lg-final-card__cta"
+          data-testid="live-final-boxscore"
+          onClick={() => onOpenBoxScore?.(framing.gameId)}
+        >
+          View Box Score ›
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+// ── Key moments strip ─────────────────────────────────────────────────────────
+
+function KeyMomentsStrip({ moments }) {
+  if (!moments?.length) return null;
+  return (
+    <div className="lg-key-moments" data-testid="live-key-moments">
+      <div className="lg-key-moments__label">Key Moments</div>
+      <div className="lg-key-moments__list">
+        {moments.map((m) => (
+          <span key={m.id} className={`lg-key-moments__item lg-key-moments__item--${m.tone}`}>
+            {m.quarter ? `Q${m.quarter} ` : ''}{m.text}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -706,6 +797,79 @@ export default function LiveGame({
   const recapScoring = Array.isArray(recapGame?.scoringSummary) ? recapGame.scoringSummary.slice(-2) : [];
   const recapDrives = Array.isArray(recapGame?.driveSummary) ? recapGame.driveSummary.slice(-2) : [];
 
+  // ── Week-results integrity ────────────────────────────────────────────────
+  // Critical fix: the header counts ALL resolved games, but the scoreboard only
+  // rendered the user's own game. When the user's game had no event/result (bye
+  // week, late skip, or a data mismatch) the panel showed "No games to display"
+  // even though other games had resolved. We now surface the resolved games we
+  // DO have so the count and the scoreboard never contradict each other.
+  const userHasResolved = userResolvedEvents.length > 0;
+  const userHasLastResult = userLastResults.length > 0;
+  const otherResolvedEvents = resolvedEvents.filter(
+    (e) => Number(e.homeId) !== numericUserTeamId && Number(e.awayId) !== numericUserTeamId,
+  );
+  // Only fall back to league-wide results when the user has nothing of their own.
+  const showOtherResolvedFallback =
+    !simulating && !userHasResolved && !userHasLastResult && otherResolvedEvents.length > 0;
+  const hasAnyResults = userHasResolved || userHasLastResult || showOtherResolvedFallback;
+  const showEmptyState =
+    !simulating && !hasAnyResults && userPendingGames.length === 0 && resolvedCount === 0;
+  // Partial completion: some — but not all — of the week's games have resolved.
+  const partialResults =
+    !simulating && totalWeekGames > 0 && resolvedCount > 0 && resolvedCount < totalWeekGames;
+
+  // ── Final-result framing for the user's game ──────────────────────────────
+  const finalFraming = (() => {
+    if (simulating || !recapGame) return null;
+    const homeScore = safeScore(recapGame.homeScore);
+    const awayScore = safeScore(recapGame.awayScore);
+    const tied = homeScore === awayScore;
+    const homeWon = homeScore > awayScore;
+    const userIsHome = Number(recapGame.homeId) === numericUserTeamId;
+    const userInGame = userIsHome || Number(recapGame.awayId) === numericUserTeamId;
+    const userWon = userInGame && !tied && (userIsHome ? homeWon : !homeWon);
+    const userLost = userInGame && !tied && !userWon;
+    return {
+      homeScore,
+      awayScore,
+      tied,
+      homeWon,
+      userWon,
+      userLost,
+      tone: userWon ? 'win' : userLost ? 'loss' : 'neutral',
+      label: userWon ? 'FINAL · W' : userLost ? 'FINAL · L' : tied ? 'FINAL · T' : 'FINAL',
+      gameId: recapGame.gameId ?? recapGame.id ?? null,
+      winnerAbbr: tied ? null : homeWon ? recapGame.homeAbbr : recapGame.awayAbbr,
+    };
+  })();
+
+  // ── Key Moments — distilled from the synthetic scoring run or recap data ──
+  const keyMoments = (() => {
+    const fromRecap = Array.isArray(recapGame?.scoringSummary) ? recapGame.scoringSummary : [];
+    if (fromRecap.length) {
+      return fromRecap.slice(-4).map((s, i) => ({
+        id: `recap-${i}`,
+        quarter: s.quarter ?? null,
+        text: `${s.teamId === recapGame.homeId ? recapGame.homeAbbr : recapGame.awayAbbr} ${s.type ?? s.scoreType ?? 'Score'}`,
+        tone: 'score',
+      }));
+    }
+    // Live fallback: pull the scoring drive lines we already rendered in the feed.
+    return plays
+      .filter((p) => p.isDrive && (p.driveType === 'td' || p.driveType === 'fg'))
+      .slice(-4)
+      .map((p) => ({ id: `live-${p.id}`, quarter: null, text: p.label.replace(/^Drive:\s*/, ''), tone: 'score' }));
+  })();
+
+  // ── Live scorebug state (synthetic, mobile-first) ─────────────────────────
+  const liveHomeScore = quarterScores.home.reduce((s, v) => s + v, 0);
+  const liveAwayScore = quarterScores.away.reduce((s, v) => s + v, 0);
+  const liveQuarter = Math.min(4, Math.floor(playCountRef.current / 8) + 1);
+  const lastPlayText = plays.length ? plays[plays.length - 1].text : '';
+  const homeHasBall = lastPlayText.toLowerCase().startsWith((userHomeAbbr || '').toLowerCase());
+  const showScorebug =
+    simulating && !skipping && (userGame || userEvent) && userHomeAbbr !== '???';
+
   if (!visible) return null;
 
   return (
@@ -820,12 +984,32 @@ export default function LiveGame({
         <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
           Games resolved: <strong style={{ color: "var(--text)" }}>{resolvedCount}</strong> / {totalWeekGames || "—"}
         </div>
+        {partialResults ? (
+          <div
+            data-testid="live-partial-results"
+            style={{ fontSize: "var(--text-xs)", color: "var(--warning)", fontWeight: 600 }}
+          >
+            ⚠ {totalWeekGames - resolvedCount} game{totalWeekGames - resolvedCount === 1 ? '' : 's'} still finishing — showing completed results.
+          </div>
+        ) : null}
         {error ? (
           <div style={{ fontSize: "var(--text-xs)", color: "var(--danger)" }}>
             Sim warning: {error}
           </div>
         ) : null}
       </div>
+
+      {/* ── Sticky mobile scorebug (user's live game) ── */}
+      {showScorebug && (
+        <MobileScorebug
+          awayAbbr={userAwayAbbr}
+          homeAbbr={userHomeAbbr}
+          awayScore={liveAwayScore}
+          homeScore={liveHomeScore}
+          quarter={liveQuarter}
+          homeHasBall={homeHasBall}
+        />
+      )}
 
       {/* ── Progress bar ── */}
       {simulating && (
@@ -890,6 +1074,17 @@ export default function LiveGame({
             Scoreboard — Week {simContextWeek ?? ""}
           </div>
 
+          {/* Prominent FINAL framing for the user's completed game */}
+          <LiveFinalCard
+            framing={finalFraming}
+            recapGame={recapGame}
+            recapText={recapText}
+            onOpenBoxScore={onOpenBoxScore}
+          />
+
+          {/* Key moments distilled from the game's scoring */}
+          {!simulating && <KeyMomentsStrip moments={keyMoments} />}
+
           <div
             style={{
               display: "grid",
@@ -939,15 +1134,32 @@ export default function LiveGame({
                 />
               ))}
 
-            {userResolvedEvents.length === 0 && userLastResults.length === 0 && !simulating && (
+            {/* Bug fix: the user has no game data this week (bye / skip / mismatch)
+                but other games resolved — surface those so the panel never reads
+                "No games to display" while completed games exist. */}
+            {showOtherResolvedFallback &&
+              otherResolvedEvents.slice(0, 8).map((ev, i) => (
+                <MatchupCard
+                  key={ev.gameId ?? `other_${i}`}
+                  event={ev}
+                  userTeamId={userTeamId}
+                  pending={false}
+                  onOpenBoxScore={onOpenBoxScore}
+                />
+              ))}
+
+            {showEmptyState && (
               <p
+                data-testid="live-scoreboard-empty"
                 style={{
                   color: "var(--text-subtle)",
                   fontSize: "var(--text-xs)",
                   margin: 0,
                 }}
               >
-                No games to display.
+                {userPendingGames.length === 0 && (userGame || userEvent)
+                  ? "Waiting for this week's results…"
+                  : "Your team is on a bye this week — no game to display."}
               </p>
             )}
           </div>
@@ -1103,37 +1315,51 @@ export default function LiveGame({
                 Simulation complete. Open the week recap above for final notes.
               </p>
             )}
-            {plays.map((p) => (
-              p.isDrive ? (
+            {plays.map((p) => {
+              const isLatest = p.id === plays[plays.length - 1]?.id;
+              if (p.isDrive) {
+                return (
+                  <div
+                    key={p.id}
+                    className={`drive-summary ${p.driveType ?? ""}`}
+                    data-testid="live-play"
+                    data-play-kind="drive"
+                    style={{
+                      animation: isLatest ? "lgFadeIn 0.22s ease" : "none",
+                    }}
+                  >
+                    {p.label}
+                  </div>
+                );
+              }
+              // Classify the play so scoring / sacks / turnovers stand out without chips.
+              const lower = p.text.toLowerCase();
+              let kind = "routine";
+              if (/touchdown|field goal|safety/.test(lower)) kind = "scoring";
+              else if (/interception|fumble/.test(lower)) kind = "turnover";
+              else if (/sack/.test(lower)) kind = "sack";
+              const highlighted = kind !== "routine";
+              return (
                 <div
                   key={p.id}
-                  className={`drive-summary ${p.driveType ?? ""}`}
+                  data-testid="live-play"
+                  data-play-kind={kind}
+                  className={`lg-play lg-play--${kind}${isLatest ? " lg-play--latest" : ""}`}
                   style={{
-                    animation: p.id === plays[plays.length - 1]?.id ? "lgFadeIn 0.22s ease" : "none",
-                  }}
-                >
-                  {p.label}
-                </div>
-              ) : (
-                <div
-                  key={p.id}
-                  style={{
-                    fontSize: "var(--text-xs)",
-                    color: /touchdown|interception|fumble|sack|field goal/i.test(p.text) ? "var(--text)" : "var(--text-muted)",
-                    lineHeight: 1.45,
+                    fontSize: isLatest ? "var(--text-sm)" : "var(--text-xs)",
+                    color: highlighted || isLatest ? "var(--text)" : "var(--text-muted)",
+                    lineHeight: 1.4,
                     borderBottom: "1px solid var(--hairline)",
                     paddingBottom: "var(--space-1)",
-                    fontWeight: /touchdown|interception|fumble|field goal/i.test(p.text) ? 700 : 500,
-                    animation:
-                      p.id === plays[plays.length - 1]?.id
-                        ? "lgFadeIn 0.22s ease"
-                        : "none",
+                    fontWeight: highlighted ? 700 : isLatest ? 600 : 500,
+                    opacity: highlighted || isLatest ? 1 : 0.82,
+                    animation: isLatest ? "lgFadeIn 0.22s ease" : "none",
                   }}
                 >
                   {p.text}
                 </div>
-              )
-            ))}
+              );
+            })}
             <style>{`@keyframes lgFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}`}</style>
             </div>
           )}

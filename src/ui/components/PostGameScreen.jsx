@@ -247,11 +247,11 @@ function LeaderCard({ label, statLine, player, color }) {
   return (
     <div style={{
       background: "var(--surface)", border: "1px solid var(--hairline)",
-      borderRadius: 12, padding: "12px 14px",
-      display: "flex", alignItems: "center", gap: 12,
+      borderRadius: 10, padding: "8px 12px",
+      display: "flex", alignItems: "center", gap: 10,
     }}>
       <div style={{
-        width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+        width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
         background: `${color}20`, border: `2px solid ${color}`,
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: "0.68rem", fontWeight: 900, color,
@@ -321,6 +321,8 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
     .filter((l) => l?.isTouchdown || l?.turnover || /field goal|sack|interception|fumble/i.test(l?.text ?? ""))
     .slice(-5)
     .reverse();
+  // Only render the interactive Game Flow card when it has real content.
+  const hasGameFlow = Boolean(gfs) || notableMoments.length > 0;
 
   // Build leader stat lines
   const qbLine = qb
@@ -395,7 +397,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
 
           {/* Result banner */}
           <div style={{
-            textAlign: "center", marginBottom: 24,
+            textAlign: "center", marginBottom: 16,
             animation: "fadeSlideIn 0.4s ease-out",
           }}>
             <style>{`
@@ -404,9 +406,9 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
                 to   { opacity: 1; transform: translateY(0); }
               }
             `}</style>
-            <div style={{ fontSize: "3.5rem", lineHeight: 1, marginBottom: 10 }}>{resultEmoji}</div>
+            <div style={{ fontSize: "2.6rem", lineHeight: 1, marginBottom: 6 }}>{resultEmoji}</div>
             <div style={{
-              fontSize: "2rem", fontWeight: 900, letterSpacing: "2px",
+              fontSize: "1.7rem", fontWeight: 900, letterSpacing: "2px",
               color: resultColor, marginBottom: 4,
             }}>
               {resultLabel}
@@ -443,8 +445,8 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
             background: "var(--surface)",
             border: "1.5px solid var(--hairline)",
             borderRadius: 16,
-            padding: "20px 24px",
-            marginBottom: 16,
+            padding: "14px 18px",
+            marginBottom: 12,
           }}>
             <div style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -500,14 +502,23 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
                 </div>
               </div>
             </div>
-            <div style={{ marginTop: 10, display: "flex", justifyContent: "center" }}>
+            <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
               <button
-                className="btn-link"
                 type="button"
                 data-testid="box-score-trigger"
                 onClick={() => boxScoreGameId && onOpenBoxScore?.(boxScoreGameId)}
                 disabled={!boxScoreGameId}
-                style={{ cursor: boxScoreGameId ? "pointer" : "not-allowed", fontWeight: 700 }}
+                style={{
+                  cursor: boxScoreGameId ? "pointer" : "not-allowed",
+                  fontWeight: 800,
+                  fontSize: "0.8rem",
+                  padding: "8px 20px",
+                  borderRadius: 999,
+                  border: `1px solid ${boxScoreGameId ? "var(--accent)" : "var(--hairline)"}`,
+                  background: boxScoreGameId ? "var(--accent-muted)" : "transparent",
+                  color: boxScoreGameId ? "var(--accent)" : "var(--text-subtle)",
+                  minHeight: "var(--mobile-btn-h-compact, 38px)",
+                }}
               >
                 {boxScoreGameId ? "View Box Score ›" : "Box score unavailable"}
               </button>
@@ -536,6 +547,21 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
             </div>
           )}
 
+          {/* Game Flow — hide the toggle card entirely when there's nothing to show,
+              and surface a compact, useful empty state instead of dead space. */}
+          {!hasGameFlow ? (
+            <div
+              data-testid="postgame-flow-empty"
+              style={{
+                marginBottom: 12, background: "var(--surface)", border: "1px solid var(--hairline)",
+                borderRadius: 12, padding: "10px 12px", fontSize: "0.74rem", color: "var(--text-muted)",
+                display: "flex", alignItems: "center", gap: 8,
+              }}
+            >
+              <strong style={{ fontSize: "0.78rem", color: "var(--text)" }}>Game Flow</strong>
+              <span style={{ color: "var(--text-subtle)" }}>· Open the box score for the full drive chart.</span>
+            </div>
+          ) : (
           <div style={{ marginBottom: 12, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 12, padding: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
               <strong style={{ fontSize: "0.8rem" }}>Game Flow</strong>
@@ -545,9 +571,11 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
                     {showReplay ? "Hide Replay" : "Replay"}
                   </button>
                 )}
-                <button className="btn" style={{ padding: "6px 10px", fontSize: "0.72rem" }} onClick={() => setShowDetails((v) => !v)} data-testid="postgame-flow-toggle">
-                  {showDetails ? "Hide" : "Key moments"}
-                </button>
+                {notableMoments.length > 0 && (
+                  <button className="btn" style={{ padding: "6px 10px", fontSize: "0.72rem" }} onClick={() => setShowDetails((v) => !v)} data-testid="postgame-flow-toggle">
+                    {showDetails ? "Hide" : "Key moments"}
+                  </button>
+                )}
               </div>
             </div>
             {showReplay && gfs && (
@@ -581,6 +609,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
               </div>
             )}
           </div>
+          )}
 
           {/* ── Tab switcher (Leaders / Grades) ── */}
           {(showLeaders || logs.length > 0) && (
@@ -609,8 +638,8 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
 
           {/* ── Game Leaders ── */}
           {activeTab === "leaders" && showLeaders && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {qb && qbLine && (
                   <LeaderCard label="Passing" statLine={qbLine} player={qb} color="#FF9F0A" />
                 )}
