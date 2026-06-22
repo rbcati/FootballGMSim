@@ -14,6 +14,7 @@ import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay 
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildGameBookDestination } from '../utils/managementScreenRouting.js';
 import ChronicleHeadlineBanner from './ChronicleHeadlineBanner.tsx';
+import MediaDesk from './MediaDesk.jsx';
 import CombineDashboard from './CombineDashboard.jsx';
 import FranchiseLegacyView from './FranchiseLegacyView.jsx';
 import FranchiseBrandHQ from './FranchiseBrandHQ.jsx';
@@ -718,6 +719,8 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           currentYear={safeNum(league?.year, 0)}
           onViewAll={() => onNavigate?.('News')}
         />
+
+        <MediaDesk stories={Array.isArray(league?.mediaStories) ? league.mediaStories : []} />
 
         {/* Twin status cards */}
         <div className="hq-twin-grid" aria-label="Team status overview" data-testid="hq-twin-status-grid">
