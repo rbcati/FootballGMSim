@@ -1213,6 +1213,7 @@ select:disabled {
     margin-bottom: 30px;
     /* Fallback removed */
     font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
 }
 
 /* Ensure fade-in is available globally */
@@ -1411,19 +1412,20 @@ select:disabled {
 
 /* Specific Event Overlays */
 .score-overlay.field-goal {
-  color: #FFD700; /* Gold */
-  text-shadow: 0 0 20px #FFA500, 0 0 40px #FF4500;
+  color: var(--warning); /* Gold */
+  text-shadow: 0 0 20px var(--warning), 0 0 40px var(--danger);
   font-family: var(--font-sans); font-weight: 900;
   letter-spacing: 2px;
 }
 
 .score-overlay.turnover {
-  color: #FFFFFF;
-  background: #FF453A;
-  text-shadow: 2px 2px 0px #8B0000;
+  color: var(--text);
+  background: var(--danger);
+  text-shadow: 2px 2px 0px var(--danger);
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 900;
-  border: 4px solid #fff;
+  border: 4px solid var(--text);
   padding: 15px 30px;
   transform: translate(-50%, -50%) rotate(-5deg);
   box-shadow: 0 10px 30px rgba(0,0,0,0.5);
@@ -1862,9 +1864,10 @@ select:disabled {
 }
 .game-event-overlay.drive-summary .event-text {
   font-size: 1.5rem;
-  color: #E6EDF3;
+  color: var(--text);
   text-transform: none;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   text-shadow: none;
   white-space: normal;
 }
@@ -2120,6 +2123,7 @@ select:disabled {
 .command-center .info-value {
     font-weight: bold;
     font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     font-size: 1rem;
     color: var(--accent);
 }
@@ -2366,6 +2370,7 @@ body {
   border-radius: 12px;
   box-shadow: 0 0 30px rgba(255, 69, 58, 0.8);
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 900;
 }
 
