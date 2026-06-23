@@ -391,7 +391,8 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
         overflowY: "auto",
         WebkitOverflowScrolling: "touch",
         display: "flex", alignItems: "flex-start", justifyContent: "center",
-        padding: "24px 16px 80px",
+        // Keep the "Back to Hub" action clear of the iOS home indicator / PWA chrome.
+        padding: "24px 16px max(80px, calc(env(safe-area-inset-bottom, 0px) + 64px))",
       }}>
         <div style={{ width: "100%", maxWidth: 420 }}>
 

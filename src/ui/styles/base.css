@@ -119,13 +119,31 @@
      and to keep primary controls clear of iOS Safari / PWA chrome.          */
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
   --mobile-card-pad-x: 14px;
   --mobile-card-pad-y: 12px;
   --mobile-btn-h: 44px;
   --mobile-btn-h-compact: 38px;
-  /* Height reserved for the in-app bottom nav so sticky footers clear it. */
-  --bottom-nav-h: 64px;
-  --sticky-footer-gap: calc(var(--bottom-nav-h) + var(--safe-bottom) + 8px);
+  /* ── Mobile shell spacing (single source of truth) ──────────────────────
+     The mobile bottom nav floats above the page (see .premium-bottom-nav).
+     These tokens describe its real footprint so page content, sticky footers
+     and primary actions always clear the nav *and* the device safe-area
+     (iPhone home indicator / Safari + installed-PWA chrome).               */
+  --mobile-nav-height: 60px;   /* floating nav min-height */
+  --mobile-nav-gap: 10px;      /* gap between nav and viewport bottom edge */
+  --mobile-header-height: 56px;
+  /* Total vertical space the floating nav occupies from the viewport bottom. */
+  --mobile-bottom-clearance: calc(
+    var(--mobile-nav-height) + var(--mobile-nav-gap) + var(--safe-bottom) + 12px
+  );
+  /* Bottom padding pages should reserve so content is never under the nav. */
+  --page-bottom-padding: calc(var(--space-3) + var(--mobile-bottom-clearance));
+  /* Offset for page-local sticky action bars so they rest above the nav. */
+  --sticky-action-offset: calc(var(--mobile-bottom-clearance) + var(--space-2));
+  /* Legacy alias kept for components that referenced the old fixed height. */
+  --bottom-nav-h: var(--mobile-nav-height);
+  --sticky-footer-gap: var(--mobile-bottom-clearance);
   /* Mobile type scale (slightly tighter than desktop). */
   --m-text-xs: 0.72rem;
   --m-text-sm: 0.82rem;
