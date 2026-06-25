@@ -219,6 +219,7 @@ import {
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot, buildHallOfFameInducteeRow, syncHallOfFameAfterRecordBook } from '../core/league-memory.js';
 import { buildPlayerSeasonStatsArchiveRows } from '../core/playerSeasonStatsArchive.js';
+import { attachSeasonStatsToRoster } from './viewStateStats.js';
 import {
   TRANSACTION_TIMELINE_SCHEMA_VERSION,
   compactRowsForArchive,
@@ -1047,7 +1048,12 @@ function buildViewState() {
   const standingsRows = resolveStandingsRows(meta, standingsContext);
   const tradeDeadline = getTradeDeadlineSnapshot(meta);
   const teams = cache.getAllTeams().map(t => {
-    const roster = cache.getPlayersByTeam(t.id);
+    // Attach recorded season totals so the League Stats hub (which reads
+    // player.seasonStats) shows real leaders instead of all-zero placeholders.
+    const roster = attachSeasonStatsToRoster(
+      cache.getPlayersByTeam(t.id),
+      (pid) => cache.getSeasonStat(pid)?.totals,
+    );
     return ({
     id:        t.id,
     name:      t.name,

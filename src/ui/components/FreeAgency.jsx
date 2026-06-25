@@ -55,6 +55,7 @@ import { buildFreeAgencyProfileContext } from "../utils/playerProfileContext.js"
 import { buildContractOfferInsight, toneToContractInsightColor } from "../utils/contractOfferInsights.js";
 import { evaluatePendingOfferCapReservation } from "../../core/pendingOfferCapModel.js";
 import { buildShowingLabel, stableSortRows } from "../utils/dataBrowser.js";
+import { resolveFreeAgencyLoadStatus } from "../utils/freeAgencyLoadStatus.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -871,6 +872,7 @@ export default function FreeAgency({
 }) {
   const [faState, setFaState] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
   // Filters
   const [posFilter, setPosFilter] = useState("ALL");
@@ -909,16 +911,25 @@ export default function FreeAgency({
     if (loadCountRef.current === 0) setLoading(true);
     loadCountRef.current += 1;
 
-    actions
-      .getFreeAgents()
+    setLoadError(null);
+
+    Promise.resolve(actions?.getFreeAgents?.())
       .then((res) => {
         if (!active) return;
-        setFaState(res.payload);
+        // Treat a missing/empty response shape as an honest load failure rather
+        // than silently rendering a misleading "no players match" empty state.
+        if (!res || typeof res !== "object" || res.payload == null) {
+          setFaState({ freeAgents: [] });
+          setLoadError("Free agent data was unavailable.");
+        } else {
+          setFaState(res.payload);
+        }
         setLoading(false);
       })
       .catch((err) => {
         if (!active) return;
         console.error("FA load error:", err);
+        setLoadError(err?.message || "Failed to load free agents.");
         setLoading(false);
       });
 
@@ -1021,6 +1032,23 @@ export default function FreeAgency({
   const archetypeOptions = useMemo(
     () => Array.from(new Set(evaluatedFaPool.map((p) => p?._eval?.archetype?.archetype).filter(Boolean))).slice(0, 24),
     [evaluatedFaPool],
+  );
+
+  // Honest load/empty status for the main table card. Distinguishes:
+  //  - loading        → fetch in flight
+  //  - error          → fetch failed / response unavailable
+  //  - unavailable    → no FA window this phase (loaded but pool is empty here)
+  //  - empty          → FA pool genuinely has no players
+  //  - ready          → players exist (filtered-empty handled inline in the table)
+  // resolveFreeAgencyLoadStatus is exported for unit testing each state.
+  const loadStatus = useMemo(
+    () => resolveFreeAgencyLoadStatus({
+      loading,
+      error: loadError,
+      faState,
+      poolCount: evaluatedFaPool.length,
+    }),
+    [loading, loadError, faState, evaluatedFaPool.length],
   );
 
 
@@ -1529,15 +1557,19 @@ export default function FreeAgency({
 
       {/* Main Table Card */}
       <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
-        {loading ? (
+        {loadStatus.state !== "ready" ? (
           <div
+            role={loadStatus.state === "error" ? "alert" : "status"}
+            data-testid="fa-load-status"
+            data-state={loadStatus.state}
             style={{
               padding: "var(--space-10)",
               textAlign: "center",
-              color: "var(--text-muted)",
+              color: loadStatus.state === "error" ? "var(--danger)" : "var(--text-muted)",
             }}
           >
-            Loading Free Agents...
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>{loadStatus.title}</div>
+            <div style={{ fontSize: "var(--text-sm)" }}>{loadStatus.body}</div>
           </div>
         ) : (
           <div>
