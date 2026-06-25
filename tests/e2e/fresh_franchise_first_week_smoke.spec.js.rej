@@ -1,0 +1,12 @@
+--- tests/e2e/fresh_franchise_first_week_smoke.spec.js
++++ tests/e2e/fresh_franchise_first_week_smoke.spec.js
+@@ -181,8 +181,8 @@
+   await expect(page.getByTestId('game-book')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+   await expect(page.getByTestId('game-book-final-score')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+   await expect(page.getByTestId('game-book-decision-summary')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+
+   const gameBookPlayerLink = page.getByTestId('game-book-top-performer-link').first().or(page.getByTestId('game-book-player-link').first());
+-  if (await gameBookPlayerLink.isVisible({ timeout: 5000 }).catch(() => false)) {
++  if (await gameBookPlayerLink.isVisible({ timeout: 2000 }).catch(() => false)) {
+     await gameBookPlayerLink.click();
+     await expect(page.getByTestId('player-profile')).toBeVisible({ timeout: SMOKE_TIMEOUT });

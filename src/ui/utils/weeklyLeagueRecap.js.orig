@@ -175,11 +175,7 @@ export function buildWeeklyLeagueRecap(league, { week, maxBullets = 6 } = {}) {
     if (biggestUpset && biggestUpset.delta > 0.15) {
       const winner = teamLabel(teamMap.get(biggestUpset.winnerId));
       const loser = teamLabel(teamMap.get(biggestUpset.loserId));
-      if (biggestUpset.delta > 0.3) {
-        bullets.push(`Stunning upset: ${winner} shocked the league by taking down ${loser}.`);
-      } else {
-        bullets.push(`Biggest upset: ${winner} knocked off ${loser}.`);
-      }
+      bullets.push(`Biggest upset: ${winner} knocked off ${loser}.`);
     }
 
     const closest = completedGames
