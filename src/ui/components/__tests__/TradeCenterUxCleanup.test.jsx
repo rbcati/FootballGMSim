@@ -86,6 +86,25 @@ describe('TradeCenter — UX cleanup', () => {
     expect(banner.getAttribute('data-tone')).toBe('success');
   });
 
+  it('renders exactly one cap projected-room display (no duplicate legacy block)', async () => {
+    const { findByLabelText, getByTestId, queryAllByTestId, container } = render(
+      <TradeCenter league={makeLeague()} actions={makeActions()} />,
+    );
+
+    fireEvent.click(await findByLabelText(/Add to Trade Give Guy/i));
+    fireEvent.click(await findByLabelText(/Add to Trade Get Guy/i));
+
+    await waitFor(() => {
+      expect(getByTestId('cap-impact-summary')).toBeTruthy();
+    });
+
+    // Only the shared CapImpactSummary should render the projected-room readout.
+    expect(queryAllByTestId('cap-impact-summary')).toHaveLength(1);
+    // The legacy stacked "Cap After" block must be gone.
+    expect(container.textContent).not.toContain('CAPSPACEAFTER');
+    expect(container.textContent).not.toMatch(/CHI · Cap After/);
+  });
+
   it('reports a rejected package clearly after a failed proposal', async () => {
     const { findByLabelText, getByTestId, getAllByText } = render(
       <TradeCenter league={makeLeague()} actions={makeActions()} />,
