@@ -219,6 +219,7 @@ import {
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot, buildHallOfFameInducteeRow, syncHallOfFameAfterRecordBook } from '../core/league-memory.js';
 import { buildPlayerSeasonStatsArchiveRows } from '../core/playerSeasonStatsArchive.js';
+import { attachSeasonStatsToRoster } from './viewStateStats.js';
 import {
   TRANSACTION_TIMELINE_SCHEMA_VERSION,
   compactRowsForArchive,
@@ -1047,7 +1048,12 @@ function buildViewState() {
   const standingsRows = resolveStandingsRows(meta, standingsContext);
   const tradeDeadline = getTradeDeadlineSnapshot(meta);
   const teams = cache.getAllTeams().map(t => {
-    const roster = cache.getPlayersByTeam(t.id);
+    // Attach recorded season totals so the League Stats hub (which reads
+    // player.seasonStats) shows real leaders instead of all-zero placeholders.
+    const roster = attachSeasonStatsToRoster(
+      cache.getPlayersByTeam(t.id),
+      (pid) => cache.getSeasonStat(pid)?.totals,
+    );
     return ({
     id:        t.id,
     name:      t.name,
@@ -2138,6 +2144,14 @@ async function loadSave() {
   ]);
 
   cache.hydrate({ meta, teams, players, draftPicks });
+  // Backfill persisted current-season stats. hydrate() clears _seasonStats and
+  // only restores meta/teams/players/draftPicks, so without this the League
+  // Stats view model rebuilds from roster players with no seasonStats and shows
+  // zero leaders after a reload — even when games were already recorded.
+  if (meta?.currentSeasonId != null) {
+    const seasonStatRows = await PlayerStats.bySeason(meta.currentSeasonId).catch(() => []);
+    cache.hydrateSeasonStats(seasonStatRows);
+  }
   hydrateAllPlayersForDevelopment();
   return true;
 }

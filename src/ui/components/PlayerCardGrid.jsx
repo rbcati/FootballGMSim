@@ -15,6 +15,7 @@
 
 import React, { useState, useMemo } from "react";
 import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
+import { toPlayerId, toEntityKey } from "../utils/entityId.js";
 import FaceAvatar from "./FaceAvatar.jsx";
 
 // ── Colour maps ────────────────────────────────────────────────────────────────
@@ -52,7 +53,9 @@ function getAttrValue(player, key) {
   if (src[key] != null) return Math.round(src[key]);
   // Deterministic fallback using OVR + key seed so cards look consistent
   const ovr  = player.ovr ?? 70;
-  const base = (player.id ?? "x").split("").reduce((h, c) => h * 31 + c.charCodeAt(0), 0) & 0xffff;
+  // toPlayerId guarantees a string — player.id may be numeric/missing/object,
+  // and calling .split() on a raw numeric id throws "split is not a function".
+  const base = toPlayerId(player, "x").split("").reduce((h, c) => h * 31 + c.charCodeAt(0), 0) & 0xffff;
   const seed = (base + key.charCodeAt(0) * 17) & 0xffff;
   const norm = ((seed * 1664525 + 1013904223) & 0xffff) / 0xffff;
   return Math.round(Math.min(99, Math.max(40, ovr + (norm - 0.5) * 20)));
@@ -257,8 +260,16 @@ export default function PlayerCardGrid({ roster = [], onPlayerSelect }) {
   const [sortKey,   setSortKey]   = useState("ovr");
   const [sortDesc,  setSortDesc]  = useState(true);
 
+  // Normalize once: drop null/non-object rows so neither the filter-pill counts
+  // nor the grid render ever throw on malformed save data. Malformed rows are
+  // skipped (not crashed on); the rest render with fallback labels.
+  const safeRoster = useMemo(
+    () => (Array.isArray(roster) ? roster : []).filter((p) => p && typeof p === "object"),
+    [roster],
+  );
+
   const filtered = useMemo(() => {
-    let players = [...roster];
+    let players = [...safeRoster];
 
     // Position filter
     const group = POSITION_GROUPS.find(g => g.label === posFilter);
@@ -293,7 +304,7 @@ export default function PlayerCardGrid({ roster = [], onPlayerSelect }) {
     });
 
     return players;
-  }, [roster, posFilter, sortKey, sortDesc]);
+  }, [safeRoster, posFilter, sortKey, sortDesc]);
 
   function toggleSort(key) {
     if (sortKey === key) {
@@ -318,8 +329,8 @@ export default function PlayerCardGrid({ roster = [], onPlayerSelect }) {
           const isActive  = posFilter === g.label;
           const posClr    = POS_COLORS[g.label];
           const count     = g.positions
-            ? roster.filter(p => g.positions.includes(p.pos ?? p.position)).length
-            : roster.length;
+            ? safeRoster.filter(p => g.positions.includes(p.pos ?? p.position)).length
+            : safeRoster.length;
 
           return (
             <button
@@ -399,7 +410,7 @@ export default function PlayerCardGrid({ roster = [], onPlayerSelect }) {
         }}>
           {filtered.map((player, i) => (
             <div
-              key={player.id}
+              key={toEntityKey(player.id ?? player.pid, i, "player")}
               className={`stagger-${Math.min(i + 1, 8)}`}
               style={{ animationDelay: `${Math.min(i, 7) * 30}ms` }}
             >

@@ -213,6 +213,30 @@ export const cache = {
     }
     _dirty.seasonStats.add(playerId);
   },
+  /**
+   * Restore persisted current-season stat rows from the DB on load.
+   *
+   * hydrate() clears _seasonStats, and the load pipeline only restores
+   * meta/teams/players/draftPicks — so after a reload the accumulators are
+   * empty until something backfills them. Without this, any consumer that reads
+   * live totals (e.g. the League Stats view model) shows zero leaders for a
+   * save that already has recorded games. Does NOT mark anything dirty (the
+   * data came straight from the DB) and never clobbers a fresher live entry.
+   */
+  hydrateSeasonStats: (rows = []) => {
+    if (!Array.isArray(rows)) return;
+    for (const row of rows) {
+      if (!row || row.playerId == null) continue;
+      const key = String(row.playerId);
+      if (_seasonStats.has(key)) continue; // prefer in-memory (freshest)
+      _seasonStats.set(key, {
+        seasonId: row.seasonId ?? _meta?.currentSeasonId,
+        playerId: key,
+        teamId: row.teamId,
+        totals: (row.totals && typeof row.totals === 'object') ? row.totals : {},
+      });
+    }
+  },
 
   // --- Draft picks ---
 
