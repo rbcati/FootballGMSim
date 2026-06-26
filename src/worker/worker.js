@@ -2144,6 +2144,14 @@ async function loadSave() {
   ]);
 
   cache.hydrate({ meta, teams, players, draftPicks });
+  // Backfill persisted current-season stats. hydrate() clears _seasonStats and
+  // only restores meta/teams/players/draftPicks, so without this the League
+  // Stats view model rebuilds from roster players with no seasonStats and shows
+  // zero leaders after a reload — even when games were already recorded.
+  if (meta?.currentSeasonId != null) {
+    const seasonStatRows = await PlayerStats.bySeason(meta.currentSeasonId).catch(() => []);
+    cache.hydrateSeasonStats(seasonStatRows);
+  }
   hydrateAllPlayersForDevelopment();
   return true;
 }
