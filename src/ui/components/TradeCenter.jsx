@@ -30,6 +30,7 @@ import { logCompletedTradeAction, persistFranchiseChronicle } from "../utils/fra
 import { getPickBaseValueFromMatrix } from "../../core/trades/tradeValuationModifiers.js";
 import FrontOfficeBadge from "./FrontOfficeBadge.jsx";
 import { getHotSeatStatus } from "../../core/meta/ownerPressureEngine.js";
+import CapImpactSummary from "./common/CapImpactSummary.jsx";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -71,13 +72,27 @@ function PlayerCheckRow({ player, checked, onChange, onNameClick }) {
   const asset = buildTradeAssetDisplay(player, { type: 'player' });
   return (
     <label className={`trade-asset-row ${checked ? "is-selected" : ""}`}>
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(player.id, e.target.checked)} style={{ accentColor: "var(--accent)", width: 16, height: 16 }} />
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(player.id, e.target.checked)}
+        aria-label={`${checked ? "Remove" : "Add to Trade"} ${asset.title}`}
+        title={checked ? "Remove from trade" : "Add to Trade"}
+        style={{ accentColor: "var(--accent)", width: 18, height: 18 }}
+      />
       <OvrBadge ovr={player.ovr} />
       <span className="trade-asset-row__pos">{player.pos}</span>
-      <span className="trade-asset-row__name" onClick={(e) => { e.preventDefault(); onNameClick?.(player.id); }}>
+      <button
+        type="button"
+        className="trade-asset-row__name"
+        aria-label={`View Player ${asset.title}`}
+        title="View Player"
+        onClick={(e) => { e.preventDefault(); onNameClick?.(player.id); }}
+        style={{ background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", color: "inherit", font: "inherit" }}
+      >
         <strong>{asset.title}</strong>
         <small>{asset.subtitle}</small>
-      </span>
+      </button>
       <span className="trade-asset-row__salary">{asset.meta}</span>
     </label>
   );
@@ -482,6 +497,19 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     const absorbed = [...offering].reduce((s, id) => s + (myRosterMap.get(toAssetId(id))?.contract?.baseAnnual ?? 0), 0);
     return Math.round((base + freed - absorbed) * 10) / 10;
   }, [offering, receiving, myRosterMap, theirRosterMap, liveTheirTeam]);
+
+  // Salary moving in/out of the user's books — surfaced in the cap breakdown so
+  // the user sees incoming vs outgoing money before proposing. Pure display
+  // figures; they do not feed the acceptance/valuation engine.
+  const myIncomingSalary = useMemo(
+    () => [...receiving].reduce((s, id) => s + (theirRosterMap.get(toAssetId(id))?.contract?.baseAnnual ?? 0), 0),
+    [receiving, theirRosterMap],
+  );
+  const myOutgoingSalary = useMemo(
+    () => [...offering].reduce((s, id) => s + (myRosterMap.get(toAssetId(id))?.contract?.baseAnnual ?? 0), 0),
+    [offering, myRosterMap],
+  );
+
   const tradeImpact = useMemo(() => {
     const incomingPositions = [...receiving].map((id) => theirRosterMap.get(toAssetId(id))?.pos).filter(Boolean);
     const outgoingPositions = [...offering].map((id) => myRosterMap.get(toAssetId(id))?.pos).filter(Boolean);
@@ -569,6 +597,17 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     if (theirCapAfter < 0) blockers.push("Their team would be over the cap after this package.");
     return blockers;
   }, [targetId, hasSelection, tradeLocked, lockReason, myCapAfter, theirCapAfter]);
+
+  // Single, explicit package status so the user always knows what state the
+  // builder is in. Derived from existing data only — no logic change.
+  const tradeStatus = useMemo(() => {
+    if (tradeResult?.error) return { tone: "danger", label: "Invalid trade", detail: "Missing team or player data — reload the partner and rebuild the package." };
+    if (tradeResult?.accepted) return { tone: "success", label: "Trade accepted", detail: "The deal went through. Build another package or switch partners." };
+    if (tradeResult) return { tone: "danger", label: "Trade rejected", detail: "See the response below, then adjust your package and try again." };
+    if (!hasSelection) return { tone: "muted", label: "No assets selected", detail: "Add at least one player or pick on either side to start a package." };
+    if (tradeBlockers.length) return { tone: "warning", label: "Not ready to propose", detail: "Resolve the issue(s) below before sending this package." };
+    return { tone: "success", label: "Package ready to propose", detail: "Review the cap impact, then Propose Trade." };
+  }, [tradeResult, hasSelection, tradeBlockers.length]);
 
 
   useEffect(() => {
@@ -754,7 +793,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     />
     <StickySubnav title="Package actions">
       {targetId && <Button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting || tradeLocked}>{submitting ? "Evaluating…" : counterOfferId ? "Send Counter" : "Propose Trade"}</Button>}
-      <Button className="btn" onClick={() => { setOffering(new Set()); setReceiving(new Set()); setMyPicks([]); setTheirPicks([]); }}>Clear package</Button>
+      <Button className="btn" onClick={() => { setOffering(new Set()); setReceiving(new Set()); setMyPicks([]); setTheirPicks([]); setTradeResult(null); }}>Clear Trade</Button>
     </StickySubnav>
     <Card className="card-premium"><CardContent className="p-4 trade-center-v2">
       <div style={{ marginBottom: 'var(--space-4)' }}>
@@ -1001,6 +1040,29 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
         </div>
       )}
 
+      {/* Explicit package status — always tells the user where they stand. */}
+      {(() => {
+        const toneColor = tradeStatus.tone === "success"
+          ? "var(--success)"
+          : tradeStatus.tone === "danger"
+            ? "var(--danger)"
+            : tradeStatus.tone === "warning"
+              ? "var(--warning)"
+              : "var(--text-muted)";
+        return (
+          <div
+            data-testid="trade-status-banner"
+            data-tone={tradeStatus.tone}
+            role={tradeStatus.tone === "danger" ? "alert" : "status"}
+            className="card"
+            style={{ padding: "var(--space-3)", marginBottom: "var(--space-3)", display: "grid", gap: 2, borderLeft: `3px solid ${toneColor}` }}
+          >
+            <strong style={{ fontSize: "var(--text-sm)", color: toneColor }}>{tradeStatus.label}</strong>
+            <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{tradeStatus.detail}</span>
+          </div>
+        );
+      })()}
+
       {/* Trade result (original) */}
       {tradeResult && <TradeResult result={tradeResult} onDismiss={() => setTradeResult(null)} />}
       {tradeBlockers.length > 0 && (
@@ -1026,6 +1088,17 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
             <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
               <ValueBar myValue={myOfferValue} theirValue={theirOfferValue} />
               <CapImpact myTeam={liveMyTeam} theirTeam={liveTheirTeam} myCapAfter={myCapAfter} theirCapAfter={theirCapAfter} />
+              <div style={{ marginTop: "var(--space-3)" }}>
+                <CapImpactSummary
+                  title={`${liveMyTeam?.abbr ?? "Your"} cap impact`}
+                  currentRoom={liveMyTeam?.capRoom ?? 0}
+                  incoming={myIncomingSalary}
+                  outgoing={myOutgoingSalary}
+                  projectedRoom={myCapAfter}
+                  incomingLabel="Salary coming in"
+                  outgoingLabel="Salary going out"
+                />
+              </div>
               <div style={{ marginTop: 10, display: "grid", gap: 4, fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
                 <div>{tradeImpact.needHits.length ? `Addresses needs: ${tradeImpact.needHits.join(", ")}` : "Does not directly hit a top need yet."}</div>
                 <div>{tradeImpact.surplusMoved.length ? `Moves surplus from: ${tradeImpact.surplusMoved.join(", ")}` : "Not moving a clear surplus group."}</div>
@@ -1062,7 +1135,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
             {/* You Give */}
             <div className="card trade-panel-card" style={{ padding: 0, overflow: "hidden" }}>
               <div className="trade-panel-card__head">
-                <span>You Give</span>
+                <span>Your Assets · You Give</span>
                 <span className={`trade-panel-card__count ${offering.size > 0 || myPicks.length > 0 ? "is-active" : ""}`}>{offering.size + myPicks.length} selected</span>
               </div>
               <div style={{ maxHeight: 360, overflowY: "auto" }}>
@@ -1076,7 +1149,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
             {/* You Receive */}
             <div className="card trade-panel-card" style={{ padding: 0, overflow: "hidden" }}>
               <div className="trade-panel-card__head">
-                <span>You Receive</span>
+                <span>Their Assets · You Receive</span>
                 <span className={`trade-panel-card__count ${receiving.size > 0 || theirPicks.length > 0 ? "is-active" : ""}`}>{receiving.size + theirPicks.length} selected</span>
               </div>
               <div style={{ maxHeight: 360, overflowY: "auto" }}>

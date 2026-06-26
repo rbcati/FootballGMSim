@@ -44,7 +44,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { computeTeamNeedsSummary, formatNeedsLine, summarizeFreeAgentMarket } from "../utils/marketSignals.js";
 import { buildDirectionGuidance, buildTeamIntelligence, scoreFreeAgentForTeam } from "../utils/teamIntelligence.js";
 import { getBudgetLabel, getMarketPlayerTags, toneToCssColor } from "../utils/transactionMarket.js";
-import { ScreenHeader, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
+import { ScreenHeader, StickySubnav } from "./ScreenSystem.jsx";
 import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
 import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
 import { buildPlayerEvaluation } from "../../core/playerEvaluation.js";
@@ -56,6 +56,7 @@ import { buildContractOfferInsight, toneToContractInsightColor } from "../utils/
 import { evaluatePendingOfferCapReservation } from "../../core/pendingOfferCapModel.js";
 import { buildShowingLabel, stableSortRows } from "../utils/dataBrowser.js";
 import { resolveFreeAgencyLoadStatus } from "../utils/freeAgencyLoadStatus.js";
+import StatusEmptyState from "./common/StatusEmptyState.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1558,19 +1559,12 @@ export default function FreeAgency({
       {/* Main Table Card */}
       <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
         {loadStatus.state !== "ready" ? (
-          <div
-            role={loadStatus.state === "error" ? "alert" : "status"}
-            data-testid="fa-load-status"
-            data-state={loadStatus.state}
-            style={{
-              padding: "var(--space-10)",
-              textAlign: "center",
-              color: loadStatus.state === "error" ? "var(--danger)" : "var(--text-muted)",
-            }}
-          >
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>{loadStatus.title}</div>
-            <div style={{ fontSize: "var(--text-sm)" }}>{loadStatus.body}</div>
-          </div>
+          <StatusEmptyState
+            testId="fa-load-status"
+            state={loadStatus.state}
+            title={loadStatus.title}
+            body={loadStatus.body}
+          />
         ) : (
           <div>
             {viewMode === "table" && <div className="desktop-only table-wrapper" style={{ overflowX: "auto" }}>
@@ -1657,13 +1651,16 @@ export default function FreeAgency({
                     <TableRow>
                       <TableCell
                         colSpan={11}
-                        style={{
-                          textAlign: "center",
-                          padding: "var(--space-8)",
-                          color: "var(--text-muted)",
-                        }}
+                        style={{ padding: 0 }}
                       >
-                        No free agents match your filter.
+                        <StatusEmptyState
+                          testId="fa-filtered-empty"
+                          state="filtered"
+                          title="No players match your filters."
+                          body="Adjust your filters, minimum OVR, or search to widen the pool."
+                          actionLabel="Reset filters"
+                          onAction={resetMarketFilters}
+                        />
                       </TableCell>
                     </TableRow>
                   )}
@@ -1926,11 +1923,15 @@ export default function FreeAgency({
             {viewMode === "cards" && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "var(--space-3)", padding: "var(--space-3)" }}>
                 {sortedAgents.length === 0 ? (
-                  <EmptyState
-                    title={faState?.phase === "offseason_resign" ? "No re-sign targets in this filter" : "No free agents match"}
+                  <StatusEmptyState
+                    testId="fa-filtered-empty"
+                    state="filtered"
+                    title={faState?.phase === "offseason_resign" ? "No re-sign targets match your filters." : "No players match your filters."}
                     body={faState?.phase === "offseason_resign"
-                      ? "Try broadening position filters or lower minimum OVR to find affordable retention options."
+                      ? "Try broadening position filters or lowering minimum OVR to find affordable retention options."
                       : "Adjust filters or open FA Hub to scout position pressure before returning here."}
+                    actionLabel="Reset filters"
+                    onAction={resetMarketFilters}
                   />
                 ) : null}
                 {sortedAgents.slice(0, 80).map((player, idx) => (
@@ -1962,11 +1963,15 @@ export default function FreeAgency({
             {/* Mobile Card Layout */}
             <div className="mobile-only" style={{ display: "none", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)" }}>
                {sortedAgents.length === 0 && (
-                  <EmptyState
-                    title={faState?.phase === "offseason_resign" ? "No re-sign targets in this filter" : "No free agents match"}
+                  <StatusEmptyState
+                    testId="fa-filtered-empty"
+                    state="filtered"
+                    title={faState?.phase === "offseason_resign" ? "No re-sign targets match your filters." : "No players match your filters."}
                     body={faState?.phase === "offseason_resign"
-                      ? "Try broadening position filters or lower minimum OVR to find affordable retention options."
+                      ? "Try broadening position filters or lowering minimum OVR to find affordable retention options."
                       : "Adjust filters, minimum OVR, or search criteria."}
+                    actionLabel="Reset filters"
+                    onAction={resetMarketFilters}
                   />
                )}
                {sortedAgents.slice(0, 100).map((player, idx) => {
