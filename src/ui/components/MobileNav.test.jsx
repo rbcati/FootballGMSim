@@ -33,8 +33,32 @@ describe('MobileNav', () => {
     );
 
     expect(html).toContain('Command Menu');
-    expect(html).toContain('Trades');
+    expect(html).toContain('Trade');
     expect(html).toContain('Free Agency');
     expect(html).toContain('League');
+  });
+
+  it('surfaces the weekly-loop group first with core destinations reachable', () => {
+    const html = renderToString(
+      <MobileNav
+        activeSection={SHELL_SECTIONS.hq}
+        onSectionChange={vi.fn()}
+        onDestinationChange={vi.fn()}
+        league={{ year: 2026, phase: 'regular' }}
+      />,
+    );
+
+    // Weekly Loop group is present and ordered ahead of Front Office.
+    expect(html).toContain('Weekly Loop');
+    expect(html).toContain('Front Office');
+    expect(html.indexOf('Weekly Loop')).toBeLessThan(html.indexOf('Front Office'));
+
+    // Core weekly-loop destinations are reachable from the drawer on mobile.
+    for (const label of ['Weekly Results', 'Schedule', 'Standings', 'League Stats']) {
+      expect(html).toContain(label);
+    }
+    // No vague "office/management" hub headings remain in the drawer.
+    expect(html).not.toContain('League Office');
+    expect(html).not.toContain('Team Management');
   });
 });

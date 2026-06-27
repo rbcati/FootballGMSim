@@ -95,6 +95,12 @@ import {
 } from "../utils/shellNavigation.js";
 import { usePhaseRouteHydration } from "../hooks/usePhaseRouteHydration.js";
 import { getPlayerProfileId, hasValidPlayerProfileId } from "../utils/playerProfileNavigation.js";
+import {
+  getPageOrientation,
+  getSectionSubtitle,
+  getTabDisplayLabel,
+} from "../constants/navigationCopy.js";
+import { NAV_GROUPS, HQ_QUICK_TABS } from "../constants/primaryNav.js";
 
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
@@ -222,13 +228,6 @@ const BASE_TABS = [
   "🎙️ Coaches",
 ];
 
-const NAV_GROUPS = [
-  { id: SHELL_SECTIONS.hq, title: "HQ", tabs: ["HQ"] },
-  { id: SHELL_SECTIONS.team, title: "Team Management", tabs: ["Team", "Roster Hub", "Roster", "Depth Chart", "Weekly Prep", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center", "💰 Cap"] },
-  { id: SHELL_SECTIONS.league, title: "League Office", tabs: ["League", "Weekly Results", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "Free Agency", "Draft", "History Hub", "Draft History", "History", "Awards & Records", "All-Time Records", "Season Recap"] },
-  { id: SHELL_SECTIONS.news, title: "News", tabs: ["News", "Story", "League Pulse"] },
-];
-
 const NAV_TEST_IDS = {
   [SHELL_SECTIONS.hq]: "nav-hq",
   [SHELL_SECTIONS.team]: "nav-team",
@@ -237,7 +236,6 @@ const NAV_TEST_IDS = {
 };
 
 const TEAM_FACING_TABS = new Set(["Roster", "Depth Chart", "Roster Hub", "Weekly Prep", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"]);
-const HQ_QUICK_TABS = ['Roster Hub', 'Schedule', 'Standings', 'Staff'];
 
 const TAB_ALIASES = {
   Trades: "Transactions",
@@ -928,6 +926,14 @@ export default function LeagueDashboard({
             </button>
           ))}
         </div>
+        {getSectionSubtitle(activeSection) ? (
+          <div
+            data-testid="section-subtitle"
+            style={{ fontSize: "11px", color: "var(--text-muted)", paddingLeft: 2, marginTop: -2 }}
+          >
+            {getSectionSubtitle(activeSection)}
+          </div>
+        ) : null}
         <div className="standings-tabs" style={{ flexWrap: "nowrap", overflowX: "auto", gap: 6 }}>
           {(activeSection === SHELL_SECTIONS.hq ? HQ_QUICK_TABS : (NAV_GROUPS.find((group) => group.id === activeSection)?.tabs ?? ['HQ']))
             .filter((tab) => TABS.includes(tab))
@@ -940,11 +946,24 @@ export default function LeagueDashboard({
                 aria-current={activeTab === tab ? "page" : undefined}
                 style={{ flexShrink: 0, fontSize: "11px", padding: "7px 10px" }}
               >
-                {tab}
+                {getTabDisplayLabel(tab)}
               </button>
             ))}
           </div>
       </div>}
+
+      {/* ── Page orientation: a clear "where am I / what is this page for" line.
+            HQ owns its own rich header, so skip it there to avoid duplication. ── */}
+      {!isMobile && activeTab !== "HQ" && getPageOrientation(activeTab) ? (
+        <div data-testid="page-orientation" className="page-orientation" style={{ marginBottom: "var(--space-3)" }}>
+          <div style={{ fontSize: "var(--text-lg)", fontWeight: 800, lineHeight: 1.15 }}>
+            {getPageOrientation(activeTab).title}
+          </div>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>
+            {getPageOrientation(activeTab).subtitle}
+          </div>
+        </div>
+      ) : null}
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}
       <div className="fade-in" key={activeTab}>
