@@ -1,33 +1,46 @@
 import React, { useState, useEffect } from 'react';
 import { SHELL_SECTIONS } from '../utils/shellNavigation.js';
 
+// More-drawer destinations. Ids are canonical dashboard tab ids that match the
+// LeagueDashboard content switch directly, so every entry routes to a real page.
+// Ordered weekly-loop first so the core game flow is reachable in one tap.
 const MORE_GROUPS = [
   {
-    title: 'Team Management',
+    title: 'Weekly Loop',
     items: [
-      { id: 'Team:Overview', label: 'Team Hub', icon: HomeIcon },
-      { id: 'Team:Roster / Depth', label: 'Roster / Depth', icon: RosterIcon },
-      { id: 'Staff', label: 'Staff', icon: StaffIcon },
-      { id: 'Training', label: 'Training', icon: TrainingIcon },
-      { id: 'Injuries', label: 'Injuries', icon: InjuryIcon },
-      { id: '💰 Cap', label: 'Cap / Financials', icon: FinancesIcon },
-      { id: 'Contract Center', label: 'Contracts', icon: ContractIcon },
+      { id: 'Weekly Results', label: 'Weekly Results', icon: StandingsIcon },
+      { id: 'Schedule', label: 'Schedule', icon: DraftIcon },
+      { id: 'Standings', label: 'Standings', icon: StandingsIcon },
+      { id: 'Stats', label: 'League Stats', icon: AnalyticsIcon },
     ],
   },
   {
-    title: 'League Office',
+    title: 'Team',
     items: [
-      { id: 'League:Overview', label: 'League Hub', icon: StandingsIcon },
-      { id: 'League:Results', label: 'Weekly Results', icon: StandingsIcon },
-      { id: 'Story', label: 'Story', icon: NewsIcon },
-      { id: 'Transactions', label: 'Trades', icon: TradesIcon },
+      { id: 'Roster Hub', label: 'Roster / Depth', icon: RosterIcon },
+      { id: 'Game Plan', label: 'Game Plan', icon: TrainingIcon },
+      { id: 'Staff', label: 'Staff', icon: StaffIcon },
+      { id: 'Injuries', label: 'Injuries', icon: InjuryIcon },
+      { id: 'Contract Center', label: 'Contracts', icon: ContractIcon },
+      { id: '💰 Cap', label: 'Salary Cap', icon: FinancesIcon },
+    ],
+  },
+  {
+    title: 'Front Office',
+    items: [
+      { id: 'Transactions', label: 'Trade', icon: TradesIcon },
       { id: 'Free Agency', label: 'Free Agency', icon: FAIcon },
       { id: 'Draft', label: 'Draft', icon: DraftIcon },
-      { id: 'league-leaders', label: 'League Leaders', icon: StandingsIcon },
       { id: 'History Hub', label: 'History', icon: HomeIcon },
+      { id: 'Awards & Records', label: 'Awards & Records', icon: StandingsIcon },
+    ],
+  },
+  {
+    title: 'Tools',
+    items: [
+      { id: '🤖 GM Advisor', label: 'GM Advisor', icon: AdvisorIcon },
       { id: 'Analytics', label: 'Analytics', icon: AnalyticsIcon },
       { id: 'Saves', label: 'Saves', icon: SaveIcon },
-      { id: '🤖 GM Advisor', label: 'GM Advisor', icon: AdvisorIcon },
       { id: 'God Mode', label: 'God Mode', icon: GodModeIcon },
     ],
   },
