@@ -96,11 +96,12 @@ import {
 import { usePhaseRouteHydration } from "../hooks/usePhaseRouteHydration.js";
 import { getPlayerProfileId, hasValidPlayerProfileId } from "../utils/playerProfileNavigation.js";
 import {
-  getPageOrientation,
   getSectionSubtitle,
   getTabDisplayLabel,
+  getNextActionLabel,
 } from "../constants/navigationCopy.js";
 import { NAV_GROUPS, HQ_QUICK_TABS } from "../constants/primaryNav.js";
+import PageOrientationHeader from "./PageOrientationHeader.jsx";
 
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
@@ -946,24 +947,17 @@ export default function LeagueDashboard({
                 aria-current={activeTab === tab ? "page" : undefined}
                 style={{ flexShrink: 0, fontSize: "11px", padding: "7px 10px" }}
               >
-                {getTabDisplayLabel(tab)}
+                {activeSection === SHELL_SECTIONS.hq ? getNextActionLabel(tab) : getTabDisplayLabel(tab)}
               </button>
             ))}
           </div>
       </div>}
 
       {/* ── Page orientation: a clear "where am I / what is this page for" line.
-            HQ owns its own rich header, so skip it there to avoid duplication. ── */}
-      {!isMobile && activeTab !== "HQ" && getPageOrientation(activeTab) ? (
-        <div data-testid="page-orientation" className="page-orientation" style={{ marginBottom: "var(--space-3)" }}>
-          <div style={{ fontSize: "var(--text-lg)", fontWeight: 800, lineHeight: 1.15 }}>
-            {getPageOrientation(activeTab).title}
-          </div>
-          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>
-            {getPageOrientation(activeTab).subtitle}
-          </div>
-        </div>
-      ) : null}
+            Rendered on both desktop and mobile so deep pages stay oriented on
+            small screens too. HQ owns its own rich header, so the component
+            skips it to avoid duplication. ── */}
+      <PageOrientationHeader tab={activeTab} />
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}
       <div className="fade-in" key={activeTab}>
