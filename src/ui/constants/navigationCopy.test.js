@@ -3,9 +3,11 @@ import {
   PAGE_ORIENTATION,
   SECTION_SUBTITLES,
   TAB_DISPLAY_LABELS,
+  HQ_NEXT_ACTIONS,
   getPageOrientation,
   getSectionSubtitle,
   getTabDisplayLabel,
+  getNextActionLabel,
 } from './navigationCopy.js';
 
 // Pages that must carry honest "where am I / what is this for" orientation copy.
@@ -22,6 +24,7 @@ const KEY_PAGES = [
   'Draft',
   'History Hub',
   'Awards & Records',
+  'Hall of Fame',
 ];
 
 describe('navigation page orientation copy', () => {
@@ -72,5 +75,29 @@ describe('tab display labels', () => {
   it('passes through ids that already read clearly', () => {
     expect(getTabDisplayLabel('Standings')).toBe('Standings');
     expect(getTabDisplayLabel('Free Agency')).toBe('Free Agency');
+  });
+});
+
+describe('HQ next-action cues', () => {
+  it('phrases the weekly-loop quick links as verb-first actions', () => {
+    expect(Object.isFrozen(HQ_NEXT_ACTIONS)).toBe(true);
+    expect(getNextActionLabel('Weekly Results')).toMatch(/review/i);
+    expect(getNextActionLabel('Roster Hub')).toMatch(/check roster/i);
+    expect(getNextActionLabel('Depth Chart')).toMatch(/depth chart/i);
+    expect(getNextActionLabel('Free Agency')).toMatch(/free agent/i);
+    expect(getNextActionLabel('Transactions')).toMatch(/trade/i);
+    expect(getNextActionLabel('Standings')).toMatch(/standings/i);
+  });
+
+  it('falls back to the display label for tabs without an action cue', () => {
+    // No action cue defined -> reuse the clarified display label, not a raw id.
+    expect(getNextActionLabel('History Hub')).toBe('History');
+    expect(getNextActionLabel('Draft')).toBe('Draft');
+  });
+
+  it('only references tabs that also carry page orientation copy', () => {
+    for (const tab of Object.keys(HQ_NEXT_ACTIONS)) {
+      expect(getPageOrientation(tab), `missing orientation for HQ action ${tab}`).toBeTruthy();
+    }
   });
 });

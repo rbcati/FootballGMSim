@@ -50,8 +50,19 @@ export const PAGE_ORIENTATION = Object.freeze({
   'Awards & Records': { title: 'Awards & Records', subtitle: 'Season awards and all-time records.' },
   'All-Time Records': { title: 'All-Time Records', subtitle: 'The league record book.' },
   'Season Recap': { title: 'Season Recap', subtitle: 'A look back at the season that was.' },
+  'Hall of Fame': { title: 'Hall of Fame', subtitle: 'The all-time greats enshrined across league history.' },
+  'Award Races': { title: 'Award Races', subtitle: 'Who is leading the MVP and other award races right now.' },
+  'Team History': { title: 'Team History', subtitle: 'Season-by-season results and franchise records.' },
+  Almanac: { title: 'League Almanac', subtitle: 'Champions, leaders, and milestones, year by year.' },
+  Postseason: { title: 'Postseason', subtitle: 'Playoff bracket, seeding, and results.' },
+  'Mock Draft': { title: 'Mock Draft', subtitle: 'Simulate how the draft board could fall.' },
+  Offseason: { title: 'Offseason', subtitle: 'Work through the offseason checklist toward the new season.' },
+  Analytics: { title: 'Analytics', subtitle: 'Advanced team and player performance metrics.' },
 
   News: { title: 'News', subtitle: 'League headlines, storylines, and your franchise pulse.' },
+  Story: { title: 'Franchise Story', subtitle: 'Your franchise narrative and major storylines.' },
+  'League Pulse': { title: 'League Pulse', subtitle: 'The mood and momentum shifts across the league.' },
+  '🤖 GM Advisor': { title: 'GM Advisor', subtitle: 'Suggested next moves for your franchise.' },
 });
 
 // Display-label overrides for sub-nav buttons. The underlying tab id (used for
@@ -75,6 +86,25 @@ export function getSectionSubtitle(sectionId) {
 
 export function getTabDisplayLabel(tab) {
   return TAB_DISPLAY_LABELS[tab] ?? tab;
+}
+
+// Action-phrased labels for the HQ next-action quick links. The underlying tab id
+// (used for routing and `section-tab-*` test ids) is unchanged — only the visible
+// chip text becomes a verb-first cue ("Check Roster" vs. a bare "Roster Hub") so a
+// new GM reads HQ as a weekly to-do list. Keyed by canonical tab id. Display only.
+export const HQ_NEXT_ACTIONS = Object.freeze({
+  'Weekly Results': 'Review Results',
+  Schedule: 'View Schedule',
+  'Roster Hub': 'Check Roster',
+  'Depth Chart': 'Set Depth Chart',
+  Standings: 'View Standings',
+  Stats: 'View Stats',
+  'Free Agency': 'Check Free Agents',
+  Transactions: 'Review Trade Market',
+});
+
+export function getNextActionLabel(tab) {
+  return HQ_NEXT_ACTIONS[tab] ?? getTabDisplayLabel(tab);
 }
 
 export const ACTION_LABELS = Object.freeze({
