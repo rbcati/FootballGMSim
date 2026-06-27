@@ -57,6 +57,7 @@ import { evaluatePendingOfferCapReservation } from "../../core/pendingOfferCapMo
 import { buildShowingLabel, stableSortRows } from "../utils/dataBrowser.js";
 import { resolveFreeAgencyLoadStatus } from "../utils/freeAgencyLoadStatus.js";
 import StatusEmptyState from "./common/StatusEmptyState.jsx";
+import CapImpactSummary from "./common/CapImpactSummary.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -598,6 +599,9 @@ export function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit 
       },
     });
   }, [pendingCapContext, player, annual, years]);
+  // projectedRoom reuses the same post-move figure already shown in this form:
+  // the after-pending reservation when available, otherwise a display estimate of
+  // currentRoom - annual cap hit consistent with the other figures on screen.
   const postMoveCap = proposedReservation?.estimatedCapRoomAfterPending ?? (Number(capRoom) - Number(annual || 0));
   const postMoveRoster = Number(rosterCount) + 1;
   const projectedWarnings = proposedReservation?.warnings ?? [];
@@ -741,6 +745,18 @@ export function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit 
             Confirm Bid
           </Button>
         </div>
+      </div>
+
+      {/* Current → this deal → projected room readout at the point of commit. */}
+      <div style={{ marginTop: "var(--space-3)", maxWidth: 360 }}>
+        <CapImpactSummary
+          title={`Sign ${player.name} · cap impact`}
+          currentRoom={capRoom}
+          incoming={Number(annual || 0)}
+          outgoing={0}
+          projectedRoom={postMoveCap}
+          incomingLabel="This contract (annual)"
+        />
       </div>
     </Wrapper>
   );

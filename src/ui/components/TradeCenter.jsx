@@ -125,25 +125,6 @@ function ValueBar({ myValue, theirValue }) {
   );
 }
 
-function CapImpact({ myTeam, theirTeam, myCapAfter, theirCapAfter }) {
-  const myCol = myCapAfter < 0 ? "var(--danger)" : myCapAfter < 10 ? "var(--warning)" : "var(--success)";
-  const theirCol = theirCapAfter < 0 ? "var(--danger)" : theirCapAfter < 10 ? "var(--warning)" : "var(--success)";
-  const fmtCap = (val) => (val < 0 ? `-$${Math.abs(val).toFixed(1)}M` : `$${val.toFixed(1)}M`);
-  return (
-    <div style={{ marginTop: "var(--space-4)", display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: "var(--space-3)" }}>
-      <div>
-        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>{myTeam?.abbr ?? "You"} · Cap After</div>
-        <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: myCol }}>{fmtCap(myCapAfter)}</div>
-      </div>
-      <div style={{ textAlign: "center", color: "var(--text-subtle)", fontSize: "var(--text-xs)", lineHeight: 1.3 }}>CAP<br/>SPACE<br/>AFTER</div>
-      <div style={{ textAlign: "right" }}>
-        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 2 }}>{theirTeam?.abbr ?? "Them"} · Cap After</div>
-        <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: theirCol }}>{fmtCap(theirCapAfter)}</div>
-      </div>
-    </div>
-  );
-}
-
 function pickLabel(pk) {
   const display = buildTradeAssetDisplay(pk, { type: 'pick' });
   return `${display.title}${display.subtitle ? ` · ${display.subtitle}` : ''}`;
@@ -1087,7 +1068,6 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
           {hasSelection && (
             <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
               <ValueBar myValue={myOfferValue} theirValue={theirOfferValue} />
-              <CapImpact myTeam={liveMyTeam} theirTeam={liveTheirTeam} myCapAfter={myCapAfter} theirCapAfter={theirCapAfter} />
               <div style={{ marginTop: "var(--space-3)" }}>
                 <CapImpactSummary
                   title={`${liveMyTeam?.abbr ?? "Your"} cap impact`}
