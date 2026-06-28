@@ -1007,6 +1007,72 @@
   line-height: 1.1;
 }
 
+/* ── Post-sim compact status strip (dismissible) ─────────────────────────── */
+.hq-postsim-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface) 93%);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.hq-postsim-strip__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-muted);
+  min-height: 32px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hq-postsim-strip__main:hover,
+.hq-postsim-strip__main:focus-visible {
+  color: var(--text);
+}
+
+.hq-postsim-strip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.hq-postsim-strip__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hq-postsim-strip__dismiss {
+  flex-shrink: 0;
+  width: 36px;
+  min-height: 32px;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--hairline);
+  color: var(--text-subtle);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.hq-postsim-strip__dismiss:hover,
+.hq-postsim-strip__dismiss:focus-visible {
+  color: var(--text);
+}
+
 /* ── Single-line status rows (last result / next game) ───────────────────── */
 .hq-status-row {
   display: flex;

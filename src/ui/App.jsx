@@ -53,6 +53,7 @@ import EventDecisionModal from './components/EventDecisionModal.jsx';
 import { SettingsProvider, useSettings } from './context/SettingsContext.jsx';
 import { ACTION_LABELS, formatRegularUnitLabel } from './constants/navigationCopy.js';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from './utils/boxScoreAccess.js';
+import { getDisplayableNotifications } from './utils/notificationsDisplay.js';
 import { buildOffseasonActionCenter } from './utils/offseasonActionCenter.js';
 import {
   hasMinimumPlayableLeague,
@@ -1343,9 +1344,12 @@ function AppContent() {
       ) : null}
 
       {/* ── Notifications ──────────────────────────────────────────────── */}
-      {Array.isArray(notifications) && notifications.length > 0 && (
+      {/* Only notifications with real, visible content render a dismissible
+          pill — empty entries would otherwise show as a blank gray block with
+          just an "×" in the post-sim / weekly-results area. */}
+      {getDisplayableNotifications(notifications).length > 0 && (
         <div className="app-notifications">
-          {notifications.map(n => (
+          {getDisplayableNotifications(notifications).map(n => (
             <div
               key={n.id}
               className={`app-notification ${n.level === 'warn' ? 'app-notification-warn' : 'app-notification-info'}`}

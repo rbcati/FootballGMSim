@@ -840,6 +840,16 @@
   }
 }
 
+/* ── Focused Game Book review: collapse the fixed nav chrome ──────────────────
+   During completed-game / Game Book review the bottom nav and hamburger are
+   collapsed so the result, score, and return action are never boxed in. The
+   surface keeps its own back action, so navigation is not lost. The collapse
+   uses display:none, so no safe-area padding can clip review content. */
+.mobile-bottom-bar.is-collapsed,
+.mobile-nav-hamburger.is-collapsed {
+  display: none !important;
+}
+
 .mobile-bottom-tab {
   display: flex;
   flex-direction: column;
@@ -1560,3 +1570,72 @@
     margin-bottom: 6px;
   }
 }
+
+/* ── Compact sticky Game Book header ──────────────────────────────────────────
+   A thin, sticky chrome row at the top of the Game Book that keeps the return
+   action, week, and final score / W-L result visible above the fold on mobile.
+   It is intentionally low-weight and reuses existing design tokens. */
+.game-book-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px max(10px, env(safe-area-inset-right)) 8px max(10px, env(safe-area-inset-left));
+  background: color-mix(in srgb, var(--surface-strong) 92%, black 8%);
+  border-bottom: 1px solid var(--hairline);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.game-book-sticky-header__back {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.game-book-sticky-header__week {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.game-book-sticky-header__score {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  color: var(--text);
+}
+
+.game-book-sticky-header__score--pending {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.game-book-sticky-header__teams {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-book-sticky-header__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill, 999px);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+}
+.game-book-sticky-header__badge.tone-ok { background: var(--success, #34C759); }
+.game-book-sticky-header__badge.tone-danger { background: var(--danger, #FF453A); }
+.game-book-sticky-header__badge.tone-info { background: var(--accent, #0A84FF); }
