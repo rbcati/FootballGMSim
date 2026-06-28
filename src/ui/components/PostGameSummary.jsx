@@ -8,21 +8,11 @@
 
 import React, { useEffect, useRef, useMemo } from 'react';
 import { buildPostgameEmotionalFrame } from '../utils/postgameEmotionalFrame.js';
+import GameResultSummaryCard from './GameResultSummaryCard.jsx';
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
-}
-
-function teamColor(abbr = '') {
-  const palette = [
-    '#0A84FF', '#34C759', '#FF9F0A', '#FF453A', '#5E5CE6',
-    '#64D2FF', '#FFD60A', '#30D158', '#FF6961', '#AEC6CF',
-    '#FF6B35', '#B4A0E5',
-  ];
-  let h = 0;
-  for (let i = 0; i < abbr.length; i++) h = abbr.charCodeAt(i) + ((h << 5) - h);
-  return palette[Math.abs(h) % palette.length];
 }
 
 function MomentumBadge({ change }) {
@@ -139,8 +129,6 @@ export default function PostGameSummary({
 
   const homeAbbr = homeTeam?.abbr ?? gameResult.homeAbbr ?? 'HOME';
   const awayAbbr = awayTeam?.abbr ?? gameResult.awayAbbr ?? 'AWAY';
-  const hColor = teamColor(homeAbbr);
-  const aColor = teamColor(awayAbbr);
 
   const injuryList = Array.isArray(injuries) ? injuries.filter(Boolean) : [];
 
@@ -180,66 +168,17 @@ export default function PostGameSummary({
           <MomentumBadge change={momentumChange} />
         </div>
 
-        {/* Score card */}
-        <div style={{
-          background: 'var(--surface)',
-          border: '1.5px solid var(--hairline)',
-          borderRadius: 16,
-          padding: '20px 24px',
-          marginBottom: 14,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            {/* Away */}
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{
-                width: 48, height: 48, borderRadius: '50%', margin: '0 auto 8px',
-                background: `${aColor}20`, border: `2.5px solid ${aColor}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontWeight: 900, fontSize: 13, color: aColor,
-              }}>
-                {awayAbbr.slice(0, 3)}
-              </div>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 3 }}>
-                {awayTeam?.name ?? awayAbbr}
-              </div>
-              <div style={{
-                fontSize: '2.6rem', fontWeight: 900,
-                color: !homeWon && !tied ? aColor : 'var(--text-muted)',
-                fontVariantNumeric: 'tabular-nums', lineHeight: 1,
-              }}>
-                {awayScore}
-              </div>
-            </div>
-
-            <div style={{ textAlign: 'center', padding: '0 10px' }}>
-              <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-subtle)', letterSpacing: '1px', textTransform: 'uppercase' }}>
-                FINAL
-              </div>
-            </div>
-
-            {/* Home */}
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{
-                width: 48, height: 48, borderRadius: '50%', margin: '0 auto 8px',
-                background: `${hColor}20`, border: `2.5px solid ${hColor}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontWeight: 900, fontSize: 13, color: hColor,
-              }}>
-                {homeAbbr.slice(0, 3)}
-              </div>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 3 }}>
-                {homeTeam?.name ?? homeAbbr}
-              </div>
-              <div style={{
-                fontSize: '2.6rem', fontWeight: 900,
-                color: homeWon ? hColor : 'var(--text-muted)',
-                fontVariantNumeric: 'tabular-nums', lineHeight: 1,
-              }}>
-                {homeScore}
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Canonical final-score card (shared with Franchise HQ) */}
+        <GameResultSummaryCard
+          variant="full"
+          testId="post-game-summary-result-card"
+          awayAbbr={awayAbbr}
+          awayName={awayTeam?.name ?? awayAbbr}
+          awayScore={awayScore}
+          homeAbbr={homeAbbr}
+          homeName={homeTeam?.name ?? homeAbbr}
+          homeScore={homeScore}
+        />
 
         {/* Game leaders */}
         {Array.isArray(leaders) && leaders.length > 0 && (

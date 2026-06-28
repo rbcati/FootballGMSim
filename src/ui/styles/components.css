@@ -1367,3 +1367,19 @@ details[open] .app-hq-background-section__summary span { transform: rotate(180de
 }
 .activity-toast__dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .activity-toast__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Page orientation header — compact "where am I / what is this page for" cue.
+   Class-based so it carries no inline styles; uses spacing + muted text tokens. */
+.page-orientation {
+  margin-bottom: var(--space-3);
+}
+.page-orientation__title {
+  font-size: var(--text-lg);
+  font-weight: 800;
+  line-height: 1.15;
+}
+.page-orientation__subtitle {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}

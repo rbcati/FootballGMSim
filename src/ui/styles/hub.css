@@ -1165,6 +1165,19 @@
   flex-shrink: 0;
 }
 
+.hq-status-row__cta {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent);
+  flex-shrink: 0;
+  letter-spacing: 0.01em;
+}
+
+.hq-status-row:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
 .hq-status-row__chevron {
   font-size: 13px;
   color: var(--text-subtle);

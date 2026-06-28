@@ -97,8 +97,7 @@ import { usePhaseRouteHydration } from "../hooks/usePhaseRouteHydration.js";
 import { getPlayerProfileId, hasValidPlayerProfileId } from "../utils/playerProfileNavigation.js";
 import {
   getSectionSubtitle,
-  getTabDisplayLabel,
-  getNextActionLabel,
+  getTabLabel,
 } from "../constants/navigationCopy.js";
 import { NAV_GROUPS, HQ_QUICK_TABS } from "../constants/primaryNav.js";
 import PageOrientationHeader from "./PageOrientationHeader.jsx";
@@ -952,7 +951,7 @@ export default function LeagueDashboard({
                 aria-current={activeTab === tab ? "page" : undefined}
                 style={{ flexShrink: 0, fontSize: "11px", padding: "7px 10px" }}
               >
-                {activeSection === SHELL_SECTIONS.hq ? getNextActionLabel(tab) : getTabDisplayLabel(tab)}
+                {getTabLabel(tab, { section: activeSection })}
               </button>
             ))}
           </div>

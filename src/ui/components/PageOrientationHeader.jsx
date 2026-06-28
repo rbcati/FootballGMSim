@@ -18,17 +18,9 @@ export default function PageOrientationHeader({ tab }) {
   if (!orientation) return null;
 
   return (
-    <div
-      data-testid="page-orientation"
-      className="page-orientation"
-      style={{ marginBottom: 'var(--space-3)' }}
-    >
-      <div style={{ fontSize: 'var(--text-lg)', fontWeight: 800, lineHeight: 1.15 }}>
-        {orientation.title}
-      </div>
-      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 2 }}>
-        {orientation.subtitle}
-      </div>
+    <div data-testid="page-orientation" className="page-orientation">
+      <div className="page-orientation__title">{orientation.title}</div>
+      <div className="page-orientation__subtitle">{orientation.subtitle}</div>
     </div>
   );
 }

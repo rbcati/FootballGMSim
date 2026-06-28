@@ -107,6 +107,19 @@ export function getNextActionLabel(tab) {
   return HQ_NEXT_ACTIONS[tab] ?? getTabDisplayLabel(tab);
 }
 
+// Single source of truth for the visible label of a quick/sub-nav tab button.
+// `context` selects the framing without callers branching on it themselves:
+//   - in the HQ section, tabs read as verb-first next actions ("Check Roster")
+//   - everywhere else they use the standard display label ("Trade", "Finances")
+// `context` may be the section id string ('hq') or an object ({ section } /
+// { isHQ }). The underlying tab id (routing + `section-tab-*` test ids) is
+// unchanged — this only resolves display text.
+export function getTabLabel(tab, context = {}) {
+  const ctx = typeof context === 'string' ? { section: context } : (context ?? {});
+  const isHQ = ctx.isHQ === true || ctx.section === 'hq' || ctx.section === 'HQ';
+  return isHQ ? getNextActionLabel(tab) : getTabDisplayLabel(tab);
+}
+
 export const ACTION_LABELS = Object.freeze({
   advanceWeek: 'Advance Week',
   advanceFranchise: 'Advance Franchise',

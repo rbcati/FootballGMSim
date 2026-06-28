@@ -8,6 +8,7 @@ import {
   getSectionSubtitle,
   getTabDisplayLabel,
   getNextActionLabel,
+  getTabLabel,
 } from './navigationCopy.js';
 
 // Pages that must carry honest "where am I / what is this for" orientation copy.
@@ -98,6 +99,35 @@ describe('HQ next-action cues', () => {
   it('only references tabs that also carry page orientation copy', () => {
     for (const tab of Object.keys(HQ_NEXT_ACTIONS)) {
       expect(getPageOrientation(tab), `missing orientation for HQ action ${tab}`).toBeTruthy();
+    }
+  });
+});
+
+describe('getTabLabel (centralized quick/sub-nav label resolver)', () => {
+  it('uses verb-first next-action labels inside the HQ section', () => {
+    expect(getTabLabel('Roster Hub', { section: 'hq' })).toBe(getNextActionLabel('Roster Hub'));
+    expect(getTabLabel('Weekly Results', { section: 'hq' })).toMatch(/review/i);
+    // Also accepts an explicit isHQ flag and a bare section-id string.
+    expect(getTabLabel('Depth Chart', { isHQ: true })).toBe(getNextActionLabel('Depth Chart'));
+    expect(getTabLabel('Free Agency', 'hq')).toBe(getNextActionLabel('Free Agency'));
+  });
+
+  it('uses the standard display label outside the HQ section', () => {
+    expect(getTabLabel('Transactions', { section: 'league' })).toBe('Trade');
+    expect(getTabLabel('History Hub', { section: 'league' })).toBe('History');
+    expect(getTabLabel('Standings', { section: 'league' })).toBe('Standings');
+  });
+
+  it('defaults to the display label when no context is given', () => {
+    expect(getTabLabel('Transactions')).toBe(getTabDisplayLabel('Transactions'));
+    expect(getTabLabel('Roster Hub')).toBe(getTabDisplayLabel('Roster Hub'));
+  });
+
+  it('matches the branching it replaced in LeagueDashboard for both sections', () => {
+    const tabs = ['Weekly Results', 'Schedule', 'Roster Hub', 'Depth Chart', 'Standings', 'Stats', 'Free Agency', 'Transactions'];
+    for (const tab of tabs) {
+      expect(getTabLabel(tab, { section: 'hq' })).toBe(getNextActionLabel(tab));
+      expect(getTabLabel(tab, { section: 'team' })).toBe(getTabDisplayLabel(tab));
     }
   });
 });

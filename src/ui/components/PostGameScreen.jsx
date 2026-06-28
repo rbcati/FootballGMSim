@@ -520,7 +520,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
                   minHeight: "var(--mobile-btn-h-compact, 38px)",
                 }}
               >
-                {boxScoreGameId ? "View Box Score ›" : "Box score unavailable"}
+                {boxScoreGameId ? "View Game Book ›" : "Box score unavailable"}
               </button>
             </div>
           </div>
