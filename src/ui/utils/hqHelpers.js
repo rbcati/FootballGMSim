@@ -59,19 +59,19 @@ export function getTeamStatusLine(team, league, weekly) {
   const { rank: divisionRank, teams: divisionTeams } = getDivisionPosition(team, league);
   const gamesBackDivision = divisionTeams.length > 1 ? getWinPct(divisionTeams[0]) - winPct : 0;
 
-  if (pressure === 'urgent' && week >= 8) return 'Owner pressure: results needed now';
+  if (pressure === 'urgent' && week >= 8) return 'Owner pressure is critical: results needed immediately to save your job';
 
   const lateSeason = week >= 13;
   const inPlayoffPosition = seed != null ? seed <= 7 : winPct >= 0.58;
   const bubbleRecord = winPct >= 0.45 && winPct < 0.58;
 
-  if (lateSeason && !inPlayoffPosition && bubbleRecord) return 'Must-win stretch to stay alive';
-  if (inPlayoffPosition && (divisionRank === 1 || winPct >= 0.64)) return 'Contender track: protect playoff seed';
-  if (divisionRank != null && divisionRank <= 2 && gamesBackDivision <= 0.08 && week >= 6) return 'Division race tightening';
-  if (bubbleRecord && week >= 7) return 'Playoff bubble: every week swings odds';
-  if (ovr >= 84 && winPct < 0.45 && week >= 5) return 'Underachieving relative to roster talent';
+  if (lateSeason && !inPlayoffPosition && bubbleRecord) return 'Must-win stretch to stay alive in the playoff hunt';
+  if (inPlayoffPosition && (divisionRank === 1 || winPct >= 0.64)) return 'Contender track: protect playoff seed at all costs';
+  if (divisionRank != null && divisionRank <= 2 && gamesBackDivision <= 0.08 && week >= 6) return 'Division race tightening - every game matters';
+  if (bubbleRecord && week >= 7) return 'Playoff bubble: every week swings odds drastically';
+  if (ovr >= 84 && winPct < 0.45 && week >= 5) return 'Underachieving relative to roster talent - fans are restless';
   if ((weekly?.direction === 'rebuilding' || ovr < 77) && week >= 5) return 'Rebuild lane: prioritize long-term value';
-  if (pressure === 'warning') return 'Owner expectations rising';
+  if (pressure === 'warning') return 'Owner expectations rising - your seat is getting warm';
 
   return 'Weekly prep window is open';
 }
