@@ -38,6 +38,38 @@ describe('MobileNav', () => {
     expect(html).toContain('League');
   });
 
+  it('collapses the bottom nav and hamburger when Game Book focus mode is active', () => {
+    const html = renderToString(
+      <MobileNav
+        activeSection={SHELL_SECTIONS.hq}
+        onSectionChange={vi.fn()}
+        onDestinationChange={vi.fn()}
+        league={{ year: 2026, phase: 'regular' }}
+        collapsed
+      />,
+    );
+
+    // Bottom bar carries the collapsed marker so CSS hides it during review.
+    expect(html).toContain('mobile-bottom-bar premium-bottom-nav is-collapsed');
+    expect(html).toContain('data-collapsed="true"');
+    // Hamburger is collapsed too so it cannot float over the result screen.
+    expect(html).toContain('mobile-nav-hamburger is-collapsed');
+  });
+
+  it('keeps the bottom nav visible (no collapsed class) by default — restored on return to HQ', () => {
+    const html = renderToString(
+      <MobileNav
+        activeSection={SHELL_SECTIONS.hq}
+        onSectionChange={vi.fn()}
+        onDestinationChange={vi.fn()}
+        league={{ year: 2026, phase: 'regular' }}
+      />,
+    );
+
+    expect(html).not.toContain('is-collapsed');
+    expect(html).toContain('data-collapsed="false"');
+  });
+
   it('surfaces the weekly-loop group first with core destinations reachable', () => {
     const html = renderToString(
       <MobileNav

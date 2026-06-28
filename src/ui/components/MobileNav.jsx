@@ -54,10 +54,16 @@ const BOTTOM_TABS = [
   { id: 'More', label: 'More', icon: MoreIcon, action: 'menu', value: 'more' },
 ];
 
-export default function MobileNav({ activeSection, activeTab, onSectionChange, onDestinationChange, league }) {
+export default function MobileNav({ activeSection, activeTab, onSectionChange, onDestinationChange, league, collapsed = false }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => setMenuOpen(false), [activeSection]);
+
+  // When the navigation chrome is collapsed (e.g. focused Game Book review),
+  // close any open More drawer so it cannot linger over the review surface.
+  useEffect(() => {
+    if (collapsed) setMenuOpen(false);
+  }, [collapsed]);
 
   useEffect(() => {
     const handleKey = (e) => e.key === 'Escape' && setMenuOpen(false);
@@ -88,7 +94,7 @@ export default function MobileNav({ activeSection, activeTab, onSectionChange, o
 
   return (
     <>
-      <button className="mobile-nav-hamburger" onClick={() => setMenuOpen(!menuOpen)} aria-label="Open navigation menu" aria-expanded={menuOpen}>
+      <button className={`mobile-nav-hamburger${collapsed ? ' is-collapsed' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Open navigation menu" aria-expanded={menuOpen} aria-hidden={collapsed || undefined} tabIndex={collapsed ? -1 : undefined}>
         <span className={`hamburger-line ${menuOpen ? 'open' : ''}`} />
         <span className={`hamburger-line ${menuOpen ? 'open' : ''}`} />
         <span className={`hamburger-line ${menuOpen ? 'open' : ''}`} />
@@ -120,7 +126,11 @@ export default function MobileNav({ activeSection, activeTab, onSectionChange, o
         </div>
       </nav>
 
-      <div className="mobile-bottom-bar premium-bottom-nav">
+      <div
+        className={`mobile-bottom-bar premium-bottom-nav${collapsed ? ' is-collapsed' : ''}`}
+        data-collapsed={collapsed ? 'true' : 'false'}
+        aria-hidden={collapsed || undefined}
+      >
         {BOTTOM_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = (tab.action === 'section' && activeSection === tab.value)

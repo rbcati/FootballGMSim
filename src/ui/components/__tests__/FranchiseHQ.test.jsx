@@ -327,6 +327,84 @@ describe('FranchiseHQ V4 compact home screen', () => {
   });
 });
 
+describe('LeagueDashboard Game Book focus mode collapses the mobile bottom nav', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('collapses the bottom nav while the Game Book is open and restores it on return to HQ', async () => {
+    window.matchMedia = window.matchMedia ?? (() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    render(
+      <LeagueDashboard
+        league={baseLeague}
+        actions={{ getDashboardLeaders: vi.fn(() => Promise.resolve({ league: {}, team: {} })) }}
+        busy={false}
+        simulating={false}
+        onAdvanceWeek={() => {}}
+      />,
+    );
+
+    const bottomBar = () => document.querySelector('.mobile-bottom-bar');
+    // Bottom nav visible at HQ.
+    expect(bottomBar()).not.toBeNull();
+    expect(bottomBar().classList.contains('is-collapsed')).toBe(false);
+
+    // Open the Game Book from the HQ Film Room card.
+    const seasonPulse = screen.getByTestId('season-pulse');
+    fireEvent.click(within(seasonPulse).getByRole('button', { name: /open game book/i }));
+    expect(await screen.findByTestId('game-book')).toBeTruthy();
+
+    // Bottom nav collapsed during focused review.
+    expect(bottomBar().classList.contains('is-collapsed')).toBe(true);
+
+    // Return to HQ restores the nav.
+    fireEvent.click(screen.getByTestId('return-to-hq'));
+    expect(await screen.findByTestId('franchise-hq')).toBeTruthy();
+    expect(bottomBar().classList.contains('is-collapsed')).toBe(false);
+  });
+});
+
+describe('FranchiseHQ post-sim compact status strip', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders one compact dismissible status strip with the completed week label', () => {
+    render(
+      <FranchiseHQ league={baseLeague} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
+    );
+    const strip = screen.getByTestId('hq-postsim-status-strip');
+    expect(strip).toBeTruthy();
+    // Last completed user game is week 9 (g-9).
+    expect(strip.textContent).toMatch(/week 9 complete/i);
+    // Dismiss control is present and labelled.
+    expect(within(strip).getByRole('button', { name: /dismiss week complete notice/i })).toBeTruthy();
+  });
+
+  it('routes the status strip tap to Weekly Results without auto-expanding it on HQ', () => {
+    const onNavigate = vi.fn();
+    render(
+      <FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /week 9 complete\. tap to review results/i }));
+    expect(onNavigate).toHaveBeenCalledWith('Weekly Results');
+    // The HQ itself does not render a full Weekly Results center.
+    expect(screen.queryByTestId('weekly-results')).toBeNull();
+  });
+
+  it('removes the strip after dismiss while keeping Weekly Results reachable elsewhere', () => {
+    const onNavigate = vi.fn();
+    render(
+      <FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
+    );
+    fireEvent.click(screen.getByTestId('hq-postsim-status-strip-dismiss'));
+    expect(screen.queryByTestId('hq-postsim-status-strip')).toBeNull();
+    // Weekly Results remains reachable via the league destination nav.
+    fireEvent.click(within(screen.getByTestId('hq-league-destination-links')).getByRole('button', { name: /^standings$/i }));
+    expect(onNavigate).toHaveBeenCalledWith('Standings');
+  });
+});
+
 describe('FranchiseHQ V3 command hierarchy cleanup', () => {
   afterEach(() => {
     cleanup();

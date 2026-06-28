@@ -16,6 +16,61 @@ function findScheduleGame(league, gameId) {
   return null;
 }
 
+// Compact, mobile-first sticky chrome for the Game Book. Keeps the final score,
+// W/L result, week, and a return action above the fold so the user never has to
+// scroll to see the outcome or get back to HQ. Presentational only — it reads
+// from the already-built box-score view model and never recomputes any result.
+function GameBookStickyHeader({ detailVm, userTeamId, week, onBack, backLabel }) {
+  const hasFinal = Boolean(detailVm?.availableData?.finalScore);
+  const home = detailVm?.homeTeam ?? null;
+  const away = detailVm?.awayTeam ?? null;
+  const homeScore = detailVm?.finalScore?.home;
+  const awayScore = detailVm?.finalScore?.away;
+
+  let outcome = null; // { label, tone }
+  if (hasFinal && userTeamId != null && home && away) {
+    const userIsHome = Number(home.id) === Number(userTeamId);
+    const userIsAway = Number(away.id) === Number(userTeamId);
+    if (userIsHome || userIsAway) {
+      const userScore = userIsHome ? homeScore : awayScore;
+      const oppScore = userIsHome ? awayScore : homeScore;
+      if (Number(userScore) === Number(oppScore)) outcome = { label: 'T', tone: 'info' };
+      else if (Number(userScore) > Number(oppScore)) outcome = { label: 'W', tone: 'ok' };
+      else outcome = { label: 'L', tone: 'danger' };
+    }
+  }
+
+  return (
+    <div className="game-book-sticky-header" data-testid="game-book-sticky-header">
+      <button
+        type="button"
+        className="btn btn-sm game-book-sticky-header__back"
+        onClick={onBack}
+        data-testid="game-book-sticky-back"
+      >
+        ← {backLabel ?? 'Return to HQ'}
+      </button>
+      <span className="game-book-sticky-header__week" data-testid="game-book-sticky-week">
+        {week != null ? `Wk ${week}` : 'Game Book'}
+      </span>
+      {hasFinal ? (
+        <span className="game-book-sticky-header__score" data-testid="game-book-sticky-score">
+          {outcome ? (
+            <span className={`game-book-sticky-header__badge tone-${outcome.tone}`} aria-hidden="true">{outcome.label}</span>
+          ) : null}
+          <span className="game-book-sticky-header__teams">
+            {away?.abbr ?? 'AWY'} {awayScore ?? '—'} – {homeScore ?? '—'} {home?.abbr ?? 'HME'}
+          </span>
+        </span>
+      ) : (
+        <span className="game-book-sticky-header__score game-book-sticky-header__score--pending" data-testid="game-book-sticky-score">
+          Final pending
+        </span>
+      )}
+    </div>
+  );
+}
+
 
 export default function GameDetailScreen({ gameId, league, actions, onBack, onPlayerSelect, onTeamSelect, onNavigate, backLabel }) {
   const weekFromId = typeof gameId === 'string' ? gameId.match(/_w(\d+)_/i)?.[1] : null;
@@ -69,6 +124,13 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
 
   return (
     <div className="app-screen-stack" data-testid="game-book">
+      <GameBookStickyHeader
+        detailVm={detailVm}
+        userTeamId={league?.userTeamId}
+        week={detailVm?.week ?? weekFromId ?? null}
+        onBack={onBack}
+        backLabel={backLabel}
+      />
       <ScreenHeader
         eyebrow="Game Book"
         title={screenTitle}

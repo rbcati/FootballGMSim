@@ -2,7 +2,7 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import GameDetailScreen from './GameDetailScreen.jsx';
 
 vi.mock('../hooks/useStableRouteRequest.js', () => ({ default: vi.fn(() => ({ data: null, loading: false, error: null })) }));
@@ -135,5 +135,30 @@ describe('GameDetailScreen score source of truth', () => {
     expect(getByTestId('game-book-final-score').textContent).toBe('CLE 10 - 27 PIT');
     expect(container.textContent).not.toContain('CLE 0 - 0 PIT');
     expect(container.textContent).not.toContain('finished tied');
+  });
+
+  it('renders a compact sticky Game Book header with week, teams, score and W/L result', () => {
+    const onBack = vi.fn();
+    const { getByTestId } = render(
+      <GameDetailScreen
+        gameId="2031_w3_1_2"
+        league={league}
+        actions={{ getBoxScore: vi.fn() }}
+        onBack={onBack}
+      />,
+    );
+
+    const header = getByTestId('game-book-sticky-header');
+    expect(getByTestId('game-book-sticky-week').textContent).toContain('Wk 3');
+    const scoreText = getByTestId('game-book-sticky-score').textContent;
+    expect(scoreText).toContain('CLE');
+    expect(scoreText).toContain('PIT');
+    expect(scoreText).toContain('10');
+    expect(scoreText).toContain('27');
+    // User team (PIT, id 1) won 27-10 → W badge from the user's perspective.
+    expect(header.querySelector('.game-book-sticky-header__badge').textContent).toBe('W');
+
+    fireEvent.click(getByTestId('game-book-sticky-back'));
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 });
