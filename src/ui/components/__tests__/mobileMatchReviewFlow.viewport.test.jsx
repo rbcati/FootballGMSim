@@ -85,7 +85,7 @@ describe('mobile Match Review flow — viewport assertions', () => {
 
     // Open the Game Book from the last result affordance / film room.
     const seasonPulse = screen.getByTestId('season-pulse');
-    fireEvent.click(within(seasonPulse).getByRole('button', { name: /open game book/i }));
+    fireEvent.click(within(seasonPulse).getByRole('button', { name: /view game book/i }));
 
     // Sticky Game Book header carries the final score + a return action above the fold.
     const stickyHeader = await screen.findByTestId('game-book-sticky-header');

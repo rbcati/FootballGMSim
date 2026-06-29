@@ -20,6 +20,7 @@ import FranchiseLegacyView from './FranchiseLegacyView.jsx';
 import FranchiseBrandHQ from './FranchiseBrandHQ.jsx';
 import JobSecurityCard from './JobSecurityCard.jsx';
 import ActivityToastStack from './ActivityToastStack.jsx';
+import GameResultSummaryCard from './GameResultSummaryCard.jsx';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -269,6 +270,8 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
     const oppAbbr = userIsHome
       ? (lastGame.awayAbbr ?? lastGame.away?.abbr ?? 'OPP')
       : (lastGame.homeAbbr ?? lastGame.home?.abbr ?? 'OPP');
+    const homeAbbr = lastGame.homeAbbr ?? lastGame.home?.abbr ?? 'HOME';
+    const awayAbbr = lastGame.awayAbbr ?? lastGame.away?.abbr ?? 'AWAY';
     const gameId = lastGame.gameId ?? lastGame.id ?? null;
     const weekNum = safeNum(lastGame.week);
     return {
@@ -276,6 +279,11 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
       tone: tied ? 'info' : userWon ? 'ok' : 'danger',
       text: `${userScore}–${oppScore} vs ${oppAbbr}${weekNum ? ` · Wk${weekNum}` : ''}`,
       oppAbbr,
+      homeAbbr,
+      awayAbbr,
+      homeScore,
+      awayScore,
+      userIsHome,
       week: weekNum || null,
       gameId,
     };
@@ -383,7 +391,7 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
       filmLabel: lastGame ? lastGameDisplay.heroLine : 'Kickoff ahead',
       filmDetail: lastGame ? 'Open the latest final before changing next week.' : 'Scout the opponent and lock a plan before kickoff.',
       filmRoute: gameId ? buildGameBookDestination(gameId) : 'Weekly Prep',
-      filmCta: gameId ? 'Open Game Book' : 'Open Weekly Prep',
+      filmCta: gameId ? 'View Game Book' : 'Open Weekly Prep',
       rosterNeed: hqTeamBuilder.biggestNeed ?? 'No urgent need',
       rosterDetail: hqTeamBuilder.nextAction ?? 'Review team builder for leverage.',
       capLabel,
@@ -506,6 +514,30 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         </button>
       </header>
 
+      {/* ── LAST RESULT CARD — canonical compact result, before any notices ─
+            Priority #2 on the post-advance mobile HQ: the score lands above the
+            dismissible status strip and any engine/development notices. Shares
+            GameResultSummaryCard with the postgame overlay; tapping opens the
+            Game Book. ── */}
+      {lastResultRow && (
+        <GameResultSummaryCard
+          variant="compact"
+          testId="hq-last-result-card"
+          ctaTestId="hq-last-result-cta"
+          homeAbbr={lastResultRow.homeAbbr}
+          awayAbbr={lastResultRow.awayAbbr}
+          homeScore={lastResultRow.homeScore}
+          awayScore={lastResultRow.awayScore}
+          userIsHome={lastResultRow.userIsHome}
+          week={lastResultRow.week}
+          onViewGameBook={
+            lastResultRow.gameId
+              ? () => onNavigate?.(buildGameBookDestination(lastResultRow.gameId))
+              : undefined
+          }
+        />
+      )}
+
       {/* ── POST-SIM STATUS STRIP — compact, dismissible, single line ────── */}
       {showPostSimStrip && (
         <div className="hq-postsim-strip" data-testid="hq-postsim-status-strip" data-week={lastResultRow.week}>
@@ -528,21 +560,6 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
             ×
           </button>
         </div>
-      )}
-
-      {/* ── LAST RESULT ROW — single line, tappable → box score ─────────── */}
-      {lastResultRow && (
-        <button
-          type="button"
-          className={`hq-status-row hq-status-row--result`}
-          data-tone={lastResultRow.tone}
-          aria-label={`Last result: ${lastResultRow.text}. Tap to view box score.`}
-          onClick={() => lastResultRow.gameId && onNavigate?.(buildGameBookDestination(lastResultRow.gameId))}
-        >
-          <span className={`hq-wl-badge hq-wl-badge--${lastResultRow.tone}`}>{lastResultRow.label}</span>
-          <span className="hq-status-row__text">{lastResultRow.text}</span>
-          <span className="hq-status-row__chevron" aria-hidden="true">›</span>
-        </button>
       )}
 
       {/* ── NEXT GAME ROW — single line, tappable → Game Plan ───────────── */}

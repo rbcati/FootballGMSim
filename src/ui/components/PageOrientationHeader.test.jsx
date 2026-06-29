@@ -31,4 +31,17 @@ describe('PageOrientationHeader', () => {
     const { container } = render(<PageOrientationHeader tab="Not A Real Tab" />);
     expect(container.firstChild).toBeNull();
   });
+
+  it('styles itself with classes only — no inline style attributes', () => {
+    render(<PageOrientationHeader tab="Free Agency" />);
+    const header = screen.getByTestId('page-orientation');
+    expect(header.getAttribute('style')).toBeNull();
+    expect(header.classList.contains('page-orientation')).toBe(true);
+    // Title + subtitle carry semantic class hooks, not inline styles.
+    for (const el of header.querySelectorAll('div')) {
+      expect(el.getAttribute('style')).toBeNull();
+    }
+    expect(header.querySelector('.page-orientation__title')).toBeTruthy();
+    expect(header.querySelector('.page-orientation__subtitle')).toBeTruthy();
+  });
 });

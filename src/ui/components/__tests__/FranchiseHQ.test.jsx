@@ -146,7 +146,7 @@ describe('FranchiseHQ', () => {
 
     // "Next Action" panel removed — Game Book access is now via the Film Room card in Season Pulse
     const seasonPulse = screen.getByTestId('season-pulse');
-    const filmRoomBtn = within(seasonPulse).getByRole('button', { name: /open game book/i });
+    const filmRoomBtn = within(seasonPulse).getByRole('button', { name: /view game book/i });
     expect(filmRoomBtn).toBeTruthy();
     fireEvent.click(filmRoomBtn);
 
@@ -182,6 +182,32 @@ describe('FranchiseHQ', () => {
     expect(screen.getByTestId('hq-last-result').textContent).toMatch(/W.*23-20.*DET/i);
   });
 
+  it('shows the compact Last Result card before the status strip and any engine/development notices', () => {
+    // Force an engine/development notice (injury) into the activity stack so we
+    // can prove the Last Result card lands ahead of it on the post-advance HQ.
+    const leagueWithInjury = {
+      ...baseLeague,
+      teams: [
+        { ...baseLeague.teams[0], roster: [{ id: 1, injuryWeeksRemaining: 3 }, { id: 2 }] },
+        baseLeague.teams[1],
+      ],
+    };
+    render(<FranchiseHQ league={leagueWithInjury} onNavigate={() => {}} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
+
+    const lastResultCard = screen.getByTestId('hq-last-result-card');
+    const statusStrip = screen.getByTestId('hq-postsim-status-strip');
+    const noticeStack = screen.getByTestId('activity-toast-stack');
+
+    const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING;
+    // Card → strip → notices, in that document order.
+    expect(lastResultCard.compareDocumentPosition(statusStrip) & FOLLOWING).toBeTruthy();
+    expect(lastResultCard.compareDocumentPosition(noticeStack) & FOLLOWING).toBeTruthy();
+    expect(statusStrip.compareDocumentPosition(noticeStack) & FOLLOWING).toBeTruthy();
+
+    // The canonical review CTA on the HQ surface reads exactly "View Game Book".
+    expect(screen.getByTestId('hq-last-result-cta').textContent).toContain('View Game Book');
+  });
+
   it('parses Game Book route intents before tab normalization can reject them', () => {
     expect(parseGameBookDestination('Game Book:g-9')).toEqual({ type: 'gameBook', gameId: 'g-9' });
     expect(parseGameBookDestination({ type: 'gameBook', gameId: 'g-9' })).toEqual({ type: 'gameBook', gameId: 'g-9' });
@@ -194,7 +220,7 @@ describe('FranchiseHQ', () => {
 
     // "Next Action" panel removed — Game Book access is now via the Film Room card in Season Pulse
     const seasonPulse = screen.getByTestId('season-pulse');
-    fireEvent.click(within(seasonPulse).getByRole('button', { name: /open game book/i }));
+    fireEvent.click(within(seasonPulse).getByRole('button', { name: /view game book/i }));
 
     expect(await screen.findByTestId('game-book')).toBeTruthy();
     expect(screen.getByTestId('game-book-final-score').textContent).toContain('CHI 23 - 20 DET');
@@ -351,7 +377,7 @@ describe('LeagueDashboard Game Book focus mode collapses the mobile bottom nav',
 
     // Open the Game Book from the HQ Film Room card.
     const seasonPulse = screen.getByTestId('season-pulse');
-    fireEvent.click(within(seasonPulse).getByRole('button', { name: /open game book/i }));
+    fireEvent.click(within(seasonPulse).getByRole('button', { name: /view game book/i }));
     expect(await screen.findByTestId('game-book')).toBeTruthy();
 
     // Bottom nav collapsed during focused review.
