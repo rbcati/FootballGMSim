@@ -58,6 +58,7 @@ import { buildShowingLabel, stableSortRows } from "../utils/dataBrowser.js";
 import { resolveFreeAgencyLoadStatus } from "../utils/freeAgencyLoadStatus.js";
 import StatusEmptyState from "./common/StatusEmptyState.jsx";
 import CapImpactSummary from "./common/CapImpactSummary.jsx";
+import NegotiationStanceBadge from "./common/NegotiationStanceBadge.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1857,6 +1858,9 @@ export default function FreeAgency({
                           })()}
                           <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
                             {player?._eval?.archetype?.archetype ?? "Balanced"} · {player?._eval?.roleProjection?.replaceContext ?? "Depth option"}
+                          </div>
+                          <div style={{ marginTop: 3 }}>
+                            <NegotiationStanceBadge player={player} team={userTeam} league={league} maxReasons={2} testId={`fa-stance-${player.id}`} />
                           </div>
                           <ContractOfferInsightBlock player={player} capRoom={capRoom} compact />
                         </TableCell>

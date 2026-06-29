@@ -469,6 +469,8 @@ export default function ContractCenter({ league, actions, compact = false, onNav
         <ExtensionNegotiationModal
           player={extensionPlayer}
           teamId={team?.id}
+          team={team}
+          league={league}
           actions={actions}
           currentSeason={league?.seasonId ?? league?.year ?? null}
           cacheScopeKey={buildLeagueCacheScopeKey(league)}
