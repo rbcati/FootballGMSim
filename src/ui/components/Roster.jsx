@@ -920,6 +920,9 @@ function RosterTable({
           player={extending}
           actions={actions}
           teamId={teamId}
+          league={league}
+          team={league?.teams?.find((t) => t.id === teamId) ?? null}
+          currentSeason={league?.seasonId ?? league?.year ?? null}
           cacheScopeKey={buildLeagueCacheScopeKey(league)}
           statusNode={<StatusBadge injuryWeeks={extending.injuryWeeksRemaining} />}
           onClose={() => setExtending(null)}

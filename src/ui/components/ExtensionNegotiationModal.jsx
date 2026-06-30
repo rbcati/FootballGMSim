@@ -5,6 +5,14 @@ import { formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatti
 import { buildRouteRequestKey } from "../utils/requestLoopGuard.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { getAgentBadgeMeta, hydratePlayerAgent } from "../../core/contracts/agentNegotiationEngine.js";
+import { deriveNegotiationContext, NEGOTIATION_STANCES } from "../selectors/deriveNegotiationContext.js";
+
+const STANCE_TEXT_TONE = {
+  [NEGOTIATION_STANCES.EAGER]: 'var(--success)',
+  [NEGOTIATION_STANCES.RELUCTANT]: 'var(--warning)',
+  [NEGOTIATION_STANCES.NEUTRAL]: 'var(--text)',
+  [NEGOTIATION_STANCES.UNAVAILABLE]: 'var(--text-muted)',
+};
 
 const AGENT_TONE_CLASSES = {
   shark:       'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400',
@@ -16,6 +24,8 @@ export default function ExtensionNegotiationModal({
   player,
   actions,
   teamId,
+  team = null,
+  league = null,
   currentSeason = null,
   cacheScopeKey = "global",
   onClose,
@@ -51,6 +61,20 @@ export default function ExtensionNegotiationModal({
     () => currentSeason != null &&
           agentHydrated?.negotiationState?.negotiationsFrozenUntilSeason === currentSeason,
     [agentHydrated, currentSeason],
+  );
+
+  // Display-only negotiation stance (no economics; derived at render time).
+  const resolvedTeam = useMemo(
+    () => team ?? league?.teams?.find((t) => t.id === teamId) ?? null,
+    [team, league, teamId],
+  );
+  const resolvedLeague = useMemo(
+    () => league ?? (currentSeason != null ? { seasonId: currentSeason } : null),
+    [league, currentSeason],
+  );
+  const negotiationStance = useMemo(
+    () => deriveNegotiationContext({ player, team: resolvedTeam, league: resolvedLeague }),
+    [player, resolvedTeam, resolvedLeague],
   );
 
   const askYears = toFiniteNumber(ask?.years, null);
@@ -130,6 +154,42 @@ export default function ExtensionNegotiationModal({
           >
             {agentBadge.label}
           </span>
+
+          {/* Negotiation Stance — display only; does not affect terms or acceptance. */}
+          <div
+            data-testid="negotiation-stance-section"
+            data-stance={negotiationStance.stance}
+            style={{
+              border: '1px solid var(--hairline)',
+              borderRadius: 'var(--radius-md)',
+              padding: 'var(--space-3)',
+              margin: 'var(--space-2) 0 var(--space-3)',
+              background: 'var(--surface)',
+              display: 'grid',
+              gap: 4,
+            }}
+          >
+            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-subtle)', fontWeight: 700 }}>
+              Negotiation Stance
+            </div>
+            {negotiationStance.stance === NEGOTIATION_STANCES.UNAVAILABLE ? (
+              <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                Player is not available to re-sign.
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: STANCE_TEXT_TONE[negotiationStance.stance] ?? 'var(--text)' }}>
+                  {negotiationStance.stanceLabel}
+                </div>
+                {negotiationStance.reasonLabels.slice(0, 2).map((label) => (
+                  <div key={label} style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                    {label}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
           {isFrozen && (
             <div
               style={{

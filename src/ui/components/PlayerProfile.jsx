@@ -2855,6 +2855,9 @@ export default function PlayerProfile({
           player={player}
           actions={actions}
           teamId={player.teamId}
+          team={resolvedProfile.team}
+          league={league}
+          currentSeason={league?.seasonId ?? league?.year ?? null}
           cacheScopeKey={cacheScopeKey}
           onClose={() => setExtending(false)}
           onComplete={() => {
