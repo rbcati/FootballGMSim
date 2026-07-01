@@ -192,6 +192,20 @@ class GameRunner {
             }
         }
 
+        // 5. Emotional Clarity: Winless or Undefeated streaks early-mid season
+        if (stakes === 0 && week >= 3 && week <= 9) {
+            const wins = team.wins || team.record?.w || 0;
+            const losses = team.losses || team.record?.l || 0;
+
+            if (wins === 0 && losses >= 2) {
+                // High tension for a winless team trying to get on the board
+                stakes = 80;
+            } else if (losses === 0 && wins >= 2) {
+                // High tension for an undefeated team trying to keep the streak alive
+                stakes = 80;
+            }
+        }
+
         return stakes;
     }
 
