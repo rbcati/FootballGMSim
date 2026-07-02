@@ -1,11 +1,11 @@
 import React from 'react';
 import { TRADE_BALANCE } from '../../selectors/deriveTradeContext.js';
 
-const BALANCE_TONE = Object.freeze({
-  [TRADE_BALANCE.FAVORABLE]: 'var(--success)',
-  [TRADE_BALANCE.UNFAVORABLE]: 'var(--warning)',
-  [TRADE_BALANCE.EVEN]: 'var(--text-muted)',
-  [TRADE_BALANCE.UNKNOWN]: 'var(--text-muted)',
+const BALANCE_TONE_CLASS = Object.freeze({
+  [TRADE_BALANCE.FAVORABLE]: 'trade-value-summary__value-row--favorable',
+  [TRADE_BALANCE.UNFAVORABLE]: 'trade-value-summary__value-row--unfavorable',
+  [TRADE_BALANCE.EVEN]: 'trade-value-summary__value-row--even',
+  [TRADE_BALANCE.UNKNOWN]: 'trade-value-summary__value-row--unknown',
 });
 
 const EMPTY_COPY = 'Add players or picks to preview trade context.';
@@ -36,64 +36,41 @@ export default function TradeValueSummary({
   const capNote = context?.capNote ?? null;
   const limited =
     balance === TRADE_BALANCE.UNKNOWN && motivationLabels.length === 0 && !capNote;
-  const tone = BALANCE_TONE[balance] ?? 'var(--text-muted)';
+  const toneClass = BALANCE_TONE_CLASS[balance] ?? BALANCE_TONE_CLASS[TRADE_BALANCE.UNKNOWN];
 
   return (
     <div
-      className="card"
+      className="card trade-value-summary"
       data-testid={testId}
       data-balance={balance}
-      style={{
-        padding: 'var(--space-3)',
-        marginBottom: 'var(--space-3)',
-        display: 'grid',
-        gap: 6,
-      }}
     >
-      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-subtle)', fontWeight: 700 }}>
-        Trade Breakdown
-      </div>
+      <div className="trade-value-summary__eyebrow">Trade Breakdown</div>
       {!hasSelection ? (
-        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{EMPTY_COPY}</div>
+        <div className="trade-value-summary__copy">{EMPTY_COPY}</div>
       ) : limited ? (
-        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{LIMITED_COPY}</div>
+        <div className="trade-value-summary__copy">{LIMITED_COPY}</div>
       ) : (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span
-              style={{
-                display: 'inline-block',
-                fontSize: 10,
-                fontWeight: 700,
-                color: tone,
-                border: `1px solid ${tone}`,
-                background: `${tone}14`,
-                borderRadius: 999,
-                padding: '0 6px',
-                lineHeight: 1.6,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Value read
-            </span>
-            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: tone }}>
+          <div className={`trade-value-summary__value-row ${toneClass}`}>
+            <span className="trade-value-summary__pill">Value read</span>
+            <span className="trade-value-summary__balance-label">
               {context?.userBalanceLabel}
             </span>
           </div>
           {motivationLabels.length > 0 ? (
-            <div style={{ display: 'grid', gap: 2 }}>
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontWeight: 700 }}>
+            <div className="trade-value-summary__interest">
+              <span className="trade-value-summary__interest-label">
                 Their interest:
               </span>
               {motivationLabels.map((label) => (
-                <div key={label} style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                <div key={label} className="trade-value-summary__copy">
                   {label}
                 </div>
               ))}
             </div>
           ) : null}
           {capNote ? (
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{capNote}</div>
+            <div className="trade-value-summary__copy">{capNote}</div>
           ) : null}
         </>
       )}

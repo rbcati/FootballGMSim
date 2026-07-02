@@ -1,9 +1,20 @@
 import { describe, it, expect } from 'vitest';
+import { FRONT_OFFICE_PERSONAS } from '../../core/ai/frontOfficePersonaEngine.js';
 import {
   deriveTradeContext,
   TRADE_BALANCE,
   MOTIVATION_CODES,
+  TRADE_CONTEXT_PERSONAS,
 } from './deriveTradeContext.js';
+
+
+describe('deriveTradeContext — front-office persona mirror', () => {
+  it('trade context persona mirror matches known front office personas', () => {
+    for (const key of Object.values(TRADE_CONTEXT_PERSONAS)) {
+      expect(Object.values(FRONT_OFFICE_PERSONAS)).toContain(key);
+    }
+  });
+});
 
 // ── Builders ──────────────────────────────────────────────────────────────────
 

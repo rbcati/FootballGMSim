@@ -132,6 +132,27 @@ describe('TradeCenter — Trade Breakdown integration', () => {
   });
 });
 
+describe('TradeValueSummary — class-based styling', () => {
+  afterEach(cleanup);
+
+  it('renders with Trade Breakdown classes instead of inline raw style values', () => {
+    const context = {
+      userBalance: TRADE_BALANCE.FAVORABLE,
+      userBalanceLabel: 'This package leans in your favor.',
+      motivationLabels: ['This fits a win-now roster push.'],
+      capNote: 'Your cap room tightens after this deal.',
+    };
+    const { getByTestId, getByText } = render(<TradeValueSummary context={context} hasSelection />);
+    const card = getByTestId('trade-value-summary');
+
+    expect(card.classList.contains('trade-value-summary')).toBe(true);
+    expect(card.querySelector('.trade-value-summary__eyebrow')).toBeTruthy();
+    expect(card.querySelector('.trade-value-summary__value-row--favorable')).toBeTruthy();
+    expect(getByText('Value read').classList.contains('trade-value-summary__pill')).toBe(true);
+    expect(card.querySelectorAll('[style]')).toHaveLength(0);
+  });
+});
+
 describe('TradeValueSummary — unavailable-context state', () => {
   afterEach(cleanup);
 
