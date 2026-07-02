@@ -31,6 +31,8 @@ import { getPickBaseValueFromMatrix } from "../../core/trades/tradeValuationModi
 import FrontOfficeBadge from "./FrontOfficeBadge.jsx";
 import { getHotSeatStatus } from "../../core/meta/ownerPressureEngine.js";
 import CapImpactSummary from "./common/CapImpactSummary.jsx";
+import TradeValueSummary from "./common/TradeValueSummary.jsx";
+import { deriveTradeContext } from "../selectors/deriveTradeContext.js";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -502,6 +504,22 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
       capAfter: myCapAfter,
     });
   }, [receiving, offering, theirRosterMap, myRosterMap, myIntel, liveMyTeam?.capRoom, myCapAfter]);
+
+  // Display-only "Trade Breakdown" context. Interprets numbers this screen
+  // already renders (offer values, projected cap room, visible needs) via the
+  // pure deriveTradeContext selector — it feeds nothing back into the engine.
+  const tradeContext = useMemo(() => deriveTradeContext({
+    userGivesPlayers: [...offering].map((id) => myRosterMap.get(toAssetId(id))).filter(Boolean),
+    userGetsPlayers: [...receiving].map((id) => theirRosterMap.get(toAssetId(id))).filter(Boolean),
+    userGivesPicks: myPicks,
+    userGetsPicks: theirPicks,
+    userOfferValue: myOfferValue,
+    otherOfferValue: theirOfferValue,
+    otherTeam: liveTheirTeam,
+    otherTeamNeeds: theirNeedsSummary?.needs ?? [],
+    userCapRoomBefore: liveMyTeam?.capRoom,
+    userCapRoomAfter: myCapAfter,
+  }), [offering, receiving, myRosterMap, theirRosterMap, myPicks, theirPicks, myOfferValue, theirOfferValue, liveTheirTeam, theirNeedsSummary, liveMyTeam?.capRoom, myCapAfter]);
 
   const toggleOffering = (id, checked) => setOffering(prev => { const s = new Set(prev); const normalizedId = toAssetId(id); checked ? s.add(normalizedId) : s.delete(normalizedId); return s; });
   const toggleReceiving = (id, checked) => setReceiving(prev => { const s = new Set(prev); const normalizedId = toAssetId(id); checked ? s.add(normalizedId) : s.delete(normalizedId); return s; });
@@ -1087,6 +1105,8 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
               </div>
             </div>
           )}
+          {/* Trade Breakdown — display-only readability layer (deriveTradeContext). */}
+          <TradeValueSummary context={tradeContext} hasSelection={hasSelection} />
           {hasSelection && (
             <TradeConsequenceStrip
               myTeam={liveMyTeam}
