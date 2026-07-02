@@ -938,6 +938,7 @@ class AiLogic {
         // 2. Players Evaluate Offers
         const freeAgents = allPlayers.filter(p => (!p.teamId || p.status === 'free_agent') && p.offers && p.offers.length > 0);
 
+        const txsToCommit = [];
         for (const player of freeAgents) {
             const decision = this.evaluateOffers(player, day);
 
@@ -1009,7 +1010,7 @@ class AiLogic {
 
                     this.updateTeamCap(teamId);
 
-                    await Transactions.add({
+                    txsToCommit.push({
                         type: 'SIGN',
                         seasonId: meta.currentSeasonId,
                         week: meta.currentWeek,
@@ -1032,6 +1033,16 @@ class AiLogic {
                 }
             }
             // else: player waits for more offers
+        }
+
+        if (txsToCommit.length > 0) {
+            if (typeof Transactions.addBulk === 'function') {
+                await Transactions.addBulk(txsToCommit);
+            } else {
+                for (const tx of txsToCommit) {
+                    await Transactions.add(tx);
+                }
+            }
         }
     }
 
