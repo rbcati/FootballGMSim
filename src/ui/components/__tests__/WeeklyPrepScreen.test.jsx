@@ -51,7 +51,8 @@ describe('WeeklyPrepScreen', () => {
     expect(screen.getByText(/Weekly Prep War Room/i)).toBeTruthy();
     expect(screen.getByText(/Readiness Command/i)).toBeTruthy();
     expect(screen.getByText(/Priority Actions/i)).toBeTruthy();
-    expect(screen.getByRole('heading', { name: /Matchup Intel/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Scout Report Summary/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Matchup Intel Details/i })).toBeTruthy();
     expect(screen.getByText(/Prep Checklist/i)).toBeTruthy();
     expect(screen.getByText(/Opponent (scouted|pending)/i)).toBeTruthy();
   });
@@ -75,6 +76,27 @@ describe('WeeklyPrepScreen', () => {
       />,
     );
     expect(screen.getByText(/Weekly prep unavailable/i)).toBeTruthy();
+  });
+
+  it('puts mobile-critical scout report copy before detailed breakdowns', () => {
+    const { container } = render(<WeeklyPrepScreen league={league} onNavigate={vi.fn()} />);
+    const text = container.textContent;
+
+    expect(screen.getByTestId('weekly-prep-scout-summary').textContent).toMatch(/Opponent.*Lions|Opponent.*DET/i);
+    expect(screen.getByTestId('weekly-prep-scout-summary').textContent).toMatch(/Primary action/i);
+    expect(screen.getByText(/Open detailed scout report/i)).toBeTruthy();
+    expect(text.indexOf('Scout Report Summary')).toBeLessThan(text.indexOf('Priority Actions'));
+    expect(text.indexOf('Priority Actions')).toBeLessThan(text.indexOf('Readiness Command'));
+    expect(text.indexOf('Scout Report Summary')).toBeLessThan(text.indexOf('Matchup Intel Details'));
+  });
+
+  it('does not mutate league gameplay data while rendering the denser prep view', () => {
+    const immutableLeague = structuredClone(league);
+    const before = JSON.stringify(immutableLeague);
+
+    render(<WeeklyPrepScreen league={immutableLeague} onNavigate={vi.fn()} />);
+
+    expect(JSON.stringify(immutableLeague)).toBe(before);
   });
 });
 
