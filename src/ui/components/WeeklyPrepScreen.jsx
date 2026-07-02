@@ -15,6 +15,18 @@ import { evaluateWeeklyContext } from '../utils/weeklyContext.js';
 import { buildWeeklyPrepActions } from '../utils/weeklyPrepActions.js';
 import { TeamIdentityBadge } from './HQVisuals.jsx';
 
+export function buildScoutSummaryItems({ prep, model, primaryAction } = {}) {
+  return [
+    { label: 'Opponent', value: `${prep?.nextGame?.isHome ? 'vs' : '@'} ${prep?.opponent?.name ?? model?.opponentAbbr ?? 'TBD'}` },
+    { label: 'Matchup context', value: model?.matchupHeadline ?? 'No opponent locked yet' },
+    {
+      label: 'Primary action',
+      value: primaryAction ? `${primaryAction.title}: ${primaryAction.reason}` : '—',
+    },
+    { label: 'Game-plan key', value: prep?.keyMatchupNote ?? model?.keyRiskLabel ?? 'No major matchup risk flagged yet.' },
+  ];
+}
+
 function TonePill({ tone = 'info', label }) {
   const palette = {
     success: { border: 'var(--success)', bg: 'color-mix(in srgb, var(--success) 12%, var(--surface))' },
@@ -302,12 +314,7 @@ export default function WeeklyPrepScreen({ league, onNavigate, onOpenBoxScore })
   const effectiveRemaining = Object.values(effectiveCompletion).filter((done) => !done).length;
   const effectiveScore = Math.round(((4 - effectiveRemaining) / 4) * 100);
   const primaryAction = model.priorityActions?.[0];
-  const scoutSummaryItems = [
-    { label: 'Opponent', value: `${prep?.nextGame?.isHome ? 'vs' : '@'} ${prep?.opponent?.name ?? model.opponentAbbr}` },
-    { label: 'Matchup context', value: model.matchupHeadline },
-    { label: 'Primary action', value: primaryAction ? `${primaryAction.title}: ${primaryAction.reason}` : model.keyRiskLabel },
-    { label: 'Game-plan key', value: prep?.keyMatchupNote ?? model.keyRiskLabel },
-  ];
+  const scoutSummaryItems = buildScoutSummaryItems({ prep, model, primaryAction });
 
   // Readiness tone/status derive from liveSummary so they update on every plan change.
   const liveReadinessTone = liveSummary.severity === 'major_risk' ? 'danger' : liveSummary.severity === 'minor_risk' ? 'warning' : 'success';
