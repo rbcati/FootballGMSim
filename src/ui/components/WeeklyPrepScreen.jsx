@@ -301,6 +301,13 @@ export default function WeeklyPrepScreen({ league, onNavigate, onOpenBoxScore })
 
   const effectiveRemaining = Object.values(effectiveCompletion).filter((done) => !done).length;
   const effectiveScore = Math.round(((4 - effectiveRemaining) / 4) * 100);
+  const primaryAction = model.priorityActions?.[0];
+  const scoutSummaryItems = [
+    { label: 'Opponent', value: `${prep?.nextGame?.isHome ? 'vs' : '@'} ${prep?.opponent?.name ?? model.opponentAbbr}` },
+    { label: 'Matchup context', value: model.matchupHeadline },
+    { label: 'Primary action', value: primaryAction ? `${primaryAction.title}: ${primaryAction.reason}` : model.keyRiskLabel },
+    { label: 'Game-plan key', value: prep?.keyMatchupNote ?? model.keyRiskLabel },
+  ];
 
   // Readiness tone/status derive from liveSummary so they update on every plan change.
   const liveReadinessTone = liveSummary.severity === 'major_risk' ? 'danger' : liveSummary.severity === 'minor_risk' ? 'warning' : 'success';
@@ -363,24 +370,16 @@ export default function WeeklyPrepScreen({ league, onNavigate, onOpenBoxScore })
         </div>
       </SectionCard>
 
-      <SectionCard title="Readiness Command" subtitle="Confirm prep quality before returning to HQ.">
-        <div className="weekly-prep-command-row">
-          <TonePill tone={liveReadinessTone} label={`${effectiveScore}% ready`} />
-          <TonePill tone={effectiveRemaining === 0 ? 'success' : 'warning'} label={`${4 - effectiveRemaining}/4 complete`} />
-          <TonePill tone={effectiveRemaining === 0 ? 'success' : 'warning'} label={effectiveRemaining === 0 ? 'Ready to Advance' : 'Needs Attention'} />
+      <SectionCard title="Scout Report Summary" actions={<TonePill tone="info" label="Top read" />}>
+        <div className="weekly-prep-scout-summary" data-testid="weekly-prep-scout-summary">
+          {scoutSummaryItems.map((item) => (
+            <div key={item.label} className="weekly-prep-compact-row">
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </div>
+          ))}
         </div>
-        <p className="weekly-prep-caption">{model.keyRiskLabel}</p>
       </SectionCard>
-
-      <GamePlanControlCenter
-        key={`${league?.seasonId}:${league?.week}`}
-        prep={prep}
-        league={league}
-        plan={plan}
-        liveSummary={liveSummary}
-        onPlanChange={handlePlanChange}
-        onPlanReviewed={() => setLocalPlanReviewed(true)}
-      />
 
       <SectionCard title="Priority Actions" subtitle="Complete these before sim day.">
         <div className="weekly-prep-action-grid">
@@ -400,27 +399,49 @@ export default function WeeklyPrepScreen({ league, onNavigate, onOpenBoxScore })
         </div>
       </SectionCard>
 
-      <SectionCard title="Matchup Intel" subtitle="Strengths, weaknesses, and pressure points.">
-        <div className="weekly-prep-intel-grid">
-          <div>
-            <div className="weekly-prep-intel-head">Strengths</div>
-            <ul>
-              {(prep.opponentStrengths.length ? prep.opponentStrengths : ['No clear dominant opponent edge identified yet.']).map((item) => <li key={item}>{item}</li>)}
-            </ul>
-          </div>
-          <div>
-            <div className="weekly-prep-intel-head">Exploitable weaknesses</div>
-            <ul>
-              {(prep.opponentWeaknesses.length ? prep.opponentWeaknesses : ['No obvious weakness — execution will decide this one.']).map((item) => <li key={item}>{item}</li>)}
-            </ul>
-          </div>
-          <div>
-            <div className="weekly-prep-intel-head">Pressure points</div>
-            <ul>
-              {(prep.pressurePoints.length ? prep.pressurePoints : ['No major pressure point flagged.']).map((item) => <li key={item}>{item}</li>)}
-            </ul>
-          </div>
+      <SectionCard title="Readiness Command" subtitle="Confirm prep quality before returning to HQ.">
+        <div className="weekly-prep-command-row">
+          <TonePill tone={liveReadinessTone} label={`${effectiveScore}% ready`} />
+          <TonePill tone={effectiveRemaining === 0 ? 'success' : 'warning'} label={`${4 - effectiveRemaining}/4 complete`} />
+          <TonePill tone={effectiveRemaining === 0 ? 'success' : 'warning'} label={effectiveRemaining === 0 ? 'Ready to Advance' : 'Needs Attention'} />
         </div>
+        <p className="weekly-prep-caption">{model.keyRiskLabel}</p>
+      </SectionCard>
+
+      <GamePlanControlCenter
+        key={`${league?.seasonId}:${league?.week}`}
+        prep={prep}
+        league={league}
+        plan={plan}
+        liveSummary={liveSummary}
+        onPlanChange={handlePlanChange}
+        onPlanReviewed={() => setLocalPlanReviewed(true)}
+      />
+
+      <SectionCard title="Matchup Intel Details" subtitle="Strengths, weaknesses, and pressure points.">
+        <details className="weekly-prep-details" data-testid="weekly-prep-matchup-details">
+          <summary>Open detailed scout report</summary>
+          <div className="weekly-prep-intel-grid">
+            <div>
+              <div className="weekly-prep-intel-head">Strengths</div>
+              <ul>
+                {(prep.opponentStrengths.length ? prep.opponentStrengths : ['No clear dominant opponent edge identified yet.']).map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+            <div>
+              <div className="weekly-prep-intel-head">Exploitable weaknesses</div>
+              <ul>
+                {(prep.opponentWeaknesses.length ? prep.opponentWeaknesses : ['No obvious weakness — execution will decide this one.']).map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+            <div>
+              <div className="weekly-prep-intel-head">Pressure points</div>
+              <ul>
+                {(prep.pressurePoints.length ? prep.pressurePoints : ['No major pressure point flagged.']).map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+          </div>
+        </details>
       </SectionCard>
 
       <SectionCard title="Active Effects" subtitle="Live plan impact for this week.">
