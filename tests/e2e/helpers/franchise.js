@@ -131,8 +131,11 @@ export async function goToTab(page, name) {
             const b = anyBtn.nth(i);
             const text = await b.innerText();
             if (text && text.toLowerCase().includes(tab)) {
-                 await b.click({ force: true });
-                 return;
+                 try {
+                     await b.click({ timeout: 1000 });
+                     return;
+                 } catch (e) {
+                 }
             }
         }
   }
@@ -167,8 +170,11 @@ export async function goToTab(page, name) {
             const b = anyBtn.nth(i);
             const text = await b.innerText();
             if (text && text.toLowerCase().includes(tab)) {
-                 await b.click({ force: true });
-                 return;
+                 try {
+                     await b.click({ timeout: 1000 });
+                     return;
+                 } catch (e) {
+                 }
             }
         }
     }

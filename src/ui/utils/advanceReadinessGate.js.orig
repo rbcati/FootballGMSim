@@ -121,16 +121,10 @@ export function buildAdvanceReadinessGate({ league, prep, weeklyContext } = {}) 
   const hasWarning = riskItems.some((item) => item.severity === 'warning');
   const gateSeverity = hasDanger ? 'danger' : hasWarning ? 'warning' : 'info';
 
-  // Stakes/Tension context
-  const isLateSeason = (league?.week ?? 0) >= 13;
-  const hasPlayoffStakes = isLateSeason && (league?.phase === 'regular' || league?.phase === 'playoffs');
-
   const title = shouldWarn ? 'Advance with unresolved prep?' : 'Advance to next week?';
-  let summary = shouldWarn
+  const summary = shouldWarn
     ? "You can still advance, but this week's setup is not clean."
     : 'No prep blockers detected. Ready to advance.';
-
-  if (!shouldWarn && hasPlayoffStakes) summary += ' Playoff stakes are high—every decision counts.';
 
   // primaryFixDestination: most critical item first
   const primaryItem =
