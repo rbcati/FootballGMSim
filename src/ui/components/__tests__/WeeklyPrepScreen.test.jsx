@@ -2,7 +2,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import WeeklyPrepScreen from '../WeeklyPrepScreen.jsx';
+import WeeklyPrepScreen, { buildScoutSummaryItems } from '../WeeklyPrepScreen.jsx';
 import * as weeklyPrepActionsModule from '../../utils/weeklyPrepActions.js';
 import { getWeeklyPrepProgress } from '../../utils/weeklyPrep.js';
 
@@ -88,6 +88,29 @@ describe('WeeklyPrepScreen', () => {
     expect(text.indexOf('Scout Report Summary')).toBeLessThan(text.indexOf('Priority Actions'));
     expect(text.indexOf('Priority Actions')).toBeLessThan(text.indexOf('Readiness Command'));
     expect(text.indexOf('Scout Report Summary')).toBeLessThan(text.indexOf('Matchup Intel Details'));
+  });
+
+  it('does not duplicate non-empty scout summary fallback values when action and matchup note are missing', () => {
+    const items = buildScoutSummaryItems({
+      prep: {
+        nextGame: { isHome: true },
+        opponent: { name: 'Lions' },
+      },
+      model: {
+        opponentAbbr: 'DET',
+        matchupHeadline: 'Home matchup vs DET',
+        keyRiskLabel: 'Defensive front must limit explosive passing downs.',
+      },
+      primaryAction: null,
+    });
+
+    const nonEmptyValues = items
+      .map((item) => item.value)
+      .filter((value) => value && value !== '—');
+
+    expect(items.find((item) => item.label === 'Primary action')?.value).toBe('—');
+    expect(items.find((item) => item.label === 'Game-plan key')?.value).toBe('Defensive front must limit explosive passing downs.');
+    expect(new Set(nonEmptyValues).size).toBe(nonEmptyValues.length);
   });
 
   it('does not mutate league gameplay data while rendering the denser prep view', () => {
