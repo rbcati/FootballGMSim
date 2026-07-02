@@ -138,6 +138,7 @@ class AiLogic {
      */
     static async executeAICutdowns() {
         const meta = cache.getMeta();
+        const transactionLogs = [];
         const userTeamId = meta.userTeamId;
         const allTeams = cache.getAllTeams();
         const limit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
@@ -213,7 +214,7 @@ class AiLogic {
                 }
 
                 // Log Transaction
-                await Transactions.add({
+                transactionLogs.push({
                     type: 'RELEASE',
                     seasonId: meta.currentSeasonId,
                     week: meta.currentWeek,
@@ -224,6 +225,10 @@ class AiLogic {
 
             // Re-calc active cap (roster changed)
             this.updateTeamCap(team.id);
+        }
+
+        if (transactionLogs.length > 0) {
+            await Transactions.addMany(transactionLogs);
         }
     }
 

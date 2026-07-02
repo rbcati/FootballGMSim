@@ -512,6 +512,7 @@ const TRANSACTIONS_RECENT_CAP = 4000;
 
 export const Transactions = {
   add:      (tx)       => dbPut(STORES.TRANSACTIONS, tx),
+  addMany:  (txs)      => dbPutBulk(STORES.TRANSACTIONS, txs),
   bySeason: (seasonId) => dbGetAllByIndex(STORES.TRANSACTIONS, 'seasonId', seasonId),
   byTeam:   (teamId)   => dbGetAllByIndex(STORES.TRANSACTIONS, 'teamId',   teamId),
   /** Full scan — only for filtered activity views; hard-capped for mobile safety. */
