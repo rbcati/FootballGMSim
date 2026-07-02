@@ -6,6 +6,8 @@ import { buildRouteRequestKey } from "../utils/requestLoopGuard.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { getAgentBadgeMeta, hydratePlayerAgent } from "../../core/contracts/agentNegotiationEngine.js";
 import { deriveNegotiationContext, NEGOTIATION_STANCES } from "../selectors/deriveNegotiationContext.js";
+import { evaluateReSignPriority, inferTeamDirection } from "../../core/contract-market.js";
+import NegotiationContextPanel from "./contracts/NegotiationContextPanel.jsx";
 
 const STANCE_TEXT_TONE = {
   [NEGOTIATION_STANCES.EAGER]: 'var(--success)',
@@ -76,6 +78,24 @@ export default function ExtensionNegotiationModal({
     () => deriveNegotiationContext({ player, team: resolvedTeam, league: resolvedLeague }),
     [player, resolvedTeam, resolvedLeague],
   );
+
+  // Display-only scouting intel (existing contract-market intelligence; no
+  // economics computed here). Uses the worker-provided ask as the demand so
+  // the recommendation matches the numbers on screen. Decision timing inputs
+  // (offerCount, phase, waitCycles) are not available at this surface — the
+  // Decision row is a V2 follow-up.
+  const priorityContext = useMemo(() => {
+    if (!player || ask == null) return null;
+    try {
+      return evaluateReSignPriority(player, {
+        teamDirection: inferTeamDirection(resolvedTeam ?? {}, toFiniteNumber(resolvedLeague?.week, 1)),
+        marketHeat: toFiniteNumber(ask?.marketHeat, 1),
+        demand: ask,
+      });
+    } catch {
+      return null;
+    }
+  }, [player, ask, resolvedTeam, resolvedLeague]);
 
   const askYears = toFiniteNumber(ask?.years, null);
   const askBaseAnnual = toFiniteNumber(ask?.baseAnnual, null);
@@ -189,6 +209,9 @@ export default function ExtensionNegotiationModal({
               </>
             )}
           </div>
+
+          {/* Scouting Intel — display-only contract-market intelligence. */}
+          <NegotiationContextPanel priorityContext={priorityContext} />
 
           {isFrozen && (
             <div

@@ -2925,6 +2925,55 @@ select:disabled {
   background: #545b62;
 }
 
+/* Negotiation context panel (Scouting Intel — re-sign / extension modal) */
+.neg-context-panel {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: var(--space-3);
+  margin: 0 0 var(--space-3);
+  display: grid;
+  gap: var(--space-1);
+}
+
+.neg-context-header {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-subtle);
+  font-weight: 700;
+  margin-bottom: var(--space-1);
+}
+
+.neg-context-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.neg-context-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.neg-context-value {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: right;
+}
+
+.neg-context-value--high { color: var(--danger); }
+.neg-context-value--medium { color: var(--warning); }
+.neg-context-value--low { color: var(--success); }
+.neg-context-value--muted { color: var(--text-muted); }
+
+.neg-context-note {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
 /* Coaching Role Styles */
 .coaching-role-interface {
     margin: var(--space-4) 0;
