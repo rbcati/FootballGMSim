@@ -240,6 +240,7 @@ class AiLogic {
      * This runs for all AI teams; the user's team must manage its own cap.
      */
     static async executeAICapManagement() {
+        const txsToCommit = [];
         const meta        = cache.getMeta();
         const userTeamId  = meta.userTeamId;
         let targetCap = Constants.SALARY_CAP.HARD_CAP;
@@ -287,7 +288,7 @@ class AiLogic {
                 });
                 this.updateTeamCap(team.id);
 
-                await Transactions.add({
+                txsToCommit.push({
                     type: 'RESTRUCTURE', seasonId: meta.currentSeasonId,
                     week: meta.currentWeek, teamId: team.id,
                     details: { playerId: p.id, convertAmount, aiInitiated: true },
@@ -337,12 +338,16 @@ class AiLogic {
                 }
                 this.updateTeamCap(team.id);
 
-                await Transactions.add({
+                txsToCommit.push({
                     type: 'RELEASE', seasonId: meta.currentSeasonId,
                     week: meta.currentWeek, teamId: team.id,
                     details: { playerId: p.id, deadCap: currentYearDead, aiCapCut: true },
                 });
             }
+        }
+
+        if (txsToCommit.length > 0) {
+            await Promise.all(txsToCommit.map(tx => Transactions.add(tx)));
         }
     }
 
