@@ -136,7 +136,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
         title={screenTitle}
         subtitle={screenSubtitle}
         onBack={onBack}
-        backLabel="Return to HQ"
+        backLabel={backLabel ?? "Return to HQ"}
         primaryAction={(
           <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Weekly Prep')}>
             Review Next Week
