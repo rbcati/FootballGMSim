@@ -1383,3 +1383,65 @@ details[open] .app-hq-background-section__summary span { transform: rotate(180de
   color: var(--text-muted);
   margin-top: var(--space-1);
 }
+
+/* Trade Breakdown card — class-based styling mirrors PageOrientationHeader pattern. */
+.trade-value-summary {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+}
+.trade-value-summary__eyebrow {
+  color: var(--text-subtle);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.trade-value-summary__copy {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.trade-value-summary__value-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  --trade-value-summary-tone: var(--text-muted);
+}
+.trade-value-summary__value-row--favorable {
+  --trade-value-summary-tone: var(--success);
+}
+.trade-value-summary__value-row--unfavorable {
+  --trade-value-summary-tone: var(--warning);
+}
+.trade-value-summary__value-row--even,
+.trade-value-summary__value-row--unknown {
+  --trade-value-summary-tone: var(--text-muted);
+}
+.trade-value-summary__pill {
+  background: color-mix(in srgb, var(--trade-value-summary-tone) 8%, transparent);
+  border: 1px solid var(--trade-value-summary-tone);
+  border-radius: var(--radius-pill);
+  color: var(--trade-value-summary-tone);
+  display: inline-block;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1.6;
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+}
+.trade-value-summary__balance-label {
+  color: var(--trade-value-summary-tone);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+.trade-value-summary__interest {
+  display: grid;
+  gap: var(--space-1);
+}
+.trade-value-summary__interest-label {
+  color: var(--text-subtle);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}

@@ -65,7 +65,7 @@ export const MOTIVATION_CODES = Object.freeze({
 // Front-office persona keys (mirrors core/ai/frontOfficePersonaEngine.js,
 // read-only — mirrored rather than imported so this file never pulls in
 // engine code).
-const PERSONA = Object.freeze({
+export const TRADE_CONTEXT_PERSONAS = Object.freeze({
   WIN_NOW: 'WIN_NOW',
   PATIENT_BUILDER: 'PATIENT_BUILDER',
   CAP_HOARDER: 'CAP_HOARDER',
@@ -175,7 +175,7 @@ function collectMotivations({
   }
 
   // WIN_NOW_ACQUIRE — win-now front office receiving a high-OVR player.
-  if (persona === PERSONA.WIN_NOW && theyGetPlayers.some((p) => num(p?.ovr) >= STAR_OVR)) {
+  if (persona === TRADE_CONTEXT_PERSONAS.WIN_NOW && theyGetPlayers.some((p) => num(p?.ovr) >= STAR_OVR)) {
     fired.push({
       code: MOTIVATION_CODES.WIN_NOW_ACQUIRE,
       label: 'This fits a win-now roster push.',
@@ -184,7 +184,7 @@ function collectMotivations({
 
   // REBUILDER_SHED — patient/cap-focused front office sending a high-OVR veteran.
   if (
-    (persona === PERSONA.PATIENT_BUILDER || persona === PERSONA.CAP_HOARDER) &&
+    (persona === TRADE_CONTEXT_PERSONAS.PATIENT_BUILDER || persona === TRADE_CONTEXT_PERSONAS.CAP_HOARDER) &&
     theySendPlayers.some((p) => num(p?.ovr) >= STAR_OVR && num(p?.age) >= VETERAN_AGE)
   ) {
     fired.push({
