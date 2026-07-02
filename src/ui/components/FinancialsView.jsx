@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
 import { classifyTeamDirection, evaluateResignRecommendation } from "../utils/contractInsights.js";
+import ReSignPriorityBadges from "./resign/ReSignPriorityBadges.jsx";
 import { CONTRACT_PLAN_LABELS, normalizeManagement } from "../utils/playerManagement.js";
 import InfoTip from "./InfoTip.jsx";
 import { computeRestructureOutcome, isContractRestructureEligible } from "../../core/contracts/restructure.js";
@@ -250,7 +251,9 @@ export default function FinancialsView({ league, actions }) {
       estimatedExtensionCost: expiring.reduce((sum, p) => sum + p.estimatedDemand, 0),
       capRiskNextYear: expiring.filter((p) => (p.age ?? 0) >= 30 && p.estimatedDemand >= 12).length,
     };
-    return { rows: expiring, summary };
+    // Sort a copy so the underlying player/enriched arrays are never reordered.
+    const sortedRows = [...expiring].sort((a, b) => (b.rec?.score ?? 0) - (a.rec?.score ?? 0));
+    return { rows: sortedRows, summary };
   }, [enriched, userTeam, league?.week]);
 
 
@@ -656,7 +659,14 @@ export default function FinancialsView({ league, actions }) {
           <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--hairline)', borderRadius: 8 }}>
             {expiringDashboard.rows.map((row) => (
               <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1.3fr repeat(7, minmax(70px, 1fr))', gap: 8, padding: '8px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 12 }}>
-                <div><strong>{row.name}</strong><div style={{ color: 'var(--text-muted)' }}>{row.pos} · age {row.age} · morale {row.morale ?? 70}</div><div style={{ color: row.rec.tone }}>{row.rec.label}</div><div style={{ color: 'var(--text-subtle)' }}>Plan: {row.management.contractPlan[0] ? (CONTRACT_PLAN_LABELS[row.management.contractPlan[0]] ?? row.management.contractPlan[0]) : 'None'} · Trade status: {row.management.tradeStatus}</div></div>
+                <div><strong>{row.name}</strong><div style={{ color: 'var(--text-muted)' }}>{row.pos} · age {row.age} · morale {row.morale ?? 70}</div>
+                  <ReSignPriorityBadges
+                    tier={row.rec.tier}
+                    urgency={row.rec.urgency}
+                    risk={row.rec.negotiationRisk}
+                    replacementDifficulty={row.rec.replacementDifficulty}
+                  />
+                  <div style={{ color: 'var(--text-subtle)' }}>Plan: {row.management.contractPlan[0] ? (CONTRACT_PLAN_LABELS[row.management.contractPlan[0]] ?? row.management.contractPlan[0]) : 'None'} · Trade status: {row.management.tradeStatus}</div></div>
                 <div>{row.ovr}/{row.potential ?? row.ovr}</div>
                 <div>{fmt(row.capHit)}</div>
                 <div>{fmt(row.estimatedDemand)}</div>
