@@ -1,6 +1,13 @@
 import React from 'react';
 import { deriveNegotiationContext, NEGOTIATION_STANCES } from '../../selectors/deriveNegotiationContext.js';
 
+const STANCE_TONE = Object.freeze({
+  [NEGOTIATION_STANCES.EAGER]: 'var(--success)',
+  [NEGOTIATION_STANCES.RELUCTANT]: 'var(--warning)',
+  [NEGOTIATION_STANCES.UNAVAILABLE]: 'var(--text-muted)',
+  [NEGOTIATION_STANCES.NEUTRAL]: 'var(--text-muted)',
+});
+
 /**
  * NegotiationStanceBadge — purely presentational display of a player's
  * derived negotiation stance and plain-language reason labels.
@@ -28,7 +35,7 @@ export default function NegotiationStanceBadge({
 }) {
   const ctx = deriveNegotiationContext({ player, team, league });
 
-  const tone = STANCE_TONE[ctx.stance] ?? STANCE_TONE[NEGOTIATION_STANCES.NEUTRAL];
+  const tone = STANCE_TONE[ctx.stance] ?? 'var(--text-muted)';
   const reasonLabels = (ctx.reasonLabels ?? []).slice(0, maxReasons);
 
   return (
@@ -66,10 +73,3 @@ export default function NegotiationStanceBadge({
     </div>
   );
 }
-
-const STANCE_TONE = Object.freeze({
-  [NEGOTIATION_STANCES.EAGER]: 'var(--success)',
-  [NEGOTIATION_STANCES.RELUCTANT]: 'var(--warning)',
-  [NEGOTIATION_STANCES.UNAVAILABLE]: 'var(--text-muted)',
-  [NEGOTIATION_STANCES.NEUTRAL]: 'var(--text-muted)',
-});
