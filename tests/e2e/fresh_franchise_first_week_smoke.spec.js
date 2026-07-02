@@ -199,13 +199,17 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
     await page.getByRole('button', { name: /^Back to HQ$/i }).click();
   }
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
-  await expect(page.getByTestId('hq-last-result')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  // hq-last-result now lives inside the collapsed "Season Pulse & More" drawer
+  // (twin-grid dashboard restructure) and is hidden until that <details> is
+  // opened; hq-last-result-card is the always-visible canonical result entry
+  // point rendered directly on HQ, so assert against that instead.
+  await expect(page.getByTestId('hq-last-result-card')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   // hq-next-action may be absent in newer twin-grid layout (removed in dashboard
   // restructure); skip the mandatory check and search for its content flexibly.
   const hqNextActionPresent = await page.getByTestId('hq-next-action').isVisible({ timeout: 3000 }).catch(() => false);
 
   // Last Result card should NOT show placeholder opponent (TBD) or zero score
-  const lastResultCard = page.getByTestId('hq-last-result');
+  const lastResultCard = page.getByTestId('hq-last-result-card');
   await expect(lastResultCard).toBeVisible();
   const lastResultText = await lastResultCard.textContent();
   // Score should contain a real score pattern like "W · 24-17" or "L · 14-21"
@@ -245,10 +249,10 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await expect(page.getByTestId('app-bootstrap-loading')).toBeHidden({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
-  await expect(page.getByTestId('hq-last-result')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  await expect(page.getByTestId('hq-last-result-card')).toBeVisible({ timeout: SMOKE_TIMEOUT });
 
   // After reload, Last Result should still show real opponent and score
-  const reloadedLastResult = await page.getByTestId('hq-last-result').textContent();
+  const reloadedLastResult = await page.getByTestId('hq-last-result-card').textContent();
   expect(reloadedLastResult).toMatch(/[WLT].*\d+[-–]\d+/);
   expect(reloadedLastResult).not.toMatch(/\bTBD\b/);
 
