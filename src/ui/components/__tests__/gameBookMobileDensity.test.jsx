@@ -73,6 +73,28 @@ function renderRichBoxScore(overrides = {}) {
   );
 }
 
+function renderSparseBoxScore(gameOverrides = {}) {
+  const game = {
+    gameId: 'g-sparse',
+    homeId: 1,
+    awayId: 2,
+    homeScore: 35,
+    awayScore: 10,
+    scoringSummary: [
+      { quarter: 1, time: '11:12', teamAbbr: 'HME', type: 'TD', description: 'Opening touchdown', scoreAfter: { home: 14, away: 0 } },
+      { quarter: 2, time: '3:45', teamAbbr: 'HME', type: 'TD', description: 'Second-quarter score', scoreAfter: { home: 28, away: 3 } },
+    ],
+    ...gameOverrides,
+  };
+  return render(
+    <BoxScore
+      gameId="g-sparse"
+      league={{ ...league, gameById: { 'g-sparse': game } }}
+      embedded
+    />,
+  );
+}
+
 describe('Game Book mobile density — section hierarchy', () => {
   afterEach(() => {
     cleanup();
@@ -148,6 +170,26 @@ describe('Game Book mobile density — section hierarchy', () => {
       <BoxScore gameId="g-density" league={{ ...league, gameById: { 'g-density': richGame } }} embedded />,
     );
     expect(JSON.stringify(richGame)).toBe(before);
+  });
+
+  it('still renders when stat leader source data is missing', () => {
+    const { getByTestId, queryByTestId } = renderSparseBoxScore({ playerStats: undefined });
+    expect(getByTestId('game-book-score-hero')).toBeTruthy();
+    expect(getByTestId('game-book-player-stats')).toBeTruthy();
+    expect(queryByTestId('game-book-leaders')).toBeNull();
+  });
+
+  it('still renders when turning point source data is missing', () => {
+    const { getByTestId } = renderSparseBoxScore({ turningPoints: undefined });
+    expect(getByTestId('game-book-score-hero')).toBeTruthy();
+    expect(getByTestId('game-book-moments')).toBeTruthy();
+  });
+
+  it('falls back to scoring summary for decisive moments when turning points are empty', () => {
+    const { getByTestId } = renderSparseBoxScore({ turningPoints: [] });
+    const moments = getByTestId('game-book-moments');
+    expect(moments.textContent).toContain('Opening touchdown');
+    expect(moments.textContent).toContain('Second-quarter score');
   });
 });
 

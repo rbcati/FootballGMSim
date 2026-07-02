@@ -55,6 +55,8 @@ describe('buildBoxScoreViewModel', () => {
   it('classifies missing detail when score unavailable', () => {
     const vm = buildBoxScoreViewModel({});
     expect(vm.archiveQuality).toBe('Missing detail');
+    expect(vm.statLeaderCards).toEqual([]);
+    expect(vm.turningPointRows).toEqual([]);
   });
 
   it('builds factual game story bullets from available data only', () => {
@@ -219,6 +221,14 @@ describe('buildBoxScoreViewModel', () => {
     expect(vm.turningPointRows).toEqual([]);
     expect(vm.notablePerformanceRows).toEqual([]);
     expect(vm.injuryRows).toEqual([]);
+  });
+
+  it('returns stable Game Book arrays when leader and turning point source data is absent', () => {
+    const vm = buildBoxScoreViewModel({
+      game: { homeId: 1, awayId: 2, homeScore: 17, awayScore: 10 },
+    });
+    expect(Array.isArray(vm.statLeaderCards)).toBe(true);
+    expect(Array.isArray(vm.turningPointRows)).toBe(true);
   });
 
   it('conservatively infers turning points from recorded scoring and key play rows', () => {
