@@ -487,7 +487,15 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
   const rawGame = unwrapBoxScoreResponse(game);
   const payload = mergeArchivedGameWithScheduleResult(rawGame, scheduleGame) ?? normalizeArchivedGamePayload(rawGame ?? null) ?? rawGame ?? null;
   if (!payload) {
-    return { gameId: gameId ?? null, status: 'unavailable', archiveQuality: QUALITY.missing, hasDetailedStats: false, missingDetailReason: 'Game data missing' };
+    return {
+      gameId: gameId ?? null,
+      status: 'unavailable',
+      archiveQuality: QUALITY.missing,
+      hasDetailedStats: false,
+      missingDetailReason: 'Game data missing',
+      statLeaderCards: [],
+      turningPointRows: [],
+    };
   }
   const homeId = payload?.homeId ?? payload?.home;
   const awayId = payload?.awayId ?? payload?.away;
