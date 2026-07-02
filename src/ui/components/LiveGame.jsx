@@ -431,7 +431,7 @@ function LiveFinalCard({ framing, recapGame, recapText, onOpenBoxScore }) {
           data-testid="live-final-boxscore"
           onClick={() => onOpenBoxScore?.(framing.gameId)}
         >
-          View Box Score ›
+          View Game Book ›
         </button>
       ) : null}
     </div>

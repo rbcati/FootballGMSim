@@ -7883,7 +7883,8 @@ details[open] .nav-summary::after {
   right: 0;
   width: 100%;
   max-height: 85dvh;
-  overflow: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   background: var(--surface, #1e1e2e);
@@ -7891,7 +7892,6 @@ details[open] .nav-summary::after {
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
   z-index: 9500;
-  /* No internal scroll — sheet is non-scrolling by design */
 }
 
 /* Embedded variant: rendered inside a parent container, not fixed */
@@ -8165,4 +8165,181 @@ details[open] .nav-summary::after {
   font-size: 13px;
   color: var(--text-muted, #999);
   text-align: center;
+}
+
+/* ── Section title (shared by leaders / decisive moments) ───────────────── */
+.bs-sheet-section-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-subtle, #666);
+  margin-bottom: 2px;
+}
+
+/* ── Key leaders — priority 2, always visible ────────────────────────────── */
+.bs-sheet-leaders {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  border-bottom: 1px solid var(--hairline, #333);
+  flex-shrink: 0;
+}
+
+.bs-sheet-leader-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  font-size: 12px;
+}
+
+.bs-sheet-leader-label {
+  font-weight: 700;
+  color: var(--text-muted, #999);
+  flex-shrink: 0;
+}
+
+.bs-sheet-leader-line {
+  flex: 1;
+  color: var(--text, #fff);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Decisive moments — priority 3, short always-visible teaser ─────────── */
+.bs-sheet-moments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+  padding: var(--space-2, 8px) var(--space-4, 16px);
+  border-bottom: 1px solid var(--hairline, #333);
+  flex-shrink: 0;
+}
+
+.bs-sheet-moment-row {
+  font-size: 11px;
+  color: var(--text-muted, #999);
+  display: flex;
+  gap: 6px;
+}
+
+.bs-sheet-moment-meta {
+  font-weight: 700;
+  color: var(--text, #fff);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.bs-sheet-moment-text {
+  flex: 1;
+}
+
+/* ── Collapsed dense sections (scoring summary, team stats, player stats,
+   play-by-play) — native <details>/<summary>, mirrors the Weekly Prep
+   Matchup Intel pattern so dense content stays out of the first viewport. */
+.bs-sheet-details {
+  border-bottom: 1px solid var(--hairline, #333);
+  flex-shrink: 0;
+}
+
+.bs-sheet-details summary {
+  cursor: pointer;
+  list-style: none;
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text, #fff);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bs-sheet-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.bs-sheet-details summary::after {
+  content: "▾";
+  color: var(--text-subtle, #666);
+  font-size: 10px;
+  margin-left: var(--space-2, 8px);
+}
+
+.bs-sheet-details[open] summary::after {
+  content: "▴";
+}
+
+.bs-sheet-details-body {
+  padding: 0 var(--space-4, 16px) var(--space-3, 12px);
+}
+
+/* Full scoring summary / play-by-play rows */
+.bs-sheet-row {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted, #999);
+  padding: 3px 0;
+}
+
+.bs-sheet-row--key {
+  color: var(--text, #fff);
+  font-weight: 600;
+}
+
+.bs-sheet-row-meta {
+  font-weight: 700;
+  color: var(--text-subtle, #666);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Team stat comparison rows */
+.bs-sheet-compare-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--space-2, 8px);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle, #666);
+  text-align: center;
+  padding-bottom: var(--space-1, 4px);
+  border-bottom: 1px solid var(--hairline, #333);
+  margin-bottom: var(--space-1, 4px);
+}
+
+.bs-sheet-compare-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--space-2, 8px);
+  align-items: center;
+  padding: var(--space-1, 4px) 0;
+  font-size: 12px;
+}
+
+.bs-sheet-compare-value {
+  text-align: center;
+  color: var(--text-muted, #999);
+  font-variant-numeric: tabular-nums;
+}
+
+.bs-sheet-compare-value.is-winner {
+  color: var(--text, #fff);
+  font-weight: 800;
+}
+
+.bs-sheet-compare-label {
+  text-align: center;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle, #666);
 }

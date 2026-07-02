@@ -161,6 +161,18 @@ function BoxScore({
     );
   };
 
+  // Key leaders — top performers surfaced above dense tables so mobile users
+  // answer "who won it" before drilling into full stat sheets.
+  const keyLeaders = (vm.statLeaderCards ?? []).filter((leader) => leader.available);
+
+  // Decisive moments — short, always-visible teaser (turning points, falling
+  // back to the first few scoring plays). The exhaustive list lives in the
+  // collapsed "Full Scoring Summary" section below.
+  const decisiveMoments = (vm.turningPointRows?.length ? vm.turningPointRows : vm.scoringSummary ?? []).slice(0, 4);
+  const scoringSummaryRows = vm.scoringSummary ?? [];
+  const teamComparisonRows = vm.teamComparisonRows ?? [];
+  const playByPlayRows = vm.playByPlayRows ?? [];
+
   return (
     <div
       className={`bs-sheet${embedded ? " bs-sheet--embedded" : ""}`}
@@ -177,7 +189,7 @@ function BoxScore({
         ✕
       </button>
 
-      {/* ── SCORE HERO ~60px ─────────────────────────────────────────────── */}
+      {/* ── SCORE HERO ~60px — priority 1: what happened ───────────────── */}
       <div className="bs-sheet-hero" data-testid="game-book-score-hero">
         <div className="bs-sheet-score-display">
           <span className="bs-sheet-abbr">{awayAbbr}</span>
@@ -195,6 +207,19 @@ function BoxScore({
         <div className="sr-only" data-testid="game-book-final-score">{vm.finalScoreLine}</div>
         <div className="bs-sheet-meta">Week {vm.week ?? mdash} · Season {vm.season ?? mdash}</div>
       </div>
+
+      {/* ── KEY LEADERS — priority 2: top performers above dense tables ─── */}
+      {keyLeaders.length > 0 && (
+        <div className="bs-sheet-leaders" data-testid="game-book-leaders">
+          <div className="bs-sheet-section-title">Key Leaders</div>
+          {keyLeaders.map((leader) => (
+            <div key={leader.key} className="bs-sheet-leader-row" data-testid={`game-book-leader-${leader.key}`}>
+              <span className="bs-sheet-leader-label">{leader.label}</span>
+              <span className="bs-sheet-leader-line">{leader.line}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── EXECUTIVE SUMMARY — inline bullets or hidden debug div ──────── */}
       {reasoningBullets.length > 0 ? (
@@ -216,27 +241,100 @@ function BoxScore({
         />
       )}
 
-      {/* ── STAT TABS — pill row ─────────────────────────────────────────── */}
-      <div className="bs-sheet-tab-row" data-testid="game-book-stat-tabs" role="tablist" aria-label="Stat category">
-        {TAB_KEYS.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab}
-            className={`bs-sheet-tab${activeTab === tab ? " is-active" : ""}`}
-            data-testid={`game-book-tab-${tab}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
-      </div>
+      {/* ── DECISIVE MOMENTS — priority 3: short teaser, always visible ─── */}
+      {decisiveMoments.length > 0 && (
+        <div className="bs-sheet-moments" data-testid="game-book-moments">
+          <div className="bs-sheet-section-title">Decisive Moments</div>
+          {decisiveMoments.map((m, i) => (
+            <div key={m.id ?? i} className="bs-sheet-moment-row">
+              <span className="bs-sheet-moment-meta">
+                {m.quarter != null ? `Q${m.quarter}` : ""}{(m.time ?? m.clock) ? ` ${m.time ?? m.clock}` : ""}
+              </span>
+              <span className="bs-sheet-moment-text">{m.text ?? m.description ?? "Momentum swing"}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* ── DENSE STAT TABLE — active tab content ───────────────────────── */}
-      <div className="bs-sheet-stat-body" data-testid="game-book-stat-body" role="tabpanel">
-        {renderStatRows(activeSection)}
-      </div>
+      {/* ── FULL SCORING SUMMARY — collapsed, exhaustive list ────────────── */}
+      {scoringSummaryRows.length > 0 && (
+        <details className="bs-sheet-details" data-testid="game-book-scoring-summary">
+          <summary>Full Scoring Summary ({scoringSummaryRows.length})</summary>
+          <div className="bs-sheet-details-body">
+            {scoringSummaryRows.map((row) => (
+              <div key={row.id} className="bs-sheet-row">
+                <span className="bs-sheet-row-meta">
+                  {row.quarter != null ? `Q${row.quarter}` : ""}{row.time ? ` ${row.time}` : ""}
+                </span>
+                <span>{[row.teamAbbr, row.type, row.description].filter(Boolean).join(" — ")}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {/* ── TEAM STAT COMPARISON — priority 4, collapsed ─────────────────── */}
+      {teamComparisonRows.length > 0 && (
+        <details className="bs-sheet-details" data-testid="game-book-team-stats">
+          <summary>Team Stat Comparison</summary>
+          <div className="bs-sheet-details-body">
+            <div className="bs-sheet-compare-head">
+              <span>{awayAbbr}</span>
+              <span />
+              <span>{homeAbbr}</span>
+            </div>
+            {teamComparisonRows.map((row) => (
+              <div key={row.key} className="bs-sheet-compare-row" data-testid={`game-book-compare-${row.key}`}>
+                <span className={`bs-sheet-compare-value${row.winner === "away" ? " is-winner" : ""}`}>{row.away ?? mdash}</span>
+                <span className="bs-sheet-compare-label">{row.label}</span>
+                <span className={`bs-sheet-compare-value${row.winner === "home" ? " is-winner" : ""}`}>{row.home ?? mdash}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {/* ── FULL PLAYER STATS — priority 5, collapsed dense tables ───────── */}
+      <details className="bs-sheet-details" data-testid="game-book-player-stats">
+        <summary>Full Player Stats</summary>
+        <div className="bs-sheet-details-body">
+          <div className="bs-sheet-tab-row" data-testid="game-book-stat-tabs" role="tablist" aria-label="Stat category">
+            {TAB_KEYS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
+                className={`bs-sheet-tab${activeTab === tab ? " is-active" : ""}`}
+                data-testid={`game-book-tab-${tab}`}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
+          <div className="bs-sheet-stat-body" data-testid="game-book-stat-body" role="tabpanel">
+            {renderStatRows(activeSection)}
+          </div>
+        </div>
+      </details>
+
+      {/* ── FULL PLAY-BY-PLAY — priority 6, collapsed drive/play log ─────── */}
+      {playByPlayRows.length > 0 && (
+        <details className="bs-sheet-details" data-testid="game-book-play-by-play">
+          <summary>Full Play-by-Play ({playByPlayRows.length})</summary>
+          <div className="bs-sheet-details-body">
+            {playByPlayRows.map((row) => (
+              <div key={row.id} className={`bs-sheet-row${row.isKey ? " bs-sheet-row--key" : ""}`}>
+                <span className="bs-sheet-row-meta">
+                  {row.quarter != null ? `Q${row.quarter}` : ""}{row.clock ? ` ${row.clock}` : ""}
+                </span>
+                <span>{row.teamAbbr ? `${row.teamAbbr} — ` : ""}{row.text}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

@@ -1449,9 +1449,7 @@ export default function LeagueDashboard({
               backLabel={
                 gameDetailOpenSource === "weekly-results"
                   ? "Back to Weekly Results"
-                  : gameDetailOpenSource === "postgame"
-                    ? "Back to Result"
-                    : undefined
+                  : undefined
               }
             />
           </TabErrorBoundary>
@@ -1641,7 +1639,7 @@ export default function LeagueDashboard({
               onNavigate={setActiveTab}
               onPlayerSelect={handlePlayerSelect}
               onTeamSelect={handleTeamSelect}
-              backLabel={gameDetailModal.source === 'weekly-results' ? 'Back to Weekly Results' : 'Back to Result'}
+              backLabel={gameDetailModal.source === 'weekly-results' ? 'Back to Weekly Results' : 'Return to HQ'}
             />
           </div>
         </div>
