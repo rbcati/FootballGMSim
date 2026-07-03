@@ -3014,7 +3014,7 @@ select:disabled {
 }
 
 .resign-priority-badges--compact .resign-priority-badge-row {
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .resign-priority-badges--compact .resign-priority-badge {

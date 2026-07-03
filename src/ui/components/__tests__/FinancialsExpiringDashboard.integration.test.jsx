@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, waitFor, act } from '@testing-library/react';
+import { cleanup, render, waitFor, within } from '@testing-library/react';
 import FinancialsView from '../FinancialsView.jsx';
 
 function makePlayer(overrides = {}) {
@@ -74,6 +74,15 @@ describe('FinancialsView — expiring contracts dashboard', () => {
 
     const badgeGroups = await findAllByTestId('resign-priority-badges');
     expect(badgeGroups.length).toBe(2);
+  });
+
+  it('renders the recommendation reason inside the priority badge group', async () => {
+    const actions = makeActions();
+    const { findAllByTestId } = render(<FinancialsView league={baseLeague} actions={actions} />);
+    await waitFor(() => expect(actions.getRoster).toHaveBeenCalled());
+
+    const badgeGroups = await findAllByTestId('resign-priority-badges');
+    expect(within(badgeGroups[0]).getByText('Priority Re-sign: productive starter at a thin position')).toBeTruthy();
   });
 
   it('sorts expiring rows by recommendation score descending (highest priority first)', async () => {
