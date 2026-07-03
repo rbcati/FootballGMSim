@@ -665,6 +665,7 @@ export default function FinancialsView({ league, actions }) {
                     urgency={row.rec.urgency}
                     risk={row.rec.negotiationRisk}
                     replacementDifficulty={row.rec.replacementDifficulty}
+                    shortReason={row.rec.reason}
                   />
                   <div style={{ color: 'var(--text-subtle)' }}>Plan: {row.management.contractPlan[0] ? (CONTRACT_PLAN_LABELS[row.management.contractPlan[0]] ?? row.management.contractPlan[0]) : 'None'} · Trade status: {row.management.tradeStatus}</div></div>
                 <div>{row.ovr}/{row.potential ?? row.ovr}</div>
