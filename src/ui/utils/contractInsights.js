@@ -89,6 +89,7 @@ export function evaluateResignRecommendation(player, context = {}) {
     label: toLabel(tier),
     tone: toTone(tier),
     reason,
+    score,
     urgency,
     negotiationRisk: risk,
     replacementDifficulty: depthDiff[0].toUpperCase() + depthDiff.slice(1),

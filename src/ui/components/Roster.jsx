@@ -52,6 +52,7 @@ import {
   summarizeExpiring,
 } from "../utils/contractInsights.js";
 import { buildDirectionGuidance, buildTeamIntelligence } from "../utils/teamIntelligence.js";
+import ReSignPriorityBadges from "./resign/ReSignPriorityBadges.jsx";
 import { normalizeManagement, TRADE_STATUSES, TRADE_STATUS_LABELS, CONTRACT_PLAN_LABELS, toggleContractPlan } from "../utils/playerManagement.js";
 import { deriveTeamCapSnapshot, formatMoneyM, toFiniteNumber } from "../utils/numberFormatting.js";
 import { derivePlayerContractFinancials } from "../utils/contractFormatting.js";
@@ -1339,26 +1340,14 @@ function RosterTable({
                         </span>
                       )}
                       {expiringDecision && (
-                        <span
-                          style={{
-                            marginLeft: 6,
-                            padding: "1px 5px",
-                            borderRadius: "var(--radius-pill)",
-                            background: `${expiringDecision.tone}22`,
-                            color: expiringDecision.tone,
-                            fontSize: 9,
-                            fontWeight: 800,
-                            letterSpacing: "0.3px",
-                            verticalAlign: "middle",
-                          }}
-                        >
-                          {expiringDecision.label}
-                        </span>
-                      )}
-                      {expiringDecision && (
-                        <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
-                          {expiringDecision.reason} · {expiringDecision.urgency} urgency · {expiringDecision.negotiationRisk} risk
-                        </div>
+                        <ReSignPriorityBadges
+                          tier={expiringDecision.key}
+                          urgency={expiringDecision.urgency}
+                          risk={expiringDecision.negotiationRisk}
+                          replacementDifficulty={expiringDecision.replacementDifficulty}
+                          shortReason={expiringDecision.reason}
+                          compact={showMobileView}
+                        />
                       )}
                     </TableCell>
                     {/* OVR */}
@@ -2266,15 +2255,6 @@ function PlayerCard({ player, onSelect, showDecisionContext = false, decisionCon
               EXPIRING
             </span>
           )}
-          {showDecisionContext && expiringDecision && (
-            <span style={{
-              fontSize: 9, fontWeight: 700, color: expiringDecision.tone,
-              background: `${expiringDecision.tone}22`, padding: "1px 5px",
-              borderRadius: 4, border: `1px solid ${expiringDecision.tone}66`,
-            }}>
-              {expiringDecision.label}
-            </span>
-          )}
           {potential >= 90 && (
             <span style={{
               fontSize: 9, fontWeight: 700, color: "#FFD700",
@@ -2285,6 +2265,16 @@ function PlayerCard({ player, onSelect, showDecisionContext = false, decisionCon
             </span>
           )}
         </div>
+      )}
+      {showDecisionContext && expiringDecision && (
+        <ReSignPriorityBadges
+          tier={expiringDecision.key}
+          urgency={expiringDecision.urgency}
+          risk={expiringDecision.negotiationRisk}
+          replacementDifficulty={expiringDecision.replacementDifficulty}
+          shortReason={expiringDecision.reason}
+          compact
+        />
       )}
     </div>
   );
