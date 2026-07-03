@@ -3025,6 +3025,62 @@ select:disabled {
   display: none;
 }
 
+/* Contract decision triage tabs (Financials + Roster expiring lists) */
+.resign-decision-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.resign-decision-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-strong);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.resign-decision-tab--active {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--surface-elevated);
+}
+
+.resign-decision-tab--empty {
+  opacity: 0.5;
+}
+
+.resign-decision-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--hairline-strong);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.resign-decision-tab--active .resign-decision-tab-count {
+  background: var(--accent);
+  color: #fff;
+}
+
+.resign-decision-empty-state {
+  padding: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
 /* Coaching Role Styles */
 .coaching-role-interface {
     margin: var(--space-4) 0;

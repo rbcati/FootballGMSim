@@ -23,6 +23,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
 import { classifyTeamDirection, evaluateResignRecommendation } from "../utils/contractInsights.js";
 import ReSignPriorityBadges from "./resign/ReSignPriorityBadges.jsx";
+import ReSignDecisionTabs from "./resign/ReSignDecisionTabs.jsx";
+import { buildResignDecisionTabs, filterResignDecisionRows, RESIGN_DECISION_DEFAULT_TAB } from "../utils/resignDecisionFilters.js";
 import { CONTRACT_PLAN_LABELS, normalizeManagement } from "../utils/playerManagement.js";
 import InfoTip from "./InfoTip.jsx";
 import { computeRestructureOutcome, isContractRestructureEligible } from "../../core/contracts/restructure.js";
@@ -162,6 +164,7 @@ export default function FinancialsView({ league, actions }) {
   const [notification, setNotification] = useState(null);
   const [contractMarks, setContractMarks] = useState({});
   const [applyingBatch, setApplyingBatch] = useState(false);
+  const [decisionTab, setDecisionTab] = useState(RESIGN_DECISION_DEFAULT_TAB);
 
   const teamId = league?.userTeamId;
   const phase = league?.phase ?? "";
@@ -255,6 +258,15 @@ export default function FinancialsView({ league, actions }) {
     const sortedRows = [...expiring].sort((a, b) => (b.rec?.score ?? 0) - (a.rec?.score ?? 0));
     return { rows: sortedRows, summary };
   }, [enriched, userTeam, league?.week]);
+
+  const decisionTabs = useMemo(
+    () => buildResignDecisionTabs(expiringDashboard.rows, (row) => row.rec),
+    [expiringDashboard.rows],
+  );
+  const filteredExpiringRows = useMemo(
+    () => filterResignDecisionRows(expiringDashboard.rows, (row) => row.rec, decisionTab),
+    [expiringDashboard.rows, decisionTab],
+  );
 
 
   const applyExpiringBatchAction = useCallback(async (flag) => {
@@ -656,8 +668,12 @@ export default function FinancialsView({ league, actions }) {
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             Recommended focus: {expiringDashboard.summary.expiringStarters >= 3 ? 'address starters now' : 'selective extensions'} · batch mode: {contractMarks.batchAction ? (CONTRACT_PLAN_LABELS[contractMarks.batchAction] ?? contractMarks.batchAction) : 'none'}.
           </div>
+          <ReSignDecisionTabs tabs={decisionTabs} activeTab={decisionTab} onChange={setDecisionTab} />
           <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--hairline)', borderRadius: 8 }}>
-            {expiringDashboard.rows.map((row) => (
+            {expiringDashboard.rows.length > 0 && filteredExpiringRows.length === 0 && (
+              <div className="resign-decision-empty-state">No expiring players in this bucket.</div>
+            )}
+            {filteredExpiringRows.map((row) => (
               <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1.3fr repeat(7, minmax(70px, 1fr))', gap: 8, padding: '8px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 12 }}>
                 <div><strong>{row.name}</strong><div style={{ color: 'var(--text-muted)' }}>{row.pos} · age {row.age} · morale {row.morale ?? 70}</div>
                   <ReSignPriorityBadges
