@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildDraftOrder, computeStrengthOfSchedule } from '../../src/worker/modding/ruleEngine.js';
-import { getZeroStats } from '../../src/core/state.js';
+import { getZeroStats } from '../../src/state/statsSchema.js';
 
 // Wave 4 Fix 4: draft-order tiebreaker uses Strength of Schedule (not point
 // differential), with a seeded coin-flip fallback.

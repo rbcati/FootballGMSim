@@ -67,6 +67,7 @@ import { getRecentGames, saveGame } from '../core/archive/gameArchive.ts';
 import { applyEventDecision } from './utils/franchiseEvents.js';
 import { logChronicleEvent } from './utils/franchiseChronicle.js';
 import { getBootViewStateValidation, getPlayableLeagueValidation } from '../state/leagueInit.ts';
+import { setLegacyState } from '../state/legacyStateBridge.js';
 
 // Increment this when shipping notable UX/bugfix updates so users
 // see the in-app changelog popup once per version.
@@ -597,7 +598,7 @@ function AppContent() {
 
   // Expose state and actions to window for E2E testing
   useEffect(() => {
-    window.state = state;
+    setLegacyState(state);
     if (actions && typeof handleAdvanceWeek === 'function') {
       window.gameController = {
         ...actions,
