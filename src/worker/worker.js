@@ -200,7 +200,7 @@ import { buildAwardHistoryEntry, appendAwardHistory, hydrateAwardHistory } from 
 import { buildAllLeaderboards } from '../core/awards/statLeaderboard.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
-import { getZeroStats as getZeroSeasonStatsSchema } from '../core/state.js';
+import { getZeroStats as getZeroSeasonStatsSchema } from '../state/statsSchema.js';
 import { getDevelopmentRateModifier } from '../core/coaching-philosophy-effects.js';
 import { processOffseasonEvolution, processWeeklyEvolution } from '../core/progression/evolutionEngine.ts';
 import { buildTeamDevelopmentFocusMap as buildCanonicalDevelopmentFocusMap } from './developmentFocus.js';
