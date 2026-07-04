@@ -23,10 +23,11 @@ describe('WITHDRAW_OFFER wiring', () => {
     expect(src).toMatch(/withdrawOffer:\s*\(playerId,\s*teamId\)\s*=>\s*\n?\s*request\(toWorker\.WITHDRAW_OFFER/);
   });
 
-  it('is routed to handleWithdrawOffer in the worker', () => {
-    const src = read('src/worker/worker.js');
-    expect(src).toContain('case toWorker.WITHDRAW_OFFER:     return await handleWithdrawOffer(payload, id);');
-    expect(src).toContain('async function handleWithdrawOffer(');
+  it('is routed to handleWithdrawOffer through the command registry', () => {
+    const workerSrc = read('src/worker/worker.js');
+    expect(workerSrc).toMatch(/\[toWorker\.WITHDRAW_OFFER\]:\s*handleWithdrawOffer,/);
+    const handlerSrc = read('src/worker/handlers/freeAgencyHandlers.js');
+    expect(handlerSrc).toContain('export async function handleWithdrawOffer(');
   });
 
   it('is wired from the FreeAgency pending-offers panel to actions.withdrawOffer', () => {
@@ -59,7 +60,7 @@ describe('ADVANCE_FREE_AGENCY_DAY sequencing', () => {
   });
 
   it('the FA pool filters treat team id 0 as a signed team, not a free agent', () => {
-    const workerSrc = read('src/worker/worker.js');
+    const workerSrc = read('src/worker/handlers/freeAgencyHandlers.js');
     const getFreeAgentsStart = workerSrc.indexOf('async function handleGetFreeAgents(');
     const getFreeAgentsBody = workerSrc.slice(getFreeAgentsStart, getFreeAgentsStart + 2000);
     // Regression: `!p.teamId` treated the default user team (id 0) as unsigned,
