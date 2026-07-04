@@ -54,7 +54,10 @@ export function createCommandRegistry() {
    */
   async function dispatch(type, payload = {}, id = null, ctx = undefined) {
     const handler = handlers.get(type);
-    if (!handler) return { handled: false, type };
+    // Function-type guard on the looked-up value: `type` arrives from inbound
+    // worker messages, so never invoke anything the register() path did not
+    // store (CodeQL js/unvalidated-dynamic-method-call).
+    if (typeof handler !== 'function') return { handled: false, type };
     await handler(payload, id, ctx);
     return { handled: true, type };
   }
