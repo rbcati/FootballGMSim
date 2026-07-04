@@ -800,6 +800,27 @@ function RosterTable({
     () => buildExpiringDecisionSummary(players, { team, roster: players, direction: teamDirection }),
     [players, team, teamDirection],
   );
+  // Data contract for the re-sign decision tabs (consumed via
+  // resignDecisionFilters.js): expiring rows carry their recommendation under
+  // player._resignMeta so tab filtering reads precomputed metadata instead of
+  // re-running evaluateResignRecommendation per tab. Only computed on the
+  // EXPIRING quick filter; `roster` must be the full team so
+  // replacementDifficulty sees real positional depth. Not rendered yet.
+  // eslint-disable-next-line no-unused-vars
+  const enrichedExpiringRows = useMemo(() => {
+    if (posFilter !== "EXPIRING") return [];
+    return evaluatedDisplayed.map(({ player, eval: playerEval }) => ({
+      player: {
+        ...player,
+        _resignMeta: evaluateResignRecommendation(player, {
+          team,
+          roster: players,
+          direction: teamDirection,
+        }),
+      },
+      eval: playerEval,
+    }));
+  }, [posFilter, evaluatedDisplayed, team, players, teamDirection]);
 
   const activeFilters = isResignPhase ? ["EXPIRING", "STARTERS", "DEPTH", "INJURED", "DEVELOPMENT", ...POSITIONS] : ["STARTERS", "DEPTH", "INJURED", "EXPIRING", "DEVELOPMENT", ...POSITIONS];
   const hasActiveFilters = Boolean(search.trim()) || posFilter !== "ALL" || advancedFilters.length > 0;
