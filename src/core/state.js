@@ -840,22 +840,6 @@ export function clearSavedState(slot = null) {
  * Set up an automatic save when the user closes the tab/window.
  * No longer installed at import time — legacy callers must opt in explicitly.
  */
-export function hookAutoSave() {
-  if (typeof window === 'undefined') return;
-  // Only hook if setting is enabled, if it exists
-  const legacyState = getLegacyState();
-  if (!legacyState || legacyState.settings?.autoSave !== false) {
-    window.addEventListener('beforeunload', function () {
-      try {
-        // Attempt save, but don't await (browser may kill it if async)
-        saveState(null, { isUnload: true }).catch(e => console.warn('Auto-save interrupted:', e));
-      } catch (err) {
-        // swallow; user is leaving anyway
-      }
-    });
-
-  }
-}
 
 // --- UI/Helper Functions ---
 

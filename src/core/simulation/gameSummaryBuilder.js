@@ -224,9 +224,21 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
 
   if (stakes && stakes > 50) {
     if (won) {
-      callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} answered the bell and secured a massive ${userScore}-${oppScore} victory!`);
+      if (scoreDiff >= 14) {
+        callbacks.push(`${stakes >= 90 ? 'A legendary, statement-making blowout' : 'A dominant victory'} under immense pressure. ${userAbbr} completely dismantled the opposition ${userScore}-${oppScore} when it mattered most.`);
+      } else if (scoreDiff <= 7) {
+        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} answered the bell and survived a thriller, ${userScore}-${oppScore}!`);
+      } else {
+        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} answered the bell and secured a massive ${userScore}-${oppScore} victory!`);
+      }
     } else {
-      callbacks.push(`A devastating, crushing ${scoreDiff}-point defeat when the stakes couldn't have been higher. The locker room is stunned.`);
+      if (scoreDiff >= 14) {
+        callbacks.push(`A complete collapse when it mattered most. A crushing ${scoreDiff}-point defeat under immense pressure leaves the locker room stunned.`);
+      } else if (scoreDiff <= 7) {
+        callbacks.push(`A heartbreaking, down-to-the-wire defeat when the stakes couldn't have been higher. This ${userScore}-${oppScore} loss will sting for a long time.`);
+      } else {
+        callbacks.push(`A devastating, crushing ${scoreDiff}-point defeat when the stakes couldn't have been higher. The locker room is stunned.`);
+      }
     }
   }
 

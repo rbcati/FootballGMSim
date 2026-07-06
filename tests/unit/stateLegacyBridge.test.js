@@ -49,13 +49,6 @@ describe('importing src/core/state.js is side-effect free for global state', () 
     expect(beforeunloadHooks).toHaveLength(0);
   });
 
-  it('still installs the autosave hook when explicitly requested', () => {
-    stateModule.hookAutoSave();
-    const beforeunloadHooks = addEventListenerSpy.mock.calls.filter(
-      ([eventName]) => eventName === 'beforeunload'
-    );
-    expect(beforeunloadHooks).toHaveLength(1);
-  });
 });
 
 describe('legacyStateBridge primitives', () => {
