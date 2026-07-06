@@ -46,8 +46,11 @@ describe('driveEngine.buildDriveBasedSummary', () => {
     expect(a.awayScore).toBe(b.awayScore);
     expect(a.seed).toBe(b.seed);
     // Pin the specific seed-42 output so regressions to the PRNG stream are caught.
-    expect(a.homeScore).toBe(57);
-    expect(a.awayScore).toBe(30);
+    // Fourth-down + special-teams V1 added new rng() draws (drive start field
+    // position, FG/punt decisions, 2-pt tries), so the pinned values changed
+    // from the pre-special-teams 57/30 to the new deterministic output.
+    expect(a.homeScore).toBe(43);
+    expect(a.awayScore).toBe(45);
   });
 
   it('keeps possession counts correlated (|homeDrives - awayDrives| ≤ 3) for 100 seeded runs', () => {
@@ -169,8 +172,9 @@ describe('driveEngine.buildDriveBasedSummary with rosters', () => {
       globalSeed: 42,
     });
     // Same pinned seed-42 output as the legacy test — flat callers are untouched.
-    expect(flat.homeScore).toBe(57);
-    expect(flat.awayScore).toBe(30);
+    // (Values updated for fourth-down + special-teams V1; see comment above.)
+    expect(flat.homeScore).toBe(43);
+    expect(flat.awayScore).toBe(45);
   });
 
   it('accepts homeRoster/awayRoster and is deterministic for the same seed', () => {
@@ -188,8 +192,14 @@ describe('driveEngine.buildDriveBasedSummary with rosters', () => {
     ]) {
       expect(summary).toHaveProperty(key);
     }
-    expect(summary.homeScore).toBe(summary.homeTDs * 7 + summary.homeFGs * 3);
-    expect(summary.awayScore).toBe(summary.awayTDs * 7 + summary.awayFGs * 3);
+    // Score identity with PATs modeled explicitly: a TD is 6 + made XP (+1)
+    // or made 2-pt (+2); a failed 2-pt adds nothing.
+    expect(summary.homeScore).toBe(
+      summary.homeTDs * 6 + summary.homeXPs + summary.homeStats.twoPointMade * 2 + summary.homeFGs * 3,
+    );
+    expect(summary.awayScore).toBe(
+      summary.awayTDs * 6 + summary.awayXPs + summary.awayStats.twoPointMade * 2 + summary.awayFGs * 3,
+    );
   });
 
   it('roster-derived ratings drive scoring (strong roster outscores weak over many seeds)', () => {
@@ -205,6 +215,16 @@ describe('driveEngine.buildDriveBasedSummary with rosters', () => {
     expect(strongTotal).toBeGreaterThan(weakTotal);
   });
 
+  it('exposes special-teams counters on homeStats/awayStats', () => {
+    const summary = buildDriveBasedSummary(ROSTER_ARGS);
+    for (const side of [summary.homeStats, summary.awayStats]) {
+      for (const key of ['punts', 'fgAttempts', 'fgMade', 'twoPointAttempts', 'twoPointMade']) {
+        expect(side).toHaveProperty(key);
+        expect(side[key]).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
   it('ignores empty rosters and keeps flat-number behavior', () => {
     const flat = buildDriveBasedSummary({
       season: 2025, week: 3,
@@ -213,7 +233,62 @@ describe('driveEngine.buildDriveBasedSummary with rosters', () => {
       globalSeed: 42,
       homeRoster: [], awayRoster: [],
     });
-    expect(flat.homeScore).toBe(57);
-    expect(flat.awayScore).toBe(30);
+    // Same pinned seed-42 output as above (fourth-down + special-teams V1).
+    expect(flat.homeScore).toBe(43);
+    expect(flat.awayScore).toBe(45);
+  });
+});
+
+// ── Fourth down + special teams V1 ───────────────────────────────────────────
+
+describe('driveEngine.buildDriveBasedSummary fourth-down/special-teams model', () => {
+  const gameForSeed = (seed) => buildDriveBasedSummary({
+    season: 2025, week: 5,
+    home: { id: 3 }, away: { id: 4 },
+    homeOff: 79, awayOff: 77, homeDef: 74, awayDef: 76,
+    globalSeed: seed,
+  });
+
+  it('produces FG makes, punts, and 2-pt attempts in aggregate over 200 seeded games', () => {
+    const baseSeed = 1000;
+    let fgMade = 0;
+    let punts = 0;
+    let twoPointAttempts = 0;
+    let twoPointMade = 0;
+    for (let i = 0; i < 200; i++) {
+      const g = gameForSeed(baseSeed + i);
+      for (const side of [g.homeStats, g.awayStats]) {
+        fgMade += side.fgMade;
+        punts += side.punts;
+        twoPointAttempts += side.twoPointAttempts;
+        twoPointMade += side.twoPointMade;
+        // Per-team sanity: makes can never exceed attempts.
+        expect(side.twoPointMade).toBeLessThanOrEqual(side.twoPointAttempts);
+        expect(side.fgMade).toBeLessThanOrEqual(side.fgAttempts);
+      }
+    }
+    expect(fgMade).toBeGreaterThan(0);
+    expect(punts).toBeGreaterThan(0);
+    expect(twoPointAttempts).toBeGreaterThan(0);
+    expect(twoPointMade).toBeLessThanOrEqual(twoPointAttempts);
+  });
+
+  it('holds the exact score identity for every team in 200 seeded games', () => {
+    // A failed 2-pt try must add 0 PAT points — these identities catch any
+    // accidental "+1 on failed 2-pt" regression cleanly.
+    const baseSeed = 5000;
+    for (let i = 0; i < 200; i++) {
+      const g = gameForSeed(baseSeed + i);
+      // Every TD gets exactly one PAT try: an XP kick or a 2-pt attempt.
+      expect(g.homeXPs + g.homeStats.twoPointAttempts).toBe(g.homeTDs);
+      expect(g.awayXPs + g.awayStats.twoPointAttempts).toBe(g.awayTDs);
+      // Scoreboard reconciles exactly with the scoring-play breakdown.
+      expect(g.homeScore).toBe(
+        g.homeTDs * 6 + g.homeXPs + g.homeStats.twoPointMade * 2 + g.homeFGs * 3,
+      );
+      expect(g.awayScore).toBe(
+        g.awayTDs * 6 + g.awayXPs + g.awayStats.twoPointMade * 2 + g.awayFGs * 3,
+      );
+    }
   });
 });
