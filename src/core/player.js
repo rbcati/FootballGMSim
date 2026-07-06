@@ -8,6 +8,7 @@ import { generateTraits } from './traits.js';
 import { generateFaceConfig } from './face.js';
 import { generatePersonalityProfile, ensurePersonalityProfile, contractPersonalityModifier } from './development/personalitySystem.js';
 import { generateCollegeStats, generateInterviewReport, getScoutingRangeFromProfile, simulateCombineResults } from './draft/draftScouting.js';
+import { applyDraftHiddenVariance } from './draft/draftVariance.js';
 import { generateDeterministicAgentProfile } from './contracts/agentNegotiationEngine.js';
 
 const CONTRACT_DEFAULT = {
@@ -563,6 +564,9 @@ function generateDraftClass(year, options = {}) {
         rookie.scoutingReport = scoutingRange;
         rookie.devTrait = rollDevTrait();
         rookie.projectedRound = U.clamp(Math.ceil((100 - rookie.scoutedOvr) / 10), 1, 7);
+        // Hidden variance: stamps hiddenDevTrait + hiddenTrueOvr (anchor rolled
+        // from scoutedOvr with round-based spread) via the seeded RNG stream.
+        applyDraftHiddenVariance(rookie, U.random);
         rookie.combineResults = simulateCombineResults(rookie.pos, rookie.ratings);
         rookie.collegeStats = generateCollegeStats(rookie.pos, rookie.trueOvr, rookie.potential);
         rookie.interviewReport = generateInterviewReport(rookie);
