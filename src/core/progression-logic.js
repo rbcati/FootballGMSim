@@ -115,6 +115,43 @@ export function resolveSchemeMultiplier(player, team) {
   return getCoachSchemeMultiplier(hc.overallRating);
 }
 
+// ── Coaching development-rate modifier safety rails ───────────────────────────
+// getDevelopmentRateModifier clamps its own output to [0.85, 1.15]; these wider
+// bounds are a defensive rail so a future helper change can never zero out or
+// explode development, and a non-finite return can never poison ratings with NaN.
+const COACH_DEV_MOD_MIN = 0.5;
+const COACH_DEV_MOD_MAX = 2.0;
+
+/**
+ * Sanitize a raw coaching development-rate modifier for use as a multiplier.
+ * undefined / null / NaN / non-finite → 1.0 (no-op); finite values are clamped
+ * to [0.5, 2.0].
+ */
+export function sanitizeCoachDevModifier(rawModifier) {
+  if (rawModifier == null) return 1.0; // null coerces to 0, so guard before Number()
+  const mod = Number(rawModifier);
+  if (!Number.isFinite(mod)) return 1.0;
+  return Math.max(COACH_DEV_MOD_MIN, Math.min(COACH_DEV_MOD_MAX, mod));
+}
+
+/**
+ * Apply the coaching philosophy development-rate modifier to a progression delta.
+ * Positive growth only — regression, aging decline, and zero deltas pass through
+ * untouched, as do players on teams with no staff data (multiplier is 1.0).
+ *
+ * @param {number} ovrDelta  - base OVR delta from the age-curve roll
+ * @param {string} position  - player position, e.g. 'QB'
+ * @param {object} teamStaff - team.staff object (or null/undefined)
+ * @returns {number} adjusted delta (rounded when a multiplier was applied)
+ */
+export function applyCoachDevModifier(ovrDelta, position, teamStaff) {
+  if (!(ovrDelta > 0) || !teamStaff) return ovrDelta;
+  const mod = sanitizeCoachDevModifier(
+    getDevelopmentRateModifier(position, teamStaff.headCoach ?? null, teamStaff)
+  );
+  return Math.round(ovrDelta * mod);
+}
+
 /**
  * Apply scheme multiplier and morale bonus to a base OVR delta, clamped to [-5, +5].
  *
@@ -358,13 +395,9 @@ export function processPlayerProgression(players, options = {}) {
 
     // ── Coaching philosophy development modifier ───────────────────────────────
     // Multiplies positive growth deltas only; never amplifies busts or regressions.
-    // Missing coach/staff → getDevelopmentRateModifier returns 1.0 (no-op).
+    // Missing coach/staff or a non-finite modifier → 1.0 (no-op).
     if (ovrDelta > 0 && !bustEvent) {
-      const teamStaff = teamCoaches[player.teamId] ?? null;
-      if (teamStaff) {
-        const coachDevMod = getDevelopmentRateModifier(player.pos, teamStaff.headCoach ?? null, teamStaff);
-        ovrDelta = Math.round(ovrDelta * coachDevMod);
-      }
+      ovrDelta = applyCoachDevModifier(ovrDelta, player.pos, teamCoaches[player.teamId] ?? null);
     }
 
     // ── Apply non-cliff, non-wall deltas via position-specific rating nudges (Task 6)
