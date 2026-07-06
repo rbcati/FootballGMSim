@@ -75,9 +75,143 @@ export function advanceDownDistance(state, gain) {
   return { down, distance, yardLine, firstDown, touchdown, turnoverOnDowns };
 }
 
+/* ── Team attribute composites ─────────────────────────────────────────────
+ * Pure, deterministic roster → team-rating helpers. They never touch the
+ * PRNG stream, so feeding them into buildDriveBasedSummary keeps the same
+ * seed → same result guarantee.
+ */
+
+const RATING_FLOOR = 55;
+const RATING_CEIL = 95;
+const DEFAULT_RATING = 70;
+
+function ratingOrFallback(player, key) {
+  const granular = player?.ratings?.[key];
+  if (Number.isFinite(granular)) return granular;
+  if (Number.isFinite(player?.ovr)) return player.ovr;
+  return DEFAULT_RATING;
+}
+
+/** Weighted blend of a single player's granular ratings (weights sum to 1). */
+function playerComposite(player, weightedKeys) {
+  let total = 0;
+  for (const [key, weight] of weightedKeys) {
+    total += ratingOrFallback(player, key) * weight;
+  }
+  return total;
+}
+
+/** Average playerComposite over the top `count` players (OVR-desc within pos). */
+function unitComposite(players, count, weightedKeys, fallback) {
+  const picked = players.slice(0, count);
+  if (picked.length === 0) return fallback;
+  let sum = 0;
+  for (const p of picked) sum += playerComposite(p, weightedKeys);
+  return sum / picked.length;
+}
+
+/** Group a roster by position, sorted best-first (depthOrder, then OVR desc). */
+function groupRosterByPosition(roster) {
+  const groups = {};
+  for (const player of roster) {
+    const pos = player?.pos || 'UNK';
+    (groups[pos] ||= []).push(player);
+  }
+  for (const pos in groups) {
+    groups[pos].sort((a, b) => {
+      const aOrder = (a.depthOrder != null && a.depthOrder > 0) ? a.depthOrder : 9999;
+      const bOrder = (b.depthOrder != null && b.depthOrder > 0) ? b.depthOrder : 9999;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return (b.ovr || 0) - (a.ovr || 0);
+    });
+  }
+  return groups;
+}
+
+/** Average OVR of the whole roster — unit fallback when a position is empty. */
+function rosterAverageOvr(roster) {
+  if (!Array.isArray(roster) || roster.length === 0) return DEFAULT_RATING;
+  let sum = 0;
+  for (const p of roster) sum += Number.isFinite(p?.ovr) ? p.ovr : DEFAULT_RATING;
+  return sum / roster.length;
+}
+
+/**
+ * Offensive team rating from roster attributes. Deterministic and side-effect
+ * free; any missing granular rating falls back to the player's OVR (then 70).
+ *
+ * Unit weights: QB 35%, OL 30%, WR/TE 20%, RB 15%.
+ *
+ * @param {Array<Object>} roster - player objects ({ pos, ovr, ratings, ... })
+ * @param {string} [scheme='balanced'] - reserved for future scheme-aware weights
+ * @returns {number} clamped to [55, 95]
+ */
+export function computeTeamOffensiveRating(roster, scheme = 'balanced') {
+  if (!Array.isArray(roster) || roster.length === 0) return DEFAULT_RATING;
+  const groups = groupRosterByPosition(roster);
+  const fallback = rosterAverageOvr(roster);
+
+  const qb = unitComposite(groups.QB || [], 1, [
+    ['throwAccuracy', 0.45], ['throwPower', 0.25], ['awareness', 0.3],
+  ], fallback);
+  const ol = unitComposite(groups.OL || [], 5, [
+    ['passBlock', 0.4], ['runBlock', 0.4], ['strength', 0.2],
+  ], fallback);
+  // Top receiving options across WR and TE, best-first by OVR.
+  const receivers = [...(groups.WR || []), ...(groups.TE || [])]
+    .sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+  const rec = unitComposite(receivers, 3, [
+    ['catching', 0.4], ['catchInTraffic', 0.3], ['speed', 0.3],
+  ], fallback);
+  const rb = unitComposite(groups.RB || [], 1, [
+    ['speed', 0.35], ['acceleration', 0.3], ['trucking', 0.175], ['juking', 0.175],
+  ], fallback);
+
+  const composite = qb * 0.35 + ol * 0.3 + rec * 0.2 + rb * 0.15;
+  return U.clamp(composite, RATING_FLOOR, RATING_CEIL);
+}
+
+/**
+ * Defensive team rating from roster attributes. Deterministic and side-effect
+ * free; any missing granular rating falls back to the player's OVR (then 70).
+ *
+ * Unit weights: DL 25%, LB 25%, CB 30%, S 20%.
+ *
+ * @param {Array<Object>} roster - player objects ({ pos, ovr, ratings, ... })
+ * @param {string} [scheme='balanced'] - reserved for future scheme-aware weights
+ * @returns {number} clamped to [55, 95]
+ */
+export function computeTeamDefensiveRating(roster, scheme = 'balanced') {
+  if (!Array.isArray(roster) || roster.length === 0) return DEFAULT_RATING;
+  const groups = groupRosterByPosition(roster);
+  const fallback = rosterAverageOvr(roster);
+
+  const dl = unitComposite(groups.DL || [], 4, [
+    ['passRushPower', 0.4], ['passRushSpeed', 0.35], ['strength', 0.25],
+  ], fallback);
+  const lb = unitComposite(groups.LB || [], 3, [
+    ['tackle', 0.35], ['awareness', 0.3], ['runStop', 0.175], ['coverage', 0.175],
+  ], fallback);
+  const cb = unitComposite(groups.CB || [], 3, [
+    ['coverage', 0.45], ['speed', 0.35], ['awareness', 0.2],
+  ], fallback);
+  const s = unitComposite(groups.S || [], 2, [
+    ['awareness', 0.35], ['coverage', 0.35], ['tackle', 0.3],
+  ], fallback);
+
+  const composite = dl * 0.25 + lb * 0.25 + cb * 0.3 + s * 0.2;
+  return U.clamp(composite, RATING_FLOOR, RATING_CEIL);
+}
+
 /**
  * Deterministic, seeded drive-level game summary. The authoritative source of
  * homeScore / awayScore for a simulated game. Same seed + inputs → same result.
+ *
+ * When a non-empty homeRoster/awayRoster is provided, that side's offensive
+ * and defensive ratings are derived from roster attributes via
+ * computeTeamOffensiveRating / computeTeamDefensiveRating, overriding the
+ * corresponding flat homeOff/homeDef (or awayOff/awayDef) inputs. Without
+ * rosters the flat-number behavior is unchanged.
  */
 export function buildDriveBasedSummary({
   season = 0,
@@ -92,7 +226,18 @@ export function buildDriveBasedSummary({
   homeStrategicEdge = 0,
   awayStrategicEdge = 0,
   globalSeed = 0,
+  homeRoster = null,
+  awayRoster = null,
 }) {
+  if (Array.isArray(homeRoster) && homeRoster.length > 0) {
+    homeOff = computeTeamOffensiveRating(homeRoster);
+    homeDef = computeTeamDefensiveRating(homeRoster);
+  }
+  if (Array.isArray(awayRoster) && awayRoster.length > 0) {
+    awayOff = computeTeamOffensiveRating(awayRoster);
+    awayDef = computeTeamDefensiveRating(awayRoster);
+  }
+
   const baseSeed = hashStringToSeed(`${season}|${week}|${home?.id}|${away?.id}`);
   const seed = (baseSeed ^ (globalSeed >>> 0)) >>> 0;
   const rng = mulberry32(seed);
