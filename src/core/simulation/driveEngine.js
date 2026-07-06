@@ -250,20 +250,94 @@ export function buildDriveBasedSummary({
   const totalDrives = randInt(20, 26);
   const homeDrives = Math.round(totalDrives / 2) + randInt(-1, 1);
   const awayDrives = totalDrives - homeDrives;
-  const homeStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0 };
-  const awayStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0 };
+  const homeStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0, punts: 0, fgAttempts: 0, fgMade: 0, twoPointAttempts: 0, twoPointMade: 0 };
+  const awayStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0, punts: 0, fgAttempts: 0, fgMade: 0, twoPointAttempts: 0, twoPointMade: 0 };
 
   const simTeam = (offOvr, defOvr, drives, teamStats, isHome, netEdge = 0) => {
     let score = 0;
     // Scoring-play breakdown — authoritative source for box-score reconciliation.
-    // Each touchdown here is scored as 7 (6 + a made extra point), so the
-    // identity 7*tds + 3*fgs === score holds exactly.
+    // A touchdown is 6 points plus its PAT (made XP = +1, made 2-pt = +2, failed
+    // 2-pt = +0), so the identity
+    //   score === tds*6 + xps + teamStats.twoPointMade*2 + fgs*3
+    // holds exactly. Every TD gets exactly one PAT try:
+    //   xps + teamStats.twoPointAttempts === tds.
     let tds = 0;
     let fgs = 0;
     let xps = 0;
     const driveSuccessRaw = 0.4 + (offOvr - defOvr) * 0.005 + (isHome ? homeFieldAdv : 0) + netEdge;
     const driveSuccess = U.clamp(driveSuccessRaw, 0.15, 0.72);
+
+    // FG success by kick position — longer kicks (lower yardLine) are harder.
+    const fgSuccessProb = (yardLine) => U.clamp(0.97 - (100 - yardLine) * 0.025, 0.35, 0.97);
+
+    // FG attempt from the current field position. A miss scores nothing —
+    // possession changes either way, so the drive simply ends.
+    const attemptFieldGoal = (yardLine) => {
+      teamStats.fgAttempts += 1;
+      if (chance(fgSuccessProb(yardLine))) {
+        score += 3;
+        fgs += 1;
+        teamStats.fgMade += 1;
+      }
+    };
+
+    // Resolve a drive that reached scoring position (converted drive or a
+    // successful 4th-down go-for-it) into a TD + PAT or a made FG.
+    const resolveScoringDrive = (yardLine) => {
+      if (chance(0.67)) {
+        tds += 1;
+        if (chance(0.58)) teamStats.passTD += 1;
+        if (chance(0.07)) {
+          // 2-point try replaces the XP: success is +2, failure is +0 —
+          // a failed 2-pt attempt adds NO extra point on top of the 6.
+          teamStats.twoPointAttempts += 1;
+          if (chance(0.47)) {
+            teamStats.twoPointMade += 1;
+            score += 8;
+          } else {
+            score += 6;
+          }
+        } else {
+          score += 7;
+          xps += 1;
+        }
+      } else {
+        // Converted drives that stall in close still book a made FG; it
+        // counts as an attempt too so fgAttempts >= fgMade always holds.
+        score += 3;
+        fgs += 1;
+        teamStats.fgAttempts += 1;
+        teamStats.fgMade += 1;
+      }
+    };
+
+    /*
+     * rng() draw order per drive — determinism contract, do NOT reorder.
+     * Conditional draws only happen when their branch is taken:
+     *   1. drive start offset        randInt(-10, 15)   (drive starts at 25 + offset)
+     *   2. passHeavy                 chance(0.56)
+     *   3. passAtt                   randInt
+     *   4. comp                      randInt
+     *   5. passYds                   randInt
+     *   6. rushAtt                   randInt
+     *   7. rushYds                   randInt
+     *   8. sack                      chance
+     *   9. turnover                  chance
+     *  10. [turnover] INT            chance(0.7)
+     *  11. convertedDrive            chance(driveSuccess)
+     *  12. [converted OR go-for-it success] TD-vs-FG   chance(0.67)
+     *  13. [TD] passTD               chance(0.58)
+     *  14. [TD] 2-pt attempt         chance(0.07)
+     *  15. [2-pt attempt] 2-pt make  chance(0.47)
+     *  16. [not converted, estDistance<=2 && yardLine>=60] go-for-it  chance(0.30)
+     *  17. [going for it] conversion chance(0.52) — success re-enters 12
+     *  18. [not converted, not going, yardLine 40–59] FG-vs-punt      chance(0.45)
+     *  19. [FG attempt from 12/18 fail-side or yardLine>=60] FG make  chance(fgSuccessProb)
+     * estDistance is derived from drive yardage (no rng draw).
+     */
     for (let i = 0; i < drives; i++) {
+      // Field position is scoring-model bookkeeping only — local to simTeam.
+      let yardLine = 25 + randInt(-10, 15);
       const passHeavy = chance(0.56);
       const passAtt = randInt(passHeavy ? 3 : 1, passHeavy ? 7 : 4);
       const comp = Math.min(passAtt, randInt(Math.max(0, passAtt - 3), passAtt));
@@ -275,6 +349,7 @@ export function buildDriveBasedSummary({
       teamStats.passYds += passYds;
       teamStats.rushAtt += rushAtt;
       teamStats.rushYds += rushYds;
+      yardLine = U.clamp(yardLine + passYds + rushYds, 1, 99);
       if (chance(U.clamp(0.17 + (defOvr - offOvr) * 0.0025, 0.08, 0.34))) {
         teamStats.sacks += 1;
       }
@@ -284,15 +359,28 @@ export function buildDriveBasedSummary({
       }
       const convertedDrive = chance(driveSuccess);
       if (convertedDrive) {
-        if (chance(0.67)) {
-          score += 7;
-          tds += 1;
-          xps += 1;
-          if (chance(0.58)) teamStats.passTD += 1;
-        } else {
-          score += 3;
-          fgs += 1;
+        resolveScoringDrive(yardLine);
+        continue;
+      }
+      // Drive stalled → fourth-down decision from field position.
+      // Estimated yards-to-go on the stalled 4th down, derived from the
+      // drive's own yardage (deterministic, costs no rng draw): 1..10.
+      const estDistance = 10 - ((passYds + rushYds) % 10);
+      if (estDistance <= 2 && yardLine >= 60 && chance(0.30)) {
+        // Short-yardage go-for-it instead of the FG try.
+        if (chance(0.52)) {
+          resolveScoringDrive(yardLine);
         }
+        // Failure: turnover on downs — no score, possession changes.
+        continue;
+      }
+      if (yardLine >= 60) {
+        attemptFieldGoal(yardLine);
+      } else if (yardLine >= 40) {
+        if (chance(0.45)) attemptFieldGoal(yardLine);
+        else teamStats.punts += 1;
+      } else {
+        teamStats.punts += 1;
       }
     }
     return { score, tds, fgs, xps };

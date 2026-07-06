@@ -212,10 +212,15 @@ describe('Deterministic Sim Reproducibility Audit', () => {
     });
 
     it('different seed + same inputs CAN produce different scores', () => {
+      // The drive engine (seeded from season|week|teamIds ^ league.globalSeed)
+      // is the authoritative score source, so the seed must flow through
+      // league.globalSeed to vary the scoreboard. The Utils seed still feeds
+      // strength noise, but since fourth-down/special-teams V1 that noise is
+      // not guaranteed to cross a scoring threshold for a fixed matchup.
       const seeds = [1001, 2002, 3003, 4004, 5005, 6006, 7007, 8008];
       const scoreSet = new Set(
         seeds.map((seed) => {
-          const league = { teams: [makeTeam(1), makeTeam(2)] };
+          const league = { teams: [makeTeam(1), makeTeam(2)], globalSeed: seed };
           Utils.setSeed(seed);
           const r = simulateMatchup(league.teams[0], league.teams[1], { league });
           return r ? `${r.homeScore}-${r.awayScore}` : 'null';
