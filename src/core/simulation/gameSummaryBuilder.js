@@ -224,9 +224,21 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
 
   if (stakes && stakes > 50) {
     if (won) {
-      callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} answered the bell and secured a massive ${userScore}-${oppScore} victory!`);
+      if (isBlowout) {
+        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining statement.' : 'A massive statement.'} Under immense pressure, ${userAbbr} completely dismantled their opponent ${userScore}-${oppScore}!`);
+      } else if (isClose) {
+        callbacks.push(`${stakes >= 90 ? 'An unforgettable thriller!' : 'An incredibly clutch performance.'} ${userAbbr} survived the tension and secured a massive ${userScore}-${oppScore} victory!`);
+      } else {
+        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'A clutch'} performance under pressure. ${userAbbr} answered the bell and secured a massive ${userScore}-${oppScore} victory!`);
+      }
     } else {
-      callbacks.push(`A devastating, crushing ${scoreDiff}-point defeat when the stakes couldn't have been higher. The locker room is stunned.`);
+      if (isBlowout) {
+        callbacks.push(`A humiliating, total collapse when it mattered most. ${userAbbr} was blown off the field in a devastating ${scoreDiff}-point defeat. The locker room is stunned.`);
+      } else if (isClose) {
+        callbacks.push(`A heartbreaking end to an absolute war. ${userAbbr} fell agonizingly short by just ${scoreDiff} points when the stakes couldn't have been higher.`);
+      } else {
+        callbacks.push(`A devastating, crushing ${scoreDiff}-point defeat when the stakes couldn't have been higher. The locker room is stunned.`);
+      }
     }
   }
 
