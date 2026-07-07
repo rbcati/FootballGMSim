@@ -1206,6 +1206,9 @@ details[open] .app-hq-background-section__summary span { transform: rotate(180de
 .attr-track { flex: 1; height: 6px; background: var(--surface-overlay); border-radius: var(--radius-pill); overflow: hidden; }
 .attr-fill { height: 100%; border-radius: var(--radius-pill); transition: width var(--duration-slow) var(--ease-out); }
 .attr-value { font-size: var(--text-xs); font-weight: 700; width: 24px; text-align: right; color: var(--text); }
+.attr-row--text { justify-content: space-between; }
+.attr-value--text { width: auto; }
+.attr-value--muted { color: var(--text-subtle); }
 
 .team-hub-lineup-frame {
   display: flex;
