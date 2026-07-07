@@ -16,7 +16,9 @@
  * All helpers are pure. RNG is injected (defaults to the seeded Utils.random
  * stream used by the rest of draft generation) — never Math.random.
  *
- * Hidden data only in this PR: no UI reads these fields.
+ * hiddenTrueOvr stays internal-only and must never be rendered. hiddenDevTrait
+ * may be surfaced through shouldRevealHiddenDevTrait / getHiddenDevTraitLabel
+ * once a player has roughly two completed pro seasons.
  */
 
 import { Utils } from '../utils.js';
@@ -160,6 +162,75 @@ export function getTrueOvrGrowthBonus(player, ovrDelta) {
   if (gap >= 6) return 2;
   if (gap >= 2) return 1;
   return 0;
+}
+
+// ── Hidden dev-trait reveal (UI-facing) ──────────────────────────────────────
+
+// Roughly two completed pro seasons before the hidden trait becomes visible.
+export const HIDDEN_DEV_TRAIT_REVEAL_SEASONS = 2;
+
+// Age proxy used only when no seasons-completed signal exists: drafted players
+// enter at 21–23 (player.js), so age 24 ≈ at least ~2 completed pro seasons.
+const REVEAL_FALLBACK_AGE = 24;
+
+const HIDDEN_DEV_TRAIT_LABELS = {
+  normal: 'Normal',
+  late_bloomer: 'Late Bloomer',
+  superstar: 'Superstar',
+  bust: 'Bust',
+};
+
+/**
+ * Completed pro seasons for a player, derived from existing persisted data —
+ * no new player fields. Paths, most reliable first:
+ *   1. player.ovrHistory — the offseason pipeline appends exactly one entry
+ *      per completed season (draft-eligible/retired players are skipped), so
+ *      its length is a direct seasons-completed count for drafted players.
+ *   2. currentSeason − player.draftYear, when both are known (draftYear is
+ *      read defensively elsewhere, e.g. holdoutEngine, but rarely stamped).
+ *
+ * @param {object} player
+ * @param {object} [context] - league/season context; reads currentSeason,
+ *   year, or season for the current league year
+ * @returns {number|null} completed seasons, or null when underivable
+ */
+export function getProSeasonsCompleted(player, context) {
+  const history = player?.ovrHistory;
+  if (Array.isArray(history)) return history.length;
+  const draftYear = Number(player?.draftYear);
+  const season = Number(context?.currentSeason ?? context?.year ?? context?.season);
+  if (Number.isFinite(draftYear) && Number.isFinite(season)) {
+    return Math.max(0, season - draftYear);
+  }
+  return null;
+}
+
+/**
+ * True once a player's hidden development trait should be visible in the UI:
+ * the player carries a hiddenDevTrait and has ~2 completed pro seasons (see
+ * getProSeasonsCompleted). With no seasons signal, falls back to the age-24
+ * proxy; with no age either — or for draft prospects — stays hidden.
+ */
+export function shouldRevealHiddenDevTrait(player, context) {
+  if (player?.hiddenDevTrait == null) return false;
+  if (player?.status === 'draft_eligible') return false;
+  const seasons = getProSeasonsCompleted(player, context);
+  if (seasons != null) return seasons >= HIDDEN_DEV_TRAIT_REVEAL_SEASONS;
+  const age = Number(player?.age);
+  return Number.isFinite(age) && age >= REVEAL_FALLBACK_AGE;
+}
+
+/**
+ * Display label for a player's hidden development trait.
+ *
+ * @returns {string|null} null when the player has no hiddenDevTrait (render
+ *   nothing), "Hidden" before the reveal threshold, the trait label after it,
+ *   or null for unrecognized trait values.
+ */
+export function getHiddenDevTraitLabel(player, context) {
+  if (player?.hiddenDevTrait == null) return null;
+  if (!shouldRevealHiddenDevTrait(player, context)) return 'Hidden';
+  return HIDDEN_DEV_TRAIT_LABELS[player.hiddenDevTrait] ?? null;
 }
 
 /**
