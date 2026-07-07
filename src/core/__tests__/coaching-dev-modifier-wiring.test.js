@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   processPlayerProgression,
   sanitizeCoachDevModifier,
-  applyCoachDevModifier,
 } from '../progression-logic.js';
 import { getDevelopmentRateModifier } from '../coaching-philosophy-effects.js';
 import { Utils } from '../utils.js';
@@ -94,50 +93,6 @@ describe('sanitizeCoachDevModifier', () => {
     expect(sanitizeCoachDevModifier(1.11)).toBe(1.11);
     expect(sanitizeCoachDevModifier(0.85)).toBe(0.85);
     expect(sanitizeCoachDevModifier(1.0)).toBe(1.0);
-  });
-});
-
-// ── applyCoachDevModifier ─────────────────────────────────────────────────────
-
-describe('applyCoachDevModifier', () => {
-  it('high-development staff boosts a positive delta more than low-development staff', () => {
-    const high = applyCoachDevModifier(5, 'QB', HIGH_DEV_STAFF); // round(5 × 1.11) = 6
-    const low  = applyCoachDevModifier(5, 'QB', LOW_DEV_STAFF);  // round(5 × 1.00) = 5
-    expect(high).toBe(6);
-    expect(low).toBe(5);
-    expect(high).toBeGreaterThan(low);
-  });
-
-  it('never touches negative or zero deltas (regression is coach-independent)', () => {
-    expect(applyCoachDevModifier(-3, 'QB', HIGH_DEV_STAFF)).toBe(-3);
-    expect(applyCoachDevModifier(0, 'QB', HIGH_DEV_STAFF)).toBe(0);
-    // Modifier helper is never even consulted for non-positive deltas
-    expect(vi.mocked(getDevelopmentRateModifier)).not.toHaveBeenCalled();
-  });
-
-  it('missing staff is a no-op', () => {
-    expect(applyCoachDevModifier(4, 'QB', null)).toBe(4);
-    expect(applyCoachDevModifier(4, 'QB', undefined)).toBe(4);
-    expect(vi.mocked(getDevelopmentRateModifier)).not.toHaveBeenCalled();
-  });
-
-  it('non-finite modifier returns default to 1.0 (no-op)', () => {
-    vi.mocked(getDevelopmentRateModifier).mockReturnValueOnce(NaN);
-    expect(applyCoachDevModifier(4, 'QB', HIGH_DEV_STAFF)).toBe(4);
-
-    vi.mocked(getDevelopmentRateModifier).mockReturnValueOnce(undefined);
-    expect(applyCoachDevModifier(4, 'QB', HIGH_DEV_STAFF)).toBe(4);
-
-    vi.mocked(getDevelopmentRateModifier).mockReturnValueOnce(Infinity);
-    expect(applyCoachDevModifier(4, 'QB', HIGH_DEV_STAFF)).toBe(4);
-  });
-
-  it('out-of-range modifier returns are clamped to [0.5, 2.0]', () => {
-    vi.mocked(getDevelopmentRateModifier).mockReturnValueOnce(10);
-    expect(applyCoachDevModifier(3, 'QB', HIGH_DEV_STAFF)).toBe(6); // 3 × 2.0
-
-    vi.mocked(getDevelopmentRateModifier).mockReturnValueOnce(0.01);
-    expect(applyCoachDevModifier(4, 'QB', HIGH_DEV_STAFF)).toBe(2); // 4 × 0.5
   });
 });
 

@@ -136,24 +136,6 @@ export function sanitizeCoachDevModifier(rawModifier) {
 }
 
 /**
- * Apply the coaching philosophy development-rate modifier to a progression delta.
- * Positive growth only — regression, aging decline, and zero deltas pass through
- * untouched, as do players on teams with no staff data (multiplier is 1.0).
- *
- * @param {number} ovrDelta  - base OVR delta from the age-curve roll
- * @param {string} position  - player position, e.g. 'QB'
- * @param {object} teamStaff - team.staff object (or null/undefined)
- * @returns {number} adjusted delta (rounded when a multiplier was applied)
- */
-export function applyCoachDevModifier(ovrDelta, position, teamStaff) {
-  if (!(ovrDelta > 0) || !teamStaff) return ovrDelta;
-  const mod = sanitizeCoachDevModifier(
-    getDevelopmentRateModifier(position, teamStaff.headCoach ?? null, teamStaff)
-  );
-  return Math.round(ovrDelta * mod);
-}
-
-/**
  * Apply scheme multiplier and morale bonus to a base OVR delta, clamped to [-5, +5].
  *
  * moraleBonus: +0.5 if morale >= 70, -0.5 if morale <= 30, 0 otherwise.
