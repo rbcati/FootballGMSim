@@ -350,10 +350,20 @@ function getPlayerSummaryChips(player, ringCount, nonRing) {
 }
 
 
-function AttrRow({ label, value }) {
+function AttrRow({ label, value, text = null, muted = false, testId = null }) {
+  // Text variant: renders a label/value pair without the 0-100 track,
+  // e.g. the Development trait label ("Hidden", "Superstar", ...).
+  if (text != null) {
+    return (
+      <div className="attr-row attr-row--text" data-testid={testId ?? undefined}>
+        <span className="attr-label">{label}</span>
+        <span className={`attr-value attr-value--text${muted ? " attr-value--muted" : ""}`}>{text}</span>
+      </div>
+    );
+  }
   const safeValue = Math.max(0, Math.min(100, Number(value ?? 0)));
   return (
-    <div className="attr-row">
+    <div className="attr-row" data-testid={testId ?? undefined}>
       <span className="attr-label">{label}</span>
       <div className="attr-track">
         <div
@@ -1942,15 +1952,12 @@ export default function PlayerProfile({
               <AttrRow label="Morale" value={player?.morale ?? 0} />
               <AttrRow label="Scheme Fit" value={player?.schemeFit ?? 50} />
               {hiddenDevTraitLabel != null && (
-                <div
-                  data-testid="player-profile-dev-trait"
-                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}
-                >
-                  <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Development</span>
-                  <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: hiddenDevTraitLabel === "Hidden" ? "var(--text-subtle)" : "var(--text)" }}>
-                    {hiddenDevTraitLabel}
-                  </span>
-                </div>
+                <AttrRow
+                  label="Development"
+                  text={hiddenDevTraitLabel}
+                  muted={hiddenDevTraitLabel === "Hidden"}
+                  testId="player-profile-dev-trait"
+                />
               )}
             </section>
           )}
