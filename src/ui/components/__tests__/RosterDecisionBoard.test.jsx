@@ -2,15 +2,16 @@
 /**
  * RosterDecisionBoard.test.jsx
  *
- * Roster Decision Board V2: expiring-contract triage table with local
- * pending-decision state. Verifies the expiring window filter, safe
- * `_resignMeta` fallbacks, local-only decision pills, the preview-only
- * commit path, reuse of the hidden dev-trait reveal helper, and that the
- * hiddenTrueOvr sentinel never reaches the DOM.
+ * Roster Decision Board V2 + commit dry-run V1: expiring-contract triage
+ * table with local pending-decision state. Verifies the expiring window
+ * filter, safe `_resignMeta` fallbacks, local-only decision pills, the
+ * dry-run "Review Decisions" flow (local commit plan, valid/invalid sections,
+ * no mutation handlers called), reuse of the hidden dev-trait reveal helper,
+ * and that the hiddenTrueOvr sentinel never reaches the DOM.
  *
  * Decision identity: decisions are keyed by String(player.id) only. Rows
  * without a usable id render read-only (disabled pills, muted note) and
- * never appear in the onCommitDecisions payload.
+ * never appear in the dry-run commit plan.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -146,16 +147,87 @@ describe("RosterDecisionBoard", () => {
     expect(screen.getByTestId("decision-row-8").getAttribute("data-pending")).toBe("false");
   });
 
-  it("Commit Decisions calls onCommitDecisions with the local decisions map", () => {
+  it("Review Decisions builds a local dry-run summary and never calls onCommitDecisions", () => {
     const onCommitDecisions = vi.fn();
-    render(<RosterDecisionBoard roster={makeRoster()} league={{}} onCommitDecisions={onCommitDecisions} />);
+    render(
+      <RosterDecisionBoard
+        roster={makeRoster()}
+        league={{ userTeamId: 1, seasonId: 2026 }}
+        onCommitDecisions={onCommitDecisions}
+      />,
+    );
+
+    // No summary before review, and the button enables as soon as decisions are pending.
+    expect(screen.queryByTestId("decision-dry-run-summary")).toBeNull();
+    const review = screen.getByRole("button", { name: "Review Decisions" });
+    expect(review.disabled).toBe(true);
+    fireEvent.click(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Cut" }));
+    fireEvent.click(within(screen.getByTestId("decision-row-8")).getByRole("button", { name: "Extend" }));
+    expect(review.disabled).toBe(false);
+
+    fireEvent.click(review);
+
+    // Dry run only: the future real-commit prop is never invoked.
+    expect(onCommitDecisions).not.toHaveBeenCalled();
+    const summary = screen.getByTestId("decision-dry-run-summary");
+    expect(within(summary).getByText(/Dry run only — nothing has been applied/)).toBeTruthy();
+    expect(within(summary).getByText("Valid decisions (2)")).toBeTruthy();
+    expect(within(summary).getByTestId("plan-valid-7").textContent).toContain("Cut Candidate");
+    expect(within(summary).getByTestId("plan-valid-8").textContent).toContain("No Meta Man");
+    // Both decisions were structurally valid → no invalid section rendered.
+    expect(within(summary).queryByTestId("dry-run-invalid")).toBeNull();
+  });
+
+  it("dry-run summary shows valid and invalid decisions separately", () => {
+    const roster = makeRoster();
+    const { rerender } = render(<RosterDecisionBoard roster={roster} league={{}} />);
 
     fireEvent.click(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Cut" }));
     fireEvent.click(within(screen.getByTestId("decision-row-8")).getByRole("button", { name: "Extend" }));
-    fireEvent.click(screen.getByRole("button", { name: "Commit Decisions" }));
 
-    expect(onCommitDecisions).toHaveBeenCalledTimes(1);
-    expect(onCommitDecisions).toHaveBeenCalledWith({ 7: "cut", 8: "extend" });
+    // Player 7 leaves the roster while their pending decision survives in
+    // local state — reviewing must now split the plan into valid + invalid.
+    rerender(<RosterDecisionBoard roster={roster.filter((p) => p?.id !== 7)} league={{}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+
+    const summary = screen.getByTestId("decision-dry-run-summary");
+    expect(within(summary).getByText("Valid decisions (1)")).toBeTruthy();
+    expect(within(summary).getByTestId("plan-valid-8").textContent).toContain("No Meta Man");
+    expect(within(summary).getByText("Invalid decisions (1)")).toBeTruthy();
+    expect(within(summary).getByTestId("plan-invalid-7").textContent).toContain("No roster player matches this ID.");
+  });
+
+  it("cut and franchise-tag entries surface warnings in the dry-run summary", () => {
+    const roster = makeRoster();
+    // Give the cut candidate a signing bonus so releasing them carries dead cap.
+    roster[0] = { ...roster[0], contract: { ...roster[0].contract, yearsTotal: 4, signingBonus: 6 } };
+    render(<RosterDecisionBoard roster={roster} league={{ phase: "regular" }} />);
+
+    fireEvent.click(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Cut" }));
+    fireEvent.click(within(screen.getByTestId("decision-row-8")).getByRole("button", { name: "Franchise Tag" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+
+    const summary = screen.getByTestId("decision-dry-run-summary");
+    expect(within(summary).getByTestId("plan-valid-7").textContent).toMatch(/dead cap/i);
+    // No Meta Man has 2 years left → tag is blocked as not expiring now.
+    expect(within(summary).getByTestId("plan-valid-8").textContent).toMatch(/not expiring/i);
+  });
+
+  it("changing or resetting decisions clears a stale dry-run summary", () => {
+    render(<RosterDecisionBoard roster={makeRoster()} league={{}} />);
+    const row = screen.getByTestId("decision-row-7");
+
+    fireEvent.click(within(row).getByRole("button", { name: "Cut" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+    expect(screen.getByTestId("decision-dry-run-summary")).toBeTruthy();
+
+    fireEvent.click(within(row).getByRole("button", { name: "Extend" }));
+    expect(screen.queryByTestId("decision-dry-run-summary")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+    expect(screen.getByTestId("decision-dry-run-summary")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(screen.queryByTestId("decision-dry-run-summary")).toBeNull();
   });
 
   it("renders a missing-id row safely with a muted unavailable note", () => {
@@ -181,20 +253,20 @@ describe("RosterDecisionBoard", () => {
     expect(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Cut" }).disabled).toBe(false);
   });
 
-  it("never includes missing-id rows in the onCommitDecisions payload", () => {
-    const onCommitDecisions = vi.fn();
-    render(<RosterDecisionBoard roster={makeRoster()} league={{}} onCommitDecisions={onCommitDecisions} />);
+  it("never includes missing-id rows in the dry-run commit plan", () => {
+    render(<RosterDecisionBoard roster={makeRoster()} league={{}} />);
 
     const nedRow = screen.getByText("No ID Ned").closest("tr");
     fireEvent.click(within(nedRow).getByRole("button", { name: "Cut" }));
     fireEvent.click(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Cut" }));
-    fireEvent.click(screen.getByRole("button", { name: "Commit Decisions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
 
-    expect(onCommitDecisions).toHaveBeenCalledTimes(1);
-    const payload = onCommitDecisions.mock.calls[0][0];
-    expect(payload).toEqual({ 7: "cut" });
-    // Stable player-id keys only — no row-index fallbacks of any shape.
-    expect(Object.keys(payload).some((key) => /row|index|missing/i.test(key))).toBe(false);
+    const summary = screen.getByTestId("decision-dry-run-summary");
+    // Only the stable-id decision made it into the plan.
+    expect(within(summary).getByText("Valid decisions (1)")).toBeTruthy();
+    expect(within(summary).getByTestId("plan-valid-7")).toBeTruthy();
+    expect(within(summary).queryByTestId("dry-run-invalid")).toBeNull();
+    expect(summary.textContent).not.toContain("No ID Ned");
   });
 
   it("pending rows keep the background shift but the inset side-border style is gone", () => {
@@ -206,20 +278,25 @@ describe("RosterDecisionBoard", () => {
     expect(css).not.toContain("roster-decision-board__row--pending td:first-child");
   });
 
-  it("without onCommitDecisions the commit button is disabled, shows preview state, and never mutates players", () => {
-    // Frozen players prove render + interaction never write to player objects.
+  it("works preview-only without onCommitDecisions and never mutates players or the league", () => {
+    // Frozen players prove render + review never write to player objects.
     const roster = makeRoster().map((p) => (p ? Object.freeze(p) : p));
-    render(<RosterDecisionBoard roster={roster} league={{}} />);
+    const league = Object.freeze({ userTeamId: 1, seasonId: 2026 });
+    render(<RosterDecisionBoard roster={roster} league={league} />);
 
-    const commit = screen.getByRole("button", { name: "Commit Decisions" });
-    expect(commit.disabled).toBe(true);
     expect(screen.getByText(/Preview only/)).toBeTruthy();
+    const review = screen.getByRole("button", { name: "Review Decisions" });
+    expect(review.disabled).toBe(true);
 
     expect(() => {
       fireEvent.click(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Cut" }));
-      fireEvent.click(commit);
+      fireEvent.click(review);
     }).not.toThrow();
+
+    // Reviewing rendered the dry-run summary without touching any state.
+    expect(screen.getByTestId("decision-dry-run-summary")).toBeTruthy();
     expect(roster[0].extensionDecision).toBeUndefined();
+    expect(roster[0].contract).toEqual({ years: 1, baseAnnual: 8.5 });
   });
 
   it("never renders the hiddenTrueOvr sentinel in the DOM", () => {
@@ -260,7 +337,7 @@ describe("RosterHub Decision Board tab", () => {
     expect(screen.getByTestId("roster-decision-board")).toBeTruthy();
     expect(screen.getByText("Cut Candidate")).toBeTruthy();
     expect(screen.queryByText("Long Deal Larry")).toBeNull();
-    // RosterHub has no safe batch-commit action yet → preview-only.
-    expect(screen.getByRole("button", { name: "Commit Decisions" }).disabled).toBe(true);
+    // Review stays disabled until a decision is pending; no commit wiring needed.
+    expect(screen.getByRole("button", { name: "Review Decisions" }).disabled).toBe(true);
   });
 });

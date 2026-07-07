@@ -8,7 +8,7 @@
  *
  * Decision identity: rows without a usable player.id still render, but their
  * decision pills are disabled and they can never appear in the decisions map
- * or the onCommitDecisions payload. The payload is therefore always
+ * or the dry-run commit plan. The payload is therefore always
  * { [String(playerId)]: decisionKey } with stable player-id keys only.
  *
  * Data contracts consumed (never re-derived here):
@@ -21,17 +21,24 @@
  *  - hidden dev trait: getHiddenDevTraitLabel (draftVariance.js) decides
  *    reveal state; hiddenTrueOvr is never read or rendered.
  *
+ * Commit dry-run (V1): "Review Decisions" builds a local, validated commit
+ * plan via buildRosterDecisionCommitPlan and renders it below the board. This
+ * is a preview step only — no contract / cut / tag / extension mutation is
+ * ever called from here.
+ *
  * Props:
  *  - roster: sanitized player array (RosterHub's null-filtered roster)
- *  - league: used only for the dev-trait reveal season context
- *  - onCommitDecisions: optional (decisionsMap) => void; when absent the
- *    board is preview-only and the commit button stays disabled
+ *  - league: dev-trait reveal season context + commit-plan metadata
+ *    (userTeamId / seasonId / phase); read-only
+ *  - onCommitDecisions: optional; reserved for future real-commit wiring (V4).
+ *    Unused by the dry-run flow — Review works with or without it.
  *  - onPlayerSelect: optional (playerId) => void
  */
 
 import React, { useMemo, useState } from "react";
 import { EmptyState } from "./ScreenSystem.jsx";
-import { derivePlayerContractFinancials } from "../utils/contractFormatting.js";
+import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
+import { buildRosterDecisionCommitPlan } from "../utils/rosterDecisionCommitPlan.js";
 import { getHiddenDevTraitLabel } from "../../core/draft/draftVariance.js";
 import PlayerDecisionRow, { DECISION_OPTIONS } from "./PlayerDecisionRow.jsx";
 
@@ -75,8 +82,88 @@ function sortValue(row, key) {
   }
 }
 
+const DECISION_LABELS = Object.fromEntries(DECISION_OPTIONS.map((o) => [o.key, o.label]));
+
+function CommitPlanEntry({ entry }) {
+  const contractBits = [];
+  if (entry.contract.annualSalary != null) contractBits.push(`${formatContractMoney(entry.contract.annualSalary)}/yr`);
+  if (entry.contract.yearsRemaining != null) contractBits.push(`${entry.contract.yearsRemaining}y left`);
+  if (entry.contract.deadCap != null && entry.contract.deadCap > 0) {
+    contractBits.push(`${formatContractMoney(entry.contract.deadCap)} dead cap`);
+  }
+  return (
+    <li className="roster-decision-board__plan-entry" data-testid={`plan-valid-${entry.playerId}`}>
+      <span>
+        <strong>{entry.playerName}</strong>
+        {entry.pos ? ` (${entry.pos})` : ""} — {DECISION_LABELS[entry.decision] ?? entry.decision}
+        {contractBits.length > 0 ? ` · ${contractBits.join(" · ")}` : ""}
+      </span>
+      {entry.blockingErrors.map((message) => (
+        <span key={message} className="roster-decision-board__plan-blocking">{message}</span>
+      ))}
+      {entry.warnings.map((message) => (
+        <span key={message} className="roster-decision-board__plan-warning">{message}</span>
+      ))}
+    </li>
+  );
+}
+
+function CommitPlanSummary({ plan }) {
+  return (
+    <section
+      className="roster-decision-board__dry-run"
+      data-testid="decision-dry-run-summary"
+      aria-label="Commit plan preview"
+    >
+      <div className="roster-decision-board__dry-run-header">
+        <strong>Commit plan preview</strong>
+        <span className="roster-decision-board__dry-run-note">
+          Dry run only — nothing has been applied to your roster yet.
+        </span>
+      </div>
+
+      <div data-testid="dry-run-valid">
+        <h4 className="roster-decision-board__dry-run-heading">
+          Valid decisions ({plan.valid.length})
+        </h4>
+        {plan.valid.length === 0 ? (
+          <p className="roster-decision-board__dry-run-empty">No valid decisions in this plan.</p>
+        ) : (
+          <ul className="roster-decision-board__plan-list">
+            {plan.valid.map((entry) => (
+              <CommitPlanEntry key={entry.playerId} entry={entry} />
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {plan.invalid.length > 0 && (
+        <div data-testid="dry-run-invalid">
+          <h4 className="roster-decision-board__dry-run-heading">
+            Invalid decisions ({plan.invalid.length})
+          </h4>
+          <ul className="roster-decision-board__plan-list">
+            {plan.invalid.map((entry) => (
+              <li
+                key={entry.playerId}
+                className="roster-decision-board__plan-entry roster-decision-board__plan-entry--invalid"
+                data-testid={`plan-invalid-${entry.playerId}`}
+              >
+                Player {entry.playerId} — {DECISION_LABELS[entry.decision] ?? String(entry.decision)}: {entry.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// onCommitDecisions is accepted but intentionally unused: reserved for future
+// real-commit wiring (V4). The dry-run review flow never depends on it.
 export default function RosterDecisionBoard({ roster, league, onCommitDecisions, onPlayerSelect }) {
   const [decisions, setDecisions] = useState({});
+  const [commitPlan, setCommitPlan] = useState(null);
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("ALL");
   const [sortKey, setSortKey] = useState("ovr");
@@ -147,6 +234,7 @@ export default function RosterDecisionBoard({ roster, league, onCommitDecisions,
 
   const handleDecide = (playerKey, decisionKey) => {
     if (playerKey == null) return;
+    setCommitPlan(null); // any pending-decision change invalidates the previewed plan
     setDecisions((prev) => {
       const next = { ...prev };
       if (next[playerKey] === decisionKey) {
@@ -159,11 +247,16 @@ export default function RosterDecisionBoard({ roster, league, onCommitDecisions,
   };
 
   const pendingCount = Object.keys(decisions).length;
-  const canCommit = typeof onCommitDecisions === "function";
 
-  const handleCommit = () => {
-    if (!canCommit) return;
-    onCommitDecisions({ ...decisions });
+  const handleReset = () => {
+    setDecisions({});
+    setCommitPlan(null);
+  };
+
+  // Dry run only: builds a local validated plan; never calls mutation handlers.
+  const handleReview = () => {
+    if (pendingCount === 0) return;
+    setCommitPlan(buildRosterDecisionCommitPlan({ decisions: { ...decisions }, roster, league }));
   };
 
   if (rows.length === 0) {
@@ -248,25 +341,25 @@ export default function RosterDecisionBoard({ roster, league, onCommitDecisions,
         </span>
         <div className="roster-decision-board__footer-actions">
           {pendingCount > 0 && (
-            <button type="button" className="btn-link" onClick={() => setDecisions({})}>
+            <button type="button" className="btn-link" onClick={handleReset}>
               Reset
             </button>
           )}
           <button
             type="button"
             className="btn"
-            disabled={!canCommit || pendingCount === 0}
-            onClick={handleCommit}
+            disabled={pendingCount === 0}
+            onClick={handleReview}
           >
-            Commit Decisions
+            Review Decisions
           </button>
-          {!canCommit && (
-            <span className="roster-decision-board__preview-note">
-              Preview only — decisions are not applied yet.
-            </span>
-          )}
+          <span className="roster-decision-board__preview-note">
+            Preview only — reviewing builds a dry-run plan; decisions are not applied yet.
+          </span>
         </div>
       </div>
+
+      {commitPlan != null && <CommitPlanSummary plan={commitPlan} />}
     </div>
   );
 }
