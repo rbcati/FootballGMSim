@@ -1445,3 +1445,108 @@ details[open] .app-hq-background-section__summary span { transform: rotate(180de
   font-size: var(--text-xs);
   font-weight: 700;
 }
+
+/* ============================================================================
+   ROSTER DECISION BOARD
+   ============================================================================ */
+
+.roster-decision-board {
+  display: grid;
+  gap: var(--space-3);
+}
+.roster-decision-board__toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.roster-decision-board__search {
+  flex: 1;
+  min-width: 160px;
+}
+.roster-decision-board__pos-tabs {
+  flex-wrap: wrap;
+}
+.roster-decision-board__table-wrap {
+  overflow-x: auto;
+}
+.roster-decision-board__table {
+  min-width: 760px;
+  width: 100%;
+}
+.roster-decision-board__sort-button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  white-space: nowrap;
+}
+.roster-decision-board__contract-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.roster-decision-board__row--pending {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.roster-decision-board__row--pending td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.roster-decision-board__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.roster-decision-board__pill {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1.6;
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+}
+.roster-decision-board__pill[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.roster-decision-board__dev-badge {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  display: inline-block;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  margin-left: var(--space-1);
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+}
+.roster-decision-board__dev-badge--hidden {
+  color: var(--text-subtle);
+  font-weight: 600;
+}
+.roster-decision-board__footer {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+.roster-decision-board__footer-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.roster-decision-board__meta,
+.roster-decision-board__preview-note,
+.roster-decision-board__empty-cell {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}

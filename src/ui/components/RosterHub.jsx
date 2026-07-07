@@ -17,6 +17,8 @@ import DragAndDropDepthChart from "./DragAndDropDepthChart.jsx";
 import { ScreenHeader, SectionCard, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
 import { applyRangeFilter, inTier, cycleSort } from "../utils/managementList.js";
 import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
+import { evaluateResignRecommendation, classifyTeamDirection } from "../utils/contractInsights.js";
+import RosterDecisionBoard from "./RosterDecisionBoard.jsx";
 
 // ── Position color map (matches stadium-theme.css pos-badge classes) ──
 const POS_COLORS = {
@@ -268,6 +270,7 @@ function ViewToggle({ mode, onChange }) {
     { key: "cards", label: "Cards" },
     { key: "table", label: "Table" },
     { key: "depth", label: "Depth" },
+    { key: "decisions", label: "Decision Board" },
   ];
   return (
     <div style={{
@@ -317,6 +320,20 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
   // Filter null/undefined/non-object players so downstream helpers don't throw on bad save data.
   const roster = safeRoster.filter((player) => player && typeof player === "object");
   const isUserTeam = activeTeamId === league?.userTeamId;
+
+  // Decision Board data contract (PR #1655 / resignDecisionFilters.js): rows
+  // carry their recommendation under player._resignMeta, mirroring the
+  // Roster.jsx enrichment site. Read-only copies — source roster objects are
+  // never mutated. Only computed while the Decision Board view is active.
+  const decisionRoster = useMemo(() => {
+    if (viewMode !== "decisions") return [];
+    const direction = classifyTeamDirection(team, league?.week ?? 1);
+    return roster.map((player) => (
+      player?._resignMeta
+        ? player
+        : { ...player, _resignMeta: evaluateResignRecommendation(player, { team, roster, direction }) }
+    ));
+  }, [viewMode, roster, team, league?.week]);
 
   const filtered = useMemo(() => {
     let players = [...roster];
@@ -469,6 +486,19 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
             onPlayerSelect={onPlayerSelect}
           />
         </RosterProfileErrorBoundary>
+        </SectionCard>
+      )}
+
+      {/* ── Decision Board view (expiring contracts, preview-only pending decisions) ── */}
+      {viewMode === "decisions" && (
+        <SectionCard title="Decision Board" subtitle="Triage expiring contracts with recommendations and pending decisions.">
+          <RosterProfileErrorBoundary>
+            <RosterDecisionBoard
+              roster={decisionRoster}
+              league={league}
+              onPlayerSelect={onPlayerSelect}
+            />
+          </RosterProfileErrorBoundary>
         </SectionCard>
       )}
 
