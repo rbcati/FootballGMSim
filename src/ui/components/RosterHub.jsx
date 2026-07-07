@@ -113,6 +113,36 @@ function schemeFitColor(fit) {
   return "#FF453A";
 }
 
+class RosterProfileErrorBoundary extends React.Component {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(err, info) {
+    console.error('[RosterHub] PlayerProfile crash:', err, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="error-fallback" role="alert" style={{
+          padding: "var(--space-4)",
+          border: "1px solid var(--danger, #ef4444)",
+          borderRadius: "var(--radius-md)",
+          background: "rgba(239,68,68,0.08)",
+          color: "var(--text)",
+        }}>
+          Could not load this player profile. Close it and continue managing your roster.
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function PlayerRow({ player, isUser, onSelect, schemeName }) {
   const devBadge = getDevTraitBadge(player.devTrait);
   const pos = player.pos || player.position;
@@ -283,8 +313,9 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
   const activeTeamId = teamId ?? league?.userTeamId;
   // Use optional chaining on `t` to guard against null entries in the teams array
   const team = league?.teams?.find(t => t?.id === activeTeamId);
-  // Filter null/undefined players so downstream helpers don't throw on bad save data
-  const roster = Array.isArray(team?.roster) ? team.roster.filter(Boolean) : [];
+  const safeRoster = Array.isArray(team?.roster) ? team.roster : [];
+  // Filter null/undefined/non-object players so downstream helpers don't throw on bad save data.
+  const roster = safeRoster.filter((player) => player && typeof player === "object");
   const isUserTeam = activeTeamId === league?.userTeamId;
 
   const filtered = useMemo(() => {
@@ -341,7 +372,7 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
     });
 
     return players;
-  }, [roster, search, posFilter, sortKey, sortDesc]);
+  }, [roster, search, posFilter, sortKey, sortDesc, ageRange, overallTier, expiringOnly, injuredOnly]);
 
   const handleSortToggle = useCallback((key) => {
     const next = cycleSort(sortKey, sortDesc ? "desc" : "asc", key, SORT_OPTIONS.filter((o) => o.desc).map((o) => o.key));
@@ -422,18 +453,22 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
       {/* ── Cards view ── */}
       {viewMode === "cards" && (
         <SectionCard title="Card view" subtitle="Mobile-first browsing with visual player summaries.">
-          <PlayerCardGrid roster={roster} onPlayerSelect={onPlayerSelect} />
+          <RosterProfileErrorBoundary>
+            <PlayerCardGrid roster={roster} onPlayerSelect={onPlayerSelect} />
+          </RosterProfileErrorBoundary>
         </SectionCard>
       )}
 
       {/* ── Depth Chart view ── */}
       {viewMode === "depth" && (
         <SectionCard title="Depth chart" subtitle="Set starters and role hierarchy.">
-        <DragAndDropDepthChart
-          league={league}
-          actions={actions}
-          onPlayerSelect={onPlayerSelect}
-        />
+        <RosterProfileErrorBoundary>
+          <DragAndDropDepthChart
+            league={league}
+            actions={actions}
+            onPlayerSelect={onPlayerSelect}
+          />
+        </RosterProfileErrorBoundary>
         </SectionCard>
       )}
 
