@@ -2,6 +2,7 @@ import { mergeArchivedGameWithScheduleResult, normalizeArchivedGamePayload } fro
 import { isScoringLikeLog, normalizePlayLogEntry } from '../../core/gameEvents.js';
 import { buildGameFlowSummary } from '../../core/sim/gameFlowSummary.js';
 import { buildLeaguePlayerMap, resolvePlayerName } from './playerNameResolver.js';
+import { buildSpecialTeamsSummary } from './specialTeamsSummary.js';
 
 const QUALITY = { full: 'Full detail', partial: 'Partial detail', score: 'Score only', missing: 'Missing detail' };
 
@@ -519,6 +520,18 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
   const homeTeam = teamInfo(league, homeId, 'home', payload);
   const finalScore = { home: homeScore, away: awayScore };
   const teamTotals = { home: teamStats?.home ?? {}, away: teamStats?.away ?? {} };
+  // Special-teams rollup — legacy scalar counters (homeFGs/homeXPs) and raw
+  // drive-summary stats only exist on the unnormalized record, so feed both.
+  const specialTeams = buildSpecialTeamsSummary({
+    teamDriveStats: payload?.teamDriveStats ?? rawGame?.teamDriveStats,
+    teamStats: teamTotals,
+    homeStats: rawGame?.homeStats,
+    awayStats: rawGame?.awayStats,
+    homeFGs: rawGame?.homeFGs,
+    awayFGs: rawGame?.awayFGs,
+    homeXPs: rawGame?.homeXPs,
+    awayXPs: rawGame?.awayXPs,
+  });
   const playerTables = { home: homePlayers, away: awayPlayers };
   const winnerSide = hasScore && awayScore !== homeScore ? (awayScore > homeScore ? 'away' : 'home') : null;
   const teamContext = { home: homeTeam, away: awayTeam };
@@ -566,6 +579,7 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
     quarterScores,
     teamTotals,
     teamComparisonRows: buildTeamComparisonRows(teamTotals),
+    specialTeams,
     scoringSummary,
     driveSummaryRows,
     playByPlayRows,
