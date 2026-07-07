@@ -3,8 +3,13 @@
  *
  * Renders a filterable, sortable table of players whose contracts expire
  * within EXPIRING_WINDOW_SEASONS. Presentation + local pending-decision state
- * only: decisions live in a useState map keyed by row, and nothing here
- * mutates league / player / global state.
+ * only: decisions live in a useState map keyed by String(player.id), and
+ * nothing here mutates league / player / global state.
+ *
+ * Decision identity: rows without a usable player.id still render, but their
+ * decision pills are disabled and they can never appear in the decisions map
+ * or the onCommitDecisions payload. The payload is therefore always
+ * { [String(playerId)]: decisionKey } with stable player-id keys only.
  *
  * Data contracts consumed (never re-derived here):
  *  - contract years remaining: contract.years with the established
@@ -51,10 +56,10 @@ function getYearsRemaining(player) {
   return Number.isFinite(years) ? years : null;
 }
 
-function rowKeyFor(player, index) {
+function decisionKeyFor(player) {
   const id = player?.id;
   if (typeof id === "string" || typeof id === "number") return String(id);
-  return `row-${index}`;
+  return null;
 }
 
 function sortValue(row, key) {
@@ -90,9 +95,11 @@ export default function RosterDecisionBoard({ roster, league, onCommitDecisions,
         const yearsRemaining = getYearsRemaining(player);
         if (yearsRemaining == null || yearsRemaining > EXPIRING_WINDOW_SEASONS) return null;
         const meta = player._resignMeta && typeof player._resignMeta === "object" ? player._resignMeta : null;
+        const decisionKey = decisionKeyFor(player);
         return {
           player,
-          rowKey: rowKeyFor(player, index),
+          decisionKey,
+          renderKey: decisionKey ?? `missing-id-${index}`,
           yearsRemaining,
           annualSalary: derivePlayerContractFinancials(player).annualSalary,
           meta,
@@ -138,13 +145,14 @@ export default function RosterDecisionBoard({ roster, league, onCommitDecisions,
     }
   };
 
-  const handleDecide = (rowKey, decisionKey) => {
+  const handleDecide = (playerKey, decisionKey) => {
+    if (playerKey == null) return;
     setDecisions((prev) => {
       const next = { ...prev };
-      if (next[rowKey] === decisionKey) {
-        delete next[rowKey];
+      if (next[playerKey] === decisionKey) {
+        delete next[playerKey];
       } else {
-        next[rowKey] = decisionKey;
+        next[playerKey] = decisionKey;
       }
       return next;
     });
@@ -216,9 +224,9 @@ export default function RosterDecisionBoard({ roster, league, onCommitDecisions,
           <tbody>
             {visibleRows.map((row) => (
               <PlayerDecisionRow
-                key={row.rowKey}
+                key={row.renderKey}
                 row={row}
-                decision={decisions[row.rowKey] ?? null}
+                decision={row.decisionKey != null ? decisions[row.decisionKey] ?? null : null}
                 onDecide={handleDecide}
                 onPlayerSelect={onPlayerSelect}
               />

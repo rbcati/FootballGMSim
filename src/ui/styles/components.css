@@ -1494,9 +1494,6 @@ details[open] .app-hq-background-section__summary span { transform: rotate(180de
 .roster-decision-board__row--pending {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
-.roster-decision-board__row--pending td:first-child {
-  box-shadow: inset 3px 0 0 var(--accent);
-}
 .roster-decision-board__pills {
   display: flex;
   flex-wrap: wrap;
@@ -1518,6 +1515,17 @@ details[open] .app-hq-background-section__summary span { transform: rotate(180de
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+.roster-decision-board__pill:disabled {
+  color: var(--text-subtle);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.roster-decision-board__missing-id-note {
+  color: var(--text-subtle);
+  display: block;
+  font-size: var(--text-xs);
+  margin-top: var(--space-1);
 }
 .roster-decision-board__dev-badge {
   border: 1px solid var(--hairline);

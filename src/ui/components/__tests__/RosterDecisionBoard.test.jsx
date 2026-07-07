@@ -7,7 +7,13 @@
  * `_resignMeta` fallbacks, local-only decision pills, the preview-only
  * commit path, reuse of the hidden dev-trait reveal helper, and that the
  * hiddenTrueOvr sentinel never reaches the DOM.
+ *
+ * Decision identity: decisions are keyed by String(player.id) only. Rows
+ * without a usable id render read-only (disabled pills, muted note) and
+ * never appear in the onCommitDecisions payload.
  */
+import fs from "node:fs";
+import path from "node:path";
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, within, cleanup } from "@testing-library/react";
@@ -80,6 +86,14 @@ function makeRoster() {
       ovr: 71,
       // no contract on purpose
     },
+    {
+      // no id on purpose: renders read-only, never enters the decisions map
+      name: "No ID Ned",
+      pos: "RB",
+      age: 25,
+      ovr: 70,
+      contract: { years: 1, baseAnnual: 2.0 },
+    },
     null, // malformed row must be ignored
   ];
 }
@@ -142,6 +156,54 @@ describe("RosterDecisionBoard", () => {
 
     expect(onCommitDecisions).toHaveBeenCalledTimes(1);
     expect(onCommitDecisions).toHaveBeenCalledWith({ 7: "cut", 8: "extend" });
+  });
+
+  it("renders a missing-id row safely with a muted unavailable note", () => {
+    render(<RosterDecisionBoard roster={makeRoster()} league={{}} />);
+    const row = screen.getByText("No ID Ned").closest("tr");
+    expect(row).toBeTruthy();
+    expect(within(row).getByText("Decision unavailable: missing player ID.")).toBeTruthy();
+  });
+
+  it("disables decision pills for a missing-id row and clicking never marks it pending", () => {
+    render(<RosterDecisionBoard roster={makeRoster()} league={{}} />);
+    const row = screen.getByText("No ID Ned").closest("tr");
+
+    for (const label of ["Extend", "Cut", "Franchise Tag", "Let Walk"]) {
+      const pill = within(row).getByRole("button", { name: label });
+      expect(pill.disabled).toBe(true);
+      fireEvent.click(pill);
+    }
+
+    expect(row.getAttribute("data-pending")).toBe("false");
+    expect(within(row).queryAllByRole("button", { pressed: true })).toHaveLength(0);
+    // Rows with ids stay interactive.
+    expect(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Cut" }).disabled).toBe(false);
+  });
+
+  it("never includes missing-id rows in the onCommitDecisions payload", () => {
+    const onCommitDecisions = vi.fn();
+    render(<RosterDecisionBoard roster={makeRoster()} league={{}} onCommitDecisions={onCommitDecisions} />);
+
+    const nedRow = screen.getByText("No ID Ned").closest("tr");
+    fireEvent.click(within(nedRow).getByRole("button", { name: "Cut" }));
+    fireEvent.click(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Cut" }));
+    fireEvent.click(screen.getByRole("button", { name: "Commit Decisions" }));
+
+    expect(onCommitDecisions).toHaveBeenCalledTimes(1);
+    const payload = onCommitDecisions.mock.calls[0][0];
+    expect(payload).toEqual({ 7: "cut" });
+    // Stable player-id keys only — no row-index fallbacks of any shape.
+    expect(Object.keys(payload).some((key) => /row|index|missing/i.test(key))).toBe(false);
+  });
+
+  it("pending rows keep the background shift but the inset side-border style is gone", () => {
+    const css = fs.readFileSync(path.resolve(process.cwd(), "src/ui/styles/components.css"), "utf8");
+    const pendingRule = css.match(/\.roster-decision-board__row--pending\s*\{[^}]*\}/);
+    expect(pendingRule).toBeTruthy();
+    expect(pendingRule[0]).toContain("background");
+    expect(pendingRule[0]).not.toContain("box-shadow");
+    expect(css).not.toContain("roster-decision-board__row--pending td:first-child");
   });
 
   it("without onCommitDecisions the commit button is disabled, shows preview state, and never mutates players", () => {
