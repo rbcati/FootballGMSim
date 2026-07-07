@@ -172,6 +172,12 @@ function BoxScore({
   const scoringSummaryRows = vm.scoringSummary ?? [];
   const teamComparisonRows = vm.teamComparisonRows ?? [];
   const playByPlayRows = vm.playByPlayRows ?? [];
+  const specialTeams = vm.specialTeams ?? null;
+  const specialTeamsNoteText = (note) => {
+    if (note.side === 'home') return `${homeAbbr} — ${note.text}`;
+    if (note.side === 'away') return `${awayAbbr} — ${note.text}`;
+    return note.text;
+  };
 
   return (
     <div
@@ -292,6 +298,32 @@ function BoxScore({
             ))}
           </div>
         </details>
+      )}
+
+      {/* ── SPECIAL TEAMS — compact kicking & field-position summary ─────── */}
+      {specialTeams?.hasData && (
+        <div className="bs-sheet-leaders" data-testid="game-book-special-teams">
+          <div className="bs-sheet-section-title">Special Teams</div>
+          <div className="bs-sheet-compare-head">
+            <span>{awayAbbr}</span>
+            <span />
+            <span>{homeAbbr}</span>
+          </div>
+          {specialTeams.rows.map((row) => (
+            <div key={row.key} className="bs-sheet-compare-row" data-testid={`game-book-special-teams-${row.key}`}>
+              <span className="bs-sheet-compare-value">{row.away}</span>
+              <span className="bs-sheet-compare-label">{row.label}</span>
+              <span className="bs-sheet-compare-value">{row.home}</span>
+            </div>
+          ))}
+          {specialTeams.notes.length > 0 && (
+            <div className="bs-sheet-exec" data-testid="game-book-special-teams-notes">
+              {specialTeams.notes.map((note) => (
+                <span key={note.id} className="bs-sheet-exec-bullet">• {specialTeamsNoteText(note)}</span>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── FULL PLAYER STATS — priority 5, collapsed dense tables ───────── */}

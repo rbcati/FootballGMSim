@@ -222,6 +222,84 @@ describe('BoxScore compact sheet — core rendering', () => {
   });
 });
 
+describe('BoxScore special teams section', () => {
+  const baseLeague = { seasonId: 2031, week: 2, teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] };
+
+  beforeEach(() => {
+    cleanup();
+    vi.mocked(useStableRouteRequest).mockReturnValue({ data: null });
+  });
+
+  it('renders FG, punts, XP and 2PT rows from teamDriveStats special-teams counters', () => {
+    const game = {
+      homeId: 1, awayId: 2, homeScore: 27, awayScore: 13,
+      teamDriveStats: {
+        home: { punts: 4, fgAttempts: 3, fgMade: 2, twoPointAttempts: 1, twoPointMade: 1 },
+        away: { punts: 7, fgAttempts: 2, fgMade: 2, twoPointAttempts: 0, twoPointMade: 0 },
+      },
+      homeXPs: 2,
+      awayXPs: 1,
+    };
+    const { getByTestId } = render(
+      <BoxScore gameId="g-st" league={{ ...baseLeague, gameById: { 'g-st': game } }} embedded />,
+    );
+    expect(getByTestId('game-book-special-teams')).toBeTruthy();
+    // Rows read away-value · label · home-value
+    expect(getByTestId('game-book-special-teams-fg').textContent).toBe('2/2FG Made/Att2/3');
+    expect(getByTestId('game-book-special-teams-punts').textContent).toBe('7Punts4');
+    expect(getByTestId('game-book-special-teams-twoPoint').textContent).toBe('0/02PT Made/Att1/1');
+    expect(getByTestId('game-book-special-teams-xp').textContent).toBe('1XP Made2');
+  });
+
+  it('shows impact notes for 2PT tries, missed FGs, and punt-heavy games', () => {
+    const game = {
+      homeId: 1, awayId: 2, homeScore: 20, awayScore: 16,
+      teamDriveStats: {
+        home: { punts: 7, fgAttempts: 3, fgMade: 1, twoPointAttempts: 1, twoPointMade: 0 },
+        away: { punts: 8, fgAttempts: 1, fgMade: 1, twoPointAttempts: 0, twoPointMade: 0 },
+      },
+    };
+    const { getByTestId } = render(
+      <BoxScore gameId="g-st-notes" league={{ ...baseLeague, gameById: { 'g-st-notes': game } }} embedded />,
+    );
+    const notes = getByTestId('game-book-special-teams-notes').textContent;
+    expect(notes).toContain('KC — 2-point attempt changed the scoring math.');
+    expect(notes).toContain('KC — Missed field goal opportunity.');
+    expect(notes).toContain('Field-position game.');
+  });
+
+  it('missing special-teams fields default safely and do not crash', () => {
+    const game = {
+      homeId: 1, awayId: 2, homeScore: 24, awayScore: 21,
+      teamDriveStats: { home: { turnovers: 1 }, away: { turnovers: 2 } },
+    };
+    const { getByTestId, queryByTestId } = render(
+      <BoxScore gameId="g-st-missing" league={{ ...baseLeague, gameById: { 'g-st-missing': game } }} embedded />,
+    );
+    expect(getByTestId('game-book-special-teams-fg').textContent).toBe('0/0FG Made/Att0/0');
+    expect(getByTestId('game-book-special-teams-punts').textContent).toBe('0Punts0');
+    expect(getByTestId('game-book-special-teams-twoPoint').textContent).toBe('0/02PT Made/Att0/0');
+    expect(queryByTestId('game-book-special-teams-notes')).toBeNull();
+  });
+
+  it('legacy score-only game objects still render without a special-teams section', () => {
+    const { getByTestId, queryByTestId } = render(
+      <BoxScore gameId="g-legacy" league={{ ...baseLeague, gameById: { 'g-legacy': { homeId: 1, awayId: 2, homeScore: 6, awayScore: 3 } } }} embedded />,
+    );
+    expect(getByTestId('game-book-score-hero')).toBeTruthy();
+    expect(queryByTestId('game-book-special-teams')).toBeNull();
+  });
+
+  it('legacy games fall back to homeFGs/awayFGs and homeXPs/awayXPs scalars', () => {
+    const game = { homeId: 1, awayId: 2, homeScore: 13, awayScore: 9, homeFGs: 2, awayFGs: 3, homeXPs: 1, awayXPs: 0 };
+    const { getByTestId } = render(
+      <BoxScore gameId="g-legacy-fg" league={{ ...baseLeague, gameById: { 'g-legacy-fg': game } }} embedded />,
+    );
+    expect(getByTestId('game-book-special-teams-fg').textContent).toBe('3/3FG Made/Att2/2');
+    expect(getByTestId('game-book-special-teams-xp').textContent).toBe('0XP Made1');
+  });
+});
+
 describe('BoxScore player name resolution', () => {
   const baseLeague = { seasonId: 2031, week: 2, teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] };
 
