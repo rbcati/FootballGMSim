@@ -6,6 +6,11 @@
  * reads `label` / `negotiationRisk`, never re-derives them), and the four
  * local pending-decision pills. All state lives in the parent board; this
  * component never touches league/player/global state.
+ *
+ * Decisions are identified by row.decisionKey (String(player.id), or null
+ * when the player has no usable id). A null decisionKey renders the row
+ * read-only: pills are disabled, onDecide is never called, and a muted
+ * "Decision unavailable" note explains why.
  */
 
 import React from "react";
@@ -31,15 +36,16 @@ function DevTraitBadge({ label }) {
 }
 
 export default function PlayerDecisionRow({ row, decision, onDecide, onPlayerSelect }) {
-  const { player, rowKey, yearsRemaining, annualSalary, meta, devTraitLabel } = row;
+  const { player, decisionKey, renderKey, yearsRemaining, annualSalary, meta, devTraitLabel } = row;
   const pos = player?.pos ?? player?.position ?? "—";
   const name = player?.name ?? "Unknown Player";
   const canOpenProfile = typeof onPlayerSelect === "function" && player?.id != null;
+  const canDecide = decisionKey != null;
 
   return (
     <tr
       className={decision ? "roster-decision-board__row--pending" : undefined}
-      data-testid={`decision-row-${rowKey}`}
+      data-testid={`decision-row-${renderKey}`}
       data-pending={decision ? "true" : "false"}
     >
       <td>
@@ -66,12 +72,18 @@ export default function PlayerDecisionRow({ row, decision, onDecide, onPlayerSel
               type="button"
               className="roster-decision-board__pill"
               aria-pressed={decision === option.key}
-              onClick={() => onDecide(rowKey, option.key)}
+              disabled={!canDecide}
+              onClick={canDecide ? () => onDecide(decisionKey, option.key) : undefined}
             >
               {option.label}
             </button>
           ))}
         </div>
+        {!canDecide && (
+          <span className="roster-decision-board__missing-id-note">
+            Decision unavailable: missing player ID.
+          </span>
+        )}
       </td>
     </tr>
   );
