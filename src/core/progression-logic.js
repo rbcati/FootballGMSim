@@ -26,6 +26,7 @@ import { Constants } from './constants.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer } from './development/personalitySystem.js';
 import { getDevelopmentRateModifier } from './coaching-philosophy-effects.js';
 import { getCoachSchemeMultiplier, isPositionMisfitForScheme } from './coaching/coachingEngine.js';
+import { getDevTraitMultiplier, combineDevModifiers, getTrueOvrGrowthBonus } from './draft/draftVariance.js';
 
 // ── Progression probability constants (Task 10) ───────────────────────────────
 // Defined here so they can be tuned without hunting for magic numbers inline.
@@ -393,11 +394,22 @@ export function processPlayerProgression(players, options = {}) {
       ovrDelta += Math.max(1, Math.round(ovrDelta * mentorship.development));
     }
 
-    // ── Coaching philosophy development modifier ───────────────────────────────
+    // ── Coaching philosophy + hidden dev-trait development modifiers ───────────
     // Multiplies positive growth deltas only; never amplifies busts or regressions.
-    // Missing coach/staff or a non-finite modifier → 1.0 (no-op).
+    // Missing coach/staff, a non-finite modifier, or no hiddenDevTrait → 1.0.
+    // Combined modifier is clamped to [0.4, 2.5]; a player still below his
+    // hidden talent anchor (hiddenTrueOvr) gets a small extra growth bonus.
     if (ovrDelta > 0 && !bustEvent) {
-      ovrDelta = applyCoachDevModifier(ovrDelta, player.pos, teamCoaches[player.teamId] ?? null);
+      const teamStaff = teamCoaches[player.teamId] ?? null;
+      const coachModifier = teamStaff
+        ? sanitizeCoachDevModifier(
+            getDevelopmentRateModifier(player.pos, teamStaff.headCoach ?? null, teamStaff)
+          )
+        : 1.0;
+      const traitModifier = getDevTraitMultiplier(player, age);
+      const finalModifier = combineDevModifiers(coachModifier, traitModifier);
+      ovrDelta = Math.round(ovrDelta * finalModifier);
+      ovrDelta += getTrueOvrGrowthBonus(player, ovrDelta);
     }
 
     // ── Apply non-cliff, non-wall deltas via position-specific rating nudges (Task 6)
