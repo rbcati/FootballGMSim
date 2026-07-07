@@ -41,6 +41,7 @@ import { getPlayerMoraleSummary } from "../../core/mood/playerMoraleEngine.js";
 import { getPlayerAwardSummary, AWARD_LABELS, AWARD_TYPES } from "../../core/awards/awardEngine.js";
 import { getNegotiationContext } from "../../core/contracts/negotiationModifiers.js";
 import { TRACKED_STATS } from "../../core/awards/statLeaderboard.js";
+import { getHiddenDevTraitLabel } from "../../core/draft/draftVariance.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -754,6 +755,10 @@ export default function PlayerProfile({
   const developmentNotes = useMemo(() => buildDevelopmentNotes(player, moraleContext), [player, moraleContext]);
   const ageCurve = useMemo(() => getAgeCurveContext(player), [player]);
   const developmentSnapshot = useMemo(() => getDevelopmentSnapshot(player), [player]);
+  const hiddenDevTraitLabel = useMemo(
+    () => getHiddenDevTraitLabel(player, { currentSeason: league?.year ?? league?.seasonId ?? null }),
+    [player, league?.year, league?.seasonId],
+  );
   const developmentDrivers = useMemo(() => getDevelopmentDrivers(player, moraleContext), [player, moraleContext]);
   const developmentArcModel = useMemo(
     () => buildPlayerDevelopmentModel(effectivePlayer, { developmentContext: effectivePlayer?.developmentContext }),
@@ -1936,6 +1941,17 @@ export default function PlayerProfile({
               <AttrRow label="Potential" value={player?.potential ?? player?.ovr ?? 0} />
               <AttrRow label="Morale" value={player?.morale ?? 0} />
               <AttrRow label="Scheme Fit" value={player?.schemeFit ?? 50} />
+              {hiddenDevTraitLabel != null && (
+                <div
+                  data-testid="player-profile-dev-trait"
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}
+                >
+                  <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Development</span>
+                  <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: hiddenDevTraitLabel === "Hidden" ? "var(--text-subtle)" : "var(--text)" }}>
+                    {hiddenDevTraitLabel}
+                  </span>
+                </div>
+              )}
             </section>
           )}
 

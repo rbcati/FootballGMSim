@@ -569,6 +569,97 @@ describe('PlayerProfile', () => {
     expect(screen.queryByTestId('player-profile-advanced-ledger')).toBeNull();
   });
 
+  describe('hidden development trait reveal', () => {
+    // useStableRouteRequest keeps a module-level completed-request cache keyed
+    // by league scope + player id, so give each render a unique player id.
+    let nextRevealPlayerId = 9100;
+
+    const buildActions = (revealPlayer) => ({
+      getPlayerCareer: vi.fn(async () => ({
+        payload: {
+          player: revealPlayer,
+          stats: [],
+          teammates: [],
+          meta: { userTeamId: 1, week: 1 },
+        },
+      })),
+      getAllSeasons: vi.fn(async () => ({ payload: { seasons: [] } })),
+      getPlayerDraftContext: vi.fn(async () => ({ payload: { context: { known: false } } })),
+      getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
+      getTransactions: vi.fn(async () => ({ payload: { transactions: [] } })),
+    });
+
+    const renderProfile = (playerOverrides) => {
+      const id = nextRevealPlayerId++;
+      const revealPlayer = { ...player, ...playerOverrides, id };
+      render(
+        <PlayerProfile
+          playerId={id}
+          onClose={vi.fn()}
+          actions={buildActions(revealPlayer)}
+          teams={league.teams}
+          league={league}
+        />,
+      );
+    };
+
+    it('renders no Development row for players without hiddenDevTrait', async () => {
+      renderProfile({});
+      await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Avery Fields'));
+      expect(screen.queryByTestId('player-profile-dev-trait')).toBeNull();
+    });
+
+    it('shows "Hidden" below the reveal threshold', async () => {
+      renderProfile({
+        hiddenDevTrait: 'superstar',
+        age: 23,
+        ovrHistory: [{ season: 2030, ovr: 80, age: 22 }],
+      });
+      await waitFor(() => expect(screen.getByTestId('player-profile-dev-trait')).toBeTruthy());
+      const row = screen.getByTestId('player-profile-dev-trait');
+      expect(row.textContent).toContain('Development');
+      expect(row.textContent).toContain('Hidden');
+      expect(row.textContent).not.toContain('Superstar');
+    });
+
+    it.each([
+      ['normal', 'Normal'],
+      ['late_bloomer', 'Late Bloomer'],
+      ['superstar', 'Superstar'],
+      ['bust', 'Bust'],
+    ])('shows the %s label at the reveal threshold', async (trait, label) => {
+      renderProfile({
+        hiddenDevTrait: trait,
+        ovrHistory: [
+          { season: 2030, ovr: 80, age: 22 },
+          { season: 2031, ovr: 82, age: 23 },
+        ],
+      });
+      await waitFor(() => expect(screen.getByTestId('player-profile-dev-trait')).toBeTruthy());
+      expect(screen.getByTestId('player-profile-dev-trait').textContent).toContain(label);
+    });
+
+    it('defaults to "Hidden" when age and season context are both missing', async () => {
+      renderProfile({ hiddenDevTrait: 'bust', age: null, ovrHistory: undefined });
+      await waitFor(() => expect(screen.getByTestId('player-profile-dev-trait')).toBeTruthy());
+      expect(screen.getByTestId('player-profile-dev-trait').textContent).toContain('Hidden');
+    });
+
+    it('never renders hiddenTrueOvr anywhere in the profile tree', async () => {
+      renderProfile({
+        hiddenTrueOvr: 977, // sentinel: impossible OVR so any leak is detectable
+        hiddenDevTrait: 'superstar',
+        ovrHistory: [
+          { season: 2030, ovr: 80, age: 22 },
+          { season: 2031, ovr: 82, age: 23 },
+        ],
+      });
+      await waitFor(() => expect(screen.getByTestId('player-profile-dev-trait')).toBeTruthy());
+      expect(document.body.textContent).not.toContain('977');
+      expect(document.body.innerHTML).not.toContain('hiddenTrueOvr');
+    });
+  });
+
   it('shows legacy watch when career stats and accolades justify legacy scoring', async () => {
     const careerPlayer = {
       id: 22,
