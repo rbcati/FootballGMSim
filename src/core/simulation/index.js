@@ -15,6 +15,7 @@ import { Utils as U } from '../utils.js';
 import { Constants as C } from '../constants.js';
 import { calculateGamePerformance, getCoachingMods, getHCMods, getMedicalStaffInjuryMod } from '../coach-system.js';
 import { applyCoachingModifiers } from '../coaching-philosophy-effects.js';
+import { normalizeTeamStaff } from '../staff/staffPhilosophy.js';
 import { updateAdvancedStats, updatePlayerGameLegacy, calculateMorale } from '../player.js';
 import { getStrategyModifiers, computeStrategicEdge } from '../strategy.js';
 import { deriveGameReasoningFlags } from '../weeklyNarrativeFlags.js';
@@ -187,6 +188,25 @@ function calculateSeasonsWithTeam(player, team) {
   return 1;
 }
 
+/**
+ * Returns the team's coaching staff with philosophy fields normalized for the
+ * simulation (canonical offensive/defensive philosophy enums + capped traits +
+ * guaranteed coordinator slots). normalizeTeamStaff() was previously only used
+ * by the UI (TeamHub), so the sim relied on applyCoachingModifiers' internal
+ * fallback inference; this makes the normalized philosophy explicit on the sim
+ * path. The result is cached per batch on a non-persistent `_cachedSimStaff`
+ * field (cleared in simulateBatch alongside _cachedSchemeFit) so we do not
+ * re-normalize per game inside a week, and the persistent team.staff record is
+ * never mutated (normalizeTeamStaff returns a fresh object).
+ */
+function getSimStaff(team) {
+  if (!team) return {};
+  if (!team._cachedSimStaff) {
+    team._cachedSimStaff = normalizeTeamStaff(team);
+  }
+  return team._cachedSimStaff;
+}
+
 // ───────────────────────────── orchestration ─────────────────────────────────
 
 export function simulateMatchup(home, away, options = {}) {
@@ -284,8 +304,13 @@ export function simGameStats(home, away, options = {}) {
     // getCoachingMods builds skill-tree mods (archetype/level based).
     // applyCoachingModifiers layers HC/OC/DC philosophy and staff traits on top
     // — single callsite per team, no philosophy logic scattered below.
-    const homeMods = applyCoachingModifiers(getCoachingMods(home.staff), home.staff?.headCoach, home.staff);
-    const awayMods = applyCoachingModifiers(getCoachingMods(away.staff), away.staff?.headCoach, away.staff);
+    // Philosophy is read from normalizeTeamStaff() output (canonical enums), so
+    // the sim consumes the same normalized fields the UI does rather than
+    // re-inferring them ad hoc.
+    const homeSimStaff = getSimStaff(home);
+    const awaySimStaff = getSimStaff(away);
+    const homeMods = applyCoachingModifiers(getCoachingMods(home.staff), homeSimStaff.headCoach, homeSimStaff);
+    const awayMods = applyCoachingModifiers(getCoachingMods(away.staff), awaySimStaff.headCoach, awaySimStaff);
 
     // --- HEAD COACH ARCHETYPE MODIFIERS ---
     const homeHCMods = getHCMods(home.staff?.headCoach);
@@ -2062,7 +2087,7 @@ export function simulateBatch(games, options = {}) {
     // Clear per-batch caches so scheme fit and morale are recalculated fresh each week
     if (league.teams) {
         for (const t of league.teams) {
-            if (t) { delete t._cachedSchemeFit; delete t._cachedMorale; }
+            if (t) { delete t._cachedSchemeFit; delete t._cachedMorale; delete t._cachedSimStaff; }
         }
     }
 
