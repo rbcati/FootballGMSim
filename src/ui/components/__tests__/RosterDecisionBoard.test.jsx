@@ -467,6 +467,121 @@ describe("RosterDecisionBoard commit execution", () => {
   });
 });
 
+describe("RosterDecisionBoard durable let-walk intent", () => {
+  const league = { userTeamId: 1, seasonId: 2026 };
+
+  function makeActions(overrides = {}) {
+    return {
+      releasePlayer: vi.fn(() => undefined),
+      applyFranchiseTag: vi.fn(async () => ({ type: "STATE_UPDATE" })),
+      updatePlayerManagement: vi.fn(async () => ({ type: "STATE_UPDATE" })),
+      ...overrides,
+    };
+  }
+
+  // Player 7 (1y left) carries a persisted let-walk intent from a previous
+  // session / Contract Center.
+  function makePersistedRoster() {
+    const roster = makeRoster();
+    roster[0] = { ...roster[0], extensionDecision: "let_walk" };
+    return roster;
+  }
+
+  it("pre-populates let_walk from player.extensionDecision on mount", () => {
+    render(<RosterDecisionBoard roster={makePersistedRoster()} league={league} actions={makeActions()} />);
+
+    const row = screen.getByTestId("decision-row-7");
+    expect(row.getAttribute("data-pending")).toBe("true");
+    expect(within(row).getByRole("button", { name: "Let Walk" }).getAttribute("aria-pressed")).toBe("true");
+    // Players without persisted intent stay untouched.
+    expect(screen.getByTestId("decision-row-8").getAttribute("data-pending")).toBe("false");
+  });
+
+  it("pre-populates ONLY let_walk — other persisted extensionDecision values are ignored", () => {
+    const roster = makeRoster();
+    roster[0] = { ...roster[0], extensionDecision: "deferred" };
+    roster[1] = { ...roster[1], extensionDecision: "tagged" };
+    render(<RosterDecisionBoard roster={roster} league={league} actions={makeActions()} />);
+
+    expect(screen.getByTestId("decision-row-7").getAttribute("data-pending")).toBe("false");
+    expect(screen.getByTestId("decision-row-8").getAttribute("data-pending")).toBe("false");
+  });
+
+  it("a roster sync arriving before any interaction still pre-populates", () => {
+    const { rerender } = render(<RosterDecisionBoard roster={makeRoster()} league={league} actions={makeActions()} />);
+    expect(screen.getByTestId("decision-row-7").getAttribute("data-pending")).toBe("false");
+
+    rerender(<RosterDecisionBoard roster={makePersistedRoster()} league={league} actions={makeActions()} />);
+
+    const row = screen.getByTestId("decision-row-7");
+    expect(row.getAttribute("data-pending")).toBe("true");
+    expect(within(row).getByRole("button", { name: "Let Walk" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("pre-population never overwrites a user edit made this session", () => {
+    const { rerender } = render(<RosterDecisionBoard roster={makeRoster()} league={league} actions={makeActions()} />);
+    fireEvent.click(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Cut" }));
+
+    // A fresh roster sync now carries a persisted let-walk for the same player.
+    rerender(<RosterDecisionBoard roster={makePersistedRoster()} league={league} actions={makeActions()} />);
+
+    const row = screen.getByTestId("decision-row-7");
+    expect(within(row).getByRole("button", { name: "Cut" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(row).getByRole("button", { name: "Let Walk" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("toggling off a pre-populated let_walk becomes a pending clear intent without calling the worker", () => {
+    const actions = makeActions();
+    render(<RosterDecisionBoard roster={makePersistedRoster()} league={league} actions={actions} />);
+
+    const row = screen.getByTestId("decision-row-7");
+    fireEvent.click(within(row).getByRole("button", { name: "Let Walk" }));
+
+    // Still pending — as a clear intent: no pill pressed, muted note shown.
+    expect(row.getAttribute("data-pending")).toBe("true");
+    expect(within(row).queryAllByRole("button", { pressed: true })).toHaveLength(0);
+    expect(within(row).getByText(/clears the saved Let Walk intent/i)).toBeTruthy();
+    // Clear-intent rule: a pill toggle never reaches the worker directly.
+    expect(actions.updatePlayerManagement).not.toHaveBeenCalled();
+    expect(actions.releasePlayer).not.toHaveBeenCalled();
+  });
+
+  it("the pending clear intent flows through Review/Apply and calls updatePlayerManagement with null", async () => {
+    const actions = makeActions();
+    render(<RosterDecisionBoard roster={makePersistedRoster()} league={league} actions={actions} />);
+
+    fireEvent.click(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Let Walk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+
+    const summary = screen.getByTestId("decision-dry-run-summary");
+    expect(within(summary).getByTestId("plan-valid-7").textContent).toContain("Clear Let Walk");
+    expect(actions.updatePlayerManagement).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Apply Executable Decisions \(1\)/ }));
+    await screen.findByTestId("decision-execution-result");
+
+    expect(actions.updatePlayerManagement).toHaveBeenCalledTimes(1);
+    expect(actions.updatePlayerManagement).toHaveBeenCalledWith("7", 1, { extensionDecision: null });
+  });
+
+  it("a pre-populated let_walk reviews and applies identically to a user-entered one", async () => {
+    const actions = makeActions();
+    render(<RosterDecisionBoard roster={makePersistedRoster()} league={league} actions={actions} />);
+
+    // No pill click at all — straight from pre-population to review/apply.
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+    const summary = screen.getByTestId("decision-dry-run-summary");
+    expect(within(summary).getByTestId("plan-valid-7").textContent).toContain("Let Walk");
+
+    fireEvent.click(screen.getByRole("button", { name: /Apply Executable Decisions \(1\)/ }));
+    await screen.findByTestId("decision-execution-result");
+
+    // Exact same handler + payload as the user-entered let_walk path.
+    expect(actions.updatePlayerManagement).toHaveBeenCalledTimes(1);
+    expect(actions.updatePlayerManagement).toHaveBeenCalledWith("7", 1, { extensionDecision: "let_walk" });
+  });
+});
+
 describe("RosterHub Decision Board tab", () => {
   beforeEach(() => {
     global.IntersectionObserver = vi.fn(function () {

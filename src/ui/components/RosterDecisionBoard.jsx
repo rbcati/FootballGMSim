@@ -21,6 +21,17 @@
  *  - hidden dev trait: getHiddenDevTraitLabel (draftVariance.js) decides
  *    reveal state; hiddenTrueOvr is never read or rendered.
  *
+ * Durable let-walk intent (V1): on mount (and on roster syncs before any user
+ * interaction) pending decisions are pre-populated from persisted
+ * player.extensionDecision === "let_walk" — the intent recorded by a previous
+ * apply or by Contract Center. ONLY let_walk pre-populates: no other persisted
+ * value maps unambiguously to a DECISION_OPTIONS key. Once the user touches
+ * the board (decide / reset / review / apply), roster syncs never overwrite
+ * local pending state. Toggling off a persisted let-walk does NOT call the
+ * worker — it becomes a local "clear_let_walk" pending intent that flows
+ * through the same Review Decisions / Apply flow and executes as
+ * updatePlayerManagement({ extensionDecision: null }).
+ *
  * Commit dry-run (V1): "Review Decisions" builds a local, validated commit
  * plan via buildRosterDecisionCommitPlan and renders it below the board. The
  * review step itself never mutates anything.
@@ -48,7 +59,7 @@
  *  - onPlayerSelect: optional (playerId) => void
  */
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "./ScreenSystem.jsx";
 import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
 import { buildRosterDecisionCommitPlan } from "../utils/rosterDecisionCommitPlan.js";
@@ -86,6 +97,27 @@ function decisionKeyFor(player) {
   return null;
 }
 
+/**
+ * Pending decisions seeded from durable player state. Only
+ * extensionDecision === "let_walk" pre-populates: "pending" / "deferred" /
+ * "extended" / "tagged" have no unambiguous DECISION_OPTIONS pill, so they are
+ * ignored by design. Scope matches the board rows exactly — usable player id
+ * and a contract expiring within the board window.
+ */
+function seedPersistedDecisions(roster) {
+  const seeded = {};
+  for (const player of Array.isArray(roster) ? roster : []) {
+    if (!player || typeof player !== "object") continue;
+    if (player.extensionDecision !== "let_walk") continue;
+    const key = decisionKeyFor(player);
+    if (key == null) continue;
+    const yearsRemaining = getYearsRemaining(player);
+    if (yearsRemaining == null || yearsRemaining > EXPIRING_WINDOW_SEASONS) continue;
+    seeded[key] = "let_walk";
+  }
+  return seeded;
+}
+
 function sortValue(row, key) {
   switch (key) {
     case "name": return String(row.player?.name ?? "").toLowerCase();
@@ -99,7 +131,12 @@ function sortValue(row, key) {
   }
 }
 
-const DECISION_LABELS = Object.fromEntries(DECISION_OPTIONS.map((o) => [o.key, o.label]));
+const DECISION_LABELS = {
+  ...Object.fromEntries(DECISION_OPTIONS.map((o) => [o.key, o.label])),
+  // Not a pill: the pending clear intent created by toggling off a persisted
+  // let-walk. Needs a label wherever plan entries / execution results render.
+  clear_let_walk: "Clear Let Walk",
+};
 
 function CommitPlanEntry({ entry }) {
   const contractBits = [];
@@ -249,17 +286,37 @@ function ExecutionResultSummary({ result, plan }) {
 // onCommitDecisions is accepted but intentionally unused: execution is wired
 // through the `actions` worker handlers instead of a bespoke commit callback.
 export default function RosterDecisionBoard({ roster, league, actions, onCommitDecisions, onPlayerSelect }) {
-  const [decisions, setDecisions] = useState({});
+  const [decisions, setDecisions] = useState(() => seedPersistedDecisions(roster));
   const [commitPlan, setCommitPlan] = useState(null);
   const [executionResult, setExecutionResult] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
   // Re-entrancy guard for apply: state updates are async, so two clicks in the
   // same tick would both read isExecuting === false. The ref closes that gap.
   const executingRef = useRef(false);
+  // True once the user decides / resets / reviews / applies this session.
+  // Roster syncs (worker STATE_UPDATE refreshes) may re-seed pending decisions
+  // from persisted intent ONLY while this is false — never over user edits.
+  const userTouchedRef = useRef(false);
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("ALL");
   const [sortKey, setSortKey] = useState("ovr");
   const [sortDesc, setSortDesc] = useState(true);
+
+  // Pre-population sync: a roster that arrives/refreshes before any user
+  // interaction re-seeds pending decisions from persisted let-walk intent.
+  // Returning `prev` when nothing changed avoids a pointless re-render on
+  // parent renders that rebuild the roster array.
+  useEffect(() => {
+    if (userTouchedRef.current) return;
+    const seeded = seedPersistedDecisions(roster);
+    setDecisions((prev) => {
+      const prevKeys = Object.keys(prev);
+      const seededKeys = Object.keys(seeded);
+      const unchanged =
+        prevKeys.length === seededKeys.length && seededKeys.every((key) => prev[key] === seeded[key]);
+      return unchanged ? prev : seeded;
+    });
+  }, [roster]);
 
   const revealContext = useMemo(
     () => ({ currentSeason: league?.year ?? league?.seasonId ?? null }),
@@ -324,14 +381,35 @@ export default function RosterDecisionBoard({ roster, league, actions, onCommitD
     }
   };
 
+  // Decision keys whose CURRENT roster player carries a persisted let-walk
+  // intent — toggling let_walk off for these must become a pending clear
+  // intent instead of silently dropping the pending entry.
+  const persistedLetWalkKeys = useMemo(() => {
+    const keys = new Set();
+    for (const row of rows) {
+      if (row.decisionKey != null && row.player?.extensionDecision === "let_walk") {
+        keys.add(row.decisionKey);
+      }
+    }
+    return keys;
+  }, [rows]);
+
   const handleDecide = (playerKey, decisionKey) => {
     if (playerKey == null) return;
+    userTouchedRef.current = true;
     setCommitPlan(null); // any pending-decision change invalidates the previewed plan
     setExecutionResult(null);
     setDecisions((prev) => {
       const next = { ...prev };
       if (next[playerKey] === decisionKey) {
-        delete next[playerKey];
+        if (decisionKey === "let_walk" && persistedLetWalkKeys.has(playerKey)) {
+          // Local pending clear intent ONLY — no worker call happens here.
+          // The clear executes through Review Decisions / Apply, as
+          // updatePlayerManagement({ extensionDecision: null }).
+          next[playerKey] = "clear_let_walk";
+        } else {
+          delete next[playerKey];
+        }
       } else {
         next[playerKey] = decisionKey;
       }
@@ -341,8 +419,12 @@ export default function RosterDecisionBoard({ roster, league, actions, onCommitD
 
   const pendingCount = Object.keys(decisions).length;
 
+  // Reset returns to the board's INITIAL state — session edits are discarded
+  // but persisted let-walk intents re-seed (clearing a persisted intent is a
+  // reviewed decision, not a side effect of Reset).
   const handleReset = () => {
-    setDecisions({});
+    userTouchedRef.current = true;
+    setDecisions(seedPersistedDecisions(roster));
     setCommitPlan(null);
     setExecutionResult(null);
   };
@@ -350,6 +432,7 @@ export default function RosterDecisionBoard({ roster, league, actions, onCommitD
   // Dry run only: builds a local validated plan; never calls mutation handlers.
   const handleReview = () => {
     if (pendingCount === 0) return;
+    userTouchedRef.current = true;
     setExecutionResult(null);
     setCommitPlan(buildRosterDecisionCommitPlan({ decisions: { ...decisions }, roster, league }));
   };
@@ -367,6 +450,7 @@ export default function RosterDecisionBoard({ roster, league, actions, onCommitD
   // re-applying requires a fresh "Review Decisions" pass.
   const handleApplyExecutable = async () => {
     if (commitPlan == null || executingRef.current || executionResult != null) return;
+    userTouchedRef.current = true;
     executingRef.current = true;
     setIsExecuting(true);
     try {

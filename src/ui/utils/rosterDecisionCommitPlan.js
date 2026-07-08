@@ -15,12 +15,22 @@
  *                    requires the player on the team and league phase 'offseason_resign')
  *  - let_walk      → no roster mutation exists; ContractCenter only records intent via
  *                    actions.updatePlayerManagement({ extensionDecision: 'let_walk' })
+ *  - clear_let_walk→ reviewed clear intent for a persisted let-walk; executed via
+ *                    actions.updatePlayerManagement({ extensionDecision: null }).
+ *                    Not a board pill (never in DECISION_OPTIONS) — it only enters the
+ *                    decisions payload when the board toggles off a persisted let-walk.
  */
 
 import { derivePlayerContractFinancials, formatContractMoney } from "./contractFormatting.js";
 import { calculateReleaseDeadCap } from "../../core/contracts/contractObligations.js";
 
-export const ROSTER_DECISION_KEYS = Object.freeze(["extend", "cut", "franchise_tag", "let_walk"]);
+export const ROSTER_DECISION_KEYS = Object.freeze([
+  "extend",
+  "cut",
+  "franchise_tag",
+  "let_walk",
+  "clear_let_walk",
+]);
 
 /**
  * Results of the handler audit above. `false` means the decision has no
@@ -37,6 +47,7 @@ const DECISION_HAS_ROSTER_MUTATION_HANDLER = Object.freeze({
   cut: true,
   franchise_tag: true,
   let_walk: false, // intent-only via updatePlayerManagement; no roster mutation
+  clear_let_walk: false, // intent-only: wipes a persisted let_walk back to null
 });
 
 /** Phase the worker's APPLY_FRANCHISE_TAG handler requires. */
@@ -95,6 +106,11 @@ function buildValidEntry({ playerId, decision, player, league }) {
     case "let_walk":
       warnings.push(
         "Planning note only — letting a player walk is not an immediate roster change; the contract expires on its own.",
+      );
+      break;
+    case "clear_let_walk":
+      warnings.push(
+        "Clears the saved let-walk intent — no roster change; the player's extension decision returns to undecided.",
       );
       break;
     default:
