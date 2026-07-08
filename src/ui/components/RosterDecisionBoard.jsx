@@ -22,16 +22,26 @@
  *    reveal state; hiddenTrueOvr is never read or rendered.
  *
  * Commit dry-run (V1): "Review Decisions" builds a local, validated commit
- * plan via buildRosterDecisionCommitPlan and renders it below the board. This
- * is a preview step only — no contract / cut / tag / extension mutation is
- * ever called from here.
+ * plan via buildRosterDecisionCommitPlan and renders it below the board. The
+ * review step itself never mutates anything.
+ *
+ * Commit execution (V1): once a dry-run plan is shown, "Apply Executable
+ * Decisions" appears if the plan has at least one executable entry
+ * (blockingErrors empty and decision !== "extend"). Clicking it delegates to
+ * executeRosterDecisionCommitPlan, which only calls existing worker action
+ * handlers (releasePlayer / applyFranchiseTag / updatePlayerManagement) — no
+ * roster, contract, or cap math lives in this component. Results render as
+ * Applied / Skipped / Failed; only successfully applied decisions are removed
+ * from local pending state, so skipped/failed rows stay adjustable.
  *
  * Props:
  *  - roster: sanitized player array (RosterHub's null-filtered roster)
  *  - league: dev-trait reveal season context + commit-plan metadata
  *    (userTeamId / seasonId / phase); read-only
- *  - onCommitDecisions: optional; reserved for future real-commit wiring (V4).
- *    Unused by the dry-run flow — Review works with or without it.
+ *  - actions: optional useWorker action creators; required only for the
+ *    apply step. Without it every entry is reported as skipped.
+ *  - onCommitDecisions: optional legacy commit callback; still unused —
+ *    execution goes through `actions` handlers instead.
  *  - onPlayerSelect: optional (playerId) => void
  */
 
@@ -39,6 +49,10 @@ import React, { useMemo, useState } from "react";
 import { EmptyState } from "./ScreenSystem.jsx";
 import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
 import { buildRosterDecisionCommitPlan } from "../utils/rosterDecisionCommitPlan.js";
+import {
+  executeRosterDecisionCommitPlan,
+  countExecutableCommitPlanEntries,
+} from "../utils/rosterDecisionCommitExecution.js";
 import { getHiddenDevTraitLabel } from "../../core/draft/draftVariance.js";
 import PlayerDecisionRow, { DECISION_OPTIONS } from "./PlayerDecisionRow.jsx";
 
@@ -159,11 +173,78 @@ function CommitPlanSummary({ plan }) {
   );
 }
 
-// onCommitDecisions is accepted but intentionally unused: reserved for future
-// real-commit wiring (V4). The dry-run review flow never depends on it.
-export default function RosterDecisionBoard({ roster, league, onCommitDecisions, onPlayerSelect }) {
+const RESULT_SECTIONS = [
+  {
+    key: "applied",
+    title: "Applied",
+    empty: "No decisions were applied.",
+    tone: "roster-decision-board__result-entry--applied",
+  },
+  {
+    key: "skipped",
+    title: "Skipped (not applied)",
+    empty: "Nothing was skipped.",
+    tone: "roster-decision-board__result-entry--skipped",
+  },
+  {
+    key: "failed",
+    title: "Failed",
+    empty: "No failures.",
+    tone: "roster-decision-board__result-entry--failed",
+  },
+];
+
+function ExecutionResultSummary({ result, plan }) {
+  const nameById = new Map(
+    (Array.isArray(plan?.valid) ? plan.valid : []).map((entry) => [entry.playerId, entry.playerName]),
+  );
+  return (
+    <section
+      className="roster-decision-board__execution-result"
+      data-testid="decision-execution-result"
+      aria-label="Execution results"
+    >
+      <div className="roster-decision-board__dry-run-header">
+        <strong>Execution results</strong>
+        <span className="roster-decision-board__dry-run-note">
+          Skipped and failed decisions were NOT applied — they remain pending below.
+        </span>
+      </div>
+      {RESULT_SECTIONS.map(({ key, title, empty, tone }) => (
+        <div key={key} data-testid={`execution-${key}`}>
+          <h4 className="roster-decision-board__dry-run-heading">
+            {title} ({result[key].length})
+          </h4>
+          {result[key].length === 0 ? (
+            <p className="roster-decision-board__dry-run-empty">{empty}</p>
+          ) : (
+            <ul className="roster-decision-board__plan-list">
+              {result[key].map((item) => (
+                <li
+                  key={`${key}-${item.playerId}`}
+                  className={`roster-decision-board__plan-entry ${tone}`}
+                  data-testid={`execution-${key}-${item.playerId}`}
+                >
+                  <strong>{nameById.get(item.playerId) ?? `Player ${item.playerId}`}</strong>
+                  {" — "}
+                  {DECISION_LABELS[item.decision] ?? String(item.decision)}: {item.message ?? item.reason}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+// onCommitDecisions is accepted but intentionally unused: execution is wired
+// through the `actions` worker handlers instead of a bespoke commit callback.
+export default function RosterDecisionBoard({ roster, league, actions, onCommitDecisions, onPlayerSelect }) {
   const [decisions, setDecisions] = useState({});
   const [commitPlan, setCommitPlan] = useState(null);
+  const [executionResult, setExecutionResult] = useState(null);
+  const [isExecuting, setIsExecuting] = useState(false);
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("ALL");
   const [sortKey, setSortKey] = useState("ovr");
@@ -235,6 +316,7 @@ export default function RosterDecisionBoard({ roster, league, onCommitDecisions,
   const handleDecide = (playerKey, decisionKey) => {
     if (playerKey == null) return;
     setCommitPlan(null); // any pending-decision change invalidates the previewed plan
+    setExecutionResult(null);
     setDecisions((prev) => {
       const next = { ...prev };
       if (next[playerKey] === decisionKey) {
@@ -251,12 +333,40 @@ export default function RosterDecisionBoard({ roster, league, onCommitDecisions,
   const handleReset = () => {
     setDecisions({});
     setCommitPlan(null);
+    setExecutionResult(null);
   };
 
   // Dry run only: builds a local validated plan; never calls mutation handlers.
   const handleReview = () => {
     if (pendingCount === 0) return;
+    setExecutionResult(null);
     setCommitPlan(buildRosterDecisionCommitPlan({ decisions: { ...decisions }, roster, league }));
+  };
+
+  const executableCount = useMemo(
+    () => (commitPlan != null ? countExecutableCommitPlanEntries(commitPlan) : 0),
+    [commitPlan],
+  );
+
+  // Real commits: delegates every mutation to existing worker action handlers.
+  // Pending decisions are only pruned AFTER results return, and only the
+  // successfully applied ones — skipped/failed stay pending for adjustment.
+  const handleApplyExecutable = async () => {
+    if (commitPlan == null || isExecuting) return;
+    setIsExecuting(true);
+    try {
+      const result = await executeRosterDecisionCommitPlan({ plan: commitPlan, actions });
+      setExecutionResult(result);
+      if (result.applied.length > 0) {
+        setDecisions((prev) => {
+          const next = { ...prev };
+          for (const item of result.applied) delete next[item.playerId];
+          return next;
+        });
+      }
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   if (rows.length === 0) {
@@ -359,7 +469,29 @@ export default function RosterDecisionBoard({ roster, league, onCommitDecisions,
         </div>
       </div>
 
-      {commitPlan != null && <CommitPlanSummary plan={commitPlan} />}
+      {commitPlan != null && (
+        <>
+          <CommitPlanSummary plan={commitPlan} />
+          {executionResult == null && executableCount > 0 && (
+            <div className="roster-decision-board__execute-bar">
+              <button
+                type="button"
+                className="btn"
+                disabled={isExecuting}
+                onClick={handleApplyExecutable}
+              >
+                {isExecuting ? "Applying…" : `Apply Executable Decisions (${executableCount})`}
+              </button>
+              <span className="roster-decision-board__preview-note">
+                Applies only entries without blocking errors; extensions always go through Contract Center.
+              </span>
+            </div>
+          )}
+          {executionResult != null && (
+            <ExecutionResultSummary result={executionResult} plan={commitPlan} />
+          )}
+        </>
+      )}
     </div>
   );
 }

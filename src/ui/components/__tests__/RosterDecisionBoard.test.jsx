@@ -316,6 +316,122 @@ describe("RosterDecisionBoard", () => {
   });
 });
 
+describe("RosterDecisionBoard commit execution", () => {
+  const league = { userTeamId: 1, seasonId: 2026 };
+
+  function makeActions(overrides = {}) {
+    return {
+      releasePlayer: vi.fn(() => undefined),
+      applyFranchiseTag: vi.fn(async () => ({ type: "STATE_UPDATE" })),
+      updatePlayerManagement: vi.fn(async () => ({ type: "STATE_UPDATE" })),
+      ...overrides,
+    };
+  }
+
+  it("shows Apply Executable Decisions only after a dry-run with executable entries", () => {
+    render(<RosterDecisionBoard roster={makeRoster()} league={league} actions={makeActions()} />);
+
+    // No apply button before any review.
+    expect(screen.queryByRole("button", { name: /Apply Executable Decisions/ })).toBeNull();
+
+    // A plan whose only entry is extend has nothing executable.
+    const row7 = screen.getByTestId("decision-row-7");
+    fireEvent.click(within(row7).getByRole("button", { name: "Extend" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+    expect(screen.getByTestId("decision-dry-run-summary")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Apply Executable Decisions/ })).toBeNull();
+
+    // Switching to an executable decision and re-reviewing surfaces the button.
+    fireEvent.click(within(row7).getByRole("button", { name: "Cut" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+    expect(screen.getByRole("button", { name: /Apply Executable Decisions \(1\)/ })).toBeTruthy();
+  });
+
+  it("applies executable entries, renders Applied/Skipped/Failed, and prunes only applied decisions", async () => {
+    const actions = makeActions();
+    render(<RosterDecisionBoard roster={makeRoster()} league={league} actions={actions} />);
+
+    // Row 7 (1y left): executable cut. Row 8 (2y left): tag is blocked by the dry-run.
+    fireEvent.click(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Cut" }));
+    fireEvent.click(within(screen.getByTestId("decision-row-8")).getByRole("button", { name: "Franchise Tag" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+
+    // Pending decisions survive the review; nothing is cleared before results.
+    expect(screen.getByTestId("decision-row-7").getAttribute("data-pending")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: /Apply Executable Decisions \(1\)/ }));
+
+    const results = await screen.findByTestId("decision-execution-result");
+    expect(actions.releasePlayer).toHaveBeenCalledTimes(1);
+    expect(actions.releasePlayer).toHaveBeenCalledWith("7", 1);
+    expect(actions.applyFranchiseTag).not.toHaveBeenCalled();
+
+    // Three sections, with skipped explicitly marked as not applied.
+    expect(within(results).getByText("Applied (1)")).toBeTruthy();
+    expect(within(results).getByText("Skipped (not applied) (1)")).toBeTruthy();
+    expect(within(results).getByText("Failed (0)")).toBeTruthy();
+    expect(within(results).getByText(/were NOT applied/)).toBeTruthy();
+    expect(within(results).getByTestId("execution-applied-7").textContent).toContain("Cut Candidate");
+    expect(within(results).getByTestId("execution-skipped-8").textContent).toContain("No Meta Man");
+
+    // Only the applied decision leaves local pending state.
+    expect(screen.getByTestId("decision-row-7").getAttribute("data-pending")).toBe("false");
+    expect(screen.getByTestId("decision-row-8").getAttribute("data-pending")).toBe("true");
+    expect(screen.getByText(/1 pending decision\b/)).toBeTruthy();
+    // The apply button is gone until the plan is re-reviewed.
+    expect(screen.queryByRole("button", { name: /Apply Executable Decisions/ })).toBeNull();
+  });
+
+  it("a rejected action lands in Failed and the decision stays pending", async () => {
+    const actions = makeActions({
+      updatePlayerManagement: vi.fn(async () => {
+        throw new Error("Player is not on the selected team");
+      }),
+    });
+    render(<RosterDecisionBoard roster={makeRoster()} league={league} actions={actions} />);
+
+    fireEvent.click(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Let Walk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+    fireEvent.click(screen.getByRole("button", { name: /Apply Executable Decisions \(1\)/ }));
+
+    const results = await screen.findByTestId("decision-execution-result");
+    expect(within(results).getByText("Failed (1)")).toBeTruthy();
+    expect(within(results).getByTestId("execution-failed-7").textContent)
+      .toContain("Player is not on the selected team");
+    expect(within(results).getByText("Applied (0)")).toBeTruthy();
+    // Failed decisions remain pending for user adjustment.
+    expect(screen.getByTestId("decision-row-7").getAttribute("data-pending")).toBe("true");
+  });
+
+  it("without an actions prop, applying reports every entry as skipped and mutates nothing", async () => {
+    const roster = makeRoster().map((p) => (p ? Object.freeze(p) : p));
+    render(<RosterDecisionBoard roster={roster} league={Object.freeze({ ...league })} />);
+
+    fireEvent.click(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Cut" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+    fireEvent.click(screen.getByRole("button", { name: /Apply Executable Decisions \(1\)/ }));
+
+    const results = await screen.findByTestId("decision-execution-result");
+    expect(within(results).getByText("Applied (0)")).toBeTruthy();
+    expect(within(results).getByText("Skipped (not applied) (1)")).toBeTruthy();
+    expect(screen.getByTestId("decision-row-7").getAttribute("data-pending")).toBe("true");
+    expect(roster[0].contract).toEqual({ years: 1, baseAnnual: 8.5 });
+  });
+
+  it("changing a decision clears stale execution results along with the plan", async () => {
+    render(<RosterDecisionBoard roster={makeRoster()} league={league} actions={makeActions()} />);
+    const row7 = screen.getByTestId("decision-row-7");
+
+    fireEvent.click(within(row7).getByRole("button", { name: "Let Walk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+    fireEvent.click(screen.getByRole("button", { name: /Apply Executable Decisions \(1\)/ }));
+    await screen.findByTestId("decision-execution-result");
+
+    fireEvent.click(within(row7).getByRole("button", { name: "Cut" }));
+    expect(screen.queryByTestId("decision-execution-result")).toBeNull();
+    expect(screen.queryByTestId("decision-dry-run-summary")).toBeNull();
+  });
+});
+
 describe("RosterHub Decision Board tab", () => {
   beforeEach(() => {
     global.IntersectionObserver = vi.fn(function () {
