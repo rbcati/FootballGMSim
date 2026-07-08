@@ -155,6 +155,13 @@ test.describe('Daily Regression Pass', () => {
         // Release a player to ensure roster spot
         await goToTab(page, 'roster');
 
+        await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const tableBtn = btns.find(b => b.innerText && b.innerText.includes('Starter tier'));
+            if (tableBtn) tableBtn.click();
+        });
+        await page.waitForTimeout(500);
+
         // Select first player
         // await page.waitForSelector('.standings-table tbody tr, table tbody tr', { state: 'visible' });
 
@@ -164,25 +171,41 @@ test.describe('Daily Regression Pass', () => {
             return team.rosterCount;
         });
 
-        // Note: Roster.jsx release flow: Click "Cut" -> Button changes to "Confirm" -> Click "Confirm" -> (Optional Dialog)
+        // Note: Roster.jsx release flow: Click "Cut" -> Opens ReleasePreviewModal -> Click "Confirm Release"
         const hasCutButton = await page.evaluate(async () => {
             const rows = document.querySelectorAll('.standings-table tbody tr, table tbody tr');
             for(let row of rows) {
                 const cutBtn = Array.from(row.querySelectorAll('button')).find(b => b.innerText === 'Cut' || b.innerText === 'Release');
                 if (cutBtn) { cutBtn.click(); return true; }
             }
+
+            // if we are in the cards view we need to click the action button first
+            const actionBtns = Array.from(document.querySelectorAll('button')).filter(b => b.innerText === 'Actions');
+            if (actionBtns.length > 0) {
+               actionBtns[0].click();
+               await new Promise(r => setTimeout(r, 100)); // wait for action sheet to open
+               const sheetBtn = Array.from(document.querySelectorAll('div')).find(div => div.innerText && div.innerText.includes('Release Player'));
+               if (sheetBtn) {
+                   sheetBtn.click();
+                   return true;
+               }
+            }
             return false;
         });
 
         if (hasCutButton) {
-            await page.waitForTimeout(500); // Wait for UI update to show Confirm
+            await page.waitForTimeout(500); // Wait for UI update to show modal
 
-            // Register dialog handler BEFORE confirming
-            page.on('dialog', d => d.accept());
-
+            // The modal is open, find and click "Confirm Release"
             await page.evaluate(() => {
-                const confirmBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText === 'Confirm Release');
-                if (confirmBtn) { confirmBtn.click(); }
+                const modal = document.querySelector('[role="dialog"]');
+                if (modal) {
+                    const confirmBtn = Array.from(modal.querySelectorAll('button')).find(b => b.innerText === 'Confirm Release');
+                    if (confirmBtn) { confirmBtn.click(); }
+                } else {
+                    const confirmBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText === 'Confirm Release');
+                    if (confirmBtn) { confirmBtn.click(); }
+                }
             });
 
             // Wait for release to process
@@ -220,7 +243,7 @@ test.describe('Daily Regression Pass', () => {
         const playerInfo = await page.evaluate(() => {
             const rows = Array.from(document.querySelectorAll('.standings-table tbody tr, table tbody tr'));
             for (let i = 0; i < rows.length; i++) {
-                const btn = Array.from(rows[i].querySelectorAll('button')).find(b => b.innerText === 'Offer' || b.innerText === 'Update' || b.innerText === 'Sign');
+                const btn = Array.from(rows[i].querySelectorAll('button')).find(b => b.innerText === 'Offer' || b.innerText === 'Update' || b.innerText === 'Sign' || b.innerText === 'Submit Bid' || b.innerText === 'Update Bid');
                 if (btn && !btn.disabled) {
                     return { index: i, text: btn.innerText };
                 }
@@ -232,7 +255,7 @@ test.describe('Daily Regression Pass', () => {
             // Click "Offer" button
             await page.evaluate((idx) => {
                 const rows = Array.from(document.querySelectorAll('.standings-table tbody tr, table tbody tr'));
-                const btn = Array.from(rows[idx].querySelectorAll('button')).find(b => b.innerText === 'Offer' || b.innerText === 'Update' || b.innerText === 'Sign');
+                const btn = Array.from(rows[idx].querySelectorAll('button')).find(b => b.innerText === 'Offer' || b.innerText === 'Update' || b.innerText === 'Sign' || b.innerText === 'Submit Bid' || b.innerText === 'Update Bid');
                 if(btn) btn.click();
             }, playerInfo.index);
             await page.waitForTimeout(500);
@@ -240,7 +263,7 @@ test.describe('Daily Regression Pass', () => {
             // Now click "Confirm" in the sign form (which is likely in the next row or same context)
             // The sign form row has "Confirm" button.
             await page.evaluate(() => {
-                 const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText === 'Confirm');
+                 const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText === 'Confirm' || b.innerText === 'Confirm Bid');
                  if(btn) btn.click();
             });
             await page.waitForTimeout(2000);
@@ -251,7 +274,7 @@ test.describe('Daily Regression Pass', () => {
             const offerStatus = await page.evaluate(() => {
                 const rows = Array.from(document.querySelectorAll('.standings-table tbody tr, table tbody tr'));
                 for(let row of rows) {
-                    const btn = Array.from(row.querySelectorAll('button')).find(b => b.innerText === 'Update' || b.innerText === 'Revoke' || b.innerText === 'Release');
+                    const btn = Array.from(row.querySelectorAll('button')).find(b => b.innerText === 'Update' || b.innerText === 'Revoke' || b.innerText === 'Release' || b.innerText === 'Update Bid');
                     if (btn) return true;
                 }
                 return false;
