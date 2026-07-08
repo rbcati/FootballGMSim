@@ -496,6 +496,7 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
             <RosterDecisionBoard
               roster={decisionRoster}
               league={league}
+              actions={actions}
               onPlayerSelect={onPlayerSelect}
             />
           </RosterProfileErrorBoundary>

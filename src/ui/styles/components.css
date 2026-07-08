@@ -1561,3 +1561,77 @@ details[open] .app-hq-background-section__summary span { transform: rotate(180de
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
+.roster-decision-board__dry-run {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+}
+.roster-decision-board__dry-run-header {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.roster-decision-board__dry-run-note,
+.roster-decision-board__dry-run-empty {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.roster-decision-board__dry-run-heading {
+  font-size: var(--text-sm);
+  margin: 0 0 var(--space-1);
+}
+.roster-decision-board__plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.roster-decision-board__plan-entry {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-sm);
+  gap: 2px;
+}
+.roster-decision-board__plan-entry--invalid {
+  color: var(--danger);
+}
+.roster-decision-board__plan-warning {
+  color: var(--warning);
+  font-size: var(--text-xs);
+}
+.roster-decision-board__plan-blocking {
+  color: var(--danger);
+  font-size: var(--text-xs);
+}
+.roster-decision-board__execute-bar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.roster-decision-board__execution-result {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+}
+.roster-decision-board__result-entry--applied {
+  color: var(--success);
+}
+.roster-decision-board__result-entry--skipped {
+  color: var(--text-muted);
+}
+.roster-decision-board__result-entry--failed {
+  color: var(--danger);
+}
