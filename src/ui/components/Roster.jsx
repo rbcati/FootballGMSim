@@ -889,13 +889,22 @@ function RosterTable({
   const confirmBulkRelease = async (dedupedPlayers) => {
     const ids = [...new Set((dedupedPlayers ?? []).map((p) => p?.id).filter(Boolean))];
     if (!ids.length || !actions?.bulkReleasePlayers) return;
-    const result = await actions.bulkReleasePlayers(teamId, ids);
-    if (!result?.ok) {
-      window.alert(`Bulk release stopped after ${result?.released?.length ?? 0} release(s): ${result?.error ?? "Unknown error"}`);
+    try {
+      // Resolves with { type: 'SUCCESS', payload: { ok, released } }; a worker
+      // ERROR (partial stop) rejects with the worker's message. The cleanup in
+      // `finally` must run on both paths — a rejection used to leave the
+      // preview modal stuck open.
+      const result = await actions.bulkReleasePlayers(teamId, ids);
+      if (!result?.payload?.ok) {
+        window.alert(`Bulk release did not complete: ${result?.payload?.error ?? "Unknown error"}`);
+      }
+    } catch (err) {
+      window.alert(err?.message ?? "Bulk release failed.");
+    } finally {
+      setBulkPreviewOpen(false);
+      setBulkSelectedIds([]);
+      onRefetch?.();
     }
-    setBulkPreviewOpen(false);
-    setBulkSelectedIds([]);
-    onRefetch?.();
   };
 
   const handleTradeBlockToggle = async (playerId) => {

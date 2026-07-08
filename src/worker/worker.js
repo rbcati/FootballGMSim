@@ -217,7 +217,7 @@ import {
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot, buildHallOfFameInducteeRow, syncHallOfFameAfterRecordBook } from '../core/league-memory.js';
 import { buildPlayerSeasonStatsArchiveRows } from '../core/playerSeasonStatsArchive.js';
-import { attachSeasonStatsToRoster } from './viewStateStats.js';
+import { attachSeasonStatsToRoster, sanitizeRosterForClient } from './viewStateStats.js';
 import {
   TRANSACTION_TIMELINE_SCHEMA_VERSION,
   compactRowsForArchive,
@@ -1047,10 +1047,12 @@ function buildViewState() {
   const teams = cache.getAllTeams().map(t => {
     // Attach recorded season totals so the League Stats hub (which reads
     // player.seasonStats) shows real leaders instead of all-zero placeholders.
-    const roster = attachSeasonStatsToRoster(
+    // sanitizeRosterForClient strips worker-only fields (hiddenTrueOvr) so the
+    // hidden draft-variance anchor never crosses into UI state.
+    const roster = sanitizeRosterForClient(attachSeasonStatsToRoster(
       cache.getPlayersByTeam(t.id),
       (pid) => cache.getSeasonStat(pid)?.totals,
-    );
+    ));
     return ({
     id:        t.id,
     name:      t.name,
@@ -7599,10 +7601,16 @@ function recalcSchemeFitForTeams(...teamIds) {
 }
 
 async function handleReleasePlayer({ playerId, teamId }, id) {
-  let player = cache.getPlayer(playerId);
-  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
-
-  await releasePlayerWithValidation({ playerId, teamId });
+  // releasePlayerWithValidation is mutation-free on failure (player missing /
+  // not on the selected roster), so a failed outcome only needs the ERROR post
+  // — previously the result was ignored and the UI saw a normal STATE_UPDATE,
+  // making a failed release (stale roster view, double-click after the player
+  // already left the team) look like it succeeded.
+  const outcome = await releasePlayerWithValidation({ playerId, teamId });
+  if (!outcome.ok) {
+    post(toUI.ERROR, { message: `Release failed: ${outcome.error}` }, id);
+    return;
+  }
   recalcSchemeFitForTeams(teamId);
   await flushDirty();
   post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
@@ -7615,16 +7623,27 @@ async function handleBulkReleasePlayers({ teamId, playerIds }, id) {
     const outcome = await releasePlayerWithValidation({ playerId, teamId });
     if (!outcome.ok) {
       await flushDirty();
-      post(toUI.ERROR, { message: `Bulk release stopped: ${outcome.error}` }, id);
-      post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
-      return post(toUI.SUCCESS, { ok: false, released, failedPlayerId: playerId, error: outcome.error }, id);
+      // ERROR carries the request id so the caller's promise rejects with this
+      // message; the follow-up STATE_UPDATE (no id) refreshes the roster view
+      // to reflect the releases that DID complete before the stop.
+      post(toUI.ERROR, {
+        message: `Bulk release stopped after ${released.length} release(s): ${outcome.error}`,
+        released,
+        failedPlayerId: playerId,
+      }, id);
+      post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() });
+      return;
     }
     released.push(playerId);
   }
   recalcSchemeFitForTeams(teamId);
   await flushDirty();
-  post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
+  // SUCCESS must be posted with the request id BEFORE the STATE_UPDATE:
+  // the useWorker pending-promise map resolves on the first message carrying
+  // the id, so posting STATE_UPDATE(id) first made callers resolve with the
+  // view-state payload (no `ok`/`released`) and treat every success as failure.
   post(toUI.SUCCESS, { ok: true, released }, id);
+  post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() });
 }
 
 // ── Handler: SUBMIT_WAIVER_CLAIM ──────────────────────────────────────────────

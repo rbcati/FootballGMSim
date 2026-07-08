@@ -294,6 +294,16 @@ export const toUI = Object.freeze({
   /** Save completed */
   SAVED:              'SAVED',
 
+  /**
+   * Generic mutation outcome for request-based bulk actions.
+   * Posted with the request id BEFORE any follow-up STATE_UPDATE so the
+   * caller's promise resolves with this payload (the pending-promise map in
+   * useWorker resolves on the FIRST message carrying the request id).
+   * Previously worker.js posted `toUI.SUCCESS` without this key existing,
+   * which serialized messages with `type: undefined`.
+   */
+  SUCCESS:            'SUCCESS',              // { ok, ... }
+
   /** Fatal worker error */
   ERROR:              'ERROR',               // { message, stack? }
   SAVE_EXPORT:        'SAVE_EXPORT',          // { data }
