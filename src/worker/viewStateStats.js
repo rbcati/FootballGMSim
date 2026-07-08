@@ -43,3 +43,37 @@ export function attachSeasonStatsToRoster(roster, getSeasonStatTotals) {
     return { ...player, seasonStats: totals };
   });
 }
+
+/**
+ * Player fields that exist only for the worker-side simulation and must never
+ * cross the postMessage boundary into UI state.
+ *
+ * `hiddenTrueOvr` is the hidden draft-variance talent anchor
+ * (draftVariance.js: "stays internal-only and must never be rendered") — but
+ * buildViewState() serialized raw cache players into `league.teams[].roster`,
+ * so the anchor was inspectable from the UI thread (React devtools / console)
+ * even though no component rendered it. `hiddenDevTrait` intentionally stays:
+ * the reveal helpers (getHiddenDevTraitLabel) need it to decide Hidden/label
+ * state in PlayerProfile and the Roster Decision Board.
+ */
+const WORKER_ONLY_PLAYER_FIELDS = Object.freeze(["hiddenTrueOvr"]);
+
+/**
+ * Strip worker-only fields from roster players before they are posted to the
+ * UI. Returns shallow copies — canonical cache player objects are never
+ * mutated. Players without any worker-only field pass through unchanged (no
+ * copy), so the common case stays cheap.
+ *
+ * @param {Array<object>} roster Player objects bound for a UI payload.
+ * @returns {Array<object>} Roster safe to serialize to the UI thread.
+ */
+export function sanitizeRosterForClient(roster) {
+  if (!Array.isArray(roster)) return [];
+  return roster.map((player) => {
+    if (!player || typeof player !== "object") return player;
+    if (!WORKER_ONLY_PLAYER_FIELDS.some((field) => field in player)) return player;
+    const copy = { ...player };
+    for (const field of WORKER_ONLY_PLAYER_FIELDS) delete copy[field];
+    return copy;
+  });
+}

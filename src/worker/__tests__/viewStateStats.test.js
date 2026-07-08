@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { attachSeasonStatsToRoster } from "../viewStateStats.js";
+import { attachSeasonStatsToRoster, sanitizeRosterForClient } from "../viewStateStats.js";
 
 // Mirrors the cache season-stat shape: totals are keyed by player id.
 function lookupFrom(map) {
@@ -54,5 +54,40 @@ describe("attachSeasonStatsToRoster", () => {
     expect(attachSeasonStatsToRoster(null, lookupFrom({}))).toEqual([]);
     const roster = [{ id: 1 }];
     expect(attachSeasonStatsToRoster(roster, undefined)).toBe(roster);
+  });
+});
+
+describe("sanitizeRosterForClient", () => {
+  it("strips hiddenTrueOvr from players bound for the UI", () => {
+    const roster = [
+      { id: 1, name: "QB", ovr: 80, hiddenTrueOvr: 91, hiddenDevTrait: "superstar" },
+      { id: 2, name: "RB", ovr: 74 },
+    ];
+    const out = sanitizeRosterForClient(roster);
+    expect("hiddenTrueOvr" in out[0]).toBe(false);
+    expect(out[0].ovr).toBe(80);
+    // hiddenDevTrait intentionally survives — the UI reveal helpers need it.
+    expect(out[0].hiddenDevTrait).toBe("superstar");
+  });
+
+  it("does not mutate the canonical cache player objects", () => {
+    const player = { id: 1, hiddenTrueOvr: 88 };
+    const out = sanitizeRosterForClient([player]);
+    expect(player.hiddenTrueOvr).toBe(88);
+    expect(out[0]).not.toBe(player);
+  });
+
+  it("passes players without worker-only fields through unchanged (no copy)", () => {
+    const player = { id: 2, name: "RB", ovr: 74 };
+    const out = sanitizeRosterForClient([player]);
+    expect(out[0]).toBe(player);
+  });
+
+  it("tolerates malformed rows and non-array input", () => {
+    expect(sanitizeRosterForClient(null)).toEqual([]);
+    const out = sanitizeRosterForClient([null, undefined, 42, { id: 1, hiddenTrueOvr: 90 }]);
+    expect(out[0]).toBeNull();
+    expect(out[2]).toBe(42);
+    expect("hiddenTrueOvr" in out[3]).toBe(false);
   });
 });
