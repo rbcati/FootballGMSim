@@ -26,6 +26,10 @@
  *                    { extensionDecision: 'let_walk' }) — the exact
  *                    ContractCenter intent path (toWorker.UPDATE_PLAYER_MANAGEMENT).
  *                    Intent only: the player is not removed from the roster.
+ *  - clear_let_walk→ actions.updatePlayerManagement(playerId, teamId,
+ *                    { extensionDecision: null }) — reviewed clear intent for a
+ *                    PERSISTED let-walk. Same handler, same intent-only
+ *                    semantics; the worker wipes the stored decision to null.
  *  - extend        → never executed from the board. The plan only carries a
  *                    decision key, not negotiated contract terms, so extend is
  *                    always skipped toward the Contract Center flow.
@@ -142,19 +146,23 @@ export async function executeRosterDecisionCommitPlan({ plan, actions } = {}) {
       continue;
     }
 
-    if (decision === "let_walk") {
+    if (decision === "let_walk" || decision === "clear_let_walk") {
       if (typeof actions?.updatePlayerManagement !== "function") {
         skipped.push({ playerId, decision, reason: "Not applied — no player management action handler is available." });
         continue;
       }
       try {
         await Promise.resolve(
-          actions.updatePlayerManagement(playerId, teamId, { extensionDecision: "let_walk" }),
+          actions.updatePlayerManagement(playerId, teamId, {
+            extensionDecision: decision === "let_walk" ? "let_walk" : null,
+          }),
         );
         applied.push({
           playerId,
           decision,
-          message: "Marked as let walk (intent only — the player stays on the roster until the contract expires).",
+          message: decision === "let_walk"
+            ? "Marked as let walk (intent only — the player stays on the roster until the contract expires)."
+            : "Cleared the saved let-walk intent (the player's extension decision is back to undecided).",
         });
       } catch (err) {
         failed.push({ playerId, decision, reason: err?.message ?? "Let-walk intent update failed." });

@@ -10081,6 +10081,11 @@ async function handleUpdatePlayerManagement({ playerId, teamId, updates = {} }, 
   }
   if (typeof updates.extensionDecision === 'string' && validExtensionDecisions.has(updates.extensionDecision)) {
     patch.extensionDecision = updates.extensionDecision;
+  } else if (updates.extensionDecision === null) {
+    // Explicit null clears a persisted intent (Roster Decision Board reviewed
+    // clear-intent flow). Only a literal null clears — an absent/undefined
+    // field must never touch the stored decision.
+    patch.extensionDecision = null;
   }
 
   if (Object.keys(patch).length === 0) {

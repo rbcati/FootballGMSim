@@ -195,6 +195,19 @@ describe("buildRosterDecisionCommitPlan", () => {
     expect(entry.warnings.some((w) => /planning note only/i.test(w))).toBe(true);
   });
 
+  it("clear_let_walk is valid and flagged as clearing the saved intent (no roster change)", () => {
+    const plan = buildRosterDecisionCommitPlan({
+      decisions: { 7: "clear_let_walk" },
+      roster: makeRoster(),
+      league: LEAGUE,
+    });
+    const entry = plan.valid[0];
+    expect(entry).toMatchObject({ playerId: "7", decision: "clear_let_walk" });
+    expect(entry.blockingErrors).toEqual([]);
+    expect(entry.warnings.some((w) => /clears the saved let-walk intent/i.test(w))).toBe(true);
+    expect(entry.warnings.some((w) => /no roster change/i.test(w))).toBe(true);
+  });
+
   it("never mutates decisions, roster, players, or league", () => {
     const roster = makeRoster().map((p) => Object.freeze({ ...p, contract: p.contract ? Object.freeze({ ...p.contract }) : undefined }));
     Object.freeze(roster);
@@ -206,7 +219,13 @@ describe("buildRosterDecisionCommitPlan", () => {
     expect(JSON.stringify({ roster, decisions, league })).toBe(before);
   });
 
-  it("exposes exactly the four supported decision keys", () => {
-    expect([...ROSTER_DECISION_KEYS]).toEqual(["extend", "cut", "franchise_tag", "let_walk"]);
+  it("exposes exactly the five supported decision keys", () => {
+    expect([...ROSTER_DECISION_KEYS]).toEqual([
+      "extend",
+      "cut",
+      "franchise_tag",
+      "let_walk",
+      "clear_let_walk",
+    ]);
   });
 });

@@ -11,6 +11,11 @@
  * when the player has no usable id). A null decisionKey renders the row
  * read-only: pills are disabled, onDecide is never called, and a muted
  * "Decision unavailable" note explains why.
+ *
+ * decision === "clear_let_walk" (pending clear of a persisted let-walk) is not
+ * a pill: no option renders pressed and a muted note explains the pending
+ * clear. Display only — the clear executes through the board's Review/Apply
+ * flow, never from this row.
  */
 
 import React from "react";
@@ -82,6 +87,11 @@ export default function PlayerDecisionRow({ row, decision, onDecide, onPlayerSel
         {!canDecide && (
           <span className="roster-decision-board__missing-id-note">
             Decision unavailable: missing player ID.
+          </span>
+        )}
+        {decision === "clear_let_walk" && (
+          <span className="roster-decision-board__missing-id-note">
+            Pending: clears the saved Let Walk intent on apply.
           </span>
         )}
       </td>
