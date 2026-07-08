@@ -23,15 +23,20 @@ import { calculateReleaseDeadCap } from "../../core/contracts/contractObligation
 export const ROSTER_DECISION_KEYS = Object.freeze(["extend", "cut", "franchise_tag", "let_walk"]);
 
 /**
- * Results of the handler audit above. `false` means the decision has no real
- * roster-mutation handler today and can only ever be a planning note; the plan
- * surfaces that as a warning on the entry.
+ * Results of the handler audit above. `false` means the decision has no
+ * DIRECT roster-mutation handler — not that it has no handler at all.
+ * let_walk is false because nothing removes the player from the roster, but
+ * it DOES have a management-intent handler: the execution adapter
+ * (rosterDecisionCommitExecution.js) records it via
+ * actions.updatePlayerManagement({ extensionDecision: 'let_walk' }), which
+ * only marks intent and lets the contract expire on its own. The plan
+ * surfaces `false` as a warning on the entry.
  */
-const DECISION_HANDLER_EXISTS = Object.freeze({
+const DECISION_HAS_ROSTER_MUTATION_HANDLER = Object.freeze({
   extend: true,
   cut: true,
   franchise_tag: true,
-  let_walk: false,
+  let_walk: false, // intent-only via updatePlayerManagement; no roster mutation
 });
 
 /** Phase the worker's APPLY_FRANCHISE_TAG handler requires. */
@@ -59,7 +64,7 @@ function buildValidEntry({ playerId, decision, player, league }) {
 
   switch (decision) {
     case "extend":
-      if (!DECISION_HANDLER_EXISTS.extend) {
+      if (!DECISION_HAS_ROSTER_MUTATION_HANDLER.extend) {
         warnings.push("No extension action/handler is available yet — this stays a planning note.");
       }
       break;

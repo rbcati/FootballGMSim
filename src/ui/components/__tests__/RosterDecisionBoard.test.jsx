@@ -365,12 +365,20 @@ describe("RosterDecisionBoard commit execution", () => {
     expect(actions.releasePlayer).toHaveBeenCalledWith("7", 1);
     expect(actions.applyFranchiseTag).not.toHaveBeenCalled();
 
-    // Three sections, with skipped explicitly marked as not applied.
-    expect(within(results).getByText("Applied (1)")).toBeTruthy();
+    // Three sections, with skipped explicitly marked as not applied. The
+    // results section is an aria-live region so screen readers announce the
+    // asynchronously rendered outcome.
+    expect(results.getAttribute("aria-live")).toBe("polite");
+    expect(results.getAttribute("aria-label")).toBe("Execution results");
+    expect(within(results).getByText("Applied / Dispatched (1)")).toBeTruthy();
     expect(within(results).getByText("Skipped (not applied) (1)")).toBeTruthy();
     expect(within(results).getByText("Failed (0)")).toBeTruthy();
     expect(within(results).getByText(/were NOT applied/)).toBeTruthy();
-    expect(within(results).getByTestId("execution-applied-7").textContent).toContain("Cut Candidate");
+    // Fire-and-forget release: the copy claims dispatch, never confirmed success.
+    const releaseEntry = within(results).getByTestId("execution-applied-7").textContent;
+    expect(releaseEntry).toContain("Cut Candidate");
+    expect(releaseEntry).toMatch(/dispatched|submitted/i);
+    expect(releaseEntry).not.toMatch(/confirmed|succeeded|successfully/i);
     expect(within(results).getByTestId("execution-skipped-8").textContent).toContain("No Meta Man");
 
     // Only the applied decision leaves local pending state.
@@ -379,6 +387,33 @@ describe("RosterDecisionBoard commit execution", () => {
     expect(screen.getByText(/1 pending decision\b/)).toBeTruthy();
     // The apply button is gone until the plan is re-reviewed.
     expect(screen.queryByRole("button", { name: /Apply Executable Decisions/ })).toBeNull();
+  });
+
+  it("a stale plan cannot be applied twice — double-click and post-result re-apply both no-op", async () => {
+    const actions = makeActions();
+    render(<RosterDecisionBoard roster={makeRoster()} league={league} actions={actions} />);
+
+    fireEvent.click(within(screen.getByTestId("decision-row-7")).getByRole("button", { name: "Cut" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review Decisions" }));
+
+    const apply = screen.getByRole("button", { name: /Apply Executable Decisions \(1\)/ });
+    // Two clicks in the same tick, before the isExecuting re-render lands —
+    // the re-entrancy guard must collapse them into a single execution.
+    fireEvent.click(apply);
+    fireEvent.click(apply);
+
+    await screen.findByTestId("decision-execution-result");
+    expect(actions.releasePlayer).toHaveBeenCalledTimes(1);
+
+    // Once results exist, the stale plan's apply button is unmounted; clicking
+    // the detached element must not execute again either.
+    expect(screen.queryByRole("button", { name: /Apply Executable Decisions/ })).toBeNull();
+    fireEvent.click(apply);
+    await Promise.resolve();
+    expect(actions.releasePlayer).toHaveBeenCalledTimes(1);
+    // The reviewed plan stays visible as a record, alongside the results.
+    expect(screen.getByTestId("decision-dry-run-summary")).toBeTruthy();
+    expect(screen.getByTestId("decision-execution-result")).toBeTruthy();
   });
 
   it("a rejected action lands in Failed and the decision stays pending", async () => {
@@ -397,7 +432,7 @@ describe("RosterDecisionBoard commit execution", () => {
     expect(within(results).getByText("Failed (1)")).toBeTruthy();
     expect(within(results).getByTestId("execution-failed-7").textContent)
       .toContain("Player is not on the selected team");
-    expect(within(results).getByText("Applied (0)")).toBeTruthy();
+    expect(within(results).getByText("Applied / Dispatched (0)")).toBeTruthy();
     // Failed decisions remain pending for user adjustment.
     expect(screen.getByTestId("decision-row-7").getAttribute("data-pending")).toBe("true");
   });
@@ -411,7 +446,7 @@ describe("RosterDecisionBoard commit execution", () => {
     fireEvent.click(screen.getByRole("button", { name: /Apply Executable Decisions \(1\)/ }));
 
     const results = await screen.findByTestId("decision-execution-result");
-    expect(within(results).getByText("Applied (0)")).toBeTruthy();
+    expect(within(results).getByText("Applied / Dispatched (0)")).toBeTruthy();
     expect(within(results).getByText("Skipped (not applied) (1)")).toBeTruthy();
     expect(screen.getByTestId("decision-row-7").getAttribute("data-pending")).toBe("true");
     expect(roster[0].contract).toEqual({ years: 1, baseAnnual: 8.5 });

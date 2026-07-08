@@ -31,8 +31,11 @@
  * executeRosterDecisionCommitPlan, which only calls existing worker action
  * handlers (releasePlayer / applyFranchiseTag / updatePlayerManagement) — no
  * roster, contract, or cap math lives in this component. Results render as
- * Applied / Skipped / Failed; only successfully applied decisions are removed
- * from local pending state, so skipped/failed rows stay adjustable.
+ * Applied/Dispatched / Skipped / Failed (send-based actions like release are
+ * only ever "dispatched"; the worker owns the confirmed outcome). Only
+ * applied/dispatched decisions are removed from local pending state, so
+ * skipped/failed rows stay adjustable, and each reviewed plan can be applied
+ * at most once — re-applying requires a fresh review.
  *
  * Props:
  *  - roster: sanitized player array (RosterHub's null-filtered roster)
@@ -45,7 +48,7 @@
  *  - onPlayerSelect: optional (playerId) => void
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { EmptyState } from "./ScreenSystem.jsx";
 import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
 import { buildRosterDecisionCommitPlan } from "../utils/rosterDecisionCommitPlan.js";
@@ -112,11 +115,11 @@ function CommitPlanEntry({ entry }) {
         {entry.pos ? ` (${entry.pos})` : ""} — {DECISION_LABELS[entry.decision] ?? entry.decision}
         {contractBits.length > 0 ? ` · ${contractBits.join(" · ")}` : ""}
       </span>
-      {entry.blockingErrors.map((message) => (
-        <span key={message} className="roster-decision-board__plan-blocking">{message}</span>
+      {entry.blockingErrors.map((message, i) => (
+        <span key={`${message}-${i}`} className="roster-decision-board__plan-blocking">{message}</span>
       ))}
-      {entry.warnings.map((message) => (
-        <span key={message} className="roster-decision-board__plan-warning">{message}</span>
+      {entry.warnings.map((message, i) => (
+        <span key={`${message}-${i}`} className="roster-decision-board__plan-warning">{message}</span>
       ))}
     </li>
   );
@@ -175,9 +178,12 @@ function CommitPlanSummary({ plan }) {
 
 const RESULT_SECTIONS = [
   {
+    // "Applied" covers both confirmed request-based actions and send-based
+    // actions that could only be dispatched — each item's own message says
+    // which, so the section title must not overpromise confirmation.
     key: "applied",
-    title: "Applied",
-    empty: "No decisions were applied.",
+    title: "Applied / Dispatched",
+    empty: "No decisions were applied or dispatched.",
     tone: "roster-decision-board__result-entry--applied",
   },
   {
@@ -203,11 +209,13 @@ function ExecutionResultSummary({ result, plan }) {
       className="roster-decision-board__execution-result"
       data-testid="decision-execution-result"
       aria-label="Execution results"
+      aria-live="polite"
     >
       <div className="roster-decision-board__dry-run-header">
         <strong>Execution results</strong>
         <span className="roster-decision-board__dry-run-note">
           Skipped and failed decisions were NOT applied — they remain pending below.
+          Dispatched items were submitted to the game engine, which reports the final roster result.
         </span>
       </div>
       {RESULT_SECTIONS.map(({ key, title, empty, tone }) => (
@@ -245,6 +253,9 @@ export default function RosterDecisionBoard({ roster, league, actions, onCommitD
   const [commitPlan, setCommitPlan] = useState(null);
   const [executionResult, setExecutionResult] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  // Re-entrancy guard for apply: state updates are async, so two clicks in the
+  // same tick would both read isExecuting === false. The ref closes that gap.
+  const executingRef = useRef(false);
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("ALL");
   const [sortKey, setSortKey] = useState("ovr");
@@ -351,8 +362,12 @@ export default function RosterDecisionBoard({ roster, league, actions, onCommitD
   // Real commits: delegates every mutation to existing worker action handlers.
   // Pending decisions are only pruned AFTER results return, and only the
   // successfully applied ones — skipped/failed stay pending for adjustment.
+  // A plan is consumable exactly once: once executionResult exists the button
+  // is unmounted AND this handler refuses to run again for the stale plan —
+  // re-applying requires a fresh "Review Decisions" pass.
   const handleApplyExecutable = async () => {
-    if (commitPlan == null || isExecuting) return;
+    if (commitPlan == null || executingRef.current || executionResult != null) return;
+    executingRef.current = true;
     setIsExecuting(true);
     try {
       const result = await executeRosterDecisionCommitPlan({ plan: commitPlan, actions });
@@ -365,6 +380,7 @@ export default function RosterDecisionBoard({ roster, league, actions, onCommitD
         });
       }
     } finally {
+      executingRef.current = false;
       setIsExecuting(false);
     }
   };

@@ -13,8 +13,11 @@
  * conventions from Roster.jsx / ContractCenter.jsx):
  *  - cut           → actions.releasePlayer(playerId, teamId)
  *                    send-based (toWorker.RELEASE_PLAYER): dispatches and
- *                    returns undefined, so a worker-side rejection cannot be
- *                    observed here — the applied message says "dispatched".
+ *                    returns undefined, so worker-side success can NEVER be
+ *                    observed here. Its `applied` entry means "dispatched" —
+ *                    the message must use dispatched/submitted language and
+ *                    must not claim confirmed success; the worker reports the
+ *                    real outcome via its STATE_UPDATE roster refresh.
  *  - franchise_tag → actions.applyFranchiseTag(playerId, teamId)
  *                    request-based (toWorker.APPLY_FRANCHISE_TAG): the promise
  *                    rejects when the worker posts an ERROR (wrong team /
@@ -111,9 +114,14 @@ export async function executeRosterDecisionCommitPlan({ plan, actions } = {}) {
       }
       try {
         // send-based: resolves immediately; the worker owns all release /
-        // dead-cap behavior and reports back via STATE_UPDATE.
+        // dead-cap behavior and reports back via STATE_UPDATE. Dispatch is
+        // all we can confirm here, so the copy must never say "applied".
         await Promise.resolve(actions.releasePlayer(playerId, teamId));
-        applied.push({ playerId, decision, message: "Release dispatched to the existing release handler." });
+        applied.push({
+          playerId,
+          decision,
+          message: "Release request dispatched — the roster update from the release handler is the final result.",
+        });
       } catch (err) {
         failed.push({ playerId, decision, reason: err?.message ?? "Release action failed." });
       }

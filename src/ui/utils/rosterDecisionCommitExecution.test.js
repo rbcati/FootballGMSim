@@ -102,6 +102,19 @@ describe("executeRosterDecisionCommitPlan", () => {
     expect(result.failed).toHaveLength(0);
   });
 
+  it("fire-and-forget release copy says dispatched/submitted, never confirmed success", async () => {
+    // releasePlayer is send-based (returns undefined) — worker-side success is
+    // unobservable here, so the message must only claim dispatch.
+    const actions = makeActions();
+    const plan = makePlan([makeEntry({ decision: "cut" })]);
+
+    const result = await executeRosterDecisionCommitPlan({ plan, actions });
+
+    const message = result.applied[0].message;
+    expect(message).toMatch(/dispatched|submitted/i);
+    expect(message).not.toMatch(/confirmed|succeeded|successfully|was applied/i);
+  });
+
   it("calls applyFranchiseTag only for executable tag entries", async () => {
     const actions = makeActions();
     const plan = makePlan([
