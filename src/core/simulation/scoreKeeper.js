@@ -61,6 +61,40 @@ export function resolveSafetyScore() {
 }
 
 /**
+ * Kick/punt return-TD probability from a team's overall strength rating.
+ * Bounded to [0.01, 0.15] (NFL average ~2-3 return TDs/team/season, ~0.15/game)
+ * regardless of how extreme `str` is.
+ * @param {number} str - team overall strength rating
+ * @returns {number}
+ */
+export function calculateReturnTDChance(str) {
+  return Math.min(0.15, Math.max(0.01, 0.04 + (str - 70) * 0.001));
+}
+
+/**
+ * Pure three-way outcome classification for a game's canonical final score.
+ * A true tie is never represented as a home win — only a strictly higher
+ * score is a win, and `winnerIsHome` is omitted entirely for ties.
+ * @param {{homeScore: number, awayScore: number, overtimePlayed?: boolean}} args
+ * @returns {{homeWin: boolean, awayWin: boolean, tie: boolean, winner: ('home'|'away'|null), winnerIsHome?: boolean, margin: number, overtimePlayed: boolean}}
+ */
+export function buildGameOutcomeState({ homeScore, awayScore, overtimePlayed = false }) {
+  const homeWin = homeScore > awayScore;
+  const awayWin = awayScore > homeScore;
+  const tie = homeScore === awayScore;
+  const state = {
+    homeWin,
+    awayWin,
+    tie,
+    winner: homeWin ? 'home' : (awayWin ? 'away' : null),
+    margin: Math.abs(homeScore - awayScore),
+    overtimePlayed: !!overtimePlayed,
+  };
+  if (!tie) state.winnerIsHome = homeWin;
+  return state;
+}
+
+/**
  * Helper to build/refresh the league's id→team map (cached on the league).
  */
 export function ensureTeamsMap(league) {

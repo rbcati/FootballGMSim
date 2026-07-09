@@ -54,6 +54,8 @@ import {
   resolveFieldGoalScore,
   resolveDefensiveTouchdownScore,
   resolveSafetyScore,
+  calculateReturnTDChance,
+  buildGameOutcomeState,
 } from './scoreKeeper.js';
 import { buildDriveBasedSummary, advanceDownDistance } from './driveEngine.js';
 import {
@@ -1134,7 +1136,7 @@ export function simGameStats(home, away, options = {}) {
         // NFL average: ~2-3 return TDs per team per season (~0.15/game)
         const checkReturnTD = (team, oppDefStr) => {
             const str = team === result.home ? homeStr : awayStr;
-            const returnTDChance = Math.min(0.15, Math.max(0.01, 0.04 + (str - 70) * 0.001));
+            const returnTDChance = calculateReturnTDChance(str);
             if (U.random() < returnTDChance) {
                 team.score += 7;
                 team.touchdowns++;
@@ -1562,10 +1564,14 @@ export function simGameStats(home, away, options = {}) {
 // In-game injuries handled within position groups
     };
 
-    // Pass the mods to the team generation
-    // Pass actualTwoPts (homeRes.twoPtMade / awayRes.twoPtMade)
-    const homeTwoPts = homeRes.twoPtMade || 0;
-    const awayTwoPts = awayRes.twoPtMade || 0;
+    // Pass the mods to the team generation.
+    // The drive engine is authoritative for the score AND its scoring-play
+    // breakdown (see homeTDs/homeFGs/homeXPs above), so 2-pt conversions
+    // must come from the same driveSummary source. Fall back to engine A
+    // only when the drive summary is unavailable, mirroring the TD/FG/XP
+    // fallback pattern above.
+    const homeTwoPts = driveSummary?.homeStats?.twoPointMade ?? (homeRes.twoPtMade || 0);
+    const awayTwoPts = driveSummary?.awayStats?.twoPointMade ?? (awayRes.twoPtMade || 0);
 
     // Collect all injuries for this game
     const gameInjuries = [];
@@ -1604,8 +1610,7 @@ export function simGameStats(home, away, options = {}) {
     const awaySacks = awayOut?.sacks ?? 0;
     // Three-way result: only a strictly higher score is a win. A tie is neither
     // a home win nor an away win.
-    const isTie = homeScore === awayScore;
-    const winnerIsHome = homeScore > awayScore;
+    const { tie: isTie, winnerIsHome = false } = buildGameOutcomeState({ homeScore, awayScore });
     const winnerAbbr = winnerIsHome ? home.abbr : away.abbr;
     const loserAbbr = winnerIsHome ? away.abbr : home.abbr;
     const winnerScore = winnerIsHome ? homeScore : awayScore;
@@ -1933,6 +1938,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         },
     });
 
+    const gameOutcome = buildGameOutcomeState({ homeScore, awayScore });
     const resultObj = {
         id: `g_final_${Date.now()}_${U.id()}`,
         gameId: gameData.gameId ?? null,
@@ -1944,9 +1950,9 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         scoreAway: awayScore,
         homeScore,
         awayScore,
-        homeWin: homeScore > awayScore,
-        awayWin: awayScore > homeScore,
-        tie: homeScore === awayScore,
+        homeWin: gameOutcome.homeWin,
+        awayWin: gameOutcome.awayWin,
+        tie: gameOutcome.tie,
         homeTeamName: home.name,
         awayTeamName: away.name,
         homeTeamAbbr: home.abbr,
@@ -2349,15 +2355,16 @@ export function simulateBatch(games, options = {}) {
             } catch (commitErr) {
                 console.error(`[SIM] commitGameResult threw for ${home?.abbr} vs ${away?.abbr}:`, commitErr?.message);
                 // Fallback: create a minimal result object so the game isn't lost
+                const fallbackOutcome = buildGameOutcomeState({ homeScore: sH, awayScore: sA });
                 resultObj = {
                     id: `g_fallback_${Date.now()}_${index}`,
                     home: home.id,
                     away: away.id,
                     scoreHome: sH,
                     scoreAway: sA,
-                    homeWin: sH > sA,
-                    awayWin: sA > sH,
-                    tie: sH === sA,
+                    homeWin: fallbackOutcome.homeWin,
+                    awayWin: fallbackOutcome.awayWin,
+                    tie: fallbackOutcome.tie,
                     homeTeamName: home.name,
                     awayTeamName: away.name,
                     homeTeamAbbr: home.abbr,
