@@ -26,6 +26,7 @@ import { Constants } from './constants.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer } from './development/personalitySystem.js';
 import { getDevelopmentRateModifier } from './coaching-philosophy-effects.js';
 import { getCoachSchemeMultiplier, isPositionMisfitForScheme } from './coaching/coachingEngine.js';
+import { normalizeStaffMember } from './staff/staffPhilosophy.js';
 import { getDevTraitMultiplier, combineDevModifiers, getTrueOvrGrowthBonus } from './draft/draftVariance.js';
 
 // ── Progression probability constants (Task 10) ───────────────────────────────
@@ -104,16 +105,52 @@ const AGE_FLOOR_TRAITS = new Set(['speed', 'acceleration', 'agility', 'jumping']
 /**
  * Resolve the scheme-fit development multiplier for a player on a team.
  *
- * - team.coach.headCoach absent (old saves or no coach hired) → 1.0 safe fallback
- * - Position is a scheme misfit → 0.90  (development slowed)
- * - Position fits or is unaffected by the scheme → coach-quality multiplier
- *   from getCoachSchemeMultiplier (1.08 / 1.00 / 0.94 / 0.88 by rating tier)
+ * Coaching data lives in two places:
+ *   - team.coach.headCoach — Coaching Carousel V1 record (single `scheme` +
+ *     `overallRating`). Only populated once a coach is hired through the carousel.
+ *   - team.staff.headCoach — the canonical live staff record generated for every
+ *     team (schemePreference/overall, normalized to offensive/defensive
+ *     philosophy). This is the source on freshly generated leagues where
+ *     team.coach is still empty.
+ *
+ * The carousel record wins when present; otherwise we fall back to the live
+ * staff head coach (passed in `staff`, or read from `team.staff`) so scheme fit
+ * is not a silent no-op on leagues that never touched the carousel.
+ *
+ * Returns:
+ *   - 1.0  when no coaching source exists (old saves / no coach hired)
+ *   - 0.90 when the position is a scheme misfit (development slowed)
+ *   - the coach-quality multiplier from getCoachSchemeMultiplier
+ *     (1.08 / 1.00 / 0.94 / 0.88 by rating tier) otherwise
+ *
+ * @param {Object} player - player with .pos
+ * @param {Object} team   - full team object (team.coach and/or team.staff)
+ * @param {Object} [staff] - pre-normalized staff (e.g. options.teamCoaches entry)
  */
-export function resolveSchemeMultiplier(player, team) {
-  const hc = team?.coach?.headCoach;
-  if (!hc) return 1.0;
-  if (isPositionMisfitForScheme(player.pos, hc.scheme)) return 0.90;
-  return getCoachSchemeMultiplier(hc.overallRating);
+export function resolveSchemeMultiplier(player, team, staff = null) {
+  // 1) Coaching Carousel V1 coach — single scheme + overallRating.
+  const carouselHc = team?.coach?.headCoach;
+  if (carouselHc && (carouselHc.scheme != null || carouselHc.overallRating != null)) {
+    if (isPositionMisfitForScheme(player.pos, carouselHc.scheme)) return 0.90;
+    return getCoachSchemeMultiplier(carouselHc.overallRating);
+  }
+
+  // 2) Live staff head coach — canonical on generated leagues.
+  const rawStaffHc = staff?.headCoach ?? team?.staff?.headCoach ?? null;
+  if (!rawStaffHc) return 1.0;
+
+  // Normalize a copy so raw staff (schemePreference / offScheme) resolves to the
+  // canonical philosophy enums. normalizeStaffMember never mutates its input.
+  const hc = normalizeStaffMember(rawStaffHc, 'headCoach');
+  // A player is a misfit only for the scheme on his own side of the ball;
+  // isPositionMisfitForScheme returns false for the opposite-side philosophy,
+  // so checking both offensive and defensive philosophy is side-safe.
+  if (isPositionMisfitForScheme(player.pos, hc.offensivePhilosophy)
+      || isPositionMisfitForScheme(player.pos, hc.defensivePhilosophy)) {
+    return 0.90;
+  }
+  const rating = rawStaffHc.overallRating ?? rawStaffHc.overall ?? rawStaffHc.rating ?? 65;
+  return getCoachSchemeMultiplier(rating);
 }
 
 // ── Coaching development-rate modifier safety rails ───────────────────────────
@@ -409,8 +446,11 @@ export function processPlayerProgression(players, options = {}) {
         }
       }
       // ── Scheme-fit multiplier + morale bonus (applied last, hard cap ±5) ─────
+      // Prefer the (normalized) staff record from teamCoaches so scheme fit reads
+      // the same canonical head-coach source as the dev-rate modifier above.
       const team = teams[player.teamId] ?? null;
-      const schemeMultiplier = resolveSchemeMultiplier(player, team);
+      const schemeStaff = teamCoaches[player.teamId] ?? null;
+      const schemeMultiplier = resolveSchemeMultiplier(player, team, schemeStaff);
       const moraleScore = player.morale ?? 70;
       ovrDelta = computeProgressionFinalDelta(ovrDelta, schemeMultiplier, moraleScore);
       nudgeRatingsBy(player, ovrDelta);
