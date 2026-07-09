@@ -1,2 +1,0 @@
-R072	tests/daily_regression.spec.js	tests/e2e/daily_regression.spec.js
-M	tests/e2e/helpers/franchise.js
