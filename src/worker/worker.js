@@ -200,6 +200,7 @@ import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
 import { getZeroStats as getZeroSeasonStatsSchema } from '../state/statsSchema.js';
 import { getDevelopmentRateModifier } from '../core/coaching-philosophy-effects.js';
+import { normalizeTeamStaff } from '../core/staff/staffPhilosophy.js';
 import { processOffseasonEvolution, processWeeklyEvolution } from '../core/progression/evolutionEngine.ts';
 import { buildTeamDevelopmentFocusMap as buildCanonicalDevelopmentFocusMap } from './developmentFocus.js';
 import { derivePlayerVisibleRatingsPatch } from './playerDerivedRatings.js';
@@ -11558,10 +11559,15 @@ async function handleAdvanceOffseason(payload, id) {
   const attrPlayers = allPlayers.filter((player) => !!player?.attributesV2);
   const legacyPlayers = allPlayers.filter((player) => !player?.attributesV2);
 
-  // Build coaching staff lookup early so both attributesV2 and legacy progression paths can use it
+  // Build coaching staff lookup early so both attributesV2 and legacy progression
+  // paths can use it. normalizeTeamStaff() returns a fresh normalized record
+  // (uppercased traits, inferred offensive/defensive philosophy, guaranteed
+  // coordinator slots) so getDevelopmentRateModifier() and the scheme-fit
+  // resolver read the same canonical staff the UI/sim path uses. It never mutates
+  // the persistent team.staff record.
   const teamCoaches = {};
   for (const team of allTeams) {
-    if (team.staff) teamCoaches[Number(team.id)] = team.staff;
+    teamCoaches[Number(team.id)] = normalizeTeamStaff(team);
   }
 
   const offseasonEvolution = processOffseasonEvolution({
