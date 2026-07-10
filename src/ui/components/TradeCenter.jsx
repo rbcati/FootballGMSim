@@ -687,9 +687,16 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     // Submit-lock prevents a double-fire on rapid taps.
     if (isAccepting) return;
     setIsAccepting(true);
+    setTradeResult(null);
     try {
       const resp = await actions.acceptIncomingTrade(offer.id);
-      if (resp?.payload?.accepted) {
+      // Worker resolved without a usable payload — treat like a failure so the
+      // user always gets feedback instead of a silent no-op.
+      if (!resp?.payload) {
+        setTradeResult({ accepted: false, error: 'Trade could not be completed. No roster changes were made. Please try again.' });
+        return;
+      }
+      if (resp.payload.accepted) {
         const partnerTeam = league?.teams?.find((team) => Number(team?.id) === Number(offer.offeringTeamId)) ?? { id: offer.offeringTeamId, abbr: offer.offeringTeamAbbr };
         const incomingPlayerIds = offer?.offering?.playerIds ?? [offer?.offeringPlayerId].filter(Boolean);
         const outgoingPlayerIds = offer?.receiving?.playerIds ?? [offer?.receivingPlayerId].filter(Boolean);
@@ -709,10 +716,10 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
         await fetchRosters(Number(offer.offeringTeamId));
         setShowSavedToast(true);
       }
-      if (resp?.payload) setTradeResult(resp.payload);
+      setTradeResult(resp.payload);
     } catch (e) {
       console.error(e);
-      setTradeResult({ accepted: false, error: 'Trade could not be completed. Please try again.' });
+      setTradeResult({ accepted: false, error: 'Trade could not be completed. No roster changes were made. Please try again.' });
     } finally {
       setIsAccepting(false);
     }
