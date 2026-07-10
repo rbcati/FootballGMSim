@@ -44,7 +44,7 @@ function makeActions(overrides = {}) {
   };
 }
 
-function makeLeague(offers = [makeIncomingOffer()]) {
+function makeLeague(offers = [makeIncomingOffer()], overrides = {}) {
   return {
     year: 2027,
     season: 2027,
@@ -55,6 +55,7 @@ function makeLeague(offers = [makeIncomingOffer()]) {
     incomingTradeOffers: offers,
     inboundTradeOffers: [],
     settings: { tradeDeadlineWeek: 9 },
+    ...overrides,
   };
 }
 
@@ -155,5 +156,65 @@ describe('TradeCenter — accept incoming trade error handling', () => {
     fireEvent.click(getByText('Accept'));
     await waitFor(() => expect(getByText('Trade Accepted!')).toBeTruthy());
     expect(queryByText('Trade Failed')).toBeNull();
+  });
+
+  it('treats an empty payload object as a malformed result, not a legitimate rejection', async () => {
+    const acceptIncomingTrade = vi.fn(async () => ({ payload: {} }));
+    const actions = makeActions({ acceptIncomingTrade });
+    const { findByText, getByText, queryByText } = render(<TradeCenter league={makeLeague()} actions={actions} />);
+
+    await findByText('DET offered a deal');
+    fireEvent.click(getByText('Accept'));
+
+    await waitFor(() => expect(getByText('Trade Failed')).toBeTruthy());
+    expect(queryByText('Trade Rejected')).toBeNull();
+    expect(queryByText('Trade Accepted!')).toBeNull();
+  });
+
+  it('keeps showing "Trade Accepted!" even when post-commit chronicle sync fails', async () => {
+    const acceptIncomingTrade = vi.fn(async () => ({ payload: { accepted: true, reason: 'DET deal accepted.' } }));
+    const updateFranchiseChronicle = vi.fn(async () => { throw new Error('chronicle write failed'); });
+    const actions = makeActions({ acceptIncomingTrade, updateFranchiseChronicle });
+    const league = makeLeague([makeIncomingOffer()], { franchiseChronicle: [] });
+    const { findByText, getByText, queryByText } = render(<TradeCenter league={league} actions={actions} />);
+
+    await findByText('DET offered a deal');
+    fireEvent.click(getByText('Accept'));
+
+    await waitFor(() => expect(getByText('Trade Accepted!')).toBeTruthy());
+    // The trade committed on the worker side — a follow-up sync failure must
+    // never relabel it as failed or claim no roster changes were made.
+    expect(queryByText('Trade Failed')).toBeNull();
+    expect(queryByText(/No roster changes were made/i)).toBeNull();
+    await waitFor(() => expect(getByText(/could not refresh/i)).toBeTruthy());
+  });
+
+  it('never shows "No roster changes were made" for a post-commit follow-up failure', async () => {
+    const acceptIncomingTrade = vi.fn(async () => ({ payload: { accepted: true, reason: 'DET deal accepted.' } }));
+    const updateFranchiseChronicle = vi.fn(async () => { throw new Error('chronicle write failed'); });
+    const actions = makeActions({ acceptIncomingTrade, updateFranchiseChronicle });
+    const league = makeLeague([makeIncomingOffer()], { franchiseChronicle: [] });
+    const { findByText, getByText, queryByText } = render(<TradeCenter league={league} actions={actions} />);
+
+    await findByText('DET offered a deal');
+    fireEvent.click(getByText('Accept'));
+
+    await waitFor(() => expect(getByText('Trade Accepted!')).toBeTruthy());
+    expect(queryByText(/No roster changes were made/i)).toBeNull();
+  });
+
+  it('shows neutral "Trade action failed" status copy for a worker/transport error, not a data-integrity diagnosis', async () => {
+    const acceptIncomingTrade = vi.fn(async () => { throw new Error('Worker timeout'); });
+    const actions = makeActions({ acceptIncomingTrade });
+    const { findByText, getByText, getByTestId, queryByText } = render(<TradeCenter league={makeLeague()} actions={actions} />);
+
+    await findByText('DET offered a deal');
+    fireEvent.click(getByText('Accept'));
+
+    await waitFor(() => expect(getByText('Trade Failed')).toBeTruthy());
+    const banner = getByTestId('trade-status-banner');
+    expect(banner.textContent).toContain('Trade action failed');
+    expect(banner.textContent).not.toContain('Missing team or player data');
+    expect(queryByText('Invalid trade')).toBeNull();
   });
 });

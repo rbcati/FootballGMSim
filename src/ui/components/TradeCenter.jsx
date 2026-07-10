@@ -414,6 +414,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   const [submitting, setSubmitting] = useState(false);
   const [isAccepting, setIsAccepting] = useState(false);
   const [tradeResult, setTradeResult] = useState(null);
+  const [postCommitWarning, setPostCommitWarning] = useState(null);
   const [counterOfferId, setCounterOfferId] = useState(null);
   const [previewPlayer, setPreviewPlayer] = useState(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
@@ -600,7 +601,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   // Single, explicit package status so the user always knows what state the
   // builder is in. Derived from existing data only — no logic change.
   const tradeStatus = useMemo(() => {
-    if (tradeResult?.error) return { tone: "danger", label: "Invalid trade", detail: "Missing team or player data — reload the partner and rebuild the package." };
+    if (tradeResult?.error) return { tone: "danger", label: "Trade action failed", detail: "The request did not complete. Review the message below and try again." };
     if (tradeResult?.accepted) return { tone: "success", label: "Trade accepted", detail: "The deal went through. Build another package or switch partners." };
     if (tradeResult) return { tone: "danger", label: "Trade rejected", detail: "See the response below, then adjust your package and try again." };
     if (!hasSelection) return { tone: "muted", label: "No assets selected", detail: "Add at least one player or pick on either side to start a package." };
@@ -688,15 +689,30 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     if (isAccepting) return;
     setIsAccepting(true);
     setTradeResult(null);
+    setPostCommitWarning(null);
     try {
-      const resp = await actions.acceptIncomingTrade(offer.id);
-      // Worker resolved without a usable payload — treat like a failure so the
-      // user always gets feedback instead of a silent no-op.
-      if (!resp?.payload) {
+      let resp;
+      try {
+        resp = await actions.acceptIncomingTrade(offer.id);
+      } catch (e) {
+        console.error(e);
         setTradeResult({ accepted: false, error: 'Trade could not be completed. No roster changes were made. Please try again.' });
         return;
       }
-      if (resp.payload.accepted) {
+      // A usable result must carry a boolean `accepted` flag. Anything else —
+      // missing payload, `{}` payload, etc. — is a malformed transport/contract
+      // result, not a legitimate trade rejection.
+      if (typeof resp?.payload?.accepted !== 'boolean') {
+        setTradeResult({ accepted: false, error: 'Trade could not be completed. No roster changes were made. Please try again.' });
+        return;
+      }
+      // The trade request itself has settled with a real answer — commit it to
+      // the UI now. Everything below is post-commit follow-up, so a failure
+      // there must never relabel an already-completed trade as failed.
+      setTradeResult(resp.payload);
+      if (!resp.payload.accepted) return;
+
+      try {
         const partnerTeam = league?.teams?.find((team) => Number(team?.id) === Number(offer.offeringTeamId)) ?? { id: offer.offeringTeamId, abbr: offer.offeringTeamAbbr };
         const incomingPlayerIds = offer?.offering?.playerIds ?? [offer?.offeringPlayerId].filter(Boolean);
         const outgoingPlayerIds = offer?.receiving?.playerIds ?? [offer?.receivingPlayerId].filter(Boolean);
@@ -715,11 +731,12 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
         await persistFranchiseChronicle(actions, league);
         await fetchRosters(Number(offer.offeringTeamId));
         setShowSavedToast(true);
+      } catch (e) {
+        // The trade already committed on the worker side. Do not re-run it and
+        // do not report it as failed — just flag that the screen may be stale.
+        console.warn('Post-commit trade follow-up failed:', e);
+        setPostCommitWarning('Trade completed, but some screen data could not refresh. Reload to verify the latest roster.');
       }
-      setTradeResult(resp.payload);
-    } catch (e) {
-      console.error(e);
-      setTradeResult({ accepted: false, error: 'Trade could not be completed. No roster changes were made. Please try again.' });
     } finally {
       setIsAccepting(false);
     }
@@ -1071,6 +1088,15 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
 
       {/* Trade result (original) */}
       {tradeResult && <TradeResult result={tradeResult} onDismiss={() => setTradeResult(null)} />}
+      {postCommitWarning && (
+        <div
+          role="status"
+          style={{ marginTop: "var(--space-2)", borderRadius: "var(--radius-md)", border: "1px solid #FF9F0A44", background: "rgba(255,159,10,0.08)", padding: "10px 14px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, fontSize: "var(--text-xs)", color: "var(--text-muted)" }}
+        >
+          <span>{postCommitWarning}</span>
+          <Button size="sm" variant="outline" onClick={() => setPostCommitWarning(null)}>Dismiss</Button>
+        </div>
+      )}
       {tradeBlockers.length > 0 && (
         <div className="card" style={{ padding: "var(--space-3)", borderColor: "rgba(255,159,10,.45)", background: "rgba(255,159,10,.08)", display: "grid", gap: 4 }}>
           <strong style={{ fontSize: "var(--text-xs)" }}>Before you submit</strong>
