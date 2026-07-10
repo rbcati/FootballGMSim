@@ -3098,6 +3098,12 @@ async function handleAdvanceWeek(payload, id) {
     // veterans so all AI teams are under the $301.2M hard cap at season start.
     await AiLogic.executeAICapManagement();
 
+    // Both cutdown passes above release players directly (teamId -> null)
+    // without touching team.depthChart, so cut players would otherwise linger
+    // as dangling starter/backup references until the next pre-sim rebuild.
+    // Repair immediately using the same canonical utility as a manual release.
+    validateAndRepairAllTeamDepthCharts('post-ai-cutdown');
+
     // Priority 4: Initialize zeroed-out season stat entries for EVERY active player
     // on EVERY team before the first game is simulated. This guarantees that:
     //   (a) Players who never appear in a box score still show gamesPlayed: 0
@@ -11864,6 +11870,11 @@ async function handleAdvanceOffseason(payload, id) {
   // whose dead-cap penalty is less than their active cap hit.  Only runs for
   // AI-controlled teams; human roster is never touched.
   await AiLogic.executeOffseasonRosterCuts();
+
+  // These cuts mutate rosters directly without touching team.depthChart —
+  // repair immediately so a cut veteran doesn't stay a dangling depth-chart
+  // reference through free agency and the draft.
+  validateAndRepairAllTeamDepthCharts('post-ai-offseason-cuts');
 
   // ── Step 5: Phase transition → free_agency ────────────────────────────────
   // All DB writes happen here atomically before the UI is notified.

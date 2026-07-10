@@ -168,4 +168,80 @@ describe('depthChartManager', () => {
     const fallback = Manager.findEmergencyPositionFallback('CB', team.roster as any, {});
     expect(fallback?.id).toBe('10');
   });
+
+  // ── Depth chart repair after a player is permanently removed from roster ──
+  // (release / cut / waive). The roster no longer contains the player, but
+  // depthChart still holds their id until repairDepthChart runs — this is the
+  // "ghost reference" scenario ensureTeamDepthChart must clean up.
+  describe('repair after a player is removed from the roster (release/cut)', () => {
+    it('strips the released starter id from the depth chart and promotes the next eligible player', () => {
+      // QB1 ('1') released: no longer in roster, but still the QB1 slot.
+      const team = makeTeam({
+        roster: makeTeam().roster.filter((p) => p.id !== '1').concat([
+          { id: '11', name: 'QB2', pos: 'QB', ovr: 74, teamId: 1, injuryWeeksRemaining: 0 },
+        ]),
+        depthChart: { QB: ['1', '11'], RB: ['2', '3'], WR: ['4', '5'], OL: ['7', '8'], CB: ['9'], S: ['10'] },
+      });
+
+      const result = Manager.repairDepthChart(team as any, { phase: 'regular' });
+
+      expect(result.modified).toBe(true);
+      expect(result.repairedAssignments.QB).not.toContain('1');
+      expect(result.repairedAssignments.QB[0]).toBe('11');
+    });
+
+    it('leaves the slot empty (no throw) when the released player was the only one at that position', () => {
+      // CB1 ('9') released and there is no other CB/DB-eligible player on roster.
+      const team = makeTeam({
+        roster: makeTeam().roster.filter((p) => p.id !== '9'),
+        depthChart: { QB: ['1'], RB: ['2', '3'], WR: ['4', '5'], OL: ['7', '8'], CB: ['9'], S: ['10'] },
+      });
+
+      expect(() => Manager.repairDepthChart(team as any, { phase: 'regular' })).not.toThrow();
+      const result = Manager.repairDepthChart(team as any, { phase: 'regular' });
+
+      expect(result.repairedAssignments.CB).not.toContain('9');
+      // Safety can fill CB in an emergency, but if unavailable the row is left
+      // empty with an unresolved issue rather than throwing.
+      if (result.repairedAssignments.CB.length === 0) {
+        expect(result.unresolvedIssues.some((i) => i.rowKey === 'CB')).toBe(true);
+      }
+    });
+
+    it('releasing a backup does not reorder or otherwise touch unrelated rows', () => {
+      // RB2 ('3') is a backup, not the starter. Releasing them should only
+      // touch the RB row; every other row must stay byte-for-byte identical.
+      const base = makeTeam();
+      const team = makeTeam({
+        roster: base.roster.filter((p) => p.id !== '3'),
+        depthChart: { ...base.depthChart },
+      });
+
+      const result = Manager.repairDepthChart(team as any, { phase: 'regular' });
+
+      expect(result.repairedAssignments.RB).not.toContain('3');
+      expect(result.repairedAssignments.RB[0]).toBe('2'); // starter untouched
+      expect(result.repairedAssignments.QB).toEqual(base.depthChart.QB);
+      expect(result.repairedAssignments.WR).toEqual(base.depthChart.WR);
+      expect(result.repairedAssignments.OL).toEqual(base.depthChart.OL);
+      expect(result.repairedAssignments.CB).toEqual(base.depthChart.CB);
+      expect(result.repairedAssignments.S).toEqual(base.depthChart.S);
+    });
+
+    it('does not leave a ghost reference when the depth chart stores the legacy numeric id but the roster uses string ids', () => {
+      // Legacy saves may have numeric ids in depthChart while the roster (and
+      // every other id) has since been normalized to strings. The released
+      // player (numeric 2) must still be stripped regardless of type.
+      const base = makeTeam();
+      const team = makeTeam({
+        roster: base.roster.filter((p) => p.id !== '2'), // RB starter released
+        depthChart: { ...base.depthChart, RB: [2, '3'] as any }, // mixed legacy types
+      });
+
+      const result = Manager.repairDepthChart(team as any, { phase: 'regular' });
+
+      expect(result.repairedAssignments.RB.map(String)).not.toContain('2');
+      expect(result.repairedAssignments.RB[0]).toBe('3');
+    });
+  });
 });
