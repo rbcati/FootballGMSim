@@ -224,9 +224,21 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
 
   if (stakes && stakes > 50) {
     if (won) {
-      callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} answered the bell and secured a massive ${userScore}-${oppScore} victory!`);
+      if (isBlowout) {
+        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An emphatic'} performance under immense pressure. ${userAbbr} completely dismantled the opponent in a ${userScore}-${oppScore} blowout!`);
+      } else if (isClose) {
+        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} survived a thriller and secured a massive ${userScore}-${oppScore} victory!`);
+      } else {
+        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} answered the bell and secured a massive ${userScore}-${oppScore} victory!`);
+      }
     } else {
-      callbacks.push(`A devastating, crushing ${scoreDiff}-point defeat when the stakes couldn't have been higher. The locker room is stunned.`);
+      if (isBlowout) {
+        callbacks.push(`A devastating, humiliating ${scoreDiff}-point blowout defeat when the stakes couldn't have been higher. The locker room is completely stunned.`);
+      } else if (isClose) {
+        callbacks.push(`A heart-breaking ${scoreDiff}-point loss in a thriller when the stakes couldn't have been higher. The locker room is stunned.`);
+      } else {
+        callbacks.push(`A devastating, crushing ${scoreDiff}-point defeat when the stakes couldn't have been higher. The locker room is stunned.`);
+      }
     }
   }
 
