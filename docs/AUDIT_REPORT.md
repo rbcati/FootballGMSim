@@ -12,6 +12,13 @@
 
 **Verdict: Structurally broken at the core. The game simulates each match twice with two unreconciled engines and stitches the score from one onto the stat lines of the other.**
 
+> **Game Result Integrity Audit Closure — 2026-07-09.** Re-verified every finding in this section against current `index.js`/`driveEngine.js`. Status:
+> - **Return-TD precedence bug — fixed in a prior commit.** `checkReturnTD` already uses the bounded expression `Math.min(0.15, Math.max(0.01, 0.04 + (str - 70) * 0.001))` for both sides. Extracted to a tested pure helper, `calculateReturnTDChance` (`scoreKeeper.js`), with regression coverage in `src/core/__tests__/simulation/gameResultIntegrity.test.js`. No behavior change.
+> - **Overtime gating on the wrong score — fixed in a prior commit.** The `if (homeScore === awayScore)` OT check already runs on `homeScore`/`awayScore` *after* they are assigned from `driveSummary` (the canonical source), not a stale engine-A value. Regression test added (playoff games never commit a tied result).
+> - **Ties recorded as home wins — fixed in a prior commit.** `winnerIsHome`/`homeWin`/`awayWin`/`tie` are all derived via strict three-way comparison (`homeScore > awayScore` / `awayScore > homeScore` / `===`) everywhere in `index.js`. Consolidated into a tested pure helper, `buildGameOutcomeState` (`scoreKeeper.js`), used by `commitGameResult` and the `simulateBatch` fallback path so a tie can never surface as `homeWin: true`.
+> - **Dual-engine score/stat fracture — partially fixed in a prior commit, one residual mismatch fixed in this PR.** `driveSummary` (the drive engine) is already the authoritative source for the final score *and* for TD/FG/XP counts fed into the box score (`homeTDs`/`homeFGs`/`homeXPs` all read `driveSummary?.… ?? homeRes.…`). The one remaining leak: 2-point-conversion attribution (`homeTwoPts`/`awayTwoPts`) still read `homeRes.twoPtMade`/`awayRes.twoPtMade` — engine A's independently-seeded count — instead of `driveSummary`'s. Patched to prefer `driveSummary?.homeStats?.twoPointMade` (falling back to engine A only if the drive summary is unavailable), matching the pattern already used for TDs/FGs/XPs. Regression test added: box-score point totals (`TDs·6 + 2-pt·2 + FG·3 + XP`) now sum exactly to `homeScore`/`awayScore` across 30 seeded games.
+> - **Known gap, intentionally deferred (not in original scope, out of surgical-fix budget):** the play-by-play-derived scoring narrative (`scoringSummary`/`quarterScores`, built from `fullGameResult.playLogs`, i.e. engine A) is **not** reconciled with the canonical `driveSummary`-based final score — the two can diverge substantially (observed: canonical 54–34 vs. quarter-by-quarter narrative summing to 17–7 for the same seed). Fixing this requires either making engine A authoritative again (regressing the box-score fix above) or teaching the drive engine to emit play-by-play events, both of which are simulation-architecture changes beyond this audit-closure pass. Flagged for a follow-up architectural decision, not patched here.
+
 ### Are game outcome calculations mathematically sound?
 **No — the architecture is the problem, not the individual formulas.** Each individual engine produces plausible NFL ranges (`buildDriveBasedSummary`, `driveEngine.js:111-144`: 20–26 drives, `driveSuccess` clamped 0.15–0.72, 67% TD / 33% FG split → ~20–26 pts/team). But two engines run per game:
 
@@ -49,8 +56,11 @@ There is no constraint that `7·TDs + 3·FGs + XPs == homeScore`. **A user can s
   const returnTDChance = 0.04 + (team === result.home ? homeStr : awayStr - 70) * 0.001;
   ```
   Operator precedence parses this as `home ? homeStr : (awayStr-70)*0.001`, so when home, `returnTDChance ≈ 0.04 + 75 = 75.04` → **always fires**; when away, it's near-zero. The added points land on the discarded engine's score anyway.
+  **[FIXED — prior commit, re-verified 2026-07-09]** Live code already reads `Math.min(0.15, Math.max(0.01, 0.04 + (str - 70) * 0.001))` for both sides.
 - **Overtime gates on the wrong score (Critical).** `if (homeScore === awayScore)` (`index.js:1128`) runs *after* `homeScore`/`awayScore` were reassigned from engine B, so OT triggers on a value unrelated to the play-by-play the user watched.
+  **[FIXED — prior commit, re-verified 2026-07-09]** The live OT check already runs on the post-reassignment (canonical) `homeScore`/`awayScore`.
 - **Ties recorded as home wins (High).** `winnerIsHome = homeScore >= awayScore` (`index.js:1543`) contradicts `homeWin: homeScore > awayScore` (`index.js:1864`); a true tie is shown as a home win in the recap.
+  **[FIXED — prior commit, re-verified 2026-07-09]** All winner/tie fields now use strict three-way comparison; see closure note above.
 
 ---
 
@@ -168,11 +178,11 @@ For completeness, the sections still crammed in the dead monolith (already extra
 
 | # | Issue Title | Severity | Category | What the User Experiences | Root Cause (file + function) | Fix Summary |
 |---|---|---|---|---|---|---|
-| 1 | Dual-engine score/stat fracture | Critical | Simulation | Box-score TDs don't match the final score; QB has 3 TDs in a 13-9 game | `index.js:1116-1123` `simulateMatchup` (score from `buildDriveBasedSummary`, TDs from `simulateFullGame`) | Pick one authoritative engine for both score and TD/FG counts |
-| 2 | Overtime gates on the wrong score | Critical | Simulation | OT fails to trigger on real ties / appends points to non-tied games | `index.js:1128` (uses reassigned engine-B score) | Run OT off the single reconciled score source |
+| 1 | Dual-engine score/stat fracture | Critical | Simulation | Box-score TDs don't match the final score; QB has 3 TDs in a 13-9 game | `index.js:1116-1123` `simulateMatchup` (score from `buildDriveBasedSummary`, TDs from `simulateFullGame`) | **[MOSTLY FIXED 2026-07-09]** TD/FG/XP already reconciled to `driveSummary` in a prior commit; the 2-pt-conversion leak fixed in this PR. Residual gap: `scoringSummary`/`quarterScores` narrative still derives from engine A playLogs — deferred, see Section 1 closure note. |
+| 2 | Overtime gates on the wrong score | Critical | Simulation | OT fails to trigger on real ties / appends points to non-tied games | `index.js:1128` (uses reassigned engine-B score) | **[FIXED — prior commit, verified 2026-07-09]** OT already gates on the canonical post-reassignment score. |
 | 3 | Two disagreeing injury-availability predicates | Critical | Simulation | Injured player appears in one sim path's lineup but not the other | `injury-core.js:94-108` `canPlayerPlay` vs `playExecution.js` `!p.injured` | Single availability predicate; `injured===true` ⇒ excluded |
-| 4 | Return-TD probability precedence bug | High | Simulation | Special-teams return TDs at ~75% when home, ~0% away | `index.js:1079` `checkReturnTD` | `0.04 + ((home?homeStr:awayStr)-70)*0.001`, clamp |
-| 5 | Ties recorded as home wins | High | Simulation | A tied regular-season game shows the home team winning | `index.js:1543` vs `:1864` | Three-way compare; only `>` is a win |
+| 4 | Return-TD probability precedence bug | High | Simulation | Special-teams return TDs at ~75% when home, ~0% away | `index.js:1079` `checkReturnTD` | **[FIXED — prior commit, verified 2026-07-09]** Bounded expression already in place; extracted to a tested helper in this PR. |
+| 5 | Ties recorded as home wins | High | Simulation | A tied regular-season game shows the home team winning | `index.js:1543` vs `:1864` | **[FIXED — prior commit, verified 2026-07-09]** Strict three-way comparison already in place everywhere; consolidated into a tested helper in this PR. |
 | 6 | In-game injuries mutate shared rosters during 0-0 retry | High | Data Integrity | Rare games stack/duplicate injuries on the live roster | `index.js:1240-1254`, retry `:2085-2090` | Apply injuries once at commit, or snapshot/rollback |
 | 7 | Depth chart never repaired after a cut | High | AI | Released starter remains a ghost in the lineup until an unrelated rebuild | `worker.js:6142-6230` (no `ensureTeamDepthChart`) | Strip released ID + repair on release |
 | 8 | Salary cap effectively soft (capRoom goes negative) | High | AI | Teams silently sit over the "hard" cap; AI loses budgeted targets | `ai-logic.js:79-82` `updateTeamCap` | Reject/clamp any transaction leaving `capRoom < 0` |
@@ -201,15 +211,15 @@ For completeness, the sections still crammed in the dead monolith (already extra
 ## SECTION 7 — TOP 10 PRIORITY REPAIR LIST
 
 ```
-1.  [Critical] Dual-engine score/stat fracture → index.js:1116-1123 simulateMatchup → derive TDs/FGs and score from ONE engine (make buildDriveBasedSummary authoritative for both).
-2.  [Critical] Overtime gates on the wrong (engine-B) score → index.js:1128 → run OT off the single reconciled score after #1.
+1.  [Critical] Dual-engine score/stat fracture → index.js:1116-1123 simulateMatchup → derive TDs/FGs and score from ONE engine (make buildDriveBasedSummary authoritative for both). [MOSTLY FIXED 2026-07-09 — see Section 1 closure note; scoringSummary/quarterScores narrative split deferred]
+2.  [Critical] Overtime gates on the wrong (engine-B) score → index.js:1128 → run OT off the single reconciled score after #1. [FIXED — prior commit, verified 2026-07-09]
 3.  [Critical] Two disagreeing injury-availability predicates → injury-core.js:94-108 canPlayerPlay vs playExecution.js → make injured===true a hard exclude in both paths.
-4.  [High] Return-TD ~75% precedence bug → index.js:1079 checkReturnTD → fix parenthesization and clamp.
+4.  [High] Return-TD ~75% precedence bug → index.js:1079 checkReturnTD → fix parenthesization and clamp. [FIXED — prior commit, verified 2026-07-09]
 5.  [High] Depth chart never repaired after a cut → worker.js:6142-6230 → call ensureTeamDepthChart on release.
 6.  [High] Salary cap effectively soft → ai-logic.js:79-82 updateTeamCap → reject any transaction leaving capRoom < 0.
 7.  [High] TradeCenter accept has no error handling → TradeCenter.jsx:554 → wrap in try/catch + surface failure.
 8.  [High] Record holder uses recyclable numeric id → recordBookV1.js:664/675; legacyScore.js:228 → match on immutable GUID.
-9.  [High] Ties recorded as home wins → index.js:1543 → three-way comparison.
+9.  [High] Ties recorded as home wins → index.js:1543 → three-way comparison. [FIXED — prior commit, verified 2026-07-09]
 10. [High] Trade valuation inconsistent/exploitable → trade-logic.js:96-125,453 + worker.js:6968-7010 → single shared getAssetValue(); penalize by live cap.
 ```
 
