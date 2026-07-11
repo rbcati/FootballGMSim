@@ -455,6 +455,8 @@ class AiLogic {
             { freeAgents, phase: meta?.phase, season: meta?.year },
         );
 
+        const transactionPayloads = [];
+
         for (const { player, contract } of extensions) {
             const newContract = { ...contract, startYear: meta?.year };
 
@@ -466,7 +468,7 @@ class AiLogic {
 
             this.updateTeamCap(teamId);
 
-            await Transactions.add({
+            transactionPayloads.push({
                 type: 'EXTEND',
                 seasonId: meta?.currentSeasonId,
                 week: meta?.currentWeek,
@@ -479,6 +481,10 @@ class AiLogic {
                 playerId: player.id,
                 contract: newContract,
             });
+        }
+
+        if (transactionPayloads.length > 0) {
+            await Transactions.addBulk(transactionPayloads);
         }
     }
 

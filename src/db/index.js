@@ -511,6 +511,7 @@ export const PlayerStats = {
 const TRANSACTIONS_RECENT_CAP = 4000;
 
 export const Transactions = {
+  addBulk:   (txs)      => dbPutBulk(STORES.TRANSACTIONS, txs),
   add:      (tx)       => dbPut(STORES.TRANSACTIONS, tx),
   addBulk:  (txs)      => dbPutBulk(STORES.TRANSACTIONS, txs),
   bySeason: (seasonId) => dbGetAllByIndex(STORES.TRANSACTIONS, 'seasonId', seasonId),
