@@ -5330,7 +5330,12 @@ async function handleSimToPhase({ targetPhase }, id) {
           if (!ds || ds.currentPickIndex >= (ds.picks?.length ?? 0)) {
             draftDone = true;
           } else {
-            await offseasonProfiler.measure('stage.draft.pick-batch', { draftGuard }, () => handleSimDraftPick({}, null));
+            const beforeDraftStep = captureDraftProgressState(cache.getMeta());
+            const draftStepResult = await offseasonProfiler.measure('stage.draft.pick-batch', { draftGuard }, () => handleSimDraftPick({ allowUserAutoPick: targetPhase === 'preseason', source: 'sim_to_phase' }, null));
+            const afterDraftStep = captureDraftProgressState(cache.getMeta());
+            if (!draftBatchMadeProgress(beforeDraftStep, afterDraftStep, draftStepResult)) {
+              throw createDraftNoProgressError(beforeDraftStep, afterDraftStep, draftStepResult);
+            }
           }
           draftGuard++;
           await yieldFrame();
@@ -10502,7 +10507,13 @@ async function handleStartDraft(payload, id) {
   const ROUNDS    = Math.max(1, Math.min(12, Number(settings?.draftRounds ?? 7)));
   const teams     = cache.getAllTeams();
   awardCompensatoryPicksForUpcomingDraft(meta);
-  const classSize = ROUNDS * teams.length;
+  const compensatoryPickCount = teams.reduce((count, team) => {
+    const teamCompPicks = (team?.picks ?? []).filter((pk) =>
+      Number(pk?.season) === Number(meta?.year) && !!pk?.isCompensatory && Number(pk?.currentOwner ?? team.id) === Number(team.id)
+    );
+    return count + teamCompPicks.length;
+  }, 0);
+  const classSize = (ROUNDS * teams.length) + compensatoryPickCount;
 
   // Build elite name set from existing players to avoid collisions
   const eliteNames = new Set(cache.getAllPlayers().filter(p => p.ovr > 80).map(p => p.name));
@@ -10676,14 +10687,126 @@ async function handleMakeDraftPick({ playerId }, id) {
   post(toUI.DRAFT_STATE, buildDraftStateView(), id);
 }
 
+
+function captureDraftProgressState(meta = cache.getMeta()) {
+  const draftState = meta?.draftState;
+  const pick = draftState?.picks?.[draftState?.currentPickIndex];
+  return {
+    season: meta?.year ?? meta?.season ?? null,
+    phase: meta?.phase ?? null,
+    currentPickIndex: Number(draftState?.currentPickIndex ?? -1),
+    currentPickId: pick?.id ?? null,
+    currentTeamId: pick?.teamId ?? null,
+    draftComplete: !!draftState && Number(draftState.currentPickIndex ?? 0) >= Number(draftState.picks?.length ?? 0),
+  };
+}
+
+function draftBatchMadeProgress(before, after, result = {}) {
+  if (result?.blocked || result?.error) return true;
+  if (!before?.draftComplete && after?.draftComplete) return true;
+  if (after?.phase !== before?.phase) return true;
+  if (Number(after?.currentPickIndex ?? -1) > Number(before?.currentPickIndex ?? -1)) return true;
+  if ((after?.currentPickId ?? null) !== (before?.currentPickId ?? null)) return true;
+  return false;
+}
+
+function createDraftNoProgressError(before, after, result = {}) {
+  const detail = {
+    season: after?.season ?? before?.season ?? null,
+    phase: after?.phase ?? before?.phase ?? null,
+    pickIndex: before?.currentPickIndex ?? null,
+    pickId: before?.currentPickId ?? null,
+    teamId: before?.currentTeamId ?? null,
+    resultStatus: result?.status ?? null,
+  };
+  const err = new Error(`Draft batch made no progress at pick index ${detail.pickIndex} (pick ${detail.pickId ?? 'unknown'}, team ${detail.teamId ?? 'unknown'}, phase ${detail.phase ?? 'unknown'}, season ${detail.season ?? 'unknown'})`);
+  err.code = 'DRAFT_BATCH_NO_PROGRESS';
+  err.detail = detail;
+  return err;
+}
+
+function selectCanonicalDraftProspectForTeam({ teamId, pick, draftPool, sessionPicksByTeamNeedGroup = new Map(), meta = cache.getMeta() }) {
+  const team = cache.getTeam(teamId);
+  const strategy = offseasonProfiler.measure('draft.ai-strategy', { teamId, pickNumber: Number(pick?.overall ?? 0) }, () => buildAiTeamStrategy({
+    team,
+    roster: cache.getPlayersByTeam(teamId),
+    league: { year: meta?.year, phase: meta?.phase },
+    phase: meta?.phase,
+    year: meta?.year,
+  }));
+  const needs = offseasonProfiler.measure('draft.team-needs', { teamId, pickNumber: Number(pick?.overall ?? 0) }, () => AiLogic.calculateTeamNeeds(teamId));
+  const needPriorityByPos = new Map((strategy?.positionalNeeds ?? []).map((row) => [row.positionGroup, Number(row?.priority ?? 0)]));
+  let bestProspect = null;
+  let bestValue = -1;
+  let bestIdx = -1;
+
+  const __pickProfileToken = offseasonProfiler.start('draft.pick.evaluate-and-select', { teamId, pickNumber: Number(pick?.overall ?? 0), round: Number(pick?.round ?? 0), prospects: draftPool.length });
+  for (let i = 0; i < draftPool.length; i++) {
+    const p = draftPool[i];
+    const boardScore = scoreDraftBoardEntry({
+      ...p,
+      ovr: p?.ovr ?? p?.scoutedOvr ?? 60,
+      potential: p?.potential ?? p?.truePotential ?? p?.ovr ?? 60,
+      combineResults: p?.combineResults,
+      interviewReport: p?.interviewReport,
+      collegeProductionScore: p?.collegeProductionScore ?? 0,
+      schemeFit: p?.schemeFit ?? 65,
+      archetypeTag: p?.archetypeTag ?? p?.pos,
+    }, team, { teamNeeds: needs });
+    const needGroup = mapPlayerPosToNeedGroup(p?.pos) ?? String(p?.pos ?? '');
+    let posPriority = Number(needPriorityByPos.get(needGroup) ?? 0);
+    const qbNeedP = Number(needPriorityByPos.get('QB') ?? 0);
+    if (String(p?.pos) === 'QB' && qbNeedP >= 56) {
+      posPriority = Math.min(100, posPriority + Math.round((qbNeedP - 52) * 0.55));
+    }
+    const talentGapGuard = Math.max(0, Number((p?.ovr ?? 60) - 80));
+    const archetypeNeedFactor = strategy?.archetype === 'contender'
+      ? 0.056
+      : ['rebuild', 'development'].includes(strategy?.archetype)
+        ? 0.086
+        : 0.069;
+    const needBoost = Math.min(6.75, posPriority * archetypeNeedFactor);
+    const eliteProspectReduction = talentGapGuard >= 8 ? 0.22 : talentGapGuard >= 4 ? 0.52 : 1;
+    const sessionKey = `${teamId}|${needGroup}`;
+    const dupDepth = Number(sessionPicksByTeamNeedGroup.get(sessionKey) || 0);
+    const hoardPenalty = dupDepth > 0
+      ? Math.min(3.6, dupDepth * 1.75) * (eliteProspectReduction < 0.95 ? 0.42 : 1)
+      : 0;
+    const combineAdj = getAIDraftBoardAdjustment(p);
+    const combineBonus = combineAdj.slots * 0.1;
+    const val = Number(boardScore?.score ?? 0) + (needBoost * eliteProspectReduction) - hoardPenalty + combineBonus;
+
+    if (val > bestValue) {
+      bestValue = val;
+      bestProspect = p;
+      bestIdx = i;
+    } else if (val === bestValue && bestProspect) {
+      const rBest = Number(bestProspect?.interviewReport?.riskScore ?? 40);
+      const rNew = Number(p?.interviewReport?.riskScore ?? 40);
+      const ovrNew = Number(p?.ovr ?? 0);
+      const ovrBest = Number(bestProspect?.ovr ?? 0);
+      if (ovrNew > ovrBest || (ovrNew === ovrBest && rNew < rBest)) {
+        bestProspect = p;
+        bestIdx = i;
+      }
+    } else if (val === bestValue && !bestProspect) {
+      bestProspect = p;
+      bestIdx = i;
+    }
+  }
+  offseasonProfiler.end(__pickProfileToken, { selectedPlayerId: bestProspect?.id ?? null, prospects: draftPool.length });
+  return { bestProspect, bestIdx };
+}
+
 // ── Handler: SIM_DRAFT_PICK ───────────────────────────────────────────────────
 
 /**
  * Auto-pick for every AI team until we reach the user's next pick (or draft ends).
- * Each AI picks the highest-OVR available prospect.
+ * Each AI pick uses the canonical weighted draft-board selector.
  */
-async function handleSimDraftPick(payload, id) {
+async function handleSimDraftPick(payload = {}, id) {
   return offseasonProfiler.measure('draft.sim-batch', {}, async () => {
+  const allowUserAutoPick = payload?.allowUserAutoPick === true && payload?.source === 'sim_to_phase';
   const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta?.draftState) { post(toUI.ERROR, { message: 'No active draft' }, id); return; }
 
@@ -10699,8 +10822,12 @@ async function handleSimDraftPick(payload, id) {
   while (currentPickIndex < picks.length) {
     const pick = picks[currentPickIndex];
 
-    // Pause at user's pick
-    if (pick.teamId === userTeamId) break;
+    // Pause at user's pick unless the lifecycle batch explicitly opted into auto-picking.
+    if (pick.teamId === userTeamId && !allowUserAutoPick) {
+      await flushDirty();
+      post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+      return { status: 'blocked', blocked: true, reason: 'user_pick', pickIndex: currentPickIndex, pickId: pick?.id ?? null, teamId: pick?.teamId ?? null };
+    }
 
     // ── Draft trade-up: AI-to-AI ─────────────────────────────────────────────
     // Before the AI makes its pick, check whether another AI team wants to trade
@@ -10761,78 +10888,14 @@ async function handleSimDraftPick(payload, id) {
     }
     // ── End draft trade-up ────────────────────────────────────────────────────
 
-    // AI selects by weighted board value (need, scheme fit, upside, combine/interview risk).
-    const team = cache.getTeam(pick.teamId);
-    const strategy = offseasonProfiler.measure('draft.ai-strategy', { teamId: pick.teamId, pickNumber: Number(pick?.overall ?? currentPickIndex + 1) }, () => buildAiTeamStrategy({
-      team,
-      roster: cache.getPlayersByTeam(pick.teamId),
-      league: { year: meta?.year, phase: meta?.phase },
-      phase: meta?.phase,
-      year: meta?.year,
-    }));
-    const needs = offseasonProfiler.measure('draft.team-needs', { teamId: pick.teamId, pickNumber: Number(pick?.overall ?? currentPickIndex + 1) }, () => AiLogic.calculateTeamNeeds(pick.teamId));
-    const needPriorityByPos = new Map((strategy?.positionalNeeds ?? []).map((row) => [row.positionGroup, Number(row?.priority ?? 0)]));
-    let bestProspect = null;
-    let bestValue = -1;
-    let bestIdx = -1;
-
-    const __pickProfileToken = offseasonProfiler.start('draft.pick.evaluate-and-select', { teamId: pick.teamId, pickNumber: Number(pick?.overall ?? currentPickIndex + 1), round: Number(pick?.round ?? 0), prospects: draftPool.length });
-    for (let i = 0; i < draftPool.length; i++) {
-        const p = draftPool[i];
-        const boardScore = scoreDraftBoardEntry({
-          ...p,
-          ovr: p?.ovr ?? p?.scoutedOvr ?? 60,
-          potential: p?.potential ?? p?.truePotential ?? p?.ovr ?? 60,
-          combineResults: p?.combineResults,
-          interviewReport: p?.interviewReport,
-          collegeProductionScore: p?.collegeProductionScore ?? 0,
-          schemeFit: p?.schemeFit ?? 65,
-          archetypeTag: p?.archetypeTag ?? p?.pos,
-        }, team, { teamNeeds: needs });
-        const needGroup = mapPlayerPosToNeedGroup(p?.pos) ?? String(p?.pos ?? '');
-        let posPriority = Number(needPriorityByPos.get(needGroup) ?? 0);
-        const qbNeedP = Number(needPriorityByPos.get('QB') ?? 0);
-        if (String(p?.pos) === 'QB' && qbNeedP >= 56) {
-          posPriority = Math.min(100, posPriority + Math.round((qbNeedP - 52) * 0.55));
-        }
-        const talentGapGuard = Math.max(0, Number((p?.ovr ?? 60) - 80));
-        const archetypeNeedFactor = strategy?.archetype === 'contender'
-          ? 0.056
-          : ['rebuild', 'development'].includes(strategy?.archetype)
-            ? 0.086
-            : 0.069;
-        const needBoost = Math.min(6.75, posPriority * archetypeNeedFactor);
-        // Keep BPA available: suppress need boost on clearly elite prospects.
-        const eliteProspectReduction = talentGapGuard >= 8 ? 0.22 : talentGapGuard >= 4 ? 0.52 : 1;
-        const sessionKey = `${pick.teamId}|${needGroup}`;
-        const dupDepth = Number(sessionPicksByTeamNeedGroup.get(sessionKey) || 0);
-        const hoardPenalty = dupDepth > 0
-          ? Math.min(3.6, dupDepth * 1.75) * (eliteProspectReduction < 0.95 ? 0.42 : 1)
-          : 0;
-        const combineAdj = getAIDraftBoardAdjustment(p);
-        const combineBonus = combineAdj.slots * 0.1;
-        const val = Number(boardScore?.score ?? 0) + (needBoost * eliteProspectReduction) - hoardPenalty + combineBonus;
-
-        if (val > bestValue) {
-            bestValue = val;
-            bestProspect = p;
-            bestIdx = i;
-        } else if (val === bestValue && bestProspect) {
-            const rBest = Number(bestProspect?.interviewReport?.riskScore ?? 40);
-            const rNew = Number(p?.interviewReport?.riskScore ?? 40);
-            const ovrNew = Number(p?.ovr ?? 0);
-            const ovrBest = Number(bestProspect?.ovr ?? 0);
-            if (ovrNew > ovrBest || (ovrNew === ovrBest && rNew < rBest)) {
-              bestProspect = p;
-              bestIdx = i;
-            }
-        } else if (val === bestValue && !bestProspect) {
-            bestProspect = p;
-            bestIdx = i;
-        }
-    }
-
-    offseasonProfiler.end(__pickProfileToken, { selectedPlayerId: bestProspect?.id ?? null, prospects: draftPool.length });
+    // Select by the canonical weighted board value (need, scheme fit, upside, combine/interview risk).
+    const { bestProspect, bestIdx } = selectCanonicalDraftProspectForTeam({
+      teamId: pick.teamId,
+      pick,
+      draftPool,
+      sessionPicksByTeamNeedGroup,
+      meta,
+    });
     if (!bestProspect) break; // pool exhausted
 
     offseasonProfiler.addIteration({ kind: 'draft-pick', pickNumber: Number(pick?.overall ?? currentPickIndex + 1), round: Number(pick?.round ?? 0), teamId: pick.teamId, prospectsRemaining: draftPool.length });
