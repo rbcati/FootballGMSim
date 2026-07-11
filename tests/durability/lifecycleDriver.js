@@ -59,6 +59,7 @@ export class LifecycleDriver {
     this.dispatch = typeof opts.dispatch === 'function' ? opts.dispatch : defaultDispatch;
     this.loadWorker = typeof opts.loadWorker === 'function' ? opts.loadWorker : defaultLoad;
     this.onEvent = typeof opts.onEvent === 'function' ? opts.onEvent : () => {};
+    if (typeof opts.readDbPool === 'function') this.readDbPool = opts.readDbPool;
     this.view = null;
     this.booted = false;
   }
@@ -114,8 +115,17 @@ export class LifecycleDriver {
       if (matchesTarget(this.view.phase, targetPhase)) break;
       if (lastBatch && lastBatch.reachedTarget) break;
     }
-    this.emit('simToPhase', { targetPhase, checkpoint, ms: Date.now() - t, calls: calls + 1, phase: this.view.phase, year: this.view.year });
-    return { view: this.view, calls: calls + 1, ms: Date.now() - t, batch: lastBatch };
+    const attempts = Math.min(calls + 1, maxCalls);
+    const reachedTarget = matchesTarget(this.view?.phase, targetPhase) || lastBatch?.reachedTarget === true;
+    if (!reachedTarget) {
+      throw crashError(
+        checkpoint || targetPhase,
+        `SIM_TO_PHASE exhausted ${maxCalls} calls without reaching ${targetPhase}; current phase=${this.view?.phase}`,
+        null,
+      );
+    }
+    this.emit('simToPhase', { targetPhase, checkpoint, ms: Date.now() - t, calls: attempts, phase: this.view.phase, year: this.view.year });
+    return { view: this.view, calls: attempts, ms: Date.now() - t, batch: lastBatch };
   }
 
   /** Force a DB flush through the real save path. */
@@ -142,10 +152,10 @@ export class LifecycleDriver {
     const [players, teams, meta, seasons] = await Promise.all([
       Players.loadAll(), Teams.loadAll(), Meta.load(), Seasons.loadAll(),
     ]);
-    // Draft picks are indexed by owner; gather across all known team ids.
-    const teamIds = (teams || []).map((t) => t.id);
-    const pickLists = await Promise.all(teamIds.map((id) => DraftPicks.byOwner(id).catch(() => [])));
-    const picks = pickLists.flat();
+    // Full scan ensures corrupted/orphaned owner ids are still validated.
+    const picks = typeof DraftPicks.loadAll === 'function'
+      ? await DraftPicks.loadAll().catch(() => [])
+      : [];
     return { players: players || [], teams: teams || [], meta: meta || null, seasons: seasons || [], picks };
   }
 

@@ -74,6 +74,8 @@ export async function runDurabilityHarness(config = {}) {
 
   let seasonsAttempted = 0;
   let seasonsCompleted = 0;
+  let competitiveSeasonsCompleted = 0;
+  let completedThrough = CHECKPOINTS.AFTER_INIT;
 
   const evaluate = (ctx) => {
     sampleMem();
@@ -114,19 +116,22 @@ export async function runDurabilityHarness(config = {}) {
       // regular season → stops at 'playoffs'
       await driver.simToPhase('playoffs', { checkpoint: CHECKPOINTS.AFTER_REGULAR_SEASON });
       evaluate(await driver.buildContext({ season: s, phase: CHECKPOINTS.AFTER_REGULAR_SEASON, includeProbes: false }));
+      completedThrough = CHECKPOINTS.AFTER_REGULAR_SEASON;
 
-      if (perSeasonStopPhase === 'playoffs') { seasonsCompleted = s; onEvent({ type: 'seasonComplete', season: s, bounded: 'playoffs' }); break; }
+      if (perSeasonStopPhase === 'playoffs') { onEvent({ type: 'seasonBoundedStop', season: s, bounded: 'playoffs' }); break; }
 
       // playoffs/championship → stops at 'offseason'
       await driver.simToPhase('offseason', { checkpoint: CHECKPOINTS.AFTER_PLAYOFFS });
       const playoffCtx = await driver.buildContext({ season: s, phase: CHECKPOINTS.AFTER_PLAYOFFS, includeDb: true, includeProbes: false });
       const boundedBefore = canonicalSummary({ view: playoffCtx.view, db: playoffCtx.db, season: s });
       evaluate(playoffCtx);
+      competitiveSeasonsCompleted = s;
+      completedThrough = CHECKPOINTS.AFTER_PLAYOFFS;
 
       if (perSeasonStopPhase === 'offseason') {
         // Bounded smoke: exercise save/reload here since the rollover is skipped.
         if (durabilityCheckpoints.has(s)) await doSaveReload(boundedBefore, s);
-        seasonsCompleted = s; onEvent({ type: 'seasonComplete', season: s, bounded: 'offseason' }); break;
+        onEvent({ type: 'seasonBoundedStop', season: s, bounded: 'offseason' }); break;
       }
 
       // draft + free agency + rollover → stops at next 'preseason'
@@ -138,11 +143,13 @@ export async function runDurabilityHarness(config = {}) {
       });
       const before = canonicalSummary({ view: rolloverCtx.view, db: rolloverCtx.db, season: s });
       evaluate(rolloverCtx);
+      completedThrough = CHECKPOINTS.AFTER_SEASON_ROLLOVER;
 
       // ── save/reload durability validation ────────────────────────────
       if (durabilityCheckpoints.has(s)) await doSaveReload(before, s);
 
       seasonsCompleted = s;
+      competitiveSeasonsCompleted = s;
       onEvent({ type: 'seasonComplete', season: s });
     }
   } catch (err) {
@@ -180,6 +187,10 @@ export async function runDurabilityHarness(config = {}) {
   report.finalize({
     seasonsAttempted,
     seasonsCompleted,
+    competitiveSeasonsCompleted,
+    completedThrough,
+    boundedRun: perSeasonStopPhase !== 'rollover',
+    unexercisedLifecycleStages: unexercisedStages(perSeasonStopPhase),
     runtimeMs: Date.now() - t0,
     peakMemoryMb: Math.round(peakRss / (1024 * 1024)),
   });
@@ -227,4 +238,12 @@ function normalizeOutcome(r) {
     checkpointPhases: r.checkpoints.map((c) => `${c.season}:${c.phase}:${c.summary.fail}`),
     saveReloadOk: r.saveReload.map((s) => `${s.season}:${s.ok}`),
   };
+}
+
+function unexercisedStages(perSeasonStopPhase) {
+  if (perSeasonStopPhase === 'rollover') return [];
+  if (perSeasonStopPhase === 'offseason') {
+    return ['draft', 'freeAgency', 'progression', 'retirement', 'historyRollover', 'nextSeasonGeneration'];
+  }
+  return ['playoffs', 'draft', 'freeAgency', 'progression', 'retirement', 'historyRollover', 'nextSeasonGeneration'];
 }

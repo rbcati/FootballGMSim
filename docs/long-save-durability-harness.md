@@ -235,7 +235,8 @@ Stable JSON (see `report.js`, `DurabilityReport`):
 {
   "harnessVersion": "1.0.0", "gitSha": "…", "seed": 1684,
   "mode": "1-season", "failureMode": "fail-fast",
-  "requestedSeasons": 1, "seasonsAttempted": 1, "seasonsCompleted": 1,
+  "requestedSeasons": 1, "seasonsAttempted": 1, "seasonsCompleted": 0,
+  "competitiveSeasonsCompleted": 1, "completedThrough": "afterPlayoffs", "boundedRun": true,
   "runtimeMs": 0, "peakMemoryMb": 0,
   "deterministic": null, "determinismDetail": null,
   "firstFailure": null,            // {season,phase,invariantId,entityType,entityId,message}
@@ -255,7 +256,7 @@ counts) for commit-safe long-run artifacts.
 
 | Command | What |
 |---|---|
-| `npm run durability:test` | **Required-tier** focused tests: all pure invariant unit tests + a **bounded real-lifecycle smoke** (real worker, init→regular→playoffs, ~12s). |
+| `npm run durability:test` | **Required-tier** focused tests: all pure invariant unit tests + a **bounded real-lifecycle smoke** (real worker, init→regular→playoffs, ~18s). |
 | `npm run durability:smoke` | 1-season full lifecycle incl. rollover + save/reload. |
 | `npm run durability:5` | 5-season durability. |
 | `npm run durability:10` | 10-season durability (manual). |
@@ -273,8 +274,8 @@ container used for this PR:
 
 | Mode | Wall-clock | Peak RSS | Seasons completed | Notes |
 |---|---|---|---|---|
-| `durability:test` (units + bounded real smoke) | **~12 s** | ~0.3 GB | n/a (init→regular→playoffs) | 23 tests |
-| 1-season, `--stop-phase=offseason` (+ save/reload) | **~15.6 s** | **317 MB** | 1 (bounded) | 126 pass / 0 fail / 31 skip — see `reports/long-save-1-season.json` |
+| `durability:test` (units + bounded real smoke) | **~18 s** | ~0.3 GB | n/a (init→regular→playoffs) | 29 tests |
+| 1-season, `--stop-phase=offseason` (+ save/reload) | **~23.3 s** | **377 MB** | 0 full rollover / 1 competitive (bounded) | 126 pass / 0 fail / 31 skip — see `reports/long-save-1-season-bounded.json` |
 | 1-season, full rollover (default) | **did NOT complete in-window** | — | 0 | offseason draft rollover dominates (see below) |
 | 5-season, full rollover, 5-min phase budget | **~315 s** then phase-timeout | **508 MB** | 0 | 91 pass / 0 fail / 26 skip through `afterPlayoffs`; timed out in the season-1 rollover — see `reports/long-save-5-season.json` |
 | 10-season / 20-season | manual; blocked by same rollover cost | — | — | commands left available |

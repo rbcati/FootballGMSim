@@ -2,7 +2,7 @@
  * History, records & awards invariants.
  *
  * Phase-aware: a completed-season archive & awards only exist AFTER a season is
- * finalized. At the afterSeasonRollover checkpoint for season N (N>=2), the
+ * finalized. At the afterSeasonRollover checkpoint for season N (N>=1), the
  * league history must have accumulated (never overwritten) prior seasons.
  * Optional awards that the production system legitimately omits are not required.
  */
@@ -16,7 +16,7 @@ export function check(ctx) {
   const history = leagueHistory(ctx);
   const validTeamIds = teamIdSet(ctx);
   // A completed-season archive is expected once we have rolled past a full season.
-  const expectHistory = ctx.phase === 'afterSeasonRollover' && Number(ctx.season) >= 2;
+  const expectHistory = ctx.phase === 'afterSeasonRollover' && Number(ctx.season) >= 1;
 
   // ── completed-season history exists & accumulates ────────────────────────
   if (expectHistory) {
@@ -28,8 +28,8 @@ export function check(ctx) {
       }));
     } else {
       out.push(pass(ctx, 'history.season-archive-exists', `${history.length} completed seasons archived`));
-      // accumulation: at least (season-1) completed seasons should be present
-      const expectedMin = Number(ctx.season) - 1;
+      // accumulation: at least one archive per rolled season should be present
+      const expectedMin = Number(ctx.season);
       if (history.length < expectedMin) {
         out.push(fail(ctx, 'history.accumulates', {
           entityType: 'league', entityId: null,

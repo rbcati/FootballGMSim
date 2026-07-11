@@ -31,6 +31,7 @@ import { runInvariants } from './invariants/index.js';
 import { scanNumericCorruption, findDuplicateIds } from './invariants/helpers.js';
 import { DurabilityReport, recommendRepair } from './report.js';
 import { parseArgv } from './cli.js';
+import { LifecycleDriver } from './lifecycleDriver.js';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 function healthyTeam(id, roster = []) {
@@ -128,6 +129,13 @@ describe('invariant checkers — happy path', () => {
     expect(res.find((r) => r.id === 'references.player-to-team').status).toBe('fail');
   });
 
+  it('references: validates actual depth-chart assignments', () => {
+    const ctx = healthyViewCtx();
+    ctx.view.teams[0].depthChart = { QB: [ctx.view.teams[0].roster[0].id, 999999] };
+    const res = references.check(ctx);
+    expect(res.find((r) => r.id === 'references.depth-chart-to-roster').status).toBe('fail');
+  });
+
   it('numericSafety: catches Infinity buried in durable state', () => {
     const ctx = healthyViewCtx();
     ctx.view.teams[3].ptsFor = Infinity;
@@ -140,9 +148,9 @@ describe('invariant checkers — happy path', () => {
     expect(res.some((r) => r.status === 'fail')).toBe(false);
   });
 
-  it('history: expects accumulation only from season 2 rollover', () => {
+  it('history: requires an archive after the first rollover', () => {
     const ctx = healthyViewCtx({ phase: 'afterSeasonRollover', season: 1 });
-    expect(history.check(ctx).find((r) => r.id === 'history.season-archive-exists').status).toBe('skip');
+    expect(history.check(ctx).find((r) => r.id === 'history.season-archive-exists').status).toBe('fail');
     const ctx2 = healthyViewCtx({ phase: 'afterSeasonRollover', season: 3 });
     ctx2.view.leagueHistory = []; // no history despite season 3 → fail
     expect(history.check(ctx2).find((r) => r.id === 'history.season-archive-exists').status).toBe('fail');
@@ -225,6 +233,57 @@ describe('cli parser', () => {
   });
 });
 
+
+describe('runDurabilityHarness bounded semantics', () => {
+  it('classifies exhausted SIM_TO_PHASE calls as an incomplete lifecycle transition', async () => {
+    const { runDurabilityHarness } = await import('./longSaveHarness.js');
+    const dispatch = async (type) => {
+      if (type === 'INIT') return { type: 'OK', payload: { ok: true } };
+      if (type === 'USE_SAFE_STARTER_LEAGUE') return { type: 'OK', payload: healthyViewCtx().view };
+      if (type === 'SIM_TO_PHASE') return { type: 'OK', payload: { ...healthyViewCtx().view, phase: 'regular', dynastySoakSimBatch: { reachedTarget: false } } };
+      if (type === 'SAVE_NOW') return { type: 'OK', payload: { ok: true } };
+      return { type: 'OK', payload: {} };
+    };
+    const report = await runDurabilityHarness({
+      mode: '1-season', failureMode: 'collect-all', perSeasonStopPhase: 'rollover',
+      driverOverrides: { loadWorker: async () => {}, dispatch, readDbPool: async () => { const v = healthyViewCtx().view; return { players: v.teams.flatMap((t) => t.roster), teams: v.teams, meta: null, seasons: [], picks: [] }; } },
+    });
+    const json = report.toJSON();
+    expect(json.seasonsAttempted).toBe(1);
+    expect(json.seasonsCompleted).toBe(0);
+    expect(json.lifecycleException.classification).toBe('lifecycle-crash');
+    expect(json.firstFailure.invariantId).toBe('lifecycle.exception');
+    expect(json.lifecycleException.message).toContain('exhausted 15 calls');
+  });
+
+  it('does not count a bounded postseason stop as a completed rollover season', async () => {
+    const { runDurabilityHarness } = await import('./longSaveHarness.js');
+    const phases = ['playoffs', 'offseason'];
+    const dispatch = async (type) => {
+      if (type === 'INIT') return { type: 'OK', payload: { ok: true } };
+      if (type === 'USE_SAFE_STARTER_LEAGUE') return { type: 'OK', payload: healthyViewCtx().view };
+      if (type === 'SIM_TO_PHASE') {
+        const phase = phases.shift();
+        return { type: 'OK', payload: { ...healthyViewCtx().view, phase, week: phase === 'playoffs' ? 18 : 22 } };
+      }
+      if (type === 'SAVE_NOW') return { type: 'OK', payload: { ok: true } };
+      if (type === 'LOAD_SAVE') return { type: 'OK', payload: { ...healthyViewCtx().view, phase: 'offseason' } };
+      return { type: 'OK', payload: {} };
+    };
+    const report = await runDurabilityHarness({
+      mode: '1-season', failureMode: 'collect-all', perSeasonStopPhase: 'offseason',
+      driverOverrides: { loadWorker: async () => {}, dispatch, readDbPool: async () => { const v = healthyViewCtx().view; return { players: v.teams.flatMap((t) => t.roster), teams: v.teams, meta: null, seasons: [], picks: [] }; } },
+    });
+    const json = report.toJSON();
+    expect(json.seasonsAttempted).toBe(1);
+    expect(json.seasonsCompleted).toBe(0);
+    expect(json.competitiveSeasonsCompleted).toBe(1);
+    expect(json.completedThrough).toBe('afterPlayoffs');
+    expect(json.boundedRun).toBe(true);
+    expect(json.unexercisedLifecycleStages).toContain('draft');
+  });
+});
+
 // ── bounded real-lifecycle smoke (real worker, no expensive offseason) ──────
 describe('real-lifecycle bounded smoke', () => {
   it('boots the real league and validates through playoffs', async () => {
@@ -245,4 +304,25 @@ describe('real-lifecycle bounded smoke', () => {
     // No lifecycle crash while booting/simming the real production path.
     expect(json.lifecycleException).toBeNull();
   }, 180_000);
+});
+
+describe('LifecycleDriver.simToPhase target enforcement', () => {
+  it('returns when the view reaches the target phase', async () => {
+    const driver = new LifecycleDriver({ loadWorker: async () => {}, dispatch: async () => ({ type: 'OK', payload: { phase: 'playoffs', year: 2026 } }) });
+    const res = await driver.simToPhase('playoffs', { checkpoint: 'afterRegularSeason', maxCalls: 3 });
+    expect(res.view.phase).toBe('playoffs');
+    expect(res.calls).toBe(1);
+  });
+
+  it('returns when the batch explicitly reports reachedTarget', async () => {
+    const driver = new LifecycleDriver({ loadWorker: async () => {}, dispatch: async () => ({ type: 'OK', payload: { phase: 'regular', year: 2026, dynastySoakSimBatch: { reachedTarget: true } } }) });
+    const res = await driver.simToPhase('playoffs', { checkpoint: 'afterRegularSeason', maxCalls: 3 });
+    expect(res.batch.reachedTarget).toBe(true);
+  });
+
+  it('throws when maxCalls is exhausted before reaching the target', async () => {
+    const driver = new LifecycleDriver({ loadWorker: async () => {}, dispatch: async () => ({ type: 'OK', payload: { phase: 'regular', year: 2026, dynastySoakSimBatch: { reachedTarget: false } } }) });
+    await expect(driver.simToPhase('playoffs', { checkpoint: 'afterRegularSeason', maxCalls: 2 }))
+      .rejects.toMatchObject({ isLifecycleCrash: true, checkpoint: 'afterRegularSeason' });
+  });
 });
