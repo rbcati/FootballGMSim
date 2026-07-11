@@ -13,13 +13,13 @@
 - `handleMakeDraftPick()` remains the manual user command. It validates that the current pick belongs to the user, validates the selected draft-eligible player, commits through `_executeDraftPick()`, logs the transaction, runs scouting reveal, and transitions after the final pick.
 - `_executeDraftPick()` is the canonical mutation point for draft pick data, player team/status/rookie contract, roster/cap recalculation, draft-pick event emission, current pick advancement, and draft state persistence.
 - Draft completion in `handleSimDraftPick()` and `handleMakeDraftPick()` runs post-draft minicamp, legality validation, and `handleStartNewSeason()` to reach preseason.
-- No worker protocol change was required; the context is internal payload metadata on the existing handler call.
+- No worker protocol change was required; the context is an internal Symbol-keyed token on the existing handler call, so public worker payloads cannot forge batch auto-pick authority.
 
 ## Behavior contract
 
 Interactive/manual behavior remains default-safe. `SIM_DRAFT_PICK` callers do not pass the internal lifecycle context, so user-owned picks still return a blocked user-pick result and leave `currentPickIndex` unchanged for manual UI control.
 
-Batch lifecycle behavior is explicit. Only the `SIM_TO_PHASE` draft branch passes `{ allowUserAutoPick: targetPhase === 'preseason', source: 'sim_to_phase' }`, allowing the preseason rollover to make a real user-owned pick through the same weighted draft-board selector used for AI picks.
+Batch lifecycle behavior is explicit. Only the `SIM_TO_PHASE` draft branch passes the internal Symbol-keyed context, allowing the preseason rollover to make a real user-owned pick through the same weighted draft-board selector used for AI picks.
 
 ## Selection path and trade-up decision
 
@@ -29,12 +29,13 @@ The batch user auto-pick does **not** add autonomous user trade acceptance. AI-t
 
 ## No-progress contract
 
-`handleSimToPhase()` now captures draft progress state before and after each draft batch. A batch must advance the pick index, change pick identity, complete the draft, change phase, or return an explicit blocked/error result. Otherwise it throws `DRAFT_BATCH_NO_PROGRESS` with season, phase, pick index, pick identity, and team ID.
+`handleSimToPhase()` now captures draft progress state before and after each draft batch. A batch must advance the pick index, change pick identity, complete the draft, or change phase. Blocked/error results are treated as lifecycle stops rather than progress, and unchanged state throws `DRAFT_BATCH_NO_PROGRESS` with season, phase, pick index, pick identity, and team ID.
 
 ## Files changed
 
 - `src/worker/worker.js` (draft lifecycle context, no-progress guard, shared selector, and prospect class size alignment with compensatory picks)
 - `src/worker/__tests__/simToPhaseDraftAutoPickRegression.test.js`
+- `tests/integration/simToPhaseDraftAutoPick.worker.test.js`
 - `docs/offseason-rollover-performance-profile-v1.md`
 - `docs/sim-to-phase-draft-user-pick-auto-advance-v1.md`
 

@@ -5331,7 +5331,7 @@ async function handleSimToPhase({ targetPhase }, id) {
             draftDone = true;
           } else {
             const beforeDraftStep = captureDraftProgressState(cache.getMeta());
-            const draftStepResult = await offseasonProfiler.measure('stage.draft.pick-batch', { draftGuard }, () => handleSimDraftPick({ allowUserAutoPick: targetPhase === 'preseason', source: 'sim_to_phase' }, null));
+            const draftStepResult = await offseasonProfiler.measure('stage.draft.pick-batch', { draftGuard }, () => handleSimDraftPick({ [SIM_TO_PHASE_DRAFT_CONTEXT]: targetPhase === 'preseason' }, null));
             const afterDraftStep = captureDraftProgressState(cache.getMeta());
             if (!draftBatchMadeProgress(beforeDraftStep, afterDraftStep, draftStepResult)) {
               throw createDraftNoProgressError(beforeDraftStep, afterDraftStep, draftStepResult);
@@ -10688,6 +10688,8 @@ async function handleMakeDraftPick({ playerId }, id) {
 }
 
 
+const SIM_TO_PHASE_DRAFT_CONTEXT = Symbol('SIM_TO_PHASE_DRAFT_CONTEXT');
+
 function captureDraftProgressState(meta = cache.getMeta()) {
   const draftState = meta?.draftState;
   const pick = draftState?.picks?.[draftState?.currentPickIndex];
@@ -10702,7 +10704,7 @@ function captureDraftProgressState(meta = cache.getMeta()) {
 }
 
 function draftBatchMadeProgress(before, after, result = {}) {
-  if (result?.blocked || result?.error) return true;
+  if (result?.blocked || result?.error) return false;
   if (!before?.draftComplete && after?.draftComplete) return true;
   if (after?.phase !== before?.phase) return true;
   if (Number(after?.currentPickIndex ?? -1) > Number(before?.currentPickIndex ?? -1)) return true;
@@ -10806,7 +10808,7 @@ function selectCanonicalDraftProspectForTeam({ teamId, pick, draftPool, sessionP
  */
 async function handleSimDraftPick(payload = {}, id) {
   return offseasonProfiler.measure('draft.sim-batch', {}, async () => {
-  const allowUserAutoPick = payload?.allowUserAutoPick === true && payload?.source === 'sim_to_phase';
+  const allowUserAutoPick = payload?.[SIM_TO_PHASE_DRAFT_CONTEXT] === true;
   const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta?.draftState) { post(toUI.ERROR, { message: 'No active draft' }, id); return; }
 
