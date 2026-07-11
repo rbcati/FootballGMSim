@@ -105,6 +105,26 @@ describe('TradeCenter — UX cleanup', () => {
     expect(container.textContent).not.toMatch(/CHI · Cap After/);
   });
 
+
+  it('labels local package numbers as directional estimates, not exact engine values', async () => {
+    const { findByLabelText, container } = render(
+      <TradeCenter league={makeLeague()} actions={makeActions()} />,
+    );
+
+    fireEvent.click(await findByLabelText(/Add to Trade Give Guy/i));
+    fireEvent.click(await findByLabelText(/Add to Trade Get Guy/i));
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('Your estimate:');
+      expect(container.textContent).toContain('Their estimate:');
+      expect(container.textContent).toContain('Estimate: balanced');
+      expect(container.textContent).toContain('Directional estimate only');
+    });
+    expect(container.textContent).not.toContain('Fair deal');
+    expect(container.textContent).not.toContain('Favorable for you');
+    expect(container.textContent).not.toContain('Unfavorable for you');
+  });
+
   it('reports a rejected package clearly after a failed proposal', async () => {
     const { findByLabelText, getByTestId, getAllByText } = render(
       <TradeCenter league={makeLeague()} actions={makeActions()} />,

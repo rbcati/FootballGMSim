@@ -274,3 +274,14 @@ No production patch was made. Only characterization tests and this audit documen
 * Should incoming proactive AI offers be re-valued on accept, or is generation-time validation enough?
 * Should draft-board pick protection remain a worker-local modifier or be moved to a package valuation adapter?
 * Should front-office persona/deadline modifiers be visible to users as reasons?
+
+## 16. PR #1683 implementation status — Canonical Trade Valuation Wiring V1
+
+- Worker package valuation now delegates from `calcAssetBundleValue` to the pure `calculatePackageAdjustedValue` adapter in `src/core/trades/packageValuation.js`; the worker remains responsible only for resolving cache-backed player and pick IDs before calling the adapter.
+- Canonical raw player valuation routes through `getAssetValue(player, null, context)`.
+- Canonical raw pick valuation routes through `getAssetValue({ assetType: 'pick', ...pick }, null, { currentSeason: null })` in this package path. The `currentSeason: null` argument is intentional parity wiring: the pre-#1683 worker package path used the round matrix as its raw pick input, so passing the live season would newly apply canonical future-pick decay and alter acceptance outputs in a wiring-only PR.
+- Contextual pick modifiers intentionally remain explicit outside raw asset valuation: projected range/slot, trade-week urgency, team-direction preference, draft-board protection, compensatory-pick discount, strategic posture, and package diminishing returns.
+- Strategic posture, positional-need, cap-burden, draft-board player protection, and package diminishing-return behavior remain separate from raw asset valuation and are preserved in the same order as the extracted worker path.
+- Numerical parity is exact in the executable package adapter fixtures for current firsts, future firsts, second-round picks, late-round picks, projected and unprojected picks, contender/rebuilder context, draft-board protection, compensatory picks, player-only packages, pick-only packages, mixed player-plus-pick packages, and multi-asset diminishing-return packages.
+- Trade Center now labels local value numbers as displayed estimates (`Your estimate`, `Their estimate`, `Estimate: balanced/favors...`) and states that final AI evaluation includes team needs, contracts, picks, and difficulty.
+- Deferred product decisions remain: whether Easy should remain at 0.80; whether Trade Center should receive exact worker preview values; whether incoming proactive AI offers should be re-valued at acceptance time; whether persona/deadline modifiers should be fully visible to users; broad trade formula rebalance; and legacy trade-code deletion.

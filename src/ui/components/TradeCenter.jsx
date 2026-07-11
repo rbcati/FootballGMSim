@@ -105,18 +105,18 @@ function ValueBar({ myValue, theirValue }) {
   const myPct = Math.round((myValue / total) * 100);
   const diff = myValue - theirValue;
   const fairnessColor = Math.abs(diff) < total * 0.15 ? "var(--success)" : diff > 0 ? "var(--accent)" : "var(--danger)";
-  const label = Math.abs(diff) < total * 0.15 ? "Fair deal" : diff > 0 ? "Favorable for you" : "Unfavorable for you";
+  const label = Math.abs(diff) < total * 0.15 ? "Estimate: balanced" : diff > 0 ? "Estimate favors you" : "Estimate favors them";
   const pulse = Math.abs(diff) < total * 0.15
-    ? "Both sides are in range. This should get a real look."
+    ? "Directional estimate only — final AI evaluation includes team needs, contracts, picks, and difficulty."
     : diff > 0
-      ? "You are asking for more value than you're sending."
-      : "You are paying a premium. Push to close if this is your target.";
+      ? "Your local estimate says you are asking for more value than you're sending."
+      : "Your local estimate says you are paying a premium. Final AI evaluation may differ.";
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
-        <span>You give: <strong style={{ color: "var(--text)" }}>{myValue.toLocaleString()}</strong></span>
+        <span>Your estimate: <strong style={{ color: "var(--text)" }}>{myValue.toLocaleString()}</strong></span>
         <span style={{ fontWeight: 700, color: fairnessColor }}>{label}</span>
-        <span>You get: <strong style={{ color: "var(--text)" }}>{theirValue.toLocaleString()}</strong></span>
+        <span>Their estimate: <strong style={{ color: "var(--text)" }}>{theirValue.toLocaleString()}</strong></span>
       </div>
       <div style={{ height: 8, borderRadius: 4, background: "var(--hairline)", display: "flex", overflow: "hidden" }}>
         <div style={{ width: `${myPct}%`, background: fairnessColor, transition: "width .3s" }} />
@@ -506,8 +506,8 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     });
   }, [receiving, offering, theirRosterMap, myRosterMap, myIntel, liveMyTeam?.capRoom, myCapAfter]);
 
-  // Display-only "Trade Breakdown" context. Interprets numbers this screen
-  // already renders (offer values, projected cap room, visible needs) via the
+  // DisplayedEstimateValue only: this local heuristic is not the worker acceptance value.
+  // Interprets numbers this screen already renders (offer estimates, projected cap room, visible needs) via the
   // pure deriveTradeContext selector — it feeds nothing back into the engine.
   const tradeContext = useMemo(() => deriveTradeContext({
     userGivesPlayers: [...offering].map((id) => myRosterMap.get(toAssetId(id))).filter(Boolean),
