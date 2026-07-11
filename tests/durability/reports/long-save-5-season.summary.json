@@ -1,0 +1,191 @@
+{
+  "harnessVersion": "1.0.0",
+  "gitSha": "b0d0a95",
+  "seed": 1684,
+  "mode": "5-season",
+  "failureMode": "collect-all",
+  "perSeasonStopPhase": "rollover",
+  "requestedSeasons": 5,
+  "seasonsAttempted": 1,
+  "seasonsCompleted": 0,
+  "runtimeMs": 315808,
+  "peakMemoryMb": 508,
+  "deterministic": null,
+  "determinismDetail": null,
+  "firstFailure": {
+    "season": 1,
+    "phase": "afterSeasonRollover",
+    "invariantId": "lifecycle.exception",
+    "entityType": "harness",
+    "entityId": null,
+    "message": "Timeout 300000ms waiting for SIM_TO_PHASE response (id=dynasty-soak-10)"
+  },
+  "lifecycleException": {
+    "message": "Timeout 300000ms waiting for SIM_TO_PHASE response (id=dynasty-soak-10)",
+    "checkpoint": "afterSeasonRollover",
+    "season": 1,
+    "classification": "performance-timeout",
+    "workerPayload": null
+  },
+  "saveReload": [],
+  "checkpoints": [
+    {
+      "season": 0,
+      "phase": "afterInit",
+      "week": 1,
+      "summary": {
+        "pass": 33,
+        "fail": 0,
+        "skip": 7
+      },
+      "failures": [],
+      "skipped": [
+        {
+          "id": "schedule.champion-valid",
+          "reason": "Champion not expected during phase \"afterInit\""
+        },
+        {
+          "id": "draft.no-duplicate-class-seasons",
+          "reason": "No draft-class archive probed at this checkpoint"
+        },
+        {
+          "id": "history.season-archive-exists",
+          "reason": "Completed-season archive not expected at phase \"afterInit\" season 0"
+        },
+        {
+          "id": "history.champion-refs-valid",
+          "reason": "No archived seasons to validate at this checkpoint"
+        },
+        {
+          "id": "history.award-refs-valid",
+          "reason": "No award ledger populated at this checkpoint"
+        },
+        {
+          "id": "references.offer-to-entities",
+          "reason": "No pending FA offers at this checkpoint"
+        },
+        {
+          "id": "saveReload.canonical-summary-stable",
+          "reason": "Save/reload not exercised at this checkpoint"
+        }
+      ]
+    },
+    {
+      "season": 1,
+      "phase": "afterRegularSeason",
+      "week": 19,
+      "summary": {
+        "pass": 24,
+        "fail": 0,
+        "skip": 13
+      },
+      "failures": [],
+      "skipped": [
+        {
+          "id": "roster.no-roster-and-free-agent-overlap",
+          "reason": "Full player pool (DB snapshot) not captured at this checkpoint"
+        },
+        {
+          "id": "roster.no-missing-player-reference",
+          "reason": "Full player pool (DB snapshot) not captured at this checkpoint"
+        },
+        {
+          "id": "schedule.champion-valid",
+          "reason": "Champion not expected during phase \"afterRegularSeason\""
+        },
+        {
+          "id": "retirement.retired-not-active",
+          "reason": "Retired ledger or full pool not available at this checkpoint"
+        },
+        {
+          "id": "retirement.no-impossibly-old-actives",
+          "reason": "Full pool not available at this checkpoint"
+        },
+        {
+          "id": "draft.no-duplicate-class-seasons",
+          "reason": "No draft-class archive probed at this checkpoint"
+        },
+        {
+          "id": "freeAgency.pool-available",
+          "reason": "Full player pool (DB snapshot incl. free agents) not captured at this checkpoint"
+        },
+        {
+          "id": "history.season-archive-exists",
+          "reason": "Completed-season archive not expected at phase \"afterRegularSeason\" season 1"
+        },
+        {
+          "id": "history.champion-refs-valid",
+          "reason": "No archived seasons to validate at this checkpoint"
+        },
+        {
+          "id": "history.award-refs-valid",
+          "reason": "No award ledger populated at this checkpoint"
+        },
+        {
+          "id": "references.player-to-team",
+          "reason": "Full player pool not available at this checkpoint"
+        },
+        {
+          "id": "references.offer-to-entities",
+          "reason": "No pending FA offers at this checkpoint"
+        },
+        {
+          "id": "saveReload.canonical-summary-stable",
+          "reason": "Save/reload not exercised at this checkpoint"
+        }
+      ]
+    },
+    {
+      "season": 1,
+      "phase": "afterPlayoffs",
+      "week": 0,
+      "summary": {
+        "pass": 34,
+        "fail": 0,
+        "skip": 6
+      },
+      "failures": [],
+      "skipped": [
+        {
+          "id": "draft.no-duplicate-class-seasons",
+          "reason": "No draft-class archive probed at this checkpoint"
+        },
+        {
+          "id": "history.season-archive-exists",
+          "reason": "Completed-season archive not expected at phase \"afterPlayoffs\" season 1"
+        },
+        {
+          "id": "history.champion-refs-valid",
+          "reason": "No archived seasons to validate at this checkpoint"
+        },
+        {
+          "id": "history.award-refs-valid",
+          "reason": "No award ledger populated at this checkpoint"
+        },
+        {
+          "id": "references.offer-to-entities",
+          "reason": "No pending FA offers at this checkpoint"
+        },
+        {
+          "id": "saveReload.canonical-summary-stable",
+          "reason": "Save/reload not exercised at this checkpoint"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "passed": 91,
+    "failed": 0,
+    "skipped": 26
+  },
+  "crashBlockersPatched": [],
+  "deferredFindings": [
+    {
+      "type": "performance limitation",
+      "checkpoint": "afterSeasonRollover",
+      "season": 1,
+      "detail": "SIM_TO_PHASE did not return within the configured phase timeout at afterSeasonRollover (season 1). The offseason draft rollover dominates runtime; see docs §22."
+    }
+  ],
+  "recommendedNextRepairPR": "Offseason performance-profiling PR: the draft/FA rollover did not complete within the phase budget at afterSeasonRollover (season 1). This is a performance limitation, not state corruption."
+}

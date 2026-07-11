@@ -3,6 +3,9 @@ name: Netlify Build Parity
 on:
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Nightly optional durability integration (5-season). Not a PR gate.
+    - cron: '0 7 * * *'
 
 jobs:
   parity:
@@ -23,8 +26,36 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
+      # Required per-PR durability check (~12s): pure invariant unit tests +
+      # a bounded real-lifecycle smoke (init -> regular season -> playoffs).
+      # Full-season / 5/10/20-season modes are intentionally NOT gated here —
+      # the offseason rollover costs minutes (see docs/long-save-durability-harness.md §17).
+      - name: Run long-save durability check
+        run: npm run durability:test
+
       - name: Verify deploy parity checks
         run: npm run check:deploy
+
+  # Optional / scheduled integration tier — 5-season durability. Runs on the
+  # nightly schedule or manual dispatch only; never blocks a PR.
+  durability-5-season:
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Use Node 22 (Netlify parity)
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run 5-season durability (collect-all, report)
+        run: npm run durability:5 -- --collect-all --write-report --summary
 
   first-session-smoke:
     needs: parity

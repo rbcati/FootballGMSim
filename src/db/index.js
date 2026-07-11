@@ -538,6 +538,7 @@ export const DraftPicks = {
   saveBulk: (picks)  => dbPutBulk(STORES.DRAFT_PICKS, picks),
   byOwner:  (teamId) => dbGetAllByIndex(STORES.DRAFT_PICKS, 'currentOwner', teamId),
   byYear:   (year)   => dbGetAllByIndex(STORES.DRAFT_PICKS, 'year',         year),
+  loadAll:  ()       => dbGetAll(STORES.DRAFT_PICKS),
 };
 
 // --- News ---
