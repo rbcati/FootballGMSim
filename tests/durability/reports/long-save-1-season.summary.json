@@ -1,0 +1,211 @@
+{
+  "harnessVersion": "1.0.0",
+  "gitSha": "b0d0a95",
+  "seed": 1684,
+  "mode": "1-season",
+  "failureMode": "collect-all",
+  "perSeasonStopPhase": "offseason",
+  "requestedSeasons": 1,
+  "seasonsAttempted": 1,
+  "seasonsCompleted": 1,
+  "runtimeMs": 15593,
+  "peakMemoryMb": 317,
+  "deterministic": null,
+  "determinismDetail": null,
+  "firstFailure": null,
+  "lifecycleException": null,
+  "saveReload": [
+    {
+      "season": 1,
+      "phase": "afterReload",
+      "ok": true,
+      "mismatches": []
+    }
+  ],
+  "checkpoints": [
+    {
+      "season": 0,
+      "phase": "afterInit",
+      "week": 1,
+      "summary": {
+        "pass": 33,
+        "fail": 0,
+        "skip": 7
+      },
+      "failures": [],
+      "skipped": [
+        {
+          "id": "schedule.champion-valid",
+          "reason": "Champion not expected during phase \"afterInit\""
+        },
+        {
+          "id": "draft.no-duplicate-class-seasons",
+          "reason": "No draft-class archive probed at this checkpoint"
+        },
+        {
+          "id": "history.season-archive-exists",
+          "reason": "Completed-season archive not expected at phase \"afterInit\" season 0"
+        },
+        {
+          "id": "history.champion-refs-valid",
+          "reason": "No archived seasons to validate at this checkpoint"
+        },
+        {
+          "id": "history.award-refs-valid",
+          "reason": "No award ledger populated at this checkpoint"
+        },
+        {
+          "id": "references.offer-to-entities",
+          "reason": "No pending FA offers at this checkpoint"
+        },
+        {
+          "id": "saveReload.canonical-summary-stable",
+          "reason": "Save/reload not exercised at this checkpoint"
+        }
+      ]
+    },
+    {
+      "season": 1,
+      "phase": "afterRegularSeason",
+      "week": 19,
+      "summary": {
+        "pass": 24,
+        "fail": 0,
+        "skip": 13
+      },
+      "failures": [],
+      "skipped": [
+        {
+          "id": "roster.no-roster-and-free-agent-overlap",
+          "reason": "Full player pool (DB snapshot) not captured at this checkpoint"
+        },
+        {
+          "id": "roster.no-missing-player-reference",
+          "reason": "Full player pool (DB snapshot) not captured at this checkpoint"
+        },
+        {
+          "id": "schedule.champion-valid",
+          "reason": "Champion not expected during phase \"afterRegularSeason\""
+        },
+        {
+          "id": "retirement.retired-not-active",
+          "reason": "Retired ledger or full pool not available at this checkpoint"
+        },
+        {
+          "id": "retirement.no-impossibly-old-actives",
+          "reason": "Full pool not available at this checkpoint"
+        },
+        {
+          "id": "draft.no-duplicate-class-seasons",
+          "reason": "No draft-class archive probed at this checkpoint"
+        },
+        {
+          "id": "freeAgency.pool-available",
+          "reason": "Full player pool (DB snapshot incl. free agents) not captured at this checkpoint"
+        },
+        {
+          "id": "history.season-archive-exists",
+          "reason": "Completed-season archive not expected at phase \"afterRegularSeason\" season 1"
+        },
+        {
+          "id": "history.champion-refs-valid",
+          "reason": "No archived seasons to validate at this checkpoint"
+        },
+        {
+          "id": "history.award-refs-valid",
+          "reason": "No award ledger populated at this checkpoint"
+        },
+        {
+          "id": "references.player-to-team",
+          "reason": "Full player pool not available at this checkpoint"
+        },
+        {
+          "id": "references.offer-to-entities",
+          "reason": "No pending FA offers at this checkpoint"
+        },
+        {
+          "id": "saveReload.canonical-summary-stable",
+          "reason": "Save/reload not exercised at this checkpoint"
+        }
+      ]
+    },
+    {
+      "season": 1,
+      "phase": "afterPlayoffs",
+      "week": 0,
+      "summary": {
+        "pass": 34,
+        "fail": 0,
+        "skip": 6
+      },
+      "failures": [],
+      "skipped": [
+        {
+          "id": "draft.no-duplicate-class-seasons",
+          "reason": "No draft-class archive probed at this checkpoint"
+        },
+        {
+          "id": "history.season-archive-exists",
+          "reason": "Completed-season archive not expected at phase \"afterPlayoffs\" season 1"
+        },
+        {
+          "id": "history.champion-refs-valid",
+          "reason": "No archived seasons to validate at this checkpoint"
+        },
+        {
+          "id": "history.award-refs-valid",
+          "reason": "No award ledger populated at this checkpoint"
+        },
+        {
+          "id": "references.offer-to-entities",
+          "reason": "No pending FA offers at this checkpoint"
+        },
+        {
+          "id": "saveReload.canonical-summary-stable",
+          "reason": "Save/reload not exercised at this checkpoint"
+        }
+      ]
+    },
+    {
+      "season": 1,
+      "phase": "afterReload",
+      "week": 0,
+      "summary": {
+        "pass": 35,
+        "fail": 0,
+        "skip": 5
+      },
+      "failures": [],
+      "skipped": [
+        {
+          "id": "draft.no-duplicate-class-seasons",
+          "reason": "No draft-class archive probed at this checkpoint"
+        },
+        {
+          "id": "history.season-archive-exists",
+          "reason": "Completed-season archive not expected at phase \"afterReload\" season 1"
+        },
+        {
+          "id": "history.champion-refs-valid",
+          "reason": "No archived seasons to validate at this checkpoint"
+        },
+        {
+          "id": "history.award-refs-valid",
+          "reason": "No award ledger populated at this checkpoint"
+        },
+        {
+          "id": "references.offer-to-entities",
+          "reason": "No pending FA offers at this checkpoint"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "passed": 126,
+    "failed": 0,
+    "skipped": 31
+  },
+  "crashBlockersPatched": [],
+  "deferredFindings": [],
+  "recommendedNextRepairPR": null
+}
