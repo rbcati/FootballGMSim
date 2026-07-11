@@ -249,6 +249,7 @@ import {
   POSITION_MARKET_WEIGHTS,
   POSITION_PAY_SCALARS,
 } from '../core/trades/assetValuation.js';
+import { calculatePackageAdjustedValue } from '../core/trades/packageValuation.js';
 import { archiveCompletedSeasonIfNeeded, ensureLeagueHistoryContainer } from '../core/leagueHistory.js';
 import {
   buildLeagueYearSummary,
@@ -1490,14 +1491,6 @@ function updateTradeOfferMemory(metaObj, offers = []) {
   return next;
 }
 
-function getPickRoundValue(round, { week = 1, teamDirection = 'balanced', projectedRange = 'mid' } = {}) {
-  const base = getPickBaseValueFromMatrix(round);
-  const rangeAdj = projectedRange === 'early' ? 1.22 : projectedRange === 'late' ? 0.88 : 1.0;
-  const stageAdj = Number(week) >= 10 ? 1.1 : Number(week) >= 6 ? 1.05 : 1.0;
-  const directionAdj = teamDirection === 'rebuilding' ? 1.15 : teamDirection === 'contender' ? 0.92 : 1.0;
-  return base * rangeAdj * stageAdj * directionAdj;
-}
-
 // PREMIUM_POSITIONS, LOW_PREMIUM_POSITIONS, POSITION_MARKET_WEIGHTS and
 // POSITION_PAY_SCALARS are imported from the shared asset-valuation module so
 // there is a single definition across every trade consumer.
@@ -1653,46 +1646,12 @@ function awardCompensatoryPicksForUpcomingDraft(metaObj = ensureCompMeta(cache.g
 }
 
 function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {}) {
-  const isDraftBoardMode = context?.marketMode === 'draft_board';
-  const teamPosture = context?.teamPosture ?? TEAM_STRATEGIC_POSTURE.NEUTRAL;
-  const currentSeason = Number(context?.currentSeason ?? 0) || null;
-  const depthNeedsMap = context?.depthNeedsMap ?? null;
-  const effectiveIncomingCapRoom = Number.isFinite(Number(context?.effectiveIncomingCapRoom))
-    ? Number(context.effectiveIncomingCapRoom)
-    : null;
-  const adjustedAssetValues = [];
-  const playerVal = playerIds.reduce((sum, pid) => {
-    const player = cache.getPlayer(Number(pid));
-    let value = _tradeValue(player, context);
-    if (isDraftBoardMode && player) {
-      const age = Number(player?.age ?? 27);
-      const yearsRemaining = Number(player?.contract?.yearsRemaining ?? player?.contract?.years ?? 1);
-      const veteranPenalty = age >= 30 ? 0.72 : age >= 28 ? 0.84 : 0.95;
-      const lowPremiumPenalty = LOW_PREMIUM_POSITIONS.has(player?.pos) ? 0.78 : 1.0;
-      const expiringPenalty = yearsRemaining <= 1 ? 0.78 : 1.0;
-      value *= veteranPenalty * lowPremiumPenalty * expiringPenalty;
-    }
-    const playerAsset = { assetType: 'player', ...player };
-    let adjusted = applyStrategicValuationModifiers(playerAsset, value, teamPosture, { currentSeason });
-    if (depthNeedsMap && player) {
-      adjusted = applyPositionalNeedModifiers(playerAsset, adjusted, depthNeedsMap, teamPosture);
-    }
-    if (effectiveIncomingCapRoom != null && player) {
-      adjusted = applyContractCapBurdenModifiers(playerAsset, adjusted, effectiveIncomingCapRoom, teamPosture);
-    }
-    adjustedAssetValues.push(adjusted);
-    return sum + adjusted;
-  }, 0);
-  const pickVal = pickIds.reduce((sum, pid) => {
-    const pick = resolvePickById(pid);
-    let value = getPickRoundValue(pick?.round, { week: context?.week ?? 1, teamDirection: context?.teamDirection ?? 'balanced', projectedRange: pick?.projectedRange ?? 'mid' });
-    if (isDraftBoardMode) value *= 1.2;
-    if (pick?.isCompensatory) value *= 0.84;
-    const adjusted = applyStrategicValuationModifiers({ assetType: 'pick', ...pick }, value, teamPosture, { currentSeason });
-    adjustedAssetValues.push(adjusted);
-    return sum + adjusted;
-  }, 0);
-  return evaluateMultiAssetPackageValue(adjustedAssetValues);
+  const players = playerIds.map((pid) => cache.getPlayer(Number(pid))).filter(Boolean);
+  const picks = pickIds.map((pid) => resolvePickById(pid)).filter(Boolean);
+  return calculatePackageAdjustedValue(
+    { players, picks },
+    { ...context, lowPremiumPositions: LOW_PREMIUM_POSITIONS },
+  );
 }
 
 function resolvePickById(pickId) {
