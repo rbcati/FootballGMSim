@@ -63,6 +63,22 @@ describe('package valuation adapter', () => {
     expect(multi).toBeLessThan(linear);
   });
 
+
+  it('feeds unchanged Easy/Normal/Hard thresholds with the same representative player-plus-pick package', () => {
+    const userPackage = calculatePackageAdjustedValue({ players: [player], picks: [{ id: 'p2', round: 2, season: 2026 }] }, baseContext);
+    const aiPackage = Math.round(userPackage / 0.9);
+    const thresholds = { Easy: 0.8, Normal: 1, Hard: 1.15 };
+    const decisions = Object.fromEntries(Object.entries(thresholds).map(([difficulty, multiplier]) => [
+      difficulty,
+      userPackage >= aiPackage * multiplier,
+    ]));
+    expect(decisions).toEqual({ Easy: true, Normal: false, Hard: false });
+    expect(Object.fromEntries(Object.entries(thresholds).map(([difficulty, multiplier]) => [
+      difficulty,
+      Math.round(aiPackage * multiplier),
+    ]))).toEqual({ Easy: Math.round(aiPackage * 0.8), Normal: aiPackage, Hard: Math.round(aiPackage * 1.15) });
+  });
+
   it.each([
     ['current first', { round: 1, season: 2026 }],
     ['future first', { round: 1, season: 2028 }],
