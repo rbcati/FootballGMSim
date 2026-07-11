@@ -168,7 +168,7 @@ test.describe('Daily Regression Pass', () => {
         const hasCutButton = await page.evaluate(async () => {
             const rows = document.querySelectorAll('.standings-table tbody tr, table tbody tr');
             for(let row of rows) {
-                const cutBtn = Array.from(row.querySelectorAll('button')).find(b => b.innerText === 'Cut' || b.innerText === 'Release');
+                const cutBtn = Array.from(row.querySelectorAll('button')).find(b => b.innerText && (b.innerText.toLowerCase().includes('cut') || b.innerText.toLowerCase().includes('release')));
                 if (cutBtn) { cutBtn.click(); return true; }
             }
             return false;
@@ -181,7 +181,7 @@ test.describe('Daily Regression Pass', () => {
             page.on('dialog', d => d.accept());
 
             await page.evaluate(() => {
-                const confirmBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText === 'Confirm Release');
+                const confirmBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText && b.innerText.toLowerCase().includes('confirm release'));
                 if (confirmBtn) { confirmBtn.click(); }
             });
 
@@ -220,7 +220,7 @@ test.describe('Daily Regression Pass', () => {
         const playerInfo = await page.evaluate(() => {
             const rows = Array.from(document.querySelectorAll('.standings-table tbody tr, table tbody tr'));
             for (let i = 0; i < rows.length; i++) {
-                const btn = Array.from(rows[i].querySelectorAll('button')).find(b => b.innerText === 'Offer' || b.innerText === 'Update' || b.innerText === 'Sign');
+                const btn = Array.from(rows[i].querySelectorAll('button')).find(b => b.innerText && (b.innerText.toLowerCase().includes('offer') || b.innerText.toLowerCase().includes('update') || b.innerText.toLowerCase().includes('sign')));
                 if (btn && !btn.disabled) {
                     return { index: i, text: btn.innerText };
                 }
@@ -232,7 +232,7 @@ test.describe('Daily Regression Pass', () => {
             // Click "Offer" button
             await page.evaluate((idx) => {
                 const rows = Array.from(document.querySelectorAll('.standings-table tbody tr, table tbody tr'));
-                const btn = Array.from(rows[idx].querySelectorAll('button')).find(b => b.innerText === 'Offer' || b.innerText === 'Update' || b.innerText === 'Sign');
+                const btn = Array.from(rows[idx].querySelectorAll('button')).find(b => b.innerText && (b.innerText.toLowerCase().includes('offer') || b.innerText.toLowerCase().includes('update') || b.innerText.toLowerCase().includes('sign')));
                 if(btn) btn.click();
             }, playerInfo.index);
             await page.waitForTimeout(500);
@@ -240,7 +240,7 @@ test.describe('Daily Regression Pass', () => {
             // Now click "Confirm" in the sign form (which is likely in the next row or same context)
             // The sign form row has "Confirm" button.
             await page.evaluate(() => {
-                 const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText === 'Confirm');
+                 const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText && b.innerText.toLowerCase().includes('confirm'));
                  if(btn) btn.click();
             });
             await page.waitForTimeout(2000);
@@ -251,7 +251,7 @@ test.describe('Daily Regression Pass', () => {
             const offerStatus = await page.evaluate(() => {
                 const rows = Array.from(document.querySelectorAll('.standings-table tbody tr, table tbody tr'));
                 for(let row of rows) {
-                    const btn = Array.from(row.querySelectorAll('button')).find(b => b.innerText === 'Update' || b.innerText === 'Revoke' || b.innerText === 'Release');
+                    const btn = Array.from(row.querySelectorAll('button')).find(b => b.innerText && (b.innerText.toLowerCase().includes('update') || b.innerText.toLowerCase().includes('revoke') || b.innerText.toLowerCase().includes('release')));
                     if (btn) return true;
                 }
                 return false;
