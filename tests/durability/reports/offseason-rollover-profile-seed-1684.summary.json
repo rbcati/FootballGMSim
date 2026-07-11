@@ -1,0 +1,4305 @@
+{
+  "profileVersion": "1.0.0",
+  "seed": 1684,
+  "gitSha": "f1f3a057709057d6bcb1b1518e38108b4613f978",
+  "startPhase": "offseason",
+  "targetPhase": "preseason",
+  "runId": 1,
+  "completed": false,
+  "startYear": 2026,
+  "endYear": 2026,
+  "error": {
+    "message": "Timeout 120000ms waiting for SIM_TO_PHASE response (id=dynasty-soak-5)",
+    "checkpoint": "afterSeasonRollover"
+  },
+  "recommendations": [
+    "#1687 \u2014 SIM_TO_PHASE Draft User-Pick Auto-Advance V1: handle user-owned draft picks in the batch rollover path so SIM_TO_PHASE can make forward progress while preserving manual draft behavior outside batch simulation."
+  ],
+  "runtimeMs": 140818.46402500002,
+  "peakMemoryMb": 513,
+  "activeStage": "lifecycle.SIM_TO_PHASE",
+  "firstIncompleteStage": "lifecycle.SIM_TO_PHASE",
+  "stages": [
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 5550,
+      "totalMs": 111708.60787800008,
+      "minMs": 16.841255999999703,
+      "maxMs": 126.80755000000136,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 20.12767709513515,
+      "share": 0.7932809710107904
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "calls": 5550,
+      "totalMs": 111190.53888099996,
+      "minMs": 16.783288000005996,
+      "maxMs": 126.1414420000001,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 20.034331329909904,
+      "share": 0.7896019861519005
+    },
+    {
+      "name": "lifecycle.SIM_TO_PHASE",
+      "parent": null,
+      "calls": 2,
+      "totalMs": 19755.219158,
+      "minMs": 6340.53054,
+      "maxMs": 13414.688618,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 9877.609579,
+      "share": 0.14028855729098694
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 5635,
+      "totalMs": 11475.160414000184,
+      "minMs": 0.007532999996328726,
+      "maxMs": 5915.350584000002,
+      "items": 0,
+      "teams": 180320,
+      "players": 10593496,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 2.0364082367347263,
+      "share": 0.08148903265954496
+    },
+    {
+      "name": "stage.regular.advance-week",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 18,
+      "totalMs": 7847.906847999999,
+      "minMs": 347.1094710000016,
+      "maxMs": 891.3861590000001,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 435.99482488888884,
+      "share": 0.05573066644589115
+    },
+    {
+      "name": "stage.free-agency.day",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 5,
+      "totalMs": 734.0974979999955,
+      "minMs": 25.796118000002025,
+      "maxMs": 245.04550099999688,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 146.81949959999912,
+      "share": 0.005213077014315882
+    },
+    {
+      "name": "stage.playoffs.advance-week",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 4,
+      "totalMs": 394.79999899999893,
+      "minMs": 51.02508500000113,
+      "maxMs": 157.34711799999968,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 98.69999974999973,
+      "share": 0.002803609609957886
+    },
+    {
+      "name": "stage.draft.ensure-state",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 12,
+      "totalMs": 249.39284800003225,
+      "minMs": 15.17639500000223,
+      "maxMs": 57.827070999999705,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 20.78273733333602,
+      "share": 0.0017710237767950417
+    },
+    {
+      "name": "draft.initialize",
+      "parent": "stage.draft.ensure-state",
+      "calls": 12,
+      "totalMs": 248.05533799998375,
+      "minMs": 15.111251999987871,
+      "maxMs": 57.476300000002084,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 20.671278166665314,
+      "share": 0.001761525661549224
+    },
+    {
+      "name": "stage.offseason.advance",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 1,
+      "totalMs": 117.66465900000185,
+      "minMs": 117.66465900000185,
+      "maxMs": 117.66465900000185,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 117.66465900000185,
+      "share": 0.0008355769239118558
+    },
+    {
+      "name": "draft.pick.evaluate-and-select",
+      "parent": "draft.sim-batch",
+      "calls": 24,
+      "totalMs": 15.194237999996403,
+      "minMs": 0.41273200000068755,
+      "maxMs": 1.4464890000017476,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 5100,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 0.6330932499998502,
+      "share": 0.00010789947259543261
+    },
+    {
+      "name": "draft.ai-strategy",
+      "parent": "draft.sim-batch",
+      "calls": 24,
+      "totalMs": 5.17559100001381,
+      "minMs": 0.17003000000113389,
+      "maxMs": 0.32960800000000745,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 0.2156496250005754,
+      "share": 3.675363906181343e-05
+    },
+    {
+      "name": "draft.team-needs",
+      "parent": "draft.sim-batch",
+      "calls": 24,
+      "totalMs": 4.722289000001183,
+      "minMs": 0.15396500000133528,
+      "maxMs": 0.36486299999887706,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 0.19676204166671596,
+      "share": 3.353458676528965e-05
+    },
+    {
+      "name": "draft.trade-up.evaluate",
+      "parent": "draft.sim-batch",
+      "calls": 24,
+      "totalMs": 0.8528120000009949,
+      "minMs": 0.012335999999777414,
+      "maxMs": 0.33758700000180397,
+      "items": 0,
+      "teams": 768,
+      "players": 0,
+      "prospects": 5100,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 0.03553383333337479,
+      "share": 6.056109231880217e-06
+    }
+  ],
+  "hotspots": [
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 5550,
+      "totalMs": 111708.60787800008,
+      "minMs": 16.841255999999703,
+      "maxMs": 126.80755000000136,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 20.12767709513515,
+      "share": 0.7932809710107904
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "calls": 5550,
+      "totalMs": 111190.53888099996,
+      "minMs": 16.783288000005996,
+      "maxMs": 126.1414420000001,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 20.034331329909904,
+      "share": 0.7896019861519005
+    },
+    {
+      "name": "lifecycle.SIM_TO_PHASE",
+      "parent": null,
+      "calls": 2,
+      "totalMs": 19755.219158,
+      "minMs": 6340.53054,
+      "maxMs": 13414.688618,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 9877.609579,
+      "share": 0.14028855729098694
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 5635,
+      "totalMs": 11475.160414000184,
+      "minMs": 0.007532999996328726,
+      "maxMs": 5915.350584000002,
+      "items": 0,
+      "teams": 180320,
+      "players": 10593496,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 2.0364082367347263,
+      "share": 0.08148903265954496
+    },
+    {
+      "name": "stage.regular.advance-week",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 18,
+      "totalMs": 7847.906847999999,
+      "minMs": 347.1094710000016,
+      "maxMs": 891.3861590000001,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 435.99482488888884,
+      "share": 0.05573066644589115
+    },
+    {
+      "name": "stage.free-agency.day",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 5,
+      "totalMs": 734.0974979999955,
+      "minMs": 25.796118000002025,
+      "maxMs": 245.04550099999688,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 146.81949959999912,
+      "share": 0.005213077014315882
+    },
+    {
+      "name": "stage.playoffs.advance-week",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 4,
+      "totalMs": 394.79999899999893,
+      "minMs": 51.02508500000113,
+      "maxMs": 157.34711799999968,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 98.69999974999973,
+      "share": 0.002803609609957886
+    },
+    {
+      "name": "stage.draft.ensure-state",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 12,
+      "totalMs": 249.39284800003225,
+      "minMs": 15.17639500000223,
+      "maxMs": 57.827070999999705,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 20.78273733333602,
+      "share": 0.0017710237767950417
+    },
+    {
+      "name": "draft.initialize",
+      "parent": "stage.draft.ensure-state",
+      "calls": 12,
+      "totalMs": 248.05533799998375,
+      "minMs": 15.111251999987871,
+      "maxMs": 57.476300000002084,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 20.671278166665314,
+      "share": 0.001761525661549224
+    },
+    {
+      "name": "stage.offseason.advance",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "calls": 1,
+      "totalMs": 117.66465900000185,
+      "minMs": 117.66465900000185,
+      "maxMs": 117.66465900000185,
+      "items": 0,
+      "teams": 0,
+      "players": 0,
+      "prospects": 0,
+      "picks": 0,
+      "offers": 0,
+      "avgMs": 117.66465900000185,
+      "share": 0.0008355769239118558
+    }
+  ],
+  "iterationSeries": [
+    {
+      "index": 0,
+      "atMs": 21758.037219,
+      "kind": "draft-pick",
+      "pickNumber": 1,
+      "round": 1,
+      "teamId": 27,
+      "prospectsRemaining": 224
+    },
+    {
+      "index": 1,
+      "atMs": 21764.66961,
+      "kind": "draft-pick",
+      "pickNumber": 2,
+      "round": 1,
+      "teamId": 3,
+      "prospectsRemaining": 223
+    },
+    {
+      "index": 2,
+      "atMs": 21768.252798,
+      "kind": "draft-pick",
+      "pickNumber": 3,
+      "round": 1,
+      "teamId": 16,
+      "prospectsRemaining": 222
+    },
+    {
+      "index": 3,
+      "atMs": 21771.525812000003,
+      "kind": "draft-pick",
+      "pickNumber": 4,
+      "round": 1,
+      "teamId": 12,
+      "prospectsRemaining": 221
+    },
+    {
+      "index": 4,
+      "atMs": 21775.035480000002,
+      "kind": "draft-pick",
+      "pickNumber": 5,
+      "round": 1,
+      "teamId": 8,
+      "prospectsRemaining": 220
+    },
+    {
+      "index": 5,
+      "atMs": 21778.447287000003,
+      "kind": "draft-pick",
+      "pickNumber": 6,
+      "round": 1,
+      "teamId": 30,
+      "prospectsRemaining": 219
+    },
+    {
+      "index": 6,
+      "atMs": 21781.779185000003,
+      "kind": "draft-pick",
+      "pickNumber": 7,
+      "round": 1,
+      "teamId": 20,
+      "prospectsRemaining": 218
+    },
+    {
+      "index": 7,
+      "atMs": 21785.375611000003,
+      "kind": "draft-pick",
+      "pickNumber": 8,
+      "round": 1,
+      "teamId": 23,
+      "prospectsRemaining": 217
+    },
+    {
+      "index": 8,
+      "atMs": 21788.736671000002,
+      "kind": "draft-pick",
+      "pickNumber": 9,
+      "round": 1,
+      "teamId": 7,
+      "prospectsRemaining": 216
+    },
+    {
+      "index": 9,
+      "atMs": 21792.421719,
+      "kind": "draft-pick",
+      "pickNumber": 10,
+      "round": 1,
+      "teamId": 18,
+      "prospectsRemaining": 215
+    },
+    {
+      "index": 10,
+      "atMs": 21795.938876,
+      "kind": "draft-pick",
+      "pickNumber": 11,
+      "round": 1,
+      "teamId": 1,
+      "prospectsRemaining": 214
+    },
+    {
+      "index": 11,
+      "atMs": 21799.29476,
+      "kind": "draft-pick",
+      "pickNumber": 12,
+      "round": 1,
+      "teamId": 25,
+      "prospectsRemaining": 213
+    },
+    {
+      "index": 12,
+      "atMs": 21802.537331000003,
+      "kind": "draft-pick",
+      "pickNumber": 13,
+      "round": 1,
+      "teamId": 24,
+      "prospectsRemaining": 212
+    },
+    {
+      "index": 13,
+      "atMs": 21806.359384000003,
+      "kind": "draft-pick",
+      "pickNumber": 14,
+      "round": 1,
+      "teamId": 15,
+      "prospectsRemaining": 211
+    },
+    {
+      "index": 14,
+      "atMs": 21811.763548000003,
+      "kind": "draft-pick",
+      "pickNumber": 15,
+      "round": 1,
+      "teamId": 13,
+      "prospectsRemaining": 210
+    },
+    {
+      "index": 15,
+      "atMs": 21815.660748000002,
+      "kind": "draft-pick",
+      "pickNumber": 16,
+      "round": 1,
+      "teamId": 5,
+      "prospectsRemaining": 209
+    },
+    {
+      "index": 16,
+      "atMs": 21818.923511,
+      "kind": "draft-pick",
+      "pickNumber": 17,
+      "round": 1,
+      "teamId": 28,
+      "prospectsRemaining": 208
+    },
+    {
+      "index": 17,
+      "atMs": 21822.16791,
+      "kind": "draft-pick",
+      "pickNumber": 18,
+      "round": 1,
+      "teamId": 4,
+      "prospectsRemaining": 207
+    },
+    {
+      "index": 18,
+      "atMs": 21823.937323000002,
+      "kind": "draft-pick",
+      "pickNumber": 19,
+      "round": 1,
+      "teamId": 11,
+      "prospectsRemaining": 206
+    },
+    {
+      "index": 19,
+      "atMs": 21826.955705,
+      "kind": "draft-pick",
+      "pickNumber": 20,
+      "round": 1,
+      "teamId": 29,
+      "prospectsRemaining": 205
+    },
+    {
+      "index": 20,
+      "atMs": 21830.059975,
+      "kind": "draft-pick",
+      "pickNumber": 21,
+      "round": 1,
+      "teamId": 17,
+      "prospectsRemaining": 204
+    },
+    {
+      "index": 21,
+      "atMs": 21832.926625,
+      "kind": "draft-pick",
+      "pickNumber": 22,
+      "round": 1,
+      "teamId": 22,
+      "prospectsRemaining": 203
+    },
+    {
+      "index": 22,
+      "atMs": 21836.656664000002,
+      "kind": "draft-pick",
+      "pickNumber": 23,
+      "round": 1,
+      "teamId": 21,
+      "prospectsRemaining": 202
+    },
+    {
+      "index": 23,
+      "atMs": 21848.676171000003,
+      "kind": "draft-pick",
+      "pickNumber": 24,
+      "round": 1,
+      "teamId": 14,
+      "prospectsRemaining": 201
+    }
+  ],
+  "persistence": {
+    "reads": 0,
+    "writes": 2,
+    "flushes": 5635,
+    "totalMs": 11475.160414000184
+  },
+  "memoryCheckpoints": [
+    {
+      "name": "profiler-enabled",
+      "atMs": 0.5342710000001034,
+      "rssMb": 92.91015625,
+      "heapUsedMb": 9.483848571777344
+    },
+    {
+      "name": "after-initialization",
+      "atMs": 1047.49872,
+      "rssMb": 150.4375,
+      "heapUsedMb": 35.01335906982422,
+      "phase": "regular",
+      "year": 2026
+    },
+    {
+      "name": "simToPhase.playoffs",
+      "atMs": 14464.458726,
+      "rssMb": 335.19140625,
+      "heapUsedMb": 98.1268310546875,
+      "type": "simToPhase",
+      "targetPhase": "playoffs",
+      "checkpoint": "afterRegularSeason",
+      "ms": 13416,
+      "calls": 1,
+      "phase": "playoffs",
+      "year": 2026
+    },
+    {
+      "name": "after-regular-season",
+      "atMs": 14464.514806,
+      "rssMb": 335.19140625,
+      "heapUsedMb": 98.13456726074219,
+      "phase": "playoffs",
+      "year": 2026
+    },
+    {
+      "name": "simToPhase.offseason",
+      "atMs": 20805.390187,
+      "rssMb": 319.1640625,
+      "heapUsedMb": 123.36287689208984,
+      "type": "simToPhase",
+      "targetPhase": "offseason",
+      "checkpoint": "afterPlayoffs",
+      "ms": 6340,
+      "calls": 1,
+      "phase": "offseason_resign",
+      "year": 2026
+    },
+    {
+      "name": "after-playoffs",
+      "atMs": 20805.427574,
+      "rssMb": 319.1640625,
+      "heapUsedMb": 123.36382293701172,
+      "phase": "offseason_resign",
+      "year": 2026
+    }
+  ],
+  "records": [
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139454.27047100003,
+      "endMs": 139475.197495,
+      "durationMs": 20.927023999975063,
+      "draftGuard": 484,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 132.68533325195312
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 125.29814147949219
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139476.482357,
+      "endMs": 139476.491966,
+      "durationMs": 0.009609000000637025,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 125.33147430419922
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 125.34661102294922
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139476.39640000003,
+      "endMs": 139494.904817,
+      "durationMs": 18.508416999975452,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 125.30048370361328
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 133.7257537841797
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139476.38672100002,
+      "endMs": 139494.98848,
+      "durationMs": 18.60175899998285,
+      "draftGuard": 485,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 125.2999496459961
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 133.7262954711914
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139496.257856,
+      "endMs": 139496.26802500003,
+      "durationMs": 0.010169000015594065,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 133.75938415527344
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 133.77452087402344
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139496.17833700002,
+      "endMs": 139517.056324,
+      "durationMs": 20.877986999985296,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 133.7283935546875
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 126.35059356689453
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139496.16780700002,
+      "endMs": 139517.13188700003,
+      "durationMs": 20.964080000005197,
+      "draftGuard": 486,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 133.7278594970703
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 126.35113525390625
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139518.457555,
+      "endMs": 139518.46745400003,
+      "durationMs": 0.009899000026052818,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 126.38446807861328
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 126.39960479736328
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139518.373754,
+      "endMs": 139536.699816,
+      "durationMs": 18.32606200000737,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 126.35347747802734
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 134.78512573242188
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139518.364153,
+      "endMs": 139536.78198200001,
+      "durationMs": 18.417829000012716,
+      "draftGuard": 487,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 126.35294342041016
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 134.7856674194336
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139536.947082,
+      "endMs": 139536.956409,
+      "durationMs": 0.009327000007033348,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 134.81875610351562
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 134.83389282226562
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139536.87282100003,
+      "endMs": 139556.70194700002,
+      "durationMs": 19.829125999996904,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 134.7877655029297
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 127.37263488769531
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139536.86326900002,
+      "endMs": 139556.77847800002,
+      "durationMs": 19.915208999998868,
+      "draftGuard": 488,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 134.7872314453125
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 127.37317657470703
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139556.95304700002,
+      "endMs": 139556.970769,
+      "durationMs": 0.017721999989589676,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 127.40645599365234
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 127.42159271240234
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139556.883597,
+      "endMs": 139575.07822000002,
+      "durationMs": 18.1946230000176,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 127.3754653930664
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 135.84761810302734
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139556.873847,
+      "endMs": 139575.154034,
+      "durationMs": 18.28018699999666,
+      "draftGuard": 489,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 127.37493133544922
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 135.84815979003906
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139576.427747,
+      "endMs": 139576.43661200002,
+      "durationMs": 0.008865000010700896,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 135.8812484741211
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 135.8963851928711
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139576.34606,
+      "endMs": 139596.140095,
+      "durationMs": 19.794034999998985,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 135.85025787353516
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 128.38511657714844
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139576.335274,
+      "endMs": 139596.23707,
+      "durationMs": 19.90179599999101,
+      "draftGuard": 490,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 135.84972381591797
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 128.38565826416016
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139597.589153,
+      "endMs": 139597.60013200002,
+      "durationMs": 0.010979000013321638,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 128.4189910888672
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 128.4341278076172
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139597.499637,
+      "endMs": 139616.46697200002,
+      "durationMs": 18.967335000023013,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 128.38800048828125
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 136.8195037841797
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139597.48878400002,
+      "endMs": 139616.54324,
+      "durationMs": 19.054455999983475,
+      "draftGuard": 491,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 128.38746643066406
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 136.8200454711914
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139618.489344,
+      "endMs": 139618.498972,
+      "durationMs": 0.009627999999793246,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.09375,
+        "heapUsedMb": 123.68212890625
+      },
+      "memoryAfter": {
+        "rssMb": 512.09375,
+        "heapUsedMb": 123.697265625
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139618.374664,
+      "endMs": 139636.834016,
+      "durationMs": 18.45935200000531,
+      "memoryBefore": {
+        "rssMb": 512.09375,
+        "heapUsedMb": 123.65113830566406
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 132.12771606445312
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139618.35861000002,
+      "endMs": 139636.916704,
+      "durationMs": 18.558093999978155,
+      "draftGuard": 492,
+      "memoryBefore": {
+        "rssMb": 512.09375,
+        "heapUsedMb": 123.65060424804688
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 132.12825775146484
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139638.242318,
+      "endMs": 139638.25284700003,
+      "durationMs": 0.010529000021051615,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 132.16148376464844
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 132.17662048339844
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139638.131506,
+      "endMs": 139659.47234200002,
+      "durationMs": 21.34083600001759,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 132.1304931640625
+      },
+      "memoryAfter": {
+        "rssMb": 512.09375,
+        "heapUsedMb": 124.51470184326172
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139638.12205600002,
+      "endMs": 139659.557665,
+      "durationMs": 21.435608999978285,
+      "draftGuard": 493,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 132.1299591064453
+      },
+      "memoryAfter": {
+        "rssMb": 512.09375,
+        "heapUsedMb": 124.51524353027344
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139660.854792,
+      "endMs": 139660.86702900002,
+      "durationMs": 0.012237000017194077,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.09375,
+        "heapUsedMb": 124.5484390258789
+      },
+      "memoryAfter": {
+        "rssMb": 512.09375,
+        "heapUsedMb": 124.5635757446289
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139660.77252700002,
+      "endMs": 139680.04990500002,
+      "durationMs": 19.277377999998862,
+      "memoryBefore": {
+        "rssMb": 512.09375,
+        "heapUsedMb": 124.51744842529297
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 132.9358367919922
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139660.762802,
+      "endMs": 139680.126431,
+      "durationMs": 19.36362899999949,
+      "draftGuard": 494,
+      "memoryBefore": {
+        "rssMb": 512.09375,
+        "heapUsedMb": 124.51691436767578
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 132.9363784790039
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139681.429493,
+      "endMs": 139681.43846,
+      "durationMs": 0.008967000001575798,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 132.9696044921875
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 132.9847412109375
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139681.34197100002,
+      "endMs": 139701.795248,
+      "durationMs": 20.45327699999325,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 132.93861389160156
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 125.89866638183594
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139681.331326,
+      "endMs": 139701.877316,
+      "durationMs": 20.545989999984158,
+      "draftGuard": 495,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 132.93807983398438
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 125.89920806884766
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139703.192893,
+      "endMs": 139703.203394,
+      "durationMs": 0.010501000011572614,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 125.93240356445312
+      },
+      "memoryAfter": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 125.94754028320312
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139703.107125,
+      "endMs": 139721.875246,
+      "durationMs": 18.768121000000974,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 125.90141296386719
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 134.32835388183594
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139703.09681400002,
+      "endMs": 139721.942546,
+      "durationMs": 18.845731999987038,
+      "draftGuard": 496,
+      "memoryBefore": {
+        "rssMb": 512.34375,
+        "heapUsedMb": 125.90087890625
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 134.32889556884766
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139723.220303,
+      "endMs": 139723.22973300001,
+      "durationMs": 0.009430000005522743,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 134.36212158203125
+      },
+      "memoryAfter": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 134.37725830078125
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139723.14342,
+      "endMs": 139743.395124,
+      "durationMs": 20.25170399999479,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 134.3311309814453
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 126.96607971191406
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139723.13330100002,
+      "endMs": 139743.458098,
+      "durationMs": 20.3247969999793,
+      "draftGuard": 497,
+      "memoryBefore": {
+        "rssMb": 512.59375,
+        "heapUsedMb": 134.33059692382812
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 126.96662139892578
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139744.729182,
+      "endMs": 139744.739689,
+      "durationMs": 0.010506999999051914,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 126.99981689453125
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 127.01495361328125
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139744.648405,
+      "endMs": 139762.90581000003,
+      "durationMs": 18.257405000011204,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 126.96882629394531
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 135.3923797607422
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139744.639262,
+      "endMs": 139762.981066,
+      "durationMs": 18.341803999996046,
+      "draftGuard": 498,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 126.96829223632812
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 135.3929214477539
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139764.30248100002,
+      "endMs": 139764.312326,
+      "durationMs": 0.009844999993219972,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 135.4261474609375
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 135.4412841796875
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139764.20144300003,
+      "endMs": 139784.635703,
+      "durationMs": 20.434259999979986,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 135.39515686035156
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.01993560791016
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139764.190337,
+      "endMs": 139784.70802800002,
+      "durationMs": 20.517691000015475,
+      "draftGuard": 499,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 135.39462280273438
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.02047729492188
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139789.88364400002,
+      "endMs": 139790.14890300002,
+      "durationMs": 0.26525900000706315,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.4438705444336
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.71287536621094
+      }
+    },
+    {
+      "name": "draft.initialize",
+      "parent": "stage.draft.ensure-state",
+      "startMs": 139790.220543,
+      "endMs": 139806.856126,
+      "durationMs": 16.635582999995677,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.71490478515625
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.21392822265625
+      }
+    },
+    {
+      "name": "stage.draft.ensure-state",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139790.20491200002,
+      "endMs": 139806.92493100002,
+      "durationMs": 16.72001900000032,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.714111328125
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.21451568603516
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139809.59734,
+      "endMs": 139811.736091,
+      "durationMs": 2.1387509999913163,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 140.6338653564453
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 124.94857025146484
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139811.940911,
+      "endMs": 139811.949525,
+      "durationMs": 0.00861399999121204,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 124.9813232421875
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 124.9964599609375
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139811.85751,
+      "endMs": 139829.52388700002,
+      "durationMs": 17.666377000015927,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 124.95033264160156
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 133.41004943847656
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139811.800445,
+      "endMs": 139829.590047,
+      "durationMs": 17.78960200000438,
+      "draftGuard": 0,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 124.94979858398438
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 133.41059112548828
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139830.89527500002,
+      "endMs": 139830.903893,
+      "durationMs": 0.008617999992566183,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 133.44378662109375
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 133.45892333984375
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139830.814056,
+      "endMs": 139849.665114,
+      "durationMs": 18.851058000000194,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 133.4127960205078
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 125.79173278808594
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139830.804483,
+      "endMs": 139849.72056000002,
+      "durationMs": 18.91607700000168,
+      "draftGuard": 1,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 133.41226196289062
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 125.79227447509766
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139851.05053100002,
+      "endMs": 139851.059385,
+      "durationMs": 0.00885399998514913,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 125.82566833496094
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 125.84080505371094
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139850.94810100002,
+      "endMs": 139868.27814,
+      "durationMs": 17.33003899999312,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 125.79461669921875
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 134.2551040649414
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139850.93749200003,
+      "endMs": 139868.33991600003,
+      "durationMs": 17.402423999999883,
+      "draftGuard": 2,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 125.79408264160156
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 134.25564575195312
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139869.707376,
+      "endMs": 139869.71718500002,
+      "durationMs": 0.009809000010136515,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 134.28873443603516
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 134.30387115478516
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139869.59643900002,
+      "endMs": 139888.683874,
+      "durationMs": 19.087434999994002,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 134.25774383544922
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 127.15914154052734
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139869.58579100002,
+      "endMs": 139888.747998,
+      "durationMs": 19.162206999986665,
+      "draftGuard": 3,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 134.25720977783203
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 127.15968322753906
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139890.021597,
+      "endMs": 139890.030513,
+      "durationMs": 0.008915999991586432,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 127.1930160522461
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 127.2081527709961
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139889.94743300002,
+      "endMs": 139907.481,
+      "durationMs": 17.533566999976756,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 127.16202545166016
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 135.59397888183594
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139889.938368,
+      "endMs": 139907.55059600002,
+      "durationMs": 17.612228000012692,
+      "draftGuard": 4,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 127.16149139404297
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 135.59452056884766
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139908.79896000001,
+      "endMs": 139908.80858900002,
+      "durationMs": 0.00962900000740774,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 135.6276092529297
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 135.6427459716797
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139908.72147400002,
+      "endMs": 139928.071201,
+      "durationMs": 19.349726999993436,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 135.59661865234375
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.20765686035156
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139908.712738,
+      "endMs": 139928.13274,
+      "durationMs": 19.42000199999893,
+      "draftGuard": 5,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 135.59608459472656
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.20819854736328
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139929.466438,
+      "endMs": 139929.476002,
+      "durationMs": 0.009564000007230788,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.2415313720703
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.2566680908203
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139929.37505,
+      "endMs": 139947.395924,
+      "durationMs": 18.020874000008916,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.21054077148438
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 136.6360855102539
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139929.34430700002,
+      "endMs": 139947.46199100002,
+      "durationMs": 18.117683999997098,
+      "draftGuard": 6,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.2100067138672
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 136.63662719726562
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139948.719092,
+      "endMs": 139948.728137,
+      "durationMs": 0.009044999984325841,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 136.66971588134766
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 136.68485260009766
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139948.639674,
+      "endMs": 139968.434276,
+      "durationMs": 19.794602000009036,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 136.63872528076172
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 129.2622299194336
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139948.630424,
+      "endMs": 139968.49828200002,
+      "durationMs": 19.867858000012347,
+      "draftGuard": 7,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 136.63819122314453
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 129.2627716064453
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139969.77155200002,
+      "endMs": 139969.78168400002,
+      "durationMs": 0.010131999995792285,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 129.29610443115234
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 129.31124114990234
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139969.695558,
+      "endMs": 139987.53702000002,
+      "durationMs": 17.841462000011234,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 129.2651138305664
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 137.69679260253906
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139969.68568800003,
+      "endMs": 139987.595172,
+      "durationMs": 17.909483999974327,
+      "draftGuard": 8,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 129.26457977294922
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 137.69733428955078
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 139988.84624100002,
+      "endMs": 139988.855543,
+      "durationMs": 0.009301999991293997,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 137.7304229736328
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 137.7455596923828
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 139988.76692400003,
+      "endMs": 140008.234566,
+      "durationMs": 19.46764199997415,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 137.69943237304688
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.28395080566406
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 139988.757649,
+      "endMs": 140008.287813,
+      "durationMs": 19.530163999996148,
+      "draftGuard": 9,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 137.6988983154297
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.28449249267578
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140009.57415600002,
+      "endMs": 140009.58343300002,
+      "durationMs": 0.009277000004658476,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.3178253173828
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.3329620361328
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140009.49905800002,
+      "endMs": 140027.58785500002,
+      "durationMs": 18.08879700000398,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.28683471679688
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.75878143310547
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140009.489441,
+      "endMs": 140027.652001,
+      "durationMs": 18.16255999999703,
+      "draftGuard": 10,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.2863006591797
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.7593231201172
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140028.90269000002,
+      "endMs": 140028.91144700002,
+      "durationMs": 0.008757000003242865,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.79241180419922
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.80754852294922
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140028.82675,
+      "endMs": 140047.93737,
+      "durationMs": 19.110619999992196,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.76142120361328
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 131.29676818847656
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140028.81756400003,
+      "endMs": 140047.99571000002,
+      "durationMs": 19.178145999991102,
+      "draftGuard": 11,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.7608871459961
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 131.29730987548828
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140049.32820100003,
+      "endMs": 140049.33787500003,
+      "durationMs": 0.009674000000813976,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 131.3306427001953
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 131.3457794189453
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140049.21292000002,
+      "endMs": 140066.690321,
+      "durationMs": 17.47740099998191,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 131.29965209960938
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 139.73126983642578
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140049.20367800002,
+      "endMs": 140066.745816,
+      "durationMs": 17.54213799998979,
+      "draftGuard": 12,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 131.2991180419922
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 139.7318115234375
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140068.380264,
+      "endMs": 140068.38904900002,
+      "durationMs": 0.008785000012721866,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 126.33927154541016
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 126.35440826416016
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140068.29057800001,
+      "endMs": 140085.565257,
+      "durationMs": 17.27467899999465,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 126.30828094482422
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 134.72676849365234
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140068.281374,
+      "endMs": 140085.6097,
+      "durationMs": 17.32832599998801,
+      "draftGuard": 13,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 126.30774688720703
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 134.72731018066406
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140086.85899600002,
+      "endMs": 140086.867518,
+      "durationMs": 0.008521999989170581,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 134.76053619384766
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 134.77567291259766
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140086.78578200002,
+      "endMs": 140105.57916400002,
+      "durationMs": 18.793382000003476,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 134.72954559326172
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 127.14976501464844
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140086.77736200002,
+      "endMs": 140105.627627,
+      "durationMs": 18.850264999986393,
+      "draftGuard": 14,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 134.72901153564453
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 127.15030670166016
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140106.95304800002,
+      "endMs": 140106.96708300003,
+      "durationMs": 0.014035000000149012,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 127.18350219726562
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 127.19863891601562
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140106.855783,
+      "endMs": 140124.41150100002,
+      "durationMs": 17.555718000017805,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 127.15251159667969
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 135.60356903076172
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140106.846476,
+      "endMs": 140124.465529,
+      "durationMs": 17.619053000002168,
+      "draftGuard": 15,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 127.1519775390625
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 135.60411071777344
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140125.72260500002,
+      "endMs": 140125.73137000002,
+      "durationMs": 0.008765000005951151,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 135.63733673095703
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 135.65247344970703
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140125.64945300002,
+      "endMs": 140145.004931,
+      "durationMs": 19.355477999983123,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 135.6063461303711
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.59852600097656
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140125.63970300002,
+      "endMs": 140145.058544,
+      "durationMs": 19.418840999976965,
+      "draftGuard": 16,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 135.6058120727539
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.59906768798828
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140146.31579300002,
+      "endMs": 140146.32533300002,
+      "durationMs": 0.00953999999910593,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.64537048339844
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.66050720214844
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140146.242812,
+      "endMs": 140163.326513,
+      "durationMs": 17.083700999995926,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.6012725830078
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 137.08634185791016
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140146.233359,
+      "endMs": 140163.37371100002,
+      "durationMs": 17.14035200001672,
+      "draftGuard": 17,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 128.60073852539062
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 137.08688354492188
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140164.606131,
+      "endMs": 140164.615993,
+      "durationMs": 0.009862000006251037,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 137.12010955810547
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 137.13524627685547
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140164.53121400002,
+      "endMs": 140183.75927100002,
+      "durationMs": 19.228057000000263,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 137.08911895751953
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 129.75645446777344
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140164.522223,
+      "endMs": 140183.877211,
+      "durationMs": 19.354988000006415,
+      "draftGuard": 18,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 137.08858489990234
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 129.75699615478516
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140185.177927,
+      "endMs": 140185.18701800003,
+      "durationMs": 0.009091000014450401,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 129.79019165039062
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 129.80532836914062
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140185.065016,
+      "endMs": 140202.802468,
+      "durationMs": 17.737452000001213,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 129.7592010498047
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.21564483642578
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140185.054838,
+      "endMs": 140202.85213,
+      "durationMs": 17.797292000002926,
+      "draftGuard": 19,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 129.7586669921875
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.2161865234375
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140204.12473,
+      "endMs": 140204.13397300002,
+      "durationMs": 0.009243000007700175,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.2494125366211
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.2645492553711
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140204.041004,
+      "endMs": 140223.77343700003,
+      "durationMs": 19.732433000026504,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.21842193603516
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.76200103759766
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140204.02780500002,
+      "endMs": 140223.87104300002,
+      "durationMs": 19.843238000001293,
+      "draftGuard": 20,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 138.21788787841797
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.76254272460938
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140225.128498,
+      "endMs": 140225.137033,
+      "durationMs": 0.008535000000847504,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.79573822021484
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.81087493896484
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140225.051504,
+      "endMs": 140242.49582100002,
+      "durationMs": 17.44431700001587,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.7647476196289
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 139.18753051757812
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140225.04274200002,
+      "endMs": 140242.547762,
+      "durationMs": 17.505019999982323,
+      "draftGuard": 21,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 130.76421356201172
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 139.18807220458984
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140243.79,
+      "endMs": 140243.798394,
+      "durationMs": 0.008394000004045665,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 139.22129821777344
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 139.23643493652344
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140243.72023200002,
+      "endMs": 140263.131972,
+      "durationMs": 19.411739999981364,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 139.1903076171875
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 131.72531127929688
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140243.71155600002,
+      "endMs": 140263.19549500002,
+      "durationMs": 19.483938999997918,
+      "draftGuard": 22,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 139.1897735595703
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 131.7258529663086
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140264.45403300002,
+      "endMs": 140264.46324100002,
+      "durationMs": 0.009208000003127381,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 131.75904846191406
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 131.77418518066406
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140264.37759000002,
+      "endMs": 140282.12149700001,
+      "durationMs": 17.743906999996398,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 131.72805786132812
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 140.1594467163086
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140264.368485,
+      "endMs": 140282.192355,
+      "durationMs": 17.823869999992894,
+      "draftGuard": 23,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 131.72752380371094
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 140.1599884033203
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140283.457246,
+      "endMs": 140283.467057,
+      "durationMs": 0.009810999996261671,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 140.1932144165039
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 140.2083511352539
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140283.38374000002,
+      "endMs": 140303.171642,
+      "durationMs": 19.78790199998184,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 140.16222381591797
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 132.69739532470703
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140283.37430700002,
+      "endMs": 140303.23477500002,
+      "durationMs": 19.860467999998946,
+      "draftGuard": 24,
+      "memoryBefore": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 140.16168975830078
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 132.69793701171875
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140304.554418,
+      "endMs": 140304.563399,
+      "durationMs": 0.008980999991763383,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 132.73113250732422
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 132.74626922607422
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140304.460729,
+      "endMs": 140322.70534500002,
+      "durationMs": 18.244616000010865,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 132.70014190673828
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 141.13189697265625
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140304.450408,
+      "endMs": 140322.788303,
+      "durationMs": 18.33789500000421,
+      "draftGuard": 25,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 132.6996078491211
+      },
+      "memoryAfter": {
+        "rssMb": 512.5703125,
+        "heapUsedMb": 141.13243865966797
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140325.02382600002,
+      "endMs": 140325.032757,
+      "durationMs": 0.00893099998938851,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 127.90687561035156
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 127.92201232910156
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140324.931756,
+      "endMs": 140343.668819,
+      "durationMs": 18.737063000007765,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 127.87588500976562
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 136.30751037597656
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140324.922473,
+      "endMs": 140343.717318,
+      "durationMs": 18.794844999996712,
+      "draftGuard": 26,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 127.87535095214844
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 136.30805206298828
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140344.963556,
+      "endMs": 140344.97283100002,
+      "durationMs": 0.00927500001853332,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 136.3411407470703
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 136.3562774658203
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140344.887894,
+      "endMs": 140364.664416,
+      "durationMs": 19.776522000000114,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 136.31015014648438
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 128.68021392822266
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140344.87864600003,
+      "endMs": 140364.722963,
+      "durationMs": 19.844316999980947,
+      "draftGuard": 27,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 136.3096160888672
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 128.68075561523438
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140366.025903,
+      "endMs": 140366.035875,
+      "durationMs": 0.009971999999834225,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 128.7140884399414
+      },
+      "memoryAfter": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 128.73738861083984
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140365.95012800003,
+      "endMs": 140384.061649,
+      "durationMs": 18.11152099998435,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 128.68309783935547
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 137.09686279296875
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140365.92978200002,
+      "endMs": 140384.154848,
+      "durationMs": 18.22506599998451,
+      "draftGuard": 28,
+      "memoryBefore": {
+        "rssMb": 512.0703125,
+        "heapUsedMb": 128.68256378173828
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 137.09740447998047
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140385.449487,
+      "endMs": 140385.45852000001,
+      "durationMs": 0.009033000009367242,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 137.1304931640625
+      },
+      "memoryAfter": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 137.1456298828125
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140385.37050000002,
+      "endMs": 140406.510581,
+      "durationMs": 21.14008099999046,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 137.09950256347656
+      },
+      "memoryAfter": {
+        "rssMb": 512.36328125,
+        "heapUsedMb": 130.04295349121094
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140385.36066,
+      "endMs": 140406.579876,
+      "durationMs": 21.219215999997687,
+      "draftGuard": 29,
+      "memoryBefore": {
+        "rssMb": 512.3203125,
+        "heapUsedMb": 137.09896850585938
+      },
+      "memoryAfter": {
+        "rssMb": 512.36328125,
+        "heapUsedMb": 130.04349517822266
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140407.95387700002,
+      "endMs": 140407.96968600003,
+      "durationMs": 0.015809000004082918,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.36328125,
+        "heapUsedMb": 130.0768280029297
+      },
+      "memoryAfter": {
+        "rssMb": 512.36328125,
+        "heapUsedMb": 130.0919647216797
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140407.841844,
+      "endMs": 140426.627401,
+      "durationMs": 18.785556999995606,
+      "memoryBefore": {
+        "rssMb": 512.36328125,
+        "heapUsedMb": 130.04583740234375
+      },
+      "memoryAfter": {
+        "rssMb": 512.61328125,
+        "heapUsedMb": 138.50997161865234
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140407.80241600002,
+      "endMs": 140426.70036800002,
+      "durationMs": 18.89795199999935,
+      "draftGuard": 30,
+      "memoryBefore": {
+        "rssMb": 512.36328125,
+        "heapUsedMb": 130.04530334472656
+      },
+      "memoryAfter": {
+        "rssMb": 512.61328125,
+        "heapUsedMb": 138.51051330566406
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140428.08191200002,
+      "endMs": 140428.09164300002,
+      "durationMs": 0.009730999998282641,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.61328125,
+        "heapUsedMb": 138.5436019897461
+      },
+      "memoryAfter": {
+        "rssMb": 512.61328125,
+        "heapUsedMb": 138.5587387084961
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140427.975314,
+      "endMs": 140448.96996400002,
+      "durationMs": 20.994650000007823,
+      "memoryBefore": {
+        "rssMb": 512.61328125,
+        "heapUsedMb": 138.51261138916016
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 131.12274169921875
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140427.96458700002,
+      "endMs": 140449.045455,
+      "durationMs": 21.080867999990005,
+      "draftGuard": 31,
+      "memoryBefore": {
+        "rssMb": 512.61328125,
+        "heapUsedMb": 138.51207733154297
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 131.12328338623047
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140450.41583100002,
+      "endMs": 140450.426727,
+      "durationMs": 0.010895999992499128,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 131.1566162109375
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 131.1717529296875
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140450.29270700002,
+      "endMs": 140468.45094600003,
+      "durationMs": 18.158239000011235,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 131.12562561035156
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 139.55326080322266
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140450.282773,
+      "endMs": 140468.527135,
+      "durationMs": 18.244361999997636,
+      "draftGuard": 32,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 131.12509155273438
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 139.55380249023438
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140469.822771,
+      "endMs": 140469.832461,
+      "durationMs": 0.009690000006230548,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 139.5868911743164
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 139.6020278930664
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140469.734853,
+      "endMs": 140489.84839300002,
+      "durationMs": 20.113540000020294,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 139.55590057373047
+      },
+      "memoryAfter": {
+        "rssMb": 512.36328125,
+        "heapUsedMb": 132.14411163330078
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140469.724946,
+      "endMs": 140489.921368,
+      "durationMs": 20.19642200000817,
+      "draftGuard": 33,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 139.55536651611328
+      },
+      "memoryAfter": {
+        "rssMb": 512.36328125,
+        "heapUsedMb": 132.1446533203125
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140491.21139200003,
+      "endMs": 140491.221284,
+      "durationMs": 0.009891999972751364,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.36328125,
+        "heapUsedMb": 132.1780776977539
+      },
+      "memoryAfter": {
+        "rssMb": 512.36328125,
+        "heapUsedMb": 132.1932144165039
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140491.12951,
+      "endMs": 140509.324312,
+      "durationMs": 18.194802000012714,
+      "memoryBefore": {
+        "rssMb": 512.36328125,
+        "heapUsedMb": 132.1469955444336
+      },
+      "memoryAfter": {
+        "rssMb": 512.61328125,
+        "heapUsedMb": 140.61128997802734
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140491.11911600002,
+      "endMs": 140509.38889200002,
+      "durationMs": 18.269776000001002,
+      "draftGuard": 34,
+      "memoryBefore": {
+        "rssMb": 512.36328125,
+        "heapUsedMb": 132.1464614868164
+      },
+      "memoryAfter": {
+        "rssMb": 512.61328125,
+        "heapUsedMb": 140.61183166503906
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140510.682226,
+      "endMs": 140510.69139000002,
+      "durationMs": 0.009164000017335638,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.61328125,
+        "heapUsedMb": 140.6449203491211
+      },
+      "memoryAfter": {
+        "rssMb": 512.61328125,
+        "heapUsedMb": 140.6600570678711
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140510.595452,
+      "endMs": 140530.639831,
+      "durationMs": 20.044378999999026,
+      "memoryBefore": {
+        "rssMb": 512.61328125,
+        "heapUsedMb": 140.61392974853516
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 133.15167236328125
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140510.58565000002,
+      "endMs": 140530.70249400003,
+      "durationMs": 20.116844000003766,
+      "draftGuard": 35,
+      "memoryBefore": {
+        "rssMb": 512.61328125,
+        "heapUsedMb": 140.61339569091797
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 133.15221405029297
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140532.03761,
+      "endMs": 140532.046417,
+      "durationMs": 0.008807000005617738,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 133.185546875
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 133.20068359375
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140531.94623,
+      "endMs": 140550.89865800002,
+      "durationMs": 18.9524280000187,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 133.15455627441406
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 141.58348846435547
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140531.937026,
+      "endMs": 140550.95926,
+      "durationMs": 19.022234000003664,
+      "draftGuard": 36,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 133.15402221679688
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 141.5840301513672
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140552.207285,
+      "endMs": 140552.21609300002,
+      "durationMs": 0.008808000013232231,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 141.61711883544922
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 141.63225555419922
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140552.128436,
+      "endMs": 140573.848776,
+      "durationMs": 21.72033999999985,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 141.58612823486328
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 134.12095642089844
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140552.11942,
+      "endMs": 140573.91141300002,
+      "durationMs": 21.79199300002074,
+      "draftGuard": 37,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 141.5855941772461
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 134.12149810791016
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140575.18819800002,
+      "endMs": 140575.198077,
+      "durationMs": 0.009878999990178272,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 134.1548309326172
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 134.1699676513672
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140575.10859400002,
+      "endMs": 140593.08872600002,
+      "durationMs": 17.980131999996956,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 134.12384033203125
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 142.5556182861328
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140575.098624,
+      "endMs": 140593.17725100002,
+      "durationMs": 18.078627000009874,
+      "draftGuard": 38,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 134.12330627441406
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 142.55615997314453
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140594.453313,
+      "endMs": 140594.473157,
+      "durationMs": 0.019843999994918704,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 142.58924865722656
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 142.60438537597656
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140594.371522,
+      "endMs": 140614.49190400002,
+      "durationMs": 20.1203820000228,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 142.55825805664062
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 135.09474182128906
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140594.36190800002,
+      "endMs": 140614.553504,
+      "durationMs": 20.19159599998966,
+      "draftGuard": 39,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 142.55772399902344
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 135.09528350830078
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140615.864938,
+      "endMs": 140615.874795,
+      "durationMs": 0.0098569999972824,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 135.1286163330078
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 135.1437530517578
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140615.752664,
+      "endMs": 140632.978627,
+      "durationMs": 17.225963000004413,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 135.09762573242188
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 143.52960968017578
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140615.742992,
+      "endMs": 140633.034656,
+      "durationMs": 17.291663999989396,
+      "draftGuard": 40,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 135.0970916748047
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 143.5301513671875
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140634.754022,
+      "endMs": 140634.764028,
+      "durationMs": 0.010005999996792525,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.08984375,
+        "heapUsedMb": 129.7542724609375
+      },
+      "memoryAfter": {
+        "rssMb": 512.08984375,
+        "heapUsedMb": 129.7694091796875
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140634.66638500002,
+      "endMs": 140652.525043,
+      "durationMs": 17.858657999982825,
+      "memoryBefore": {
+        "rssMb": 512.08984375,
+        "heapUsedMb": 129.72328186035156
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 138.19049835205078
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140634.65690600002,
+      "endMs": 140652.57822000002,
+      "durationMs": 17.921314000006532,
+      "draftGuard": 41,
+      "memoryBefore": {
+        "rssMb": 512.08984375,
+        "heapUsedMb": 129.72274780273438
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 138.1910400390625
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140653.83378400002,
+      "endMs": 140653.842976,
+      "durationMs": 0.009191999997710809,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 138.2242660522461
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 138.2394027709961
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140653.75893200003,
+      "endMs": 140672.799551,
+      "durationMs": 19.040618999977596,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 138.19327545166016
+      },
+      "memoryAfter": {
+        "rssMb": 512.08984375,
+        "heapUsedMb": 130.61534881591797
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140653.750074,
+      "endMs": 140672.853964,
+      "durationMs": 19.1038899999985,
+      "draftGuard": 42,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 138.19274139404297
+      },
+      "memoryAfter": {
+        "rssMb": 512.08984375,
+        "heapUsedMb": 130.6158905029297
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140674.257828,
+      "endMs": 140674.267682,
+      "durationMs": 0.009854000003542751,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.08984375,
+        "heapUsedMb": 130.64908599853516
+      },
+      "memoryAfter": {
+        "rssMb": 512.08984375,
+        "heapUsedMb": 130.66422271728516
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140674.15946300002,
+      "endMs": 140696.860091,
+      "durationMs": 22.70062799999141,
+      "memoryBefore": {
+        "rssMb": 512.08984375,
+        "heapUsedMb": 130.61809539794922
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 139.09580993652344
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140674.148447,
+      "endMs": 140696.93308100002,
+      "durationMs": 22.784634000010556,
+      "draftGuard": 43,
+      "memoryBefore": {
+        "rssMb": 512.08984375,
+        "heapUsedMb": 130.61756134033203
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 139.09635162353516
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140698.390672,
+      "endMs": 140698.401717,
+      "durationMs": 0.011044999992009252,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 139.12957763671875
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 139.14471435546875
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140698.26253900002,
+      "endMs": 140718.188002,
+      "durationMs": 19.925462999992305,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 139.0985870361328
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 131.95806884765625
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140698.250872,
+      "endMs": 140718.25554900002,
+      "durationMs": 20.004677000019,
+      "draftGuard": 44,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 139.09805297851562
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 131.95861053466797
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140719.544381,
+      "endMs": 140719.55479700002,
+      "durationMs": 0.010416000004624948,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 131.99180603027344
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 132.00694274902344
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140719.460606,
+      "endMs": 140736.973172,
+      "durationMs": 17.51256599999033,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 131.9608154296875
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 140.3968048095703
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140719.45113200002,
+      "endMs": 140737.041238,
+      "durationMs": 17.590105999988737,
+      "draftGuard": 45,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 131.9602813720703
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 140.39734649658203
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140738.34713,
+      "endMs": 140738.35664,
+      "durationMs": 0.009510000003501773,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 140.43057250976562
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 140.44570922851562
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140738.245892,
+      "endMs": 140758.123866,
+      "durationMs": 19.877974000002723,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 140.3995819091797
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 133.0768814086914
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140738.229349,
+      "endMs": 140758.200156,
+      "durationMs": 19.970807000005152,
+      "draftGuard": 46,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 140.3990478515625
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 133.07742309570312
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140759.49823000003,
+      "endMs": 140759.508096,
+      "durationMs": 0.00986599997850135,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 133.1106185913086
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 133.1257553100586
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140759.410414,
+      "endMs": 140777.091885,
+      "durationMs": 17.68147099998896,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 133.07962799072266
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 141.55206298828125
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140759.401285,
+      "endMs": 140777.18548900002,
+      "durationMs": 17.784204000025056,
+      "draftGuard": 47,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 133.07909393310547
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 141.55260467529297
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140778.52812200002,
+      "endMs": 140778.538063,
+      "durationMs": 0.009940999996615574,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 141.58583068847656
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 141.60096740722656
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140778.41200100002,
+      "endMs": 140798.73726800003,
+      "durationMs": 20.325267000007443,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 141.55484008789062
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 134.12589263916016
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140778.402543,
+      "endMs": 140798.80050100002,
+      "durationMs": 20.397958000015933,
+      "draftGuard": 48,
+      "memoryBefore": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 141.55430603027344
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 134.12643432617188
+      }
+    },
+    {
+      "name": "persistence.flushDirty",
+      "parent": "draft.sim-batch",
+      "startMs": 140800.110607,
+      "endMs": 140800.120429,
+      "durationMs": 0.009821999992709607,
+      "forceFlush": false,
+      "phase": "draft",
+      "teams": 32,
+      "players": 1882,
+      "writes": 0,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 134.15962982177734
+      },
+      "memoryAfter": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 134.17476654052734
+      }
+    },
+    {
+      "name": "draft.sim-batch",
+      "parent": "stage.draft.pick-batch",
+      "startMs": 140800.02385700002,
+      "endMs": 140817.946781,
+      "durationMs": 17.92292399998405,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 134.1286392211914
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 142.5909881591797
+      }
+    },
+    {
+      "name": "stage.draft.pick-batch",
+      "parent": "lifecycle.SIM_TO_PHASE",
+      "startMs": 140800.01431600002,
+      "endMs": 140818.014643,
+      "durationMs": 18.00032699998701,
+      "draftGuard": 49,
+      "memoryBefore": {
+        "rssMb": 512.33984375,
+        "heapUsedMb": 134.12810516357422
+      },
+      "memoryAfter": {
+        "rssMb": 512.58984375,
+        "heapUsedMb": 142.5915298461914
+      }
+    }
+  ],
+  "runToRunVariance": [
+    {
+      "name": "stage.draft.pick-batch",
+      "run1Ms": 111708.60787800008,
+      "run2Ms": 112733.87023000015,
+      "deltaPct": 0.9178006704011381
+    },
+    {
+      "name": "draft.sim-batch",
+      "run1Ms": 111190.53888099996,
+      "run2Ms": 112191.28699500149,
+      "deltaPct": 0.9000299162796268
+    },
+    {
+      "name": "lifecycle.SIM_TO_PHASE",
+      "run1Ms": 19755.219158,
+      "run2Ms": null,
+      "deltaPct": null
+    },
+    {
+      "name": "persistence.flushDirty",
+      "run1Ms": 11475.160414000184,
+      "run2Ms": 67.99603800071054,
+      "deltaPct": -99.40745021814465
+    },
+    {
+      "name": "stage.regular.advance-week",
+      "run1Ms": 7847.906847999999,
+      "run2Ms": null,
+      "deltaPct": null
+    }
+  ],
+  "comparisonRuns": [
+    {
+      "runId": 1,
+      "completed": false,
+      "runtimeMs": 140818.46402500002,
+      "peakMemoryMb": 513,
+      "top": [
+        {
+          "name": "stage.draft.pick-batch",
+          "parent": "lifecycle.SIM_TO_PHASE",
+          "calls": 5550,
+          "totalMs": 111708.60787800008,
+          "minMs": 16.841255999999703,
+          "maxMs": 126.80755000000136,
+          "items": 0,
+          "teams": 0,
+          "players": 0,
+          "prospects": 0,
+          "picks": 0,
+          "offers": 0,
+          "avgMs": 20.12767709513515,
+          "share": 0.7932809710107904
+        },
+        {
+          "name": "draft.sim-batch",
+          "parent": "stage.draft.pick-batch",
+          "calls": 5550,
+          "totalMs": 111190.53888099996,
+          "minMs": 16.783288000005996,
+          "maxMs": 126.1414420000001,
+          "items": 0,
+          "teams": 0,
+          "players": 0,
+          "prospects": 0,
+          "picks": 0,
+          "offers": 0,
+          "avgMs": 20.034331329909904,
+          "share": 0.7896019861519005
+        },
+        {
+          "name": "lifecycle.SIM_TO_PHASE",
+          "parent": null,
+          "calls": 2,
+          "totalMs": 19755.219158,
+          "minMs": 6340.53054,
+          "maxMs": 13414.688618,
+          "items": 0,
+          "teams": 0,
+          "players": 0,
+          "prospects": 0,
+          "picks": 0,
+          "offers": 0,
+          "avgMs": 9877.609579,
+          "share": 0.14028855729098694
+        },
+        {
+          "name": "persistence.flushDirty",
+          "parent": "lifecycle.SIM_TO_PHASE",
+          "calls": 5635,
+          "totalMs": 11475.160414000184,
+          "minMs": 0.007532999996328726,
+          "maxMs": 5915.350584000002,
+          "items": 0,
+          "teams": 180320,
+          "players": 10593496,
+          "prospects": 0,
+          "picks": 0,
+          "offers": 0,
+          "avgMs": 2.0364082367347263,
+          "share": 0.08148903265954496
+        },
+        {
+          "name": "stage.regular.advance-week",
+          "parent": "lifecycle.SIM_TO_PHASE",
+          "calls": 18,
+          "totalMs": 7847.906847999999,
+          "minMs": 347.1094710000016,
+          "maxMs": 891.3861590000001,
+          "items": 0,
+          "teams": 0,
+          "players": 0,
+          "prospects": 0,
+          "picks": 0,
+          "offers": 0,
+          "avgMs": 435.99482488888884,
+          "share": 0.05573066644589115
+        }
+      ]
+    },
+    {
+      "runId": 2,
+      "completed": false,
+      "runtimeMs": 120019.43851399998,
+      "peakMemoryMb": 521,
+      "top": [
+        {
+          "name": "stage.draft.pick-batch",
+          "parent": null,
+          "calls": 5591,
+          "totalMs": 112733.87023000015,
+          "minMs": 17.037595000001602,
+          "maxMs": 80.4108830000041,
+          "items": 0,
+          "teams": 0,
+          "players": 0,
+          "prospects": 0,
+          "picks": 0,
+          "offers": 0,
+          "avgMs": 20.163453806117,
+          "share": 0.9392967641391691
+        },
+        {
+          "name": "draft.sim-batch",
+          "parent": "stage.draft.pick-batch",
+          "calls": 5591,
+          "totalMs": 112191.28699500149,
+          "minMs": 16.972853999992367,
+          "maxMs": 78.3796849999926,
+          "items": 0,
+          "teams": 0,
+          "players": 0,
+          "prospects": 0,
+          "picks": 0,
+          "offers": 0,
+          "avgMs": 20.066407976212034,
+          "share": 0.934775969493597
+        },
+        {
+          "name": "stage.draft.ensure-state",
+          "parent": null,
+          "calls": 11,
+          "totalMs": 189.82530999995652,
+          "minMs": 16.095252999977674,
+          "maxMs": 18.646624999993946,
+          "items": 0,
+          "teams": 0,
+          "players": 0,
+          "prospects": 0,
+          "picks": 0,
+          "offers": 0,
+          "avgMs": 17.25684636363241,
+          "share": 0.0015816213802551146
+        },
+        {
+          "name": "draft.initialize",
+          "parent": "stage.draft.ensure-state",
+          "calls": 11,
+          "totalMs": 188.73786200000905,
+          "minMs": 16.01434500000323,
+          "maxMs": 18.52305700001307,
+          "items": 0,
+          "teams": 0,
+          "players": 0,
+          "prospects": 0,
+          "picks": 0,
+          "offers": 0,
+          "avgMs": 17.157987454546276,
+          "share": 0.001572560781293717
+        },
+        {
+          "name": "persistence.flushDirty",
+          "parent": "draft.sim-batch",
+          "calls": 5614,
+          "totalMs": 67.99603800071054,
+          "minMs": 0.007031999994069338,
+          "maxMs": 2.3397990000084974,
+          "items": 0,
+          "teams": 179648,
+          "players": 10565548,
+          "prospects": 0,
+          "picks": 0,
+          "offers": 0,
+          "avgMs": 0.012111869968063866,
+          "share": 0.0005665418772374857
+        }
+      ]
+    }
+  ]
+}

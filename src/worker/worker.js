@@ -59,6 +59,7 @@ import { handleGetRoster } from './handlers/rosterHandlers.js';
 import { handleGetFreeAgents, handleSubmitOffer, handleWithdrawOffer } from './handlers/freeAgencyHandlers.js';
 import { handleSaveNow } from './handlers/saveHandlers.js';
 import { handleGetDraftState } from './handlers/draftHandlers.js';
+import { offseasonProfiler } from './offseasonProfiler.js';
 import {
   createEmptyDirtySnapshot,
   hasDirtySnapshot,
@@ -1937,6 +1938,8 @@ async function createUniqueLeagueId() {
  *    key path did not yield a value."
  */
 async function flushDirty(forceFlush = false) {
+  const __profileToken = offseasonProfiler.start('persistence.flushDirty', { forceFlush });
+  try {
   // PRIMARY iOS GUARD: Never flush until a save has been explicitly loaded or created.
   // This is the bootloader protection — the worker must never write an empty state.
   if (!_saveIsExplicitlyLoaded) {
@@ -2083,6 +2086,14 @@ async function flushDirty(forceFlush = false) {
     if (typeof globalThis !== 'undefined') {
       globalThis.__DYNASTY_SOAK_PENDING_DIRTY__ = pendingBatchDirty;
     }
+  }
+  } finally {
+    offseasonProfiler.end(__profileToken, {
+      phase: cache.getMeta()?.phase ?? null,
+      teams: cache.getAllTeams?.().length ?? 0,
+      players: cache.getAllPlayers?.().length ?? 0,
+      writes: forceFlush ? 1 : 0,
+    });
   }
 }
 
@@ -5170,6 +5181,8 @@ async function handleSimToWeek({ targetWeek }, id) {
 // ── Handler: SIM_TO_PHASE ────────────────────────────────────────────────────
 
 async function handleSimToPhase({ targetPhase }, id) {
+  const __simProfileToken = offseasonProfiler.start('lifecycle.SIM_TO_PHASE', { targetPhase });
+  try {
   if (batchSimControl.running) {
     post(toUI.SIM_BATCH_STATUS, {
       status: 'running',
@@ -5282,15 +5295,15 @@ async function handleSimToPhase({ targetPhase }, id) {
       // Pass skipUserGame:true during batch sim to avoid prompting the user
       if (['regular', 'playoffs', 'preseason'].includes(currentMeta.phase)) {
         validateLeagueFlowState({ stage: currentMeta.phase });
-        await handleAdvanceWeek({ skipUserGame: true }, null);
+        await offseasonProfiler.measure(`stage.${currentMeta.phase}.advance-week`, { phase: currentMeta.phase, week: currentMeta.currentWeek ?? 0 }, () => handleAdvanceWeek({ skipUserGame: true }, null));
       } else if (['offseason_resign', 'offseason'].includes(currentMeta.phase)) {
         validateLeagueFlowState({ stage: 'retirements_resignings' });
-        await handleAdvanceOffseason({}, null);
+        await offseasonProfiler.measure('stage.offseason.advance', { phase: currentMeta.phase }, () => handleAdvanceOffseason({}, null));
       } else if (currentMeta.phase === 'free_agency') {
         validateLeagueFlowState({ stage: 'free_agency' });
-        await handleAdvanceFreeAgencyDay({}, null);
+        await offseasonProfiler.measure('stage.free-agency.day', { phase: currentMeta.phase }, () => handleAdvanceFreeAgencyDay({}, null));
       } else if (currentMeta.phase === 'draft_combine') {
-        await handleAdvanceCombineWeek({}, null);
+        await offseasonProfiler.measure('stage.combine.week', { phase: currentMeta.phase }, () => handleAdvanceCombineWeek({}, null));
       } else if (currentMeta.phase === 'draft') {
         // Auto-sim all draft picks. The draft pipeline itself is responsible
         // for transitioning into the next season (handleSimDraftPick and
@@ -5301,7 +5314,7 @@ async function handleSimToPhase({ targetPhase }, id) {
           iterations,
           { force: true },
         );
-        await handleStartDraft({}, null);
+        await offseasonProfiler.measure('stage.draft.ensure-state', {}, () => handleStartDraft({}, null));
         validateLeagueFlowState({ stage: 'draft_setup', requireDraftState: true });
         await maybePersistSimSession(
           { status: 'running', targetPhase, stage: 'draft_execution', checkpoint: 'start' },
@@ -5317,7 +5330,7 @@ async function handleSimToPhase({ targetPhase }, id) {
           if (!ds || ds.currentPickIndex >= (ds.picks?.length ?? 0)) {
             draftDone = true;
           } else {
-            await handleSimDraftPick({}, null);
+            await offseasonProfiler.measure('stage.draft.pick-batch', { draftGuard }, () => handleSimDraftPick({}, null));
           }
           draftGuard++;
           await yieldFrame();
@@ -5381,6 +5394,14 @@ async function handleSimToPhase({ targetPhase }, id) {
       targetPhase: null,
       stage: null,
     };
+  }
+  } finally {
+    offseasonProfiler.end(__simProfileToken, {
+      phase: cache.getMeta()?.phase ?? null,
+      week: cache.getMeta()?.currentWeek ?? null,
+      season: cache.getMeta()?.year ?? null,
+      completed: cache.getMeta()?.phase === targetPhase,
+    });
   }
 }
 
@@ -10461,6 +10482,7 @@ async function handleAssignMentor({ mentorId, menteeId, teamId }, id) {
 }
 
 async function handleStartDraft(payload, id) {
+  return offseasonProfiler.measure('draft.initialize', {}, async () => {
   const meta = ensureCompMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
@@ -10570,6 +10592,7 @@ async function handleStartDraft(payload, id) {
   await flushDirty();
 
   post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+  });
 }
 
 // ── Handler: MAKE_DRAFT_PICK ──────────────────────────────────────────────────
@@ -10660,6 +10683,7 @@ async function handleMakeDraftPick({ playerId }, id) {
  * Each AI picks the highest-OVR available prospect.
  */
 async function handleSimDraftPick(payload, id) {
+  return offseasonProfiler.measure('draft.sim-batch', {}, async () => {
   const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta?.draftState) { post(toUI.ERROR, { message: 'No active draft' }, id); return; }
 
@@ -10690,7 +10714,7 @@ async function handleSimDraftPick(payload, id) {
         draftPool:   allActivePlayers.filter((p) => p.status === 'draft_eligible').sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0)),
         futurePicks: cache.getAllDraftPicks(),
       };
-      const tuOpportunity = findDraftTradeUpOpportunity(tuState);
+      const tuOpportunity = offseasonProfiler.measure('draft.trade-up.evaluate', { pickNumber: Number(pick?.overall ?? currentPickIndex + 1), prospects: tuState.draftPool.length, teams: tuState.teams.length }, () => findDraftTradeUpOpportunity(tuState));
       if (tuOpportunity?.type === 'ai_to_ai') {
         const tuResult = applyDraftTradeUp(tuOpportunity, tuState);
         // Apply swapped picks back into the live draftState
@@ -10739,19 +10763,20 @@ async function handleSimDraftPick(payload, id) {
 
     // AI selects by weighted board value (need, scheme fit, upside, combine/interview risk).
     const team = cache.getTeam(pick.teamId);
-    const strategy = buildAiTeamStrategy({
+    const strategy = offseasonProfiler.measure('draft.ai-strategy', { teamId: pick.teamId, pickNumber: Number(pick?.overall ?? currentPickIndex + 1) }, () => buildAiTeamStrategy({
       team,
       roster: cache.getPlayersByTeam(pick.teamId),
       league: { year: meta?.year, phase: meta?.phase },
       phase: meta?.phase,
       year: meta?.year,
-    });
-    const needs = AiLogic.calculateTeamNeeds(pick.teamId);
+    }));
+    const needs = offseasonProfiler.measure('draft.team-needs', { teamId: pick.teamId, pickNumber: Number(pick?.overall ?? currentPickIndex + 1) }, () => AiLogic.calculateTeamNeeds(pick.teamId));
     const needPriorityByPos = new Map((strategy?.positionalNeeds ?? []).map((row) => [row.positionGroup, Number(row?.priority ?? 0)]));
     let bestProspect = null;
     let bestValue = -1;
     let bestIdx = -1;
 
+    const __pickProfileToken = offseasonProfiler.start('draft.pick.evaluate-and-select', { teamId: pick.teamId, pickNumber: Number(pick?.overall ?? currentPickIndex + 1), round: Number(pick?.round ?? 0), prospects: draftPool.length });
     for (let i = 0; i < draftPool.length; i++) {
         const p = draftPool[i];
         const boardScore = scoreDraftBoardEntry({
@@ -10807,8 +10832,10 @@ async function handleSimDraftPick(payload, id) {
         }
     }
 
+    offseasonProfiler.end(__pickProfileToken, { selectedPlayerId: bestProspect?.id ?? null, prospects: draftPool.length });
     if (!bestProspect) break; // pool exhausted
 
+    offseasonProfiler.addIteration({ kind: 'draft-pick', pickNumber: Number(pick?.overall ?? currentPickIndex + 1), round: Number(pick?.round ?? 0), teamId: pick.teamId, prospectsRemaining: draftPool.length });
     _executeDraftPick(currentPickIndex, bestProspect.id, pick.teamId);
     const pickedGroup = mapPlayerPosToNeedGroup(bestProspect?.pos) ?? String(bestProspect?.pos ?? '');
     const sgKey = `${pick.teamId}|${pickedGroup}`;
@@ -10900,6 +10927,7 @@ async function handleSimDraftPick(payload, id) {
       }
     }
   }
+  });
 }
 
 // ── Handler: ACCEPT_DRAFT_TRADE ──────────────────────────────────────────────

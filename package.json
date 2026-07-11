@@ -30,7 +30,8 @@
     "check:netlify-cli-build:preview": "npx --yes netlify-cli@latest build --context deploy-preview --offline",
     "audit:dynasty:multi": "npm run audit:dynasty -- --audit-profile=multi-seed-ci",
     "audit:dynasty:stability": "npm run audit:dynasty -- --audit-profile=stability-v1",
-    "audit:dynasty:stability:deep": "npm run audit:dynasty -- --audit-profile=stability-v1 --seasons=10 --seeds=1383,1408,1426,1451,1499 --deep"
+    "audit:dynasty:stability:deep": "npm run audit:dynasty -- --audit-profile=stability-v1 --seasons=10 --seeds=1383,1408,1426,1451,1499 --deep",
+    "durability:profile:offseason": "tsx scripts/offseason-rollover-profile.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
