@@ -75,7 +75,7 @@ describe('TradeCenter — accept incoming trade error handling', () => {
     await waitFor(() => expect(actions.getRoster).toHaveBeenCalledWith(2));
   });
 
-  it('shows a visible error and clears the pending state when the request rejects', async () => {
+  it('shows the outcome-unknown message and clears the pending state when the request rejects', async () => {
     const acceptIncomingTrade = vi.fn(async () => { throw new Error('Worker not ready'); });
     const actions = makeActions({ acceptIncomingTrade });
     const { findByText, getByText, queryByText } = render(<TradeCenter league={makeLeague()} actions={actions} />);
@@ -86,9 +86,16 @@ describe('TradeCenter — accept incoming trade error handling', () => {
     await waitFor(() => expect(getByText('Trade Failed')).toBeTruthy());
     expect(queryByText('Trade Accepted!')).toBeNull();
     expect(getByText('Accept').disabled).toBe(false);
+    // A worker timeout doesn't cancel the in-flight trade — the outcome is
+    // unknown, not confirmed-failed, so the copy must not overclaim either way
+    // and must not tell the user to just retry immediately.
+    expect(getByText(/Trade outcome could not be confirmed/i)).toBeTruthy();
+    expect(getByText(/Reload before retrying/i)).toBeTruthy();
+    expect(queryByText(/Please try again/i)).toBeNull();
+    expect(queryByText(/No roster changes were made/i)).toBeNull();
   });
 
-  it('shows an error when the response resolves without a usable payload', async () => {
+  it('shows the outcome-unknown message when the response resolves without a usable payload', async () => {
     const acceptIncomingTrade = vi.fn(async () => undefined);
     const actions = makeActions({ acceptIncomingTrade });
     const { findByText, getByText, queryByText } = render(<TradeCenter league={makeLeague()} actions={actions} />);
@@ -99,6 +106,9 @@ describe('TradeCenter — accept incoming trade error handling', () => {
     await waitFor(() => expect(getByText('Trade Failed')).toBeTruthy());
     expect(queryByText('Trade Accepted!')).toBeNull();
     expect(getByText('Accept').disabled).toBe(false);
+    expect(getByText(/Trade outcome could not be confirmed/i)).toBeTruthy();
+    expect(queryByText(/Please try again/i)).toBeNull();
+    expect(queryByText(/No roster changes were made/i)).toBeNull();
   });
 
   it('surfaces an explicit unsuccessful result without crashing or claiming success', async () => {
@@ -111,6 +121,10 @@ describe('TradeCenter — accept incoming trade error handling', () => {
 
     await waitFor(() => expect(getByText('Trade Rejected')).toBeTruthy());
     expect(queryByText('Trade Accepted!')).toBeNull();
+    // A confirmed rejection is unaffected by the outcome-unknown copy change —
+    // it still shows the worker-provided reason verbatim.
+    expect(getByText('Offer expired or no longer available.')).toBeTruthy();
+    expect(queryByText(/Trade outcome could not be confirmed/i)).toBeNull();
   });
 
   it('blocks a second submission while the first request is still pending', async () => {
@@ -169,6 +183,8 @@ describe('TradeCenter — accept incoming trade error handling', () => {
     await waitFor(() => expect(getByText('Trade Failed')).toBeTruthy());
     expect(queryByText('Trade Rejected')).toBeNull();
     expect(queryByText('Trade Accepted!')).toBeNull();
+    expect(getByText(/Trade outcome could not be confirmed/i)).toBeTruthy();
+    expect(queryByText(/Please try again/i)).toBeNull();
   });
 
   it('keeps showing "Trade Accepted!" even when post-commit chronicle sync fails', async () => {

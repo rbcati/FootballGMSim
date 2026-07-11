@@ -696,14 +696,14 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
         resp = await actions.acceptIncomingTrade(offer.id);
       } catch (e) {
         console.error(e);
-        setTradeResult({ accepted: false, error: 'Trade could not be completed. No roster changes were made. Please try again.' });
+        setTradeResult({ accepted: false, error: 'Trade outcome could not be confirmed. Reload before retrying to verify your roster.' });
         return;
       }
       // A usable result must carry a boolean `accepted` flag. Anything else —
       // missing payload, `{}` payload, etc. — is a malformed transport/contract
       // result, not a legitimate trade rejection.
       if (typeof resp?.payload?.accepted !== 'boolean') {
-        setTradeResult({ accepted: false, error: 'Trade could not be completed. No roster changes were made. Please try again.' });
+        setTradeResult({ accepted: false, error: 'Trade outcome could not be confirmed. Reload before retrying to verify your roster.' });
         return;
       }
       // The trade request itself has settled with a real answer — commit it to
