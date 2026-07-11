@@ -18,6 +18,15 @@ broad-repair change. It does **not** re-implement any simulation, schedule,
 draft, progression, free-agency, or offseason rule — it invokes the production
 worker and validates the state the game itself produces.
 
+### Review-blocker fix status
+
+The follow-up review fixes are intentionally narrow and live in the harness layer:
+
+- `LifecycleDriver.simToPhase()` must throw a structured lifecycle error if retry calls are exhausted before the requested target phase is reached.
+- Bounded runs that stop at `playoffs` or `offseason` must not increment `seasonsCompleted`; they instead report `competitiveSeasonsCompleted`, `completedThrough`, `boundedRun`, and `unexercisedLifecycleStages`.
+- The committed bounded report is named `long-save-1-season-bounded.json` / `.summary.json` to avoid implying a completed offseason rollover.
+- DB-backed draft-pick validation reads every persisted pick instead of only valid-owner index buckets, and explicit depth-chart IDs are validated against the active roster.
+
 ## 2. Architecture findings (pre-task investigation, verified against `main`)
 
 | Question | Finding |
@@ -30,7 +39,7 @@ worker and validates the state the game itself produces.
 | Cache / global state reset | The worker holds a module-level `cache`. `USE_SAFE_STARTER_LEAGUE` calls `clearAllData()` + `cache.reset()` + `cache.hydrate(...)`, so re-initializing fully resets in-memory + DB state between runs. |
 | Headless worker-only path | Yes — `src/testSupport/dynastySoakRunner.js` exposes `loadWorkerModule()` + `dispatchWorker()`, a `postMessage` bridge that runs the real worker in Node with `fake-indexeddb`. **This is the same worker the browser uses**, not a shortcut engine. The harness reuses this bridge. |
 | Existing multi-season utilities | Yes — the **dynasty soak** stack (`scripts/dynasty-soak.mjs`, `src/testSupport/dynastySoak*.js`, `src/core/dynastySoakAudit.js`). This harness is complementary: it adds a phase-aware, separately-importable invariant framework, checkpoint save/reload validation, and a stable machine-readable report. |
-| Save serialization / reload | Real path: `SAVE_NOW` flushes the cache to IndexedDB via `src/db/index.js`; `LOAD_SAVE` rehydrates. The full pool (including free agents, which are **not** in the rostered-only `FULL_STATE` view) is read back through `Players.loadAll()` / `Teams.loadAll()` / `DraftPicks.byOwner()` / `Meta.load()`. |
+| Save serialization / reload | Real path: `SAVE_NOW` flushes the cache to IndexedDB via `src/db/index.js`; `LOAD_SAVE` rehydrates. The full pool (including free agents, which are **not** in the rostered-only `FULL_STATE` view) is read back through `Players.loadAll()` / `Teams.loadAll()` / `DraftPicks.loadAll()` / `Meta.load()` so orphaned pick owners are still visible to reference checks. |
 | In-memory storage adapter | `fake-indexeddb` provides the Node-side IndexedDB; no browser required. |
 | Regular vs playoff records | Regular-season W/L/T live on `team.wins/losses/ties`; playoff outcomes are separate (`championTeamId`, `playoffSeeds`). Game counts differ per team — playoffs are evaluated separately and never folded into per-team regular-season expectations. |
 | History / awards archive | `meta.leagueHistory[]` (completed seasons), `meta.awardHistory` / `meta.franchiseAwards`, `meta.retiredPlayers`, `meta.recordBook`. Surfaced in the view + persisted. |
@@ -235,7 +244,8 @@ Stable JSON (see `report.js`, `DurabilityReport`):
 {
   "harnessVersion": "1.0.0", "gitSha": "…", "seed": 1684,
   "mode": "1-season", "failureMode": "fail-fast",
-  "requestedSeasons": 1, "seasonsAttempted": 1, "seasonsCompleted": 1,
+  "requestedSeasons": 1, "seasonsAttempted": 1, "seasonsCompleted": 0,
+  "competitiveSeasonsCompleted": 1, "completedThrough": "afterPlayoffs", "boundedRun": true,
   "runtimeMs": 0, "peakMemoryMb": 0,
   "deterministic": null, "determinismDetail": null,
   "firstFailure": null,            // {season,phase,invariantId,entityType,entityId,message}
@@ -255,7 +265,7 @@ counts) for commit-safe long-run artifacts.
 
 | Command | What |
 |---|---|
-| `npm run durability:test` | **Required-tier** focused tests: all pure invariant unit tests + a **bounded real-lifecycle smoke** (real worker, init→regular→playoffs, ~12s). |
+| `npm run durability:test` | **Required-tier** focused tests: all pure invariant unit tests + a **bounded real-lifecycle smoke** (real worker, init→regular→playoffs, ~18s). |
 | `npm run durability:smoke` | 1-season full lifecycle incl. rollover + save/reload. |
 | `npm run durability:5` | 5-season durability. |
 | `npm run durability:10` | 10-season durability (manual). |
@@ -273,8 +283,8 @@ container used for this PR:
 
 | Mode | Wall-clock | Peak RSS | Seasons completed | Notes |
 |---|---|---|---|---|
-| `durability:test` (units + bounded real smoke) | **~12 s** | ~0.3 GB | n/a (init→regular→playoffs) | 23 tests |
-| 1-season, `--stop-phase=offseason` (+ save/reload) | **~15.6 s** | **317 MB** | 1 (bounded) | 126 pass / 0 fail / 31 skip — see `reports/long-save-1-season.json` |
+| `durability:test` (units + bounded real smoke) | **~18 s** | ~0.3 GB | n/a (init→regular→playoffs) | 29 tests |
+| 1-season, `--stop-phase=offseason` (+ save/reload) | **~23.3 s** | **377 MB** | 0 full rollover / 1 competitive (bounded) | 126 pass / 0 fail / 31 skip — see `reports/long-save-1-season-bounded.json` |
 | 1-season, full rollover (default) | **did NOT complete in-window** | — | 0 | offseason draft rollover dominates (see below) |
 | 5-season, full rollover, 5-min phase budget | **~315 s** then phase-timeout | **508 MB** | 0 | 91 pass / 0 fail / 26 skip through `afterPlayoffs`; timed out in the season-1 rollover — see `reports/long-save-5-season.json` |
 | 10-season / 20-season | manual; blocked by same rollover cost | — | — | commands left available |

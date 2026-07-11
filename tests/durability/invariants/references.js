@@ -37,12 +37,16 @@ export function check(ctx) {
   let depthChecked = false;
   for (const team of Array.isArray(ctx?.view?.teams) ? ctx.view.teams : []) {
     const rosterIds = new Set((Array.isArray(team.roster) ? team.roster : []).map((p) => String(p?.id)));
-    // depthOrder lives on each roster player; a stale depth ref would be a
-    // roster player whose depthOrder points nowhere — here we assert every
-    // roster player has a resolvable id (ghost depth refs are caught by roster).
-    for (const p of Array.isArray(team.roster) ? team.roster : []) {
+    const refs = collectDepthChartPlayerIds(team?.depthChart);
+    if (refs.length) {
       depthChecked = true;
-      if (p?.depthOrder != null && !rosterIds.has(String(p.id))) depthDangling += 1;
+      for (const ref of refs) if (!rosterIds.has(String(ref))) depthDangling += 1;
+    } else {
+      // Some view shapes store depth metadata directly on roster players rather
+      // than a team.depthChart object; those entries are implicitly roster-bound.
+      for (const p of Array.isArray(team.roster) ? team.roster : []) {
+        if (p?.depthOrder != null) depthChecked = true;
+      }
     }
   }
   if (!depthChecked) {
@@ -99,4 +103,27 @@ export function check(ctx) {
   }
 
   return out;
+}
+
+function collectDepthChartPlayerIds(value) {
+  const ids = [];
+  const visit = (node, key = '') => {
+    if (node == null) return;
+    if (typeof node !== 'object') {
+      ids.push(node);
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item, key);
+      return;
+    }
+    if (node.playerId != null) ids.push(node.playerId);
+    else if (node.id != null) ids.push(node.id);
+    for (const [childKey, child] of Object.entries(node)) {
+      if (childKey === 'playerId' || childKey === 'id') continue;
+      visit(child, childKey);
+    }
+  };
+  visit(value);
+  return ids.filter((id) => id != null);
 }

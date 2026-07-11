@@ -20,6 +20,10 @@ export class DurabilityReport {
       requestedSeasons,
       seasonsAttempted: 0,
       seasonsCompleted: 0,
+      competitiveSeasonsCompleted: 0,
+      completedThrough: null,
+      boundedRun: perSeasonStopPhase !== 'rollover',
+      unexercisedLifecycleStages: [],
       runtimeMs: 0,
       peakMemoryMb: 0,
       deterministic: null,
@@ -85,9 +89,22 @@ export class DurabilityReport {
   addDeferredFinding(entry) { this.report.deferredFindings.push(entry); }
   setRecommendedNextRepairPR(v) { this.report.recommendedNextRepairPR = v; }
 
-  finalize({ seasonsAttempted, seasonsCompleted, runtimeMs, peakMemoryMb }) {
+  finalize({
+    seasonsAttempted,
+    seasonsCompleted,
+    competitiveSeasonsCompleted = seasonsCompleted,
+    completedThrough = null,
+    boundedRun = null,
+    unexercisedLifecycleStages = [],
+    runtimeMs,
+    peakMemoryMb,
+  }) {
     this.report.seasonsAttempted = seasonsAttempted;
     this.report.seasonsCompleted = seasonsCompleted;
+    this.report.competitiveSeasonsCompleted = competitiveSeasonsCompleted;
+    this.report.completedThrough = completedThrough;
+    this.report.boundedRun = boundedRun ?? this.report.perSeasonStopPhase !== 'rollover';
+    this.report.unexercisedLifecycleStages = unexercisedLifecycleStages;
     this.report.runtimeMs = runtimeMs;
     this.report.peakMemoryMb = peakMemoryMb;
     if (!this.report.recommendedNextRepairPR) {
@@ -152,7 +169,8 @@ export function formatConsole(report) {
   const r = report.toJSON ? report.toJSON() : report;
   lines.push(`── Long-Save Durability Report ──────────────────────────────`);
   lines.push(`mode=${r.mode} seed=${r.seed} failureMode=${r.failureMode}`);
-  lines.push(`seasons: requested=${r.requestedSeasons} attempted=${r.seasonsAttempted} completed=${r.seasonsCompleted}`);
+  lines.push(`seasons: requested=${r.requestedSeasons} attempted=${r.seasonsAttempted} completed=${r.seasonsCompleted} competitive=${r.competitiveSeasonsCompleted ?? r.seasonsCompleted}`);
+  if (r.boundedRun) lines.push(`boundedRun=true completedThrough=${r.completedThrough ?? 'unknown'} unexercised=${(r.unexercisedLifecycleStages || []).join(',')}`);
   lines.push(`runtime=${(r.runtimeMs / 1000).toFixed(1)}s peakMem=${r.peakMemoryMb}MB`);
   lines.push(`invariants: pass=${r.summary.passed} fail=${r.summary.failed} skip=${r.summary.skipped}`);
   if (r.deterministic != null) lines.push(`deterministic=${r.deterministic} (${r.determinismDetail ?? ''})`);
