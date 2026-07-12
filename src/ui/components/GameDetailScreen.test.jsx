@@ -60,7 +60,7 @@ describe('GameDetailScreen canonical title and prep context', () => {
     vi.mocked(useStableRouteRequest).mockReturnValue({ data: null, loading: false, error: null });
   });
 
-  it('uses a single Game Book destination title', () => {
+  it('shows an anchored recovery surface (not a placeholder final) when no game data resolves', () => {
     const html = renderToString(
       <GameDetailScreen
         gameId="2031_w1_1_2"
@@ -69,8 +69,11 @@ describe('GameDetailScreen canonical title and prep context', () => {
       />,
     );
 
-    expect(html).toContain('Game Book');
-    expect(html).toContain('Week');
+    expect(html).toContain('Game Book unavailable');
+    expect(html).toContain('game-book-recovery-return');
+    // Never renders a fabricated 0-0 / placeholder final for a missing game.
+    expect(html).not.toContain('finished tied');
+    expect(html).not.toContain('AWAY 0');
     expect(html).not.toContain('Completed Game Detail');
   });
 

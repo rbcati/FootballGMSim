@@ -53,7 +53,7 @@ import EventDecisionModal from './components/EventDecisionModal.jsx';
 import { SettingsProvider, useSettings } from './context/SettingsContext.jsx';
 import { ACTION_LABELS, formatRegularUnitLabel } from './constants/navigationCopy.js';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from './utils/boxScoreAccess.js';
-import { getDisplayableNotifications } from './utils/notificationsDisplay.js';
+import { capVisibleNotifications, getDisplayableNotifications } from './utils/notificationsDisplay.js';
 import { buildOffseasonActionCenter } from './utils/offseasonActionCenter.js';
 import {
   hasMinimumPlayableLeague,
@@ -567,6 +567,28 @@ function AppContent() {
     }
   }, [simulating, lastResults, lastSimWeek, userGameLogs, postGameResult, league]);
 
+  // ── Auto-dismiss routine info notices ─────────────────────────────────────
+  // Post-sim info notices ("Weekly simulation ran…", "development updated…")
+  // previously piled up as permanent full-width cards over the weekly results.
+  // Info-level, non-retryable notices now dismiss themselves; warnings and
+  // retryable notices persist until the user acts on them.
+  const autoDismissTimersRef = useRef(new Map());
+  useEffect(() => {
+    const timers = autoDismissTimersRef.current;
+    (notifications ?? []).forEach((n) => {
+      if (!n || n.level === 'warn' || n.retryable || timers.has(n.id)) return;
+      timers.set(n.id, setTimeout(() => {
+        timers.delete(n.id);
+        actions.dismissNotification(n.id);
+      }, 7000));
+    });
+    return undefined;
+  }, [notifications, actions]);
+  useEffect(() => () => {
+    autoDismissTimersRef.current.forEach((t) => clearTimeout(t));
+    autoDismissTimersRef.current.clear();
+  }, []);
+
   // ── Keyboard shortcuts (desktop) ──────────────────────────────────────────
   // Space / Enter  → Advance week (when not busy and no modal open)
   // S              → Manual save
@@ -604,6 +626,9 @@ function AppContent() {
         ...actions,
         startNewLeague: () => actions.newLeague(DEFAULT_TEAMS, { userTeamId: 0, name: 'Test League' }),
         advanceWeek: handleAdvanceWeek,
+        // Route straight into the Game Book screen — used by E2E to exercise
+        // both the canonical open path and the missing-game recovery path.
+        openBoxScore: (gameId) => setExternalBoxScoreId(gameId),
       };
       window.handleGlobalAdvance = handleAdvanceWeek;
     }
@@ -1347,37 +1372,59 @@ function AppContent() {
       {/* ── Notifications ──────────────────────────────────────────────── */}
       {/* Only notifications with real, visible content render a dismissible
           pill — empty entries would otherwise show as a blank gray block with
-          just an "×" in the post-sim / weekly-results area. */}
-      {getDisplayableNotifications(notifications).length > 0 && (
-        <div className="app-notifications">
-          {getDisplayableNotifications(notifications).map(n => (
-            <div
-              key={n.id}
-              className={`app-notification ${n.level === 'warn' ? 'app-notification-warn' : 'app-notification-info'}`}
-            >
-              <span>{n.message}</span>
-              {n.retryable && (
+          just an "×" in the post-sim / weekly-results area.
+          Mobile trust pass: at most 3 rows render (newest last) so routine
+          post-sim notices ("Weekly simulation ran…", "development updated…")
+          can't bury the weekly results; older ones collapse into one compact
+          summary row with a Dismiss-all action. Warnings and retryable rows
+          stay until acted on; info rows auto-dismiss (see effect above). */}
+      {(() => {
+        if (getDisplayableNotifications(notifications).length === 0) return null;
+        const { visible, collapsed } = capVisibleNotifications(notifications, 3);
+        return (
+          <div className="app-notifications" data-testid="app-notifications">
+            {collapsed.length > 0 && (
+              <div className="app-notification app-notification-info app-notification-compact" data-testid="app-notification-overflow">
+                <span>{collapsed.length} earlier notice{collapsed.length === 1 ? '' : 's'}</span>
                 <button
-                  onClick={() => {
-                    actions.dismissNotification(n.id);
-                    handleAdvanceWeek();
-                  }}
-                  className="app-notification-retry"
-                  disabled={busy || simulating}
+                  onClick={() => collapsed.forEach((n) => actions.dismissNotification(n.id))}
+                  className="app-notification-dismiss"
+                  aria-label="Dismiss earlier notices"
                 >
-                  Retry
+                  ×
                 </button>
-              )}
-              <button
-                onClick={() => actions.dismissNotification(n.id)}
-                className="app-notification-dismiss"
+              </div>
+            )}
+            {visible.map(n => (
+              <div
+                key={n.id}
+                className={`app-notification app-notification-compact ${n.level === 'warn' ? 'app-notification-warn' : 'app-notification-info'}`}
               >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+                <span>{n.message}</span>
+                {n.retryable && (
+                  <button
+                    onClick={() => {
+                      actions.dismissNotification(n.id);
+                      handleAdvanceWeek();
+                    }}
+                    className="app-notification-retry"
+                    disabled={busy || simulating}
+                  >
+                    Retry
+                  </button>
+                )}
+                <button
+                  onClick={() => actions.dismissNotification(n.id)}
+                  className="app-notification-dismiss"
+                  aria-label="Dismiss notice"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* ── Live game viewer (visible during simulation + results) ────── */}
       {/* Hide when user game prompt is active to avoid stale empty state behind modal */}
@@ -1654,6 +1701,16 @@ function AppContent() {
         const awayId = userEvent?.awayId ?? (userMatchup ? Number(userMatchup.away) : league?.teams?.find(t => t.id !== league?.userTeamId)?.id);
         const homeTeam = league?.teams?.find(t => t.id === homeId) || { abbr: userEvent?.homeAbbr || 'HOME', id: homeId };
         const awayTeam = league?.teams?.find(t => t.id === awayId) || { abbr: userEvent?.awayAbbr || 'AWAY', id: awayId };
+        // Canonical final: the worker posts GAME_EVENT (the league-recorded
+        // score) before PLAY_LOGS, so the real result is known for the whole
+        // watch session. The narrated play stream runs on a different engine
+        // whose running score can contradict it — never treat viewer-reported
+        // scores as the result when the canonical final exists.
+        const canonicalFinal = userEvent
+          && Number.isFinite(Number(userEvent.homeScore))
+          && Number.isFinite(Number(userEvent.awayScore))
+          ? { home: Number(userEvent.homeScore), away: Number(userEvent.awayScore) }
+          : null;
         return (
           <GameSimErrorBoundary onFallback={() => {
             // If GameSimulation crashes, recover directly to advancing the week
@@ -1666,6 +1723,7 @@ function AppContent() {
               awayTeam={awayTeam}
               initialMode={watchMode}
               userTendency={userTendency}
+              finalScore={canonicalFinal}
               gameSummary={{
                 gameReasoningFlags: userGameReasoningFlags || [],
                 homeId: homeTeam?.id,
@@ -1681,8 +1739,8 @@ function AppContent() {
                   setPostGameResult({
                     homeTeam,
                     awayTeam,
-                    homeScore: scores?.homeScore ?? 0,
-                    awayScore: scores?.awayScore ?? 0,
+                    homeScore: canonicalFinal?.home ?? scores?.homeScore ?? 0,
+                    awayScore: canonicalFinal?.away ?? scores?.awayScore ?? 0,
                     userTeamId: league?.userTeamId,
                     week: league?.week,
                     phase: league?.phase,
@@ -1748,7 +1806,10 @@ function AppContent() {
           }}
           onArchiveReady={(archivePayload) => {
             if (!archivePayload?.gameId) return;
-            saveGame(archivePayload.gameId, archivePayload);
+            saveGame(archivePayload.gameId, {
+              ...archivePayload,
+              season: archivePayload.season ?? postGameResult.seasonId ?? league?.seasonId ?? null,
+            });
           }}
         />
       )}

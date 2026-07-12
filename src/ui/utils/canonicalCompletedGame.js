@@ -24,6 +24,9 @@ function extractScoreFields(game) {
 
 function hasValidFinalScore(game) {
   if (!game || typeof game !== 'object') return false;
+  // Rows explicitly marked unplayed carry serialization-default 0-0 scores
+  // (schedule buffers can't hold null) — never treat them as a real final.
+  if (game.played === false || game.played === 0) return false;
   const { home, away } = extractScoreFields(game);
   return Number.isFinite(home) && Number.isFinite(away);
 }

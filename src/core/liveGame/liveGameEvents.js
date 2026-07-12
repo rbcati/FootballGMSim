@@ -28,21 +28,45 @@ function normalizeEventType(log = {}) {
   return 'routine';
 }
 
+function toFiniteScore(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Canonical-data policy for the live feed.
+ *
+ * The play logs emitted by the narration engine carry per-play
+ * `homeScore`/`awayScore` snapshots, but those values are NOT canonical:
+ * the league-recorded final comes from a separate drive engine
+ * (see `src/core/simulation/index.js` — `buildDriveBasedSummary` overrides
+ * `homeScore`/`awayScore` after the narration loop runs), so the narrated
+ * running score routinely contradicts the real result. Rather than stamp a
+ * score on every event card that can contradict the recorded final, events
+ * carry `score: null` and only the appended `game_end` marker is stamped with
+ * the canonical final passed in via `context.finalScore`.
+ *
+ * The per-play `clock` value is likewise drive-granular (every play in a
+ * drive shares one clock string, and the seconds are randomized), so the feed
+ * exposes `sequence` (a real event-order indicator) instead of pretending to
+ * have a trustworthy per-play game clock. The raw log stays on `raw` for
+ * data-level consumers (jump filters), which never display it.
+ */
 export function buildLiveGameEvent(log = {}, index = 0, context = {}) {
   const eventType = normalizeEventType(log);
-  const home = Number(log.homeScore ?? log.scoreHome ?? 0);
-  const away = Number(log.awayScore ?? log.scoreAway ?? 0);
   return {
     id: `${context.gameId || 'game'}-${index}`,
     gameId: context.gameId || 'game',
     quarter: Number(log.quarter || 1),
-    clock: log.clock || log.timeLeft || '15:00',
+    clock: log.clock || log.timeLeft || null,
+    sequence: index + 1,
     offenseTeamId: log.possession === 'home' ? context.homeTeamId : context.awayTeamId,
     defenseTeamId: log.possession === 'home' ? context.awayTeamId : context.homeTeamId,
     eventType,
     headline: String(log.text || log.playText || 'Drive develops').trim(),
     detail: log.description || undefined,
-    score: { home, away },
+    // Untrusted per-play score snapshots are intentionally omitted — see note above.
+    score: null,
     possessionTeamId: log.possession === 'home' ? context.homeTeamId : context.awayTeamId,
     fieldPosition: log.fieldPosition ?? log.yardLine,
     down: log.down,
@@ -73,6 +97,15 @@ export function mapArchiveEventsToLiveFeed(playLogs = [], context = {}) {
     }
   }
 
+  // The final marker is the only event stamped with a score, and only when the
+  // caller supplies the canonical league-recorded final. Never reconstructed
+  // from the narration stream.
+  const finalHome = toFiniteScore(context.finalScore?.home);
+  const finalAway = toFiniteScore(context.finalScore?.away);
+  const canonicalFinal = finalHome != null && finalAway != null
+    ? { home: finalHome, away: finalAway }
+    : null;
+
   const last = withMarkers[withMarkers.length - 1];
   withMarkers.push({
     ...last,
@@ -80,6 +113,7 @@ export function mapArchiveEventsToLiveFeed(playLogs = [], context = {}) {
     eventType: 'game_end',
     headline: 'Final whistle. Game Book is ready.',
     impactTag: 'swing',
+    score: canonicalFinal,
   });
 
   return withMarkers;

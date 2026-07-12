@@ -17,6 +17,9 @@ function archiveQualityKey(label) {
 }
 
 function hasFinalScore(game) {
+  // Explicitly-unplayed schedule rows carry serialization-default 0-0 scores
+  // (Int32Array slots can't hold null) — never treat them as completed.
+  if (game?.played === false || game?.played === 0) return false;
   return Boolean(
     game?.played
       || Number.isFinite(Number(game?.homeScore))

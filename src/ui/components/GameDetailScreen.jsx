@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import BoxScorePanel from './BoxScorePanel.jsx';
 import { EmptyState, ScreenHeader, SectionCard } from './ScreenSystem.jsx';
 import { buildWeeklyDecisionImpact } from '../utils/weeklyDecisionImpact.js';
@@ -77,7 +77,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
 
   const scheduleGame = findScheduleGame(league, gameId);
   const canLoadArchive = Boolean(gameId && typeof actions?.getBoxScore === 'function');
-  const { data: archiveResponse } = useStableRouteRequest({
+  const { data: archiveResponse, loading: archiveLoading } = useStableRouteRequest({
     requestKey: canLoadArchive ? `boxscore:${gameId}` : null,
     enabled: canLoadArchive,
     cacheScopeKey: league?.id ?? league?.leagueId ?? 'global',
@@ -103,6 +103,15 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
     ? `${detailVm.finalScoreLine} · Game Book sections show only data recorded for this final.`
     : 'Scan the final, review the recap narrative, compare team stats, then drill into player leaders and play detail.';
 
+  // Recovery guard: onBack navigates exactly once even if the recovery action
+  // is tapped repeatedly while the route transition is in flight.
+  const backFiredRef = useRef(false);
+  const handleBackOnce = () => {
+    if (backFiredRef.current) return;
+    backFiredRef.current = true;
+    onBack?.();
+  };
+
   if (!gameId) {
     return (
       <div className="app-screen-stack" data-testid="game-book">
@@ -118,6 +127,56 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
           title="No completed game selected yet."
           body="Open a final score from Schedule, Weekly Results, or recent surfaces to load the full Game Book."
         />
+      </div>
+    );
+  }
+
+  // No canonical record anywhere (archive, schedule, league index): keep the
+  // user anchored on an honest recovery surface with one clear exit instead
+  // of rendering placeholder teams and a fake 0-0 final.
+  if (!canonicalGame && !archiveLoading) {
+    return (
+      <div className="app-screen-stack" data-testid="game-book">
+        <div
+          role="alert"
+          data-testid="game-book-recovery"
+          style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            gap: 12, padding: '40px 20px', textAlign: 'center',
+          }}
+        >
+          <div style={{ fontSize: '1.6rem' }} aria-hidden="true">📖</div>
+          <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text)' }}>
+            Game Book unavailable
+          </div>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: 340, lineHeight: 1.5 }}>
+            The detailed recap for this game could not be loaded. Your league
+            results are unaffected.
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            data-testid="game-book-recovery-return"
+            onClick={handleBackOnce}
+            style={{ minHeight: 44, padding: '10px 26px' }}
+          >
+            {backLabel ?? 'Return to HQ'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!canonicalGame && archiveLoading) {
+    return (
+      <div className="app-screen-stack" data-testid="game-book">
+        <div
+          role="status"
+          data-testid="game-book-loading"
+          style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}
+        >
+          Loading Game Book…
+        </div>
       </div>
     );
   }

@@ -11,16 +11,27 @@ const TAG_CLASS = {
   CLUTCH:     'feed-tag-clutch',
 };
 
+function finiteScore(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export default function GameEventFeed({ events = [], activeIndex = 0 }) {
   const visible = events.slice(Math.max(0, activeIndex - 20), activeIndex + 1);
   let previousQuarter = null;
   let previousPossession = null;
   return (
-    <div className="live-feed">
+    <div className="live-feed" role="log" aria-label="Play-by-play, newest play last">
       {visible.map((event, idx) => {
         const tags = getEventTags(event);
         const isLatest = idx === visible.length - 1;
-        const scoreText = event.score ? `${event.score.away}–${event.score.home}` : '';
+        // Score chips only render when the event carries a trustworthy score
+        // (today: the game_end marker stamped with the canonical final).
+        // Per-play narration scores are untrusted and arrive as null — see
+        // buildLiveGameEvent for the authority note.
+        const scoreHome = finiteScore(event.score?.home);
+        const scoreAway = finiteScore(event.score?.away);
+        const scoreText = scoreHome != null && scoreAway != null ? `${scoreAway}–${scoreHome}` : '';
         const isMajor = ['touchdown', 'field_goal', 'turnover', 'sack', 'explosive_play', 'game_end', 'turning_point'].includes(event.eventType);
         const showQuarterMarker = previousQuarter !== null && previousQuarter !== event.quarter;
         const showPossessionDivider = !showQuarterMarker
@@ -40,12 +51,18 @@ export default function GameEventFeed({ events = [], activeIndex = 0 }) {
               <div className="feed-possession-divider" aria-hidden="true" />
             ) : null}
             <article className={`feed-row${isLatest ? ' latest' : ''}${isMajor ? ' major' : ' routine'}`}>
-              <div className="feed-time">Q{event.quarter} <span className="feed-clock">{event.clock}</span></div>
+              {/* Quarter + event-sequence indicator. The narration engine only has
+                  drive-level clock estimates (every play in a drive shares one
+                  randomized stamp), so no per-play clock is displayed. */}
+              <div className="feed-time">
+                Q{event.quarter}
+                {event.sequence != null ? <span className="feed-clock">#{event.sequence}</span> : null}
+              </div>
               <div className="feed-body">
                 <div className="feed-headline">{event.headline}</div>
                 {(scoreText || tags.length > 0) ? (
                   <div className="feed-meta">
-                    {scoreText ? <span className="feed-score">{scoreText}</span> : null}
+                    {scoreText ? <span className="feed-score">FINAL {scoreText}</span> : null}
                     {tags.map((tag) => (
                       <span key={tag} className={`feed-tag ${TAG_CLASS[tag] || 'feed-tag-default'}`}>{tag}</span>
                     ))}

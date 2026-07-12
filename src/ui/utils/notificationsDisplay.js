@@ -20,3 +20,18 @@ export function getDisplayableNotifications(notifications) {
   if (!Array.isArray(notifications)) return [];
   return notifications.filter((notification) => getNotificationMessage(notification).length > 0);
 }
+
+/**
+ * Splits displayable notifications into the rows that render individually and
+ * the older ones that collapse into a single "+N earlier notices" summary, so
+ * routine post-sim messages can't stack over the weekly results on mobile.
+ * Newest entries stay visible (the queue appends newest last).
+ */
+export function capVisibleNotifications(notifications, maxVisible = 3) {
+  const displayable = getDisplayableNotifications(notifications);
+  const max = Math.max(1, Number(maxVisible) || 1);
+  return {
+    visible: displayable.slice(-max),
+    collapsed: displayable.slice(0, -max),
+  };
+}

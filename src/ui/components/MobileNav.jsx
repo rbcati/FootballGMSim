@@ -57,7 +57,10 @@ const BOTTOM_TABS = [
 export default function MobileNav({ activeSection, activeTab, onSectionChange, onDestinationChange, league, collapsed = false }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
-  useEffect(() => setMenuOpen(false), [activeSection]);
+  // Route-change cleanup: any navigation — section OR tab — closes the More
+  // drawer, so returning from game-day surfaces (postgame, Game Book) can
+  // never land on HQ with a stale drawer still open or mid-transition.
+  useEffect(() => setMenuOpen(false), [activeSection, activeTab]);
 
   // When the navigation chrome is collapsed (e.g. focused Game Book review),
   // close any open More drawer so it cannot linger over the review surface.

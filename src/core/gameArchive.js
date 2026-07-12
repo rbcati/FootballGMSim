@@ -13,7 +13,10 @@ const asNumberOrNull = (value) => {
 
 const hasValues = (obj) => Boolean(obj && typeof obj === 'object' && Object.keys(obj).length > 0);
 
-const hasFinalScore = (game) => Number.isFinite(Number(game?.homeScore ?? game?.scoreHome ?? game?.score?.home))
+// Rows explicitly marked unplayed carry serialization-default 0-0 scores
+// (schedule buffers can't hold null) — they are never a real final.
+const hasFinalScore = (game) => !(game?.played === false || game?.played === 0)
+  && Number.isFinite(Number(game?.homeScore ?? game?.scoreHome ?? game?.score?.home))
   && Number.isFinite(Number(game?.awayScore ?? game?.scoreAway ?? game?.score?.away));
 
 function teamLabel(rawGame, side, key) {
@@ -172,6 +175,10 @@ export function normalizeArchivedGamePayload(rawGame) {
     gameId: id,
     seasonId,
     week,
+    // Preserve the explicit played flag so downstream completed-game checks
+    // can distinguish a real 0-0 final from a serialization-default 0-0 on an
+    // unplayed schedule row. Undefined stays undefined (legacy payloads).
+    played: rawGame?.played,
     phase: rawGame?.phase ?? null,
     homeId,
     awayId,
@@ -351,6 +358,11 @@ export function recoverArchivedGameFromSchedule(gameId, leagueState) {
       const rowAway = toTeamId(row?.awayId ?? row?.away?.id ?? row?.away);
       if (rowHome !== Number(homeValue) || rowAway !== Number(awayValue)) continue;
       if (row?.homeScore == null && row?.awayScore == null) continue;
+      // The serialized slim schedule packs unplayed games with default 0-0
+      // scores (Int32Array slots can't hold null — see worker/serialization.js),
+      // so a row explicitly marked unplayed must never be recovered as a
+      // "final". Otherwise a pre-game row surfaces as a fake 0-0 tie.
+      if (row?.played === false || row?.played === 0) continue;
       return normalizeArchivedGamePayload({
         id: gameId,
         seasonId: row?.seasonId ?? seasonId,
