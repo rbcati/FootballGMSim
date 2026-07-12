@@ -25,13 +25,24 @@ export function getDisplayableNotifications(notifications) {
  * Splits displayable notifications into the rows that render individually and
  * the older ones that collapse into a single "+N earlier notices" summary, so
  * routine post-sim messages can't stack over the weekly results on mobile.
- * Newest entries stay visible (the queue appends newest last).
+ *
+ * Warnings and retryable notices are actionable and never collapse — the
+ * summary row renders as generic info with only a dismiss-all control, which
+ * would silently discard their severity and retry affordance. Only routine
+ * info rows count against the cap; newest entries stay visible (the queue
+ * appends newest last) and original ordering is preserved.
  */
 export function capVisibleNotifications(notifications, maxVisible = 3) {
   const displayable = getDisplayableNotifications(notifications);
   const max = Math.max(1, Number(maxVisible) || 1);
+  const isActionable = (n) => n?.level === 'warn' || n?.retryable === true;
+  const routine = displayable.filter((n) => !isActionable(n));
+  const routineBudget = Math.max(0, max - (displayable.length - routine.length));
+  const collapsedCount = Math.max(0, routine.length - routineBudget);
+  const collapsed = routine.slice(0, collapsedCount);
+  const collapsedSet = new Set(collapsed);
   return {
-    visible: displayable.slice(-max),
-    collapsed: displayable.slice(0, -max),
+    visible: displayable.filter((n) => !collapsedSet.has(n)),
+    collapsed,
   };
 }

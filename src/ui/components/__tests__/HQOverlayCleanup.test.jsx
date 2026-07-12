@@ -60,6 +60,23 @@ describe('Activity notifications — visible-item cap', () => {
     expect(visible.map((n) => n.id)).toEqual([1, 3]);
     expect(collapsed).toEqual([]);
   });
+
+  it('never collapses warnings or retryable notices, even when newer info notices exceed the cap', () => {
+    const notifications = [
+      { id: 1, level: 'warn', message: 'Roster invalid' },
+      { id: 2, level: 'info', message: 'Info A', retryable: true },
+      notice(3, 'Info B'),
+      notice(4, 'Info C'),
+      notice(5, 'Info D'),
+      notice(6, 'Info E'),
+    ];
+    const { visible, collapsed } = capVisibleNotifications(notifications, 3);
+    // Actionable rows (warn + retryable) always stay visible; the info budget
+    // (cap minus actionable rows) keeps only the newest routine notice.
+    expect(visible.map((n) => n.id)).toEqual([1, 2, 6]);
+    expect(collapsed.map((n) => n.id)).toEqual([3, 4, 5]);
+    expect(collapsed.every((n) => n.level !== 'warn' && !n.retryable)).toBe(true);
+  });
 });
 
 describe('Schedule 0-0 defaults never masquerade as finals', () => {

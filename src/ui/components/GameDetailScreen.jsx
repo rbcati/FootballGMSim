@@ -131,10 +131,21 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
     );
   }
 
-  // No canonical record anywhere (archive, schedule, league index): keep the
-  // user anchored on an honest recovery surface with one clear exit instead
-  // of rendering placeholder teams and a fake 0-0 final.
-  if (!canonicalGame && !archiveLoading) {
+  // A "usable" record must carry a real final: resolveCanonicalCompletedGame
+  // returns the best available reference even when no valid final exists
+  // (e.g. an unplayed schedule row whose serialized scores default to 0-0),
+  // so gate on played/score validity — never on object existence alone.
+  const canonicalHasFinal = Boolean(
+    canonicalGame
+    && !(canonicalGame.played === false || canonicalGame.played === 0)
+    && Number.isFinite(Number(canonicalGame.homeScore ?? canonicalGame.scoreHome))
+    && Number.isFinite(Number(canonicalGame.awayScore ?? canonicalGame.scoreAway)),
+  );
+
+  // No canonical completed record anywhere (archive, schedule, league index):
+  // keep the user anchored on an honest recovery surface with one clear exit
+  // instead of rendering placeholder teams and a fake 0-0 final.
+  if (!canonicalHasFinal && !archiveLoading) {
     return (
       <div className="app-screen-stack" data-testid="game-book">
         <div
@@ -167,7 +178,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
     );
   }
 
-  if (!canonicalGame && archiveLoading) {
+  if (!canonicalHasFinal && archiveLoading) {
     return (
       <div className="app-screen-stack" data-testid="game-book">
         <div

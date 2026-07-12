@@ -45,11 +45,15 @@ export function resolveCanonicalCompletedGame({ league, gameId, scheduleGame, ar
     const { home: archivedHome, away: archivedAway } = extractScoreFields(archived);
     const meta = schedule ?? byId;
     if (!meta) {
-      return { ...archived, homeScore: archivedHome, awayScore: archivedAway };
+      // An archive-validated final is by definition a played game.
+      return { ...archived, homeScore: archivedHome, awayScore: archivedAway, played: true };
     }
     return {
       ...meta,
       ...archived,
+      // The stale schedule/index row may still say played:false (the UI league
+      // snapshot is not refreshed mid-week); the archived final wins.
+      played: true,
       homeScore: archivedHome,
       awayScore: archivedAway,
       homeAbbr: archived.homeAbbr ?? meta.homeAbbr,

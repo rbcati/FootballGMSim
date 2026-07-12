@@ -198,6 +198,17 @@ New:
 Updated: `GameDetailScreen.test.jsx` (no-data case now asserts the anchored
 recovery surface instead of a placeholder header).
 
+Review follow-up (Codex findings, both confirmed and fixed):
+- The Game Book's recovery gate now requires a *valid final* (played +
+  finite scores), not object existence — an unplayed schedule row matched by
+  id can no longer bypass recovery and render a fake 0-0 tie; conversely, an
+  archive-validated final is stamped `played: true` so a stale
+  `played: false` schedule/index row can never veto a real result.
+- `capVisibleNotifications` never collapses warnings or retryable notices
+  into the info summary row; only routine info rows count against the cap.
+Covered by new cases in `GameDetailScreen.test.jsx` and
+`HQOverlayCleanup.test.jsx` (unit totals now 444 files / 5494 tests).
+
 Results: `npm run test:unit` — 444 files / 5492 tests passed (including the 29
 new tests above). `npm run build` — passes. New E2E spec — 2/2 passed against the
 production build. Pre-existing E2E failures on `main` (verified identical on a
