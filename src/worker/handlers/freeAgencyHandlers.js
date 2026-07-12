@@ -22,6 +22,7 @@ import {
   marketHeatLabel,
 } from '../../core/contract-market.js';
 import { getTeamContextForNegotiation } from '../../core/teamContext/negotiationContext.js';
+import { isFreeAgent } from '../../core/freeAgency/membership.js';
 import { evaluateContractOffer, summarizeNegotiationStance } from '../../core/contracts/negotiation.js';
 import { summarizePlayerMood } from '../../core/mood/playerMood.js';
 import { getPlayerMoraleSummary } from '../../core/mood/playerMoraleEngine.js';
@@ -385,7 +386,7 @@ export async function handleSubmitOffer({ playerId, teamId, contract }, id, ctx)
     score: quality.score,
   });
   ctx.savePendingOffersLedger(upsertPendingOffer(ledger, offerRecord).list, { day: faDay });
-  const allFreeAgents = cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent');
+  const allFreeAgents = cache.getAllPlayers().filter((p) => isFreeAgent(p));
   const heat = computeMarketHeat(player.pos, allFreeAgents);
   const marketMemory = liveMeta?.contractMarketMemory?.[String(playerId)] ?? {};
   const decisionTiming = buildDecisionTiming(player, heat, player.offers.length, liveMeta.phase, {
