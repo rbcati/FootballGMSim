@@ -135,3 +135,8 @@ Large raw traces are not committed. Generate locally with:
 ```bash
 npm run durability:profile:offseason -- --seed=1684 --phase-timeout-ms=900000 --write-report
 ```
+
+
+## #1688 implementation status
+
+The #1687 recommendation to repair user-owned draft-pick progress in `SIM_TO_PHASE('preseason')` is implemented by #1688. The original measurements above are intentionally preserved as the before profile. The post-fix comparison is documented in `docs/sim-to-phase-draft-user-pick-auto-advance-v1.md` and generated durability/profiler reports.
