@@ -1,6 +1,6 @@
 {
   "harnessVersion": "1.0.0",
-  "gitSha": "b0d0a95",
+  "gitSha": "563ed39",
   "seed": 1684,
   "mode": "5-season",
   "failureMode": "collect-all",
@@ -8,8 +8,12 @@
   "requestedSeasons": 5,
   "seasonsAttempted": 1,
   "seasonsCompleted": 0,
-  "runtimeMs": 315808,
-  "peakMemoryMb": 508,
+  "competitiveSeasonsCompleted": 1,
+  "completedThrough": "afterPlayoffs",
+  "boundedRun": false,
+  "unexercisedLifecycleStages": [],
+  "runtimeMs": 310832,
+  "peakMemoryMb": 543,
   "deterministic": null,
   "determinismDetail": null,
   "firstFailure": {
