@@ -225,19 +225,19 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
   if (stakes && stakes > 50) {
     if (won) {
       if (isBlowout) {
-        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An emphatic'} performance under immense pressure. ${userAbbr} completely dismantled the opponent in a ${userScore}-${oppScore} blowout!`);
+        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An emphatic'} performance under immense pressure. ${userAbbr} completely dismantled their opponent in a statement ${userScore}-${oppScore} blowout with everything on the line!`);
       } else if (isClose) {
-        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} survived a thriller and secured a massive ${userScore}-${oppScore} victory!`);
+        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense playoff-caliber pressure. ${userAbbr} survived an absolute thriller to secure a massive ${userScore}-${oppScore} victory!`);
       } else {
-        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} answered the bell and secured a massive ${userScore}-${oppScore} victory!`);
+        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} answered the bell and secured a critical ${userScore}-${oppScore} victory to keep their goals alive!`);
       }
     } else {
       if (isBlowout) {
-        callbacks.push(`A devastating, humiliating ${scoreDiff}-point blowout defeat when the stakes couldn't have been higher. The locker room is completely stunned.`);
+        callbacks.push(`A devastating, humiliating ${scoreDiff}-point blowout defeat when the stakes couldn't have been higher. The locker room is completely stunned, and the owner will demand answers.`);
       } else if (isClose) {
-        callbacks.push(`A heart-breaking ${scoreDiff}-point loss in a thriller when the stakes couldn't have been higher. The locker room is stunned.`);
+        callbacks.push(`An agonizing, heart-breaking ${scoreDiff}-point loss in a thriller with their backs against the wall. The locker room is dead silent.`);
       } else {
-        callbacks.push(`A devastating, crushing ${scoreDiff}-point defeat when the stakes couldn't have been higher. The locker room is stunned.`);
+        callbacks.push(`A devastating, crushing ${scoreDiff}-point defeat when the stakes couldn't have been higher. A massive missed opportunity for ${userAbbr}.`);
       }
     }
   }
