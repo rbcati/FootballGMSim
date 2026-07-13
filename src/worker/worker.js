@@ -177,6 +177,7 @@ import {
   expireAllPendingOffers,
   prunePendingOffers,
 } from '../core/freeAgency/pendingOffers.js';
+import { isFreeAgent } from '../core/freeAgency/membership.js';
 import {
   shouldAITeamPursuePlayer,
   computeAIOffer,
@@ -962,7 +963,7 @@ function buildTeamContractSnapshot(teamId) {
     return years <= 1;
   });
 
-  const allFreeAgents = cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent');
+  const allFreeAgents = cache.getAllPlayers().filter((p) => isFreeAgent(p));
   const hotPositions = {};
   for (const pos of Object.keys(depth)) {
     hotPositions[pos] = computeMarketHeat(pos, allFreeAgents);
@@ -7235,7 +7236,7 @@ async function finalizeFreeAgencySigning(player, offer, liveMeta) {
 
 function evaluatePlayerOfferDecision(player, offers = [], liveMeta, memory = {}) {
   if (!player || !offers.length) return { status: 'pending', reason: 'No offers yet', bestOffer: null };
-  const freeAgents = cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent');
+  const freeAgents = cache.getAllPlayers().filter((p) => isFreeAgent(p));
   const heat = computeMarketHeat(player.pos, freeAgents);
   const profile = buildContractProfile(player);
   const ask = buildDemandFromProfile(player, profile, { marketHeat: heat, morale: player.morale ?? 68, fit: 65, teamSuccess: 0.5 });
@@ -7410,7 +7411,7 @@ async function resolvePendingFreeAgencyOffers({ resolutionDay = 7, onlyPlayerId 
   const nextMemory = { ...memory };
   const freeAgentsWithOffers = cache.getAllPlayers().filter((p) => {
     if (targetPlayerId != null && Number(p?.id) !== targetPlayerId) return false;
-    return (!p.teamId || p.status === 'free_agent') && Array.isArray(p.offers) && p.offers.length > 0;
+    return (isFreeAgent(p)) && Array.isArray(p.offers) && p.offers.length > 0;
   });
 
   const results = [];
@@ -8290,7 +8291,7 @@ async function handleGetExtensionAsk({ playerId }, id) {
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
   const team = cache.getTeam(player.teamId ?? meta.userTeamId);
   const profile = buildContractProfile(player);
-  const marketHeat = computeMarketHeat(player.pos, cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent'));
+  const marketHeat = computeMarketHeat(player.pos, cache.getAllPlayers().filter((p) => isFreeAgent(p)));
   const demandFromProfile = inflateContract(buildDemandFromProfile(player, profile, {
     marketHeat,
     morale: calculateMorale(player, team, true),
@@ -11974,7 +11975,7 @@ async function injectAIFaBids(day) {
 
   const allTeams   = cache.getAllTeams();
   const allPlayers = cache.getAllPlayers();
-  const freeAgents = allPlayers.filter((p) => !p.teamId || p.status === 'free_agent');
+  const freeAgents = allPlayers.filter((p) => isFreeAgent(p));
   if (freeAgents.length === 0) return;
 
   const userTeam = cache.getTeam(userTeamId);
@@ -12166,7 +12167,7 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
     // Snapshot free-agent player IDs before bids/signings for post-pass events.
     const preBidFaIds = new Set(
       cache.getAllPlayers()
-        .filter((p) => !p.teamId || p.status === 'free_agent')
+        .filter((p) => isFreeAgent(p))
         .map((p) => p.id),
     );
     try {

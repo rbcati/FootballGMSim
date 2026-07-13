@@ -76,7 +76,17 @@ export function createEmptyRecords() {
  * @returns {{ records: Object, broken: Object[] }} Updated records and list of newly broken records
  */
 export function processSeasonRecords(existingRecords, seasonStats, allPlayers, year, teamAbbrMap, leagueHistory = []) {
-  const records = existingRecords ? structuredClone(existingRecords) : createEmptyRecords();
+  // A league is bootstrapped (defaultLeague / league.js) with a LEGACY record
+  // stub shaped `{ mostPassingYardsSeason, ... }` that lacks the V1
+  // singleSeason/allTime buckets this engine indexes into. structuredClone-ing
+  // that stub and then reading `records.singleSeason.passYd` throws. Accept an
+  // existing record book only when it carries the current shape; otherwise start
+  // from a fresh empty book (the legacy stub holds no real records to preserve).
+  const hasV1Shape = existingRecords
+    && typeof existingRecords === 'object'
+    && existingRecords.singleSeason
+    && existingRecords.allTime;
+  const records = hasV1Shape ? structuredClone(existingRecords) : createEmptyRecords();
   if (!records.history) records.history = [];
   const broken = [];
 
