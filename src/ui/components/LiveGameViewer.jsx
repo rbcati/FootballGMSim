@@ -17,17 +17,31 @@ const TENDENCY_CONFIG = {
   CONSERVATIVE: { label: 'Conservative', chipClass: 'conservative' },
 };
 
-export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComplete, initialMode = 'watch', onPlaycallOverride, userTendency = 'BALANCED' }) {
+function finiteScore(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComplete, initialMode = 'watch', onPlaycallOverride, userTendency = 'BALANCED', finalScore = null }) {
+  // Canonical final: the league-recorded result (GAME_EVENT payload). The
+  // narrated play stream is a separate engine whose running score can
+  // contradict it, so this is the only score the viewer will ever display.
+  const canonicalFinal = useMemo(() => {
+    const home = finiteScore(finalScore?.home ?? finalScore?.homeScore);
+    const away = finiteScore(finalScore?.away ?? finalScore?.awayScore);
+    return home != null && away != null ? { home, away } : null;
+  }, [finalScore]);
+
   const events = useMemo(() => mapArchiveEventsToLiveFeed(logs, {
     gameId: `${homeTeam?.id || 'h'}-${awayTeam?.id || 'a'}`,
     homeTeamId: homeTeam?.id,
     awayTeamId: awayTeam?.id,
-  }), [logs, homeTeam?.id, awayTeam?.id]);
+    finalScore: canonicalFinal,
+  }), [logs, homeTeam?.id, awayTeam?.id, canonicalFinal]);
 
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(initialMode === 'pause');
   const [speed, setSpeed] = useState(initialMode === 'fast' ? 'fast' : 'normal');
-  const [lastLeadTeamId, setLastLeadTeamId] = useState(null);
   const [momentBanner, setMomentBanner] = useState(null);
 
   useEffect(() => {
@@ -51,28 +65,31 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
   const standout = useMemo(() => getCurrentStandoutPlayers(events, index + 1), [events, index]);
   const swing = useMemo(() => summarizeGameSwing(events, index + 1), [events, index]);
 
+  const finished = index >= events.length - 1;
+  // Scores shown only once the canonical final is in play — never the narrated
+  // per-play snapshots, which belong to a different scoring engine.
+  const displayScore = finished && canonicalFinal ? canonicalFinal : null;
+
   const scoreState = {
-    score: currentEvent.score || { home: 0, away: 0 },
+    score: displayScore,
     quarter: currentEvent.quarter || 1,
-    clock: currentEvent.clock || '15:00',
+    // No trustworthy per-play clock exists (drive-granular estimates only) —
+    // the scorebug shows quarter + event progress instead of a fake clock.
+    clock: null,
+    progressLabel: finished ? 'Final' : `Play ${Math.min(index + 1, events.length)} of ${events.length}`,
     downDistance: currentEvent.down ? `${currentEvent.down}${ordinal(currentEvent.down)} & ${currentEvent.distance || 10}` : 'Drive update',
     ballSpot: currentEvent.fieldPosition != null ? `Ball on ${Math.round(Number(currentEvent.fieldPosition) || 50)}` : 'Ball spot --',
     fieldPosition: currentEvent.fieldPosition,
     possessionTeamId: currentEvent.possessionTeamId,
+    isFinal: finished,
   };
-  const leadTeamId = scoreState.score.home === scoreState.score.away
-    ? null
-    : scoreState.score.home > scoreState.score.away ? homeTeam?.id : awayTeam?.id;
-  const isFinalMinutes = Number(scoreState.quarter) >= 4 && /^([0-4]):/.test(String(scoreState.clock || ''));
+  const isLateGame = Number(scoreState.quarter) >= 4 && index >= Math.floor((events.length - 1) * 0.85);
 
-  const finished = index >= events.length - 1;
   const modeLabel = paused ? 'Paused' : `Watch · ${SPEED_STEPS.find((step) => step.key === speed)?.label ?? 'Normal'}`;
 
   useEffect(() => {
     if (!currentEvent?.eventType) return;
-    if (leadTeamId != null && lastLeadTeamId != null && leadTeamId !== lastLeadTeamId) {
-      setMomentBanner({ type: 'lead', text: `Lead Change · ${leadTeamId === homeTeam?.id ? homeTeam?.abbr : awayTeam?.abbr} in front` });
-    } else if (currentEvent.eventType === 'touchdown') {
+    if (currentEvent.eventType === 'touchdown') {
       setMomentBanner({ type: 'score', text: 'Touchdown' });
     } else if (currentEvent.eventType === 'field_goal') {
       setMomentBanner({ type: 'score', text: 'Field Goal' });
@@ -83,8 +100,10 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
     } else {
       setMomentBanner(null);
     }
-    setLastLeadTeamId(leadTeamId);
-  }, [currentEvent?.eventType, leadTeamId, lastLeadTeamId, homeTeam?.abbr, homeTeam?.id, awayTeam?.abbr, awayTeam?.id]);
+  }, [currentEvent?.eventType]);
+
+  const finalHomeScore = displayScore?.home ?? null;
+  const finalAwayScore = displayScore?.away ?? null;
 
   return (
     <div className="watch-overlay">
@@ -93,20 +112,20 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
         <Scorebug homeTeam={homeTeam} awayTeam={awayTeam} state={scoreState} />
         <div className="watch-state-strip">
           <span className="watch-mode-chip">{modeLabel}</span>
-          {isFinalMinutes ? <span className="watch-mode-chip clutch">Final Minutes</span> : null}
+          {isLateGame && !finished ? <span className="watch-mode-chip clutch">Late Game</span> : null}
           {finished ? <span className="watch-mode-chip final">Complete</span> : null}
           {(() => {
             const tc = TENDENCY_CONFIG[userTendency] || TENDENCY_CONFIG.BALANCED;
             return <span className={`watch-mode-chip tendency-${tc.chipClass}`}>{tc.label}</span>;
           })()}
         </div>
-        {momentBanner ? <div className={`watch-moment-banner ${momentBanner.type}`}>{momentBanner.text}</div> : null}
+        {momentBanner ? <div className={`watch-moment-banner ${momentBanner.type}`} role="status">{momentBanner.text}</div> : null}
       </header>
 
       <main className="watch-main">
         <section className="watch-panel">
           <div className={`momentum ${swing.tone}`}>Momentum: {swing.label}</div>
-          <div className="jump-row">
+          <div className="jump-row" role="group" aria-label="Jump to game moments">
             <JumpBtn label="Scores" onClick={() => setIndex(getNextImportantEvent(events, index, 'score'))} />
             <JumpBtn label="Red Zone" onClick={() => setIndex(getNextImportantEvent(events, index, 'redZone'))} />
             <JumpBtn label="Turnovers" onClick={() => setIndex(getNextImportantEvent(events, index, 'turnover'))} />
@@ -117,54 +136,79 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
         </section>
 
         <aside className="watch-side">
-          <h3 className="watch-side-title">Standouts</h3>
-          <ul className="standout-list">
-            <li><span className="standout-pos">QB</span>{formatQb(standout.qb)}</li>
-            <li><span className="standout-pos">Rush</span>{formatRush(standout.rusher)}</li>
-            <li><span className="standout-pos">Rec</span>{formatRec(standout.receiver)}</li>
-            <li><span className="standout-pos">Sacks</span>{standout.sacks ? `${standout.sacks.player} (${standout.sacks.sacks})` : '—'}</li>
-            <li><span className="standout-pos">INT</span>{standout.picks ? `${standout.picks.player} (${standout.picks.picks})` : '—'}</li>
-          </ul>
-
-          <div className="controls">
-            <div className="controls-label">Speed</div>
-            <div className="speed-row">
-              <button className="ctrl-btn pause-btn" onClick={() => setPaused((prev) => !prev)}>{paused ? '▶' : '⏸'}</button>
-              {SPEED_STEPS.map((step) => (
-                <button key={step.key} className={`ctrl-btn${speed === step.key && !paused ? ' active' : ''}`}
-                  onClick={() => { setSpeed(step.key); setPaused(false); }}>{step.label}</button>
-              ))}
-            </div>
-            <div className="controls-label">Skip</div>
-            <div className="skip-row">
-              <button className="ctrl-btn" onClick={() => setIndex(getNextImportantEvent(events, index, 'score'))}>Next Score</button>
-              <button className="ctrl-btn" onClick={() => setIndex(getNextImportantEvent(events, index, 'keyPlay'))}>Key Play</button>
-              <button className="ctrl-btn" onClick={() => setIndex(events.length - 1)}>Sim End</button>
-            </div>
-            {onPlaycallOverride ? (
-              <>
-                <div className="controls-label">Playcall</div>
-                <div className="playcall-row">
-                  <button className="ctrl-btn" title="Lean run on next drive." onClick={() => onPlaycallOverride?.({ type: 'run_heavy' })}>Run Heavy</button>
-                  <button className="ctrl-btn" title="Lean pass on next drive." onClick={() => onPlaycallOverride?.({ type: 'pass_heavy' })}>Pass Heavy</button>
-                  <button className="ctrl-btn" title="Request a timeout." onClick={() => onPlaycallOverride?.({ type: 'timeout' })}>Timeout</button>
-                </div>
-              </>
-            ) : null}
-          </div>
+          <details className="standout-panel" open>
+            <summary className="watch-side-title">Standouts</summary>
+            <ul className="standout-list">
+              <li><span className="standout-pos">QB</span>{formatQb(standout.qb)}</li>
+              <li><span className="standout-pos">Rush</span>{formatRush(standout.rusher)}</li>
+              <li><span className="standout-pos">Rec</span>{formatRec(standout.receiver)}</li>
+              <li><span className="standout-pos">Sacks</span>{standout.sacks ? `${standout.sacks.player} (${standout.sacks.sacks})` : '—'}</li>
+              <li><span className="standout-pos">INT</span>{standout.picks ? `${standout.picks.player} (${standout.picks.picks})` : '—'}</li>
+            </ul>
+          </details>
 
           {finished ? (
             <div className="watch-final-card">
               <div className="watch-final-label">Final</div>
-              <div className="watch-final-score">
-                <span>{awayTeam?.abbr || 'AWY'} {scoreState.score.away}</span>
-                <span>{homeTeam?.abbr || 'HME'} {scoreState.score.home}</span>
-              </div>
-              <button className="finish" onClick={() => onComplete?.({ homeScore: scoreState.score.home, awayScore: scoreState.score.away })}>Open Final Game Book</button>
+              {displayScore ? (
+                <div className="watch-final-score">
+                  <span>{awayTeam?.abbr || 'AWY'} {finalAwayScore}</span>
+                  <span>{homeTeam?.abbr || 'HME'} {finalHomeScore}</span>
+                </div>
+              ) : (
+                <div className="watch-final-pending" data-testid="watch-final-pending">
+                  Final score is being recorded — open the Game Book for the official result.
+                </div>
+              )}
+              <button
+                className="finish"
+                onClick={() => onComplete?.(displayScore ? { homeScore: displayScore.home, awayScore: displayScore.away } : {})}
+              >
+                Open Final Game Book
+              </button>
             </div>
           ) : null}
         </aside>
       </main>
+
+      {/* Compact sticky control tray — one row of playback controls above the
+          safe area so the feed owns the screen on mobile. */}
+      <footer className="watch-controls-tray" aria-label="Playback controls">
+        <button
+          className="ctrl-btn pause-btn"
+          onClick={() => setPaused((prev) => !prev)}
+          aria-label={paused ? 'Resume playback' : 'Pause playback'}
+        >
+          {paused ? '▶' : '⏸'}
+        </button>
+        <div className="speed-row" role="group" aria-label="Playback speed">
+          {SPEED_STEPS.map((step) => (
+            <button
+              key={step.key}
+              className={`ctrl-btn${speed === step.key && !paused ? ' active' : ''}`}
+              onClick={() => { setSpeed(step.key); setPaused(false); }}
+              aria-pressed={speed === step.key && !paused}
+            >
+              {step.label}
+            </button>
+          ))}
+        </div>
+        <details className="skip-menu">
+          <summary className="ctrl-btn skip-trigger" aria-label="Skip options">Skip ▾</summary>
+          <div className="skip-menu-list">
+            <button className="ctrl-btn" onClick={() => setIndex(getNextImportantEvent(events, index, 'score'))}>Next Score</button>
+            <button className="ctrl-btn" onClick={() => setIndex(getNextImportantEvent(events, index, 'keyPlay'))}>Key Play</button>
+            <button className="ctrl-btn" onClick={() => setIndex(events.length - 1)}>Sim End</button>
+            {onPlaycallOverride ? (
+              <>
+                <button className="ctrl-btn" title="Lean run on next drive." onClick={() => onPlaycallOverride?.({ type: 'run_heavy' })}>Run Heavy</button>
+                <button className="ctrl-btn" title="Lean pass on next drive." onClick={() => onPlaycallOverride?.({ type: 'pass_heavy' })}>Pass Heavy</button>
+                <button className="ctrl-btn" title="Request a timeout." onClick={() => onPlaycallOverride?.({ type: 'timeout' })}>Timeout</button>
+              </>
+            ) : null}
+          </div>
+        </details>
+      </footer>
     </div>
   );
 }
@@ -187,11 +231,16 @@ function formatRec(v) { return v ? `${v.player} ${v.rec} rec ${v.yds}y` : '—';
 const styles = `
 /* ── Layout ─────────────────────────────────────────────────────────── */
 .watch-overlay { position:fixed; inset:0; background:#071021; color:#f3f6ff; z-index:7000; display:flex; flex-direction:column; overflow:hidden; }
-.watch-header { position:sticky; top:0; z-index:2; padding:8px 10px; background:#071021; border-bottom:1px solid #253149; }
-.watch-state-strip { display:flex; align-items:center; gap:5px; margin-top:6px; flex-wrap:wrap; }
+.watch-header { position:sticky; top:0; z-index:2; padding:calc(6px + env(safe-area-inset-top, 0px)) 10px 6px; background:#071021; border-bottom:1px solid #253149; }
+.watch-state-strip { display:flex; align-items:center; gap:5px; margin-top:5px; flex-wrap:wrap; }
 .watch-main { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; padding:8px; flex:1; overflow:hidden; min-height:0; }
 @media (min-width:960px) { .watch-main { grid-template-columns:2fr 1fr; } }
 .watch-panel, .watch-side { background:#0f172b; border:1px solid #2d3a55; border-radius:12px; padding:10px; overflow:auto; }
+@media (max-width:959px) {
+  /* Feed first; side rail collapses to a compact strip below it. */
+  .watch-main { grid-template-rows:minmax(0,1fr) auto; }
+  .watch-side { max-height:32vh; }
+}
 
 /* ── Mode chips ──────────────────────────────────────────────────────── */
 .watch-mode-chip { font-size:11px; border-radius:999px; padding:3px 8px; border:1px solid #3d4d6d; background:#12213b; color:#d9e7ff; }
@@ -212,12 +261,14 @@ const styles = `
 .live-scorebug { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; }
 .sb-team { display:flex; justify-content:space-between; align-items:center; background:#111c33; border:1px solid #30405f; padding:7px 10px; border-radius:9px; }
 .sb-team.has-ball { border-color:#fbbf24; box-shadow:inset 0 0 0 1px #fbbf24; }
+.sb-score-pending { color:#7d92ba; font-weight:600; letter-spacing:.08em; }
 .sb-center { text-align:center; font-size:12px; color:#d0dbf5; }
 .sb-flags { display:flex; justify-content:center; gap:4px; margin-top:4px; flex-wrap:wrap; }
 .sb-flag { font-size:9px; font-weight:800; letter-spacing:.05em; border-radius:999px; padding:2px 6px; background:#1c2f4d; border:1px solid #3d5b88; }
 .sb-flag.redzone { border-color:#8a3e3e; background:#3c1d28; color:#ffb9b9; }
 .sb-flag.clutch { border-color:#8f6f2b; background:#3a2f18; color:#ffe4a3; }
 .sb-flag.overtime { border-color:#5377b0; background:#1c335d; color:#c6ddff; }
+.sb-flag.final { border-color:#56b58a; background:#12321f; color:#91f0c3; }
 
 /* ── Momentum / jump row ─────────────────────────────────────────────── */
 .momentum { font-size:11px; margin-bottom:7px; padding:5px 8px; border-radius:7px; font-weight:700; }
@@ -226,7 +277,7 @@ const styles = `
 .momentum.swing { background:#3b2f18; }
 .momentum.neutral { background:#253149; }
 .jump-row { display:flex; gap:5px; overflow-x:auto; padding-bottom:5px; -webkit-overflow-scrolling:touch; }
-.jump-btn { white-space:nowrap; background:#182741; color:#d8e6ff; border:1px solid #37527d; border-radius:999px; padding:5px 10px; font-size:11px; cursor:pointer; flex-shrink:0; }
+.jump-btn { white-space:nowrap; background:#182741; color:#d8e6ff; border:1px solid #37527d; border-radius:999px; padding:6px 12px; font-size:11px; cursor:pointer; flex-shrink:0; min-height:32px; }
 
 /* ── Live feed ───────────────────────────────────────────────────────── */
 .live-feed { display:grid; gap:5px; }
@@ -252,23 +303,44 @@ const styles = `
 .feed-tag-default { background:#1b2f4f; color:#a0aec0; border:1px solid #415d89; }
 
 /* ── Standouts ───────────────────────────────────────────────────────── */
+.standout-panel > summary { cursor:pointer; list-style:none; }
+.standout-panel > summary::-webkit-details-marker { display:none; }
+.standout-panel > summary::after { content:'▾'; margin-left:6px; color:#6a87b8; }
+.standout-panel:not([open]) > summary::after { content:'▸'; }
 .watch-side-title { margin:0 0 8px; font-size:13px; font-weight:700; color:#c8d8f5; }
 .standout-list { margin:0; padding:0; list-style:none; display:grid; gap:4px; }
 .standout-list li { display:flex; align-items:baseline; gap:6px; font-size:12px; line-height:1.4; }
 .standout-pos { font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:#6a87b8; min-width:32px; flex-shrink:0; }
+@media (max-width:959px) {
+  .standout-list { grid-template-columns:1fr 1fr; }
+}
 
-/* ── Controls ────────────────────────────────────────────────────────── */
-.controls { margin-top:10px; display:grid; gap:4px; }
-.controls-label { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#4d6a96; margin-top:4px; }
-.speed-row, .skip-row, .playcall-row { display:flex; gap:4px; flex-wrap:wrap; }
-.ctrl-btn { background:#1c2e4d; color:#c8d8f5; border:1px solid #456596; border-radius:7px; padding:5px 9px; font-size:11px; cursor:pointer; white-space:nowrap; }
+/* ── Compact sticky control tray ─────────────────────────────────────── */
+.watch-controls-tray {
+  display:flex; align-items:center; gap:6px;
+  padding:6px 10px calc(6px + env(safe-area-inset-bottom, 0px));
+  background:#0c1730; border-top:1px solid #2d3a55;
+  flex-shrink:0;
+}
+.speed-row { display:flex; gap:4px; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; flex:1; min-width:0; }
+.ctrl-btn { background:#1c2e4d; color:#c8d8f5; border:1px solid #456596; border-radius:8px; padding:8px 10px; font-size:11px; cursor:pointer; white-space:nowrap; min-height:44px; min-width:44px; }
 .ctrl-btn.active { border-color:#7cc4ff; color:#b8e0ff; background:#182948; }
 .ctrl-btn:hover { background:#233660; }
-.pause-btn { font-size:13px; padding:5px 8px; }
+.pause-btn { font-size:14px; padding:8px 12px; flex-shrink:0; }
+.skip-menu { position:relative; flex-shrink:0; }
+.skip-menu > summary { list-style:none; display:inline-flex; align-items:center; }
+.skip-menu > summary::-webkit-details-marker { display:none; }
+.skip-menu[open] .skip-menu-list {
+  position:absolute; right:0; bottom:calc(100% + 6px);
+  display:flex; flex-direction:column; gap:4px;
+  background:#0f1c38; border:1px solid #334870; border-radius:10px;
+  padding:6px; min-width:132px; box-shadow:0 -8px 24px rgba(0,0,0,.45); z-index:3;
+}
 
 /* ── Final card ──────────────────────────────────────────────────────── */
 .watch-final-card { border:1px solid #3d5378; border-radius:10px; margin-top:12px; padding:10px; background:#13203a; }
 .watch-final-label { text-transform:uppercase; font-size:10px; letter-spacing:.08em; color:#98b4dd; margin-bottom:4px; }
 .watch-final-score { display:flex; flex-direction:column; gap:4px; font-size:15px; font-weight:800; color:#ecf4ff; }
-.finish { margin-top:10px; width:100%; background:#1d4ed8; color:#fff; font-weight:800; border:none; border-radius:8px; padding:9px; cursor:pointer; font-size:13px; }
+.watch-final-pending { font-size:12px; color:#b9c9e6; line-height:1.4; }
+.finish { margin-top:10px; width:100%; background:#1d4ed8; color:#fff; font-weight:800; border:none; border-radius:8px; padding:11px; cursor:pointer; font-size:13px; min-height:44px; }
 `;

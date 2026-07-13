@@ -60,7 +60,7 @@ describe('GameDetailScreen canonical title and prep context', () => {
     vi.mocked(useStableRouteRequest).mockReturnValue({ data: null, loading: false, error: null });
   });
 
-  it('uses a single Game Book destination title', () => {
+  it('shows an anchored recovery surface (not a placeholder final) when no game data resolves', () => {
     const html = renderToString(
       <GameDetailScreen
         gameId="2031_w1_1_2"
@@ -69,8 +69,11 @@ describe('GameDetailScreen canonical title and prep context', () => {
       />,
     );
 
-    expect(html).toContain('Game Book');
-    expect(html).toContain('Week');
+    expect(html).toContain('Game Book unavailable');
+    expect(html).toContain('game-book-recovery-return');
+    // Never renders a fabricated 0-0 / placeholder final for a missing game.
+    expect(html).not.toContain('finished tied');
+    expect(html).not.toContain('AWAY 0');
     expect(html).not.toContain('Completed Game Detail');
   });
 
@@ -98,6 +101,39 @@ describe('GameDetailScreen canonical title and prep context', () => {
     expect(html).toContain('Preparation Context');
     expect(html).toContain('does not assign direct causality');
     expect(html).toContain('Game plan was saved before kickoff');
+  });
+
+  it('shows the recovery surface for an unplayed schedule row instead of a fake 0-0 tie', () => {
+    // The requested id matches a serialized upcoming game: played=false with
+    // Int32Array-default 0-0 scores. This must never render as a final.
+    const html = renderToString(
+      <GameDetailScreen
+        gameId="2031_w5_1_2"
+        league={{
+          seasonId: '2031',
+          teams: league.teams,
+          schedule: {
+            weeks: [{
+              week: 5,
+              games: [{
+                gameId: '2031_w5_1_2',
+                id: '2031_w5_1_2',
+                homeId: 1,
+                awayId: 2,
+                homeScore: 0,
+                awayScore: 0,
+                played: false,
+              }],
+            }],
+          },
+        }}
+        actions={{ getBoxScore: async () => ({ game: null }) }}
+      />,
+    );
+
+    expect(html).toContain('Game Book unavailable');
+    expect(html).not.toContain('finished tied');
+    expect(html).not.toContain('0 - 0');
   });
 
   it('renders an explicit empty state when no game is selected', () => {

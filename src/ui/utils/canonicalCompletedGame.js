@@ -24,6 +24,9 @@ function extractScoreFields(game) {
 
 function hasValidFinalScore(game) {
   if (!game || typeof game !== 'object') return false;
+  // Rows explicitly marked unplayed carry serialization-default 0-0 scores
+  // (schedule buffers can't hold null) — never treat them as a real final.
+  if (game.played === false || game.played === 0) return false;
   const { home, away } = extractScoreFields(game);
   return Number.isFinite(home) && Number.isFinite(away);
 }
@@ -42,11 +45,15 @@ export function resolveCanonicalCompletedGame({ league, gameId, scheduleGame, ar
     const { home: archivedHome, away: archivedAway } = extractScoreFields(archived);
     const meta = schedule ?? byId;
     if (!meta) {
-      return { ...archived, homeScore: archivedHome, awayScore: archivedAway };
+      // An archive-validated final is by definition a played game.
+      return { ...archived, homeScore: archivedHome, awayScore: archivedAway, played: true };
     }
     return {
       ...meta,
       ...archived,
+      // The stale schedule/index row may still say played:false (the UI league
+      // snapshot is not refreshed mid-week); the archived final wins.
+      played: true,
       homeScore: archivedHome,
       awayScore: archivedAway,
       homeAbbr: archived.homeAbbr ?? meta.homeAbbr,

@@ -17,7 +17,10 @@
   max-width: 1200px;
   margin: 0 auto;
   padding: var(--space-3);
-  padding-bottom: calc(var(--space-3) + 80px); /* Space for bottom nav on mobile */
+  /* Space for the floating bottom nav on mobile: nav height (~60px) + its
+     10px inset + breathing room, plus the home-indicator safe area so the
+     last interactive row is never covered on notched iPhones. */
+  padding-bottom: calc(var(--space-3) + 84px + env(safe-area-inset-bottom, 0px));
   min-height: 100vh;
   min-height: 100dvh;
 }
@@ -415,6 +418,20 @@
   color: var(--warning-text);
 }
 
+/* Compact activity notices: routine post-sim messages render as tight rows
+   instead of full-width alert cards, so weekly results stay visible. */
+.app-notification-compact {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  border-radius: var(--radius-sm);
+  min-height: 32px;
+}
+.app-notification-compact .app-notification-dismiss {
+  min-width: 32px;
+  min-height: 32px;
+  padding: var(--space-1);
+}
+
 .app-notification-dismiss {
   background: none;
   border: none;
@@ -761,6 +778,16 @@
 
 .mobile-nav-panel.open {
   transform: translateX(0);
+  visibility: visible;
+}
+
+/* Hardening: a closed drawer is fully invisible even if a transform gets stuck
+   mid-transition (e.g. interrupted by a route change while animating) — no
+   partial sliver can remain over HQ content. Visibility flips after the slide
+   finishes so the close animation still plays. */
+.mobile-nav-panel:not(.open) {
+  visibility: hidden;
+  transition: transform var(--dur-slow) var(--ease), visibility 0s linear var(--dur-slow);
 }
 
 .mobile-nav-header {

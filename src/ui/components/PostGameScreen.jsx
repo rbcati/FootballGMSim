@@ -18,33 +18,59 @@ import { buildReasoningBullets } from "../../core/gameSummary.js";
 import ReplayableGameFlowViewer from "./ReplayableGameFlowViewer.jsx";
 
 // ── Error boundary so a crash here never freezes the whole app ────────────────
-class PostGameErrorBoundary extends Component {
-  constructor(props) { super(props); this.state = { crashed: false }; }
+// Recovery contract: the fallback is a fully opaque, anchored surface (no
+// unrelated screen bleeding through behind it), the copy is honest (the game
+// result is already saved — only the recap view failed), and navigation is
+// user-controlled and fires exactly once. No automatic redirect races the
+// button.
+export class PostGameErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { crashed: false };
+    this.recoveredRef = { done: false };
+    this.handleRecover = this.handleRecover.bind(this);
+  }
   static getDerivedStateFromError() { return { crashed: true }; }
   componentDidCatch(err) { console.error('[PostGameScreen] render crash:', err); }
+  handleRecover() {
+    if (this.recoveredRef.done) return;
+    this.recoveredRef.done = true;
+    this.props.onContinue?.();
+  }
   render() {
     if (!this.state.crashed) return this.props.children;
     return (
-      <div style={{
-        position: "fixed", inset: 0, zIndex: 9700,
-        background: "rgba(0,0,0,0.92)", display: "flex",
-        alignItems: "center", justifyContent: "center", flexDirection: "column",
-        gap: 16, padding: 24,
-      }}>
-        <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#FF453A" }}>
-          Game recap failed
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="postgame-recovery-title"
+        aria-describedby="postgame-recovery-detail"
+        data-testid="postgame-recovery"
+        style={{
+          position: "fixed", inset: 0, zIndex: 9700,
+          background: "var(--bg, #0b0b12)", display: "flex",
+          alignItems: "center", justifyContent: "center", flexDirection: "column",
+          gap: 14, padding: 24, textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: "1.6rem" }} aria-hidden="true">🏈</div>
+        <div id="postgame-recovery-title" style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text, #fff)" }}>
+          Game recap unavailable
         </div>
-        <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center" }}>
-          Returning you to the Weekly Hub…
+        <div id="postgame-recovery-detail" style={{ fontSize: "0.85rem", color: "var(--text-muted, #9aa2b1)", maxWidth: 320, lineHeight: 1.5 }}>
+          The final result was saved, but the recap view could not be shown.
+          You can pick the week back up from Franchise HQ.
         </div>
         <button
-          onClick={this.props.onContinue}
+          onClick={this.handleRecover}
+          data-testid="postgame-recovery-return"
           style={{
             padding: "12px 28px", background: "#0A84FF", color: "#fff",
             border: "none", borderRadius: 10, fontWeight: 800, cursor: "pointer",
+            minHeight: 44,
           }}
         >
-          Back to Hub →
+          Return to HQ
         </button>
       </div>
     );
@@ -395,39 +421,44 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
       }}>
         <div style={{ width: "100%", maxWidth: 420 }}>
 
-          {/* Result banner */}
-          <div style={{
-            textAlign: "center", marginBottom: 16,
-            animation: "fadeSlideIn 0.4s ease-out",
-          }}>
+          {/* Result banner — compact single-line header so postgame content
+              starts above the fold on a phone. Emotionally clear (emoji +
+              tone color + W/L label) without a half-screen of decoration. */}
+          <div
+            data-testid="postgame-result-banner"
+            style={{
+              textAlign: "center", marginBottom: 10,
+              animation: "fadeSlideIn 0.4s ease-out",
+            }}
+          >
             <style>{`
               @keyframes fadeSlideIn {
                 from { opacity: 0; transform: translateY(16px); }
                 to   { opacity: 1; transform: translateY(0); }
               }
             `}</style>
-            <div style={{ fontSize: "2.6rem", lineHeight: 1, marginBottom: 6 }}>{resultEmoji}</div>
-            <div style={{
-              fontSize: "1.7rem", fontWeight: 900, letterSpacing: "2px",
-              color: resultColor, marginBottom: 4,
-            }}>
-              {resultLabel}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <span style={{ fontSize: "1.5rem", lineHeight: 1 }} aria-hidden="true">{resultEmoji}</span>
+              <span style={{
+                fontSize: "1.35rem", fontWeight: 900, letterSpacing: "1.5px",
+                color: resultColor,
+              }}>
+                {resultLabel}
+              </span>
             </div>
-            {week && (
-              <div style={{ fontSize: "0.72rem", color: "var(--text-subtle)", fontWeight: 600 }}>
-                Week {week} · {phase === "playoffs" ? "Playoffs" : "Regular Season"}
-              </div>
-            )}
-            {/* Auto-save confirmation toast */}
             <div style={{
-              marginTop: 10,
-              height: 22,
-              display: "flex", alignItems: "center", justifyContent: "center",
+              marginTop: 4, display: "flex", alignItems: "center",
+              justifyContent: "center", gap: 8, minHeight: 18,
             }}>
+              {week && (
+                <span style={{ fontSize: "0.72rem", color: "var(--text-subtle)", fontWeight: 600 }}>
+                  Week {week} · {phase === "playoffs" ? "Playoffs" : "Regular Season"}
+                </span>
+              )}
               {showSaved && (
-                <div style={{
+                <span style={{
                   display: "inline-flex", alignItems: "center", gap: 5,
-                  padding: "3px 10px",
+                  padding: "2px 8px",
                   background: "#34C75918",
                   border: "1px solid #34C75940",
                   borderRadius: 20,
@@ -435,7 +466,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
                   animation: "fadeSlideIn 0.3s ease-out",
                 }}>
                   ✓ Game saved
-                </div>
+                </span>
               )}
             </div>
           </div>
@@ -445,8 +476,8 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
             background: "var(--surface)",
             border: "1.5px solid var(--hairline)",
             borderRadius: 16,
-            padding: "14px 18px",
-            marginBottom: 12,
+            padding: "10px 14px",
+            marginBottom: 10,
           }}>
             <div style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -454,18 +485,18 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
               {/* Away */}
               <div style={{ flex: 1, textAlign: "center" }}>
                 <div style={{
-                  width: 52, height: 52, borderRadius: "50%", margin: "0 auto 8px",
-                  background: `${aColor}20`, border: `2.5px solid ${aColor}`,
+                  width: 42, height: 42, borderRadius: "50%", margin: "0 auto 6px",
+                  background: `${aColor}20`, border: `2px solid ${aColor}`,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontWeight: 900, fontSize: 14, color: aColor,
+                  fontWeight: 900, fontSize: 13, color: aColor,
                 }}>
                   {awayTeam?.abbr?.slice(0, 3) ?? "AWY"}
                 </div>
-                <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 4 }}>
+                <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 3 }}>
                   {awayTeam?.name ?? awayTeam?.abbr ?? "Away"}
                 </div>
                 <div style={{
-                  fontSize: "2.8rem", fontWeight: 900,
+                  fontSize: "2.2rem", fontWeight: 900,
                   color: !homeWon && !tied ? aColor : "var(--text-muted)",
                   fontVariantNumeric: "tabular-nums", lineHeight: 1,
                 }}>
@@ -483,18 +514,18 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
               {/* Home */}
               <div style={{ flex: 1, textAlign: "center" }}>
                 <div style={{
-                  width: 52, height: 52, borderRadius: "50%", margin: "0 auto 8px",
-                  background: `${hColor}20`, border: `2.5px solid ${hColor}`,
+                  width: 42, height: 42, borderRadius: "50%", margin: "0 auto 6px",
+                  background: `${hColor}20`, border: `2px solid ${hColor}`,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontWeight: 900, fontSize: 14, color: hColor,
+                  fontWeight: 900, fontSize: 13, color: hColor,
                 }}>
                   {homeTeam?.abbr?.slice(0, 3) ?? "HME"}
                 </div>
-                <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 4 }}>
+                <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 3 }}>
                   {homeTeam?.name ?? homeTeam?.abbr ?? "Home"}
                 </div>
                 <div style={{
-                  fontSize: "2.8rem", fontWeight: 900,
+                  fontSize: "2.2rem", fontWeight: 900,
                   color: homeWon ? hColor : "var(--text-muted)",
                   fontVariantNumeric: "tabular-nums", lineHeight: 1,
                 }}>
@@ -559,7 +590,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
               }}
             >
               <strong style={{ fontSize: "0.78rem", color: "var(--text)" }}>Game Flow</strong>
-              <span style={{ color: "var(--text-subtle)" }}>· Open the box score for the full drive chart.</span>
+              <span style={{ color: "var(--text-subtle)" }}>· Detailed game flow was not recorded for this matchup.</span>
             </div>
           ) : (
           <div style={{ marginBottom: 12, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 12, padding: 12 }}>

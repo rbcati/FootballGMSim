@@ -48,8 +48,10 @@ export default function ThemeToggle({ compact = false }) {
 
   useEffect(() => {
     applyTheme(theme);
-    updateSetting?.("theme", theme);
-  }, [theme, applyTheme, updateSetting]);
+    // Only persist a real change — unconditionally writing on mount re-ran
+    // this effect through the settings context on every render pass.
+    if (theme !== savedTheme) updateSetting?.("theme", theme);
+  }, [theme, savedTheme, applyTheme, updateSetting]);
 
   const cycle = useCallback(() => {
     setTheme(prev => {
