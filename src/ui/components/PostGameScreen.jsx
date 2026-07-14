@@ -15,6 +15,7 @@ import PlayerCard from "./PlayerCard.jsx";
 import AdvancedStats from "./AdvancedStats.jsx";
 import { buildGameFlowSummary } from "../../core/sim/gameFlowSummary.js";
 import { buildReasoningBullets } from "../../core/gameSummary.js";
+import { readStrictFinalScore } from "../../core/gameArchive.js";
 import ReplayableGameFlowViewer from "./ReplayableGameFlowViewer.jsx";
 
 // ── Error boundary so a crash here never freezes the whole app ────────────────
@@ -318,17 +319,21 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
 }) {
   const hColor = teamColor(homeTeam?.abbr || "HME");
   const aColor = teamColor(awayTeam?.abbr || "AWY");
+  const strictFinalScore = readStrictFinalScore({ homeScore, awayScore });
+  const hasStrictFinal = Boolean(strictFinalScore);
+  const displayHomeScore = strictFinalScore?.home ?? null;
+  const displayAwayScore = strictFinalScore?.away ?? null;
 
-  const homeWon = homeScore > awayScore;
-  const tied = homeScore === awayScore;
+  const homeWon = hasStrictFinal && displayHomeScore > displayAwayScore;
+  const tied = hasStrictFinal && displayHomeScore === displayAwayScore;
   const userIsHome = homeTeam?.id === userTeamId;
   const userIsAway = awayTeam?.id === userTeamId;
-  const userWon = (userIsHome && homeWon) || (userIsAway && !homeWon && !tied);
-  const userLost = (userIsHome && !homeWon && !tied) || (userIsAway && homeWon);
+  const userWon = hasStrictFinal && ((userIsHome && homeWon) || (userIsAway && !homeWon && !tied));
+  const userLost = hasStrictFinal && ((userIsHome && !homeWon && !tied) || (userIsAway && homeWon));
 
-  const resultColor = userWon ? "#34C759" : userLost ? "#FF453A" : "#FFD60A";
+  const resultColor = userWon ? "#34C759" : userLost ? "#FF453A" : tied ? "#FFD60A" : "var(--text-muted)";
   const resultEmoji = userWon ? "🏆" : userLost ? "😔" : tied ? "🤝" : "🏈";
-  const resultLabel = userWon ? "VICTORY!" : userLost ? "DEFEAT" : tied ? "TIE" : "FINAL";
+  const resultLabel = userWon ? "VICTORY!" : userLost ? "DEFEAT" : tied ? "TIE" : "Result pending";
 
   const [activeTab, setActiveTab] = useState("leaders"); // "leaders" | "grades"
   // Show "Game Saved ✓" for 3 seconds on mount to confirm the auto-save happened
@@ -379,11 +384,11 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
   );
   const archiveSavedRef = React.useRef(false);
   React.useEffect(() => {
-    if (archiveSavedRef.current || !boxScoreGameId || typeof onArchiveReady !== "function") return;
+    if (archiveSavedRef.current || !boxScoreGameId || typeof onArchiveReady !== "function" || !strictFinalScore) return;
     archiveSavedRef.current = true;
     const recapText = notableMoments.length
       ? notableMoments.map((m) => `Q${m.quarter ?? "?"} ${m.clock ?? ""} ${m.text ?? "Momentum swing"}`).join(" ")
-      : `${awayTeam?.abbr ?? "AWY"} ${awayScore} - ${homeScore} ${homeTeam?.abbr ?? "HME"}`;
+      : `${awayTeam?.abbr ?? "AWY"} ${strictFinalScore.away} - ${strictFinalScore.home} ${homeTeam?.abbr ?? "HME"}`;
     const derivedPlayerStats = derivePlayerStatsFromLogs(logs, homeTeam?.id, awayTeam?.id);
     onArchiveReady({
       gameId: boxScoreGameId,
@@ -393,8 +398,8 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
       awayId: awayTeam?.id,
       homeAbbr: homeTeam?.abbr,
       awayAbbr: awayTeam?.abbr,
-      homeScore,
-      awayScore,
+      homeScore: strictFinalScore.home,
+      awayScore: strictFinalScore.away,
       recapText,
       logs,
       playerStats: derivedPlayerStats,
@@ -404,7 +409,9 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
         simOutputs: null,
       },
     });
-  }, [awayScore, awayTeam?.abbr, awayTeam?.id, boxScoreGameId, homeScore, homeTeam?.abbr, homeTeam?.id, logs, notableMoments, onArchiveReady, week]);
+  }, [awayScore, awayTeam?.abbr, awayTeam?.id, boxScoreGameId, homeScore, homeTeam?.abbr, homeTeam?.id, logs, notableMoments, onArchiveReady, strictFinalScore, week]);
+
+  const canOpenGameBook = Boolean(boxScoreGameId && hasStrictFinal);
 
   return (
     <>
@@ -455,7 +462,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
                   Week {week} · {phase === "playoffs" ? "Playoffs" : "Regular Season"}
                 </span>
               )}
-              {showSaved && (
+              {showSaved && hasStrictFinal && (
                 <span style={{
                   display: "inline-flex", alignItems: "center", gap: 5,
                   padding: "2px 8px",
@@ -500,14 +507,14 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
                   color: !homeWon && !tied ? aColor : "var(--text-muted)",
                   fontVariantNumeric: "tabular-nums", lineHeight: 1,
                 }}>
-                  {awayScore}
+                  {displayAwayScore ?? "—"}
                 </div>
               </div>
 
               <div style={{ textAlign: "center", padding: "0 12px" }}>
                 <div style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--text-subtle)",
                   letterSpacing: "1px", textTransform: "uppercase" }}>
-                  FINAL
+                  RESULT
                 </div>
               </div>
 
@@ -529,7 +536,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
                   color: homeWon ? hColor : "var(--text-muted)",
                   fontVariantNumeric: "tabular-nums", lineHeight: 1,
                 }}>
-                  {homeScore}
+                  {displayHomeScore ?? "—"}
                 </div>
               </div>
             </div>
@@ -537,21 +544,21 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
               <button
                 type="button"
                 data-testid="box-score-trigger"
-                onClick={() => boxScoreGameId && onOpenBoxScore?.(boxScoreGameId)}
-                disabled={!boxScoreGameId}
+                onClick={() => canOpenGameBook && onOpenBoxScore?.(boxScoreGameId)}
+                disabled={!canOpenGameBook}
                 style={{
-                  cursor: boxScoreGameId ? "pointer" : "not-allowed",
+                  cursor: canOpenGameBook ? "pointer" : "not-allowed",
                   fontWeight: 800,
                   fontSize: "0.8rem",
                   padding: "8px 20px",
                   borderRadius: 999,
-                  border: `1px solid ${boxScoreGameId ? "var(--accent)" : "var(--hairline)"}`,
-                  background: boxScoreGameId ? "var(--accent-muted)" : "transparent",
-                  color: boxScoreGameId ? "var(--accent)" : "var(--text-subtle)",
+                  border: `1px solid ${canOpenGameBook ? "var(--accent)" : "var(--hairline)"}`,
+                  background: canOpenGameBook ? "var(--accent-muted)" : "transparent",
+                  color: canOpenGameBook ? "var(--accent)" : "var(--text-subtle)",
                   minHeight: "var(--mobile-btn-h-compact, 38px)",
                 }}
               >
-                {boxScoreGameId ? "View Game Book ›" : "Box score unavailable"}
+                {canOpenGameBook ? "View Game Book ›" : "Official score pending"}
               </button>
             </div>
           </div>
@@ -615,7 +622,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
                   gameFlowSummary={gfs}
                   homeTeam={homeTeam}
                   awayTeam={awayTeam}
-                  finalScore={{ home: homeScore, away: awayScore }}
+                  finalScore={{ home: displayHomeScore, away: displayAwayScore }}
                 />
               </div>
             )}

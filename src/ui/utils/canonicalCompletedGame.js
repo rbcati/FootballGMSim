@@ -1,3 +1,5 @@
+import { readStrictFinalScore } from '../../core/gameArchive.js';
+
 /**
  * resolveCanonicalCompletedGame
  *
@@ -16,19 +18,8 @@
  * Returns null only when no game reference is available at all.
  */
 
-function extractScoreFields(game) {
-  const home = Number(game?.homeScore ?? game?.scoreHome ?? game?.score?.home);
-  const away = Number(game?.awayScore ?? game?.scoreAway ?? game?.score?.away);
-  return { home, away };
-}
-
 function hasValidFinalScore(game) {
-  if (!game || typeof game !== 'object') return false;
-  // Rows explicitly marked unplayed carry serialization-default 0-0 scores
-  // (schedule buffers can't hold null) — never treat them as a real final.
-  if (game.played === false || game.played === 0) return false;
-  const { home, away } = extractScoreFields(game);
-  return Number.isFinite(home) && Number.isFinite(away);
+  return readStrictFinalScore(game) != null;
 }
 
 export function resolveCanonicalCompletedGame({ league, gameId, scheduleGame, archivedGame } = {}) {
@@ -42,7 +33,7 @@ export function resolveCanonicalCompletedGame({ league, gameId, scheduleGame, ar
     // Archive has a valid final score — it wins absolutely for score fields.
     // Always normalize homeScore/awayScore so callers get consistent field names
     // regardless of whether the archive used scoreHome, score.home, etc.
-    const { home: archivedHome, away: archivedAway } = extractScoreFields(archived);
+    const { home: archivedHome, away: archivedAway } = readStrictFinalScore(archived);
     const meta = schedule ?? byId;
     if (!meta) {
       // An archive-validated final is by definition a played game.

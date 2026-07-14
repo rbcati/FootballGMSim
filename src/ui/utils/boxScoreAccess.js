@@ -1,5 +1,5 @@
 import { buildCanonicalGameId, toTeamId } from "../../core/gameIdentity.js";
-import { normalizeArchivedGamePayload, recoverArchivedGameFromSchedule } from "../../core/gameArchive.js";
+import { normalizeArchivedGamePayload, readStrictFinalScore, recoverArchivedGameFromSchedule } from "../../core/gameArchive.js";
 import { buildBoxScoreViewModel } from "./boxScoreViewModel.js";
 
 const ARCHIVE_QUALITY_LABELS = {
@@ -17,14 +17,7 @@ function archiveQualityKey(label) {
 }
 
 function hasFinalScore(game) {
-  // Explicitly-unplayed schedule rows carry serialization-default 0-0 scores
-  // (Int32Array slots can't hold null) — never treat them as completed.
-  if (game?.played === false || game?.played === 0) return false;
-  return Boolean(
-    game?.played
-      || Number.isFinite(Number(game?.homeScore))
-      || Number.isFinite(Number(game?.awayScore)),
-  );
+  return readStrictFinalScore(game) != null;
 }
 
 export function inferCompletedGameIdentity(game, context = {}) {
@@ -46,7 +39,7 @@ export function normalizeCompletedGameRecord(game, context = {}) {
     homeId: toTeamId(game?.homeId ?? game?.home),
     awayId: toTeamId(game?.awayId ?? game?.away),
     seasonId: game?.seasonId ?? context?.seasonId ?? null,
-    week: Number(game?.week ?? context?.week ?? null),
+    week: (game?.week ?? context?.week) == null ? null : Number(game?.week ?? context?.week),
   };
 }
 
@@ -81,9 +74,10 @@ export function getArchiveQualityLabel(archiveQuality) {
 
 export function buildCompletedGamePresentation(game, context = {}) {
   const availability = getBoxScoreAvailability(game, context);
+  const finalScore = readStrictFinalScore(game);
   const away = context?.teamById?.[toTeamId(game?.awayId ?? game?.away)] ?? null;
   const home = context?.teamById?.[toTeamId(game?.homeId ?? game?.home)] ?? null;
-  const displayScoreLine = `${away?.abbr ?? "AWY"} ${game?.awayScore ?? "—"} - ${game?.homeScore ?? "—"} ${home?.abbr ?? "HME"}`;
+  const displayScoreLine = `${away?.abbr ?? "AWY"} ${finalScore?.away ?? "—"} - ${finalScore?.home ?? "—"} ${home?.abbr ?? "HME"}`;
   return {
     ...availability,
     ctaLabel: availability.canOpen
