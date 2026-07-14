@@ -33,7 +33,10 @@ async function advanceIntoUserGamePrompt(page) {
   } else {
     await page.evaluate(() => window.handleGlobalAdvance?.());
   }
-  await page.getByRole('button', { name: /Advance anyway/i }).click({ timeout: 1500 }).catch(() => {});
+  const advanceAnywayBtn = page.getByRole('button', { name: /Advance anyway/i });
+  if (await advanceAnywayBtn.isVisible().catch(() => false)) {
+    await advanceAnywayBtn.click({ timeout: 1500 });
+  }
   await page.getByRole('button', { name: /Watch \(Broadcast Pace\)/ }).waitFor({ state: 'visible', timeout: 45000 });
 }
 

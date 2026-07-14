@@ -215,7 +215,11 @@ test('offseason FA loop: submit → reserve cap → withdraw → strong offer �
         phase: p.phase,
       };
     }, target.id);
-    await page.waitForFunction(() => !window?.state?.busy && !window?.state?.simulating, { timeout: SMOKE_TIMEOUT }).catch(() => {});
+    try {
+      await page.waitForFunction(() => !window?.state?.busy && !window?.state?.simulating, { timeout: SMOKE_TIMEOUT });
+    } catch (e) {
+      console.warn("waitForFunction timed out waiting for state to not be busy/simulating.");
+    }
     if (resolution.status !== 'pending' || resolution.phase !== 'free_agency') break;
   }
 
