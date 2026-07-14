@@ -1,4 +1,4 @@
-import { mergeArchivedGameWithScheduleResult, normalizeArchivedGamePayload } from '../../core/gameArchive.js';
+import { mergeArchivedGameWithScheduleResult, normalizeArchivedGamePayload, readStrictFinalScore } from '../../core/gameArchive.js';
 import { isScoringLikeLog, normalizePlayLogEntry } from '../../core/gameEvents.js';
 import { buildGameFlowSummary } from '../../core/sim/gameFlowSummary.js';
 import { buildLeaguePlayerMap, resolvePlayerName } from './playerNameResolver.js';
@@ -67,8 +67,8 @@ function formatScoreLine(awayTeam, homeTeam, finalScore) {
 }
 
 function buildHeadline({ awayTeam, homeTeam, finalScore, status }) {
-  const away = toNum(finalScore?.away);
-  const home = toNum(finalScore?.home);
+  const away = finalScore?.away;
+  const home = finalScore?.home;
   if (away == null || home == null) return status === 'Final' ? 'Final score unavailable' : 'Game not final';
   if (away === home) return `${awayTeam?.abbr ?? 'Away'} and ${homeTeam?.abbr ?? 'Home'} finished tied`;
   const winner = away > home ? awayTeam : homeTeam;
@@ -368,8 +368,8 @@ function normalizePlayByPlayRows(payload = {}, teams = {}) {
 }
 
 function applyCloseGameLastPlays(playRows = [], finalScore = {}) {
-  const home = toNum(finalScore.home);
-  const away = toNum(finalScore.away);
+  const home = finalScore.home;
+  const away = finalScore.away;
   if (home == null || away == null || Math.abs(home - away) > 8 || playRows.length <= 5) return playRows;
   const lastFiveIds = new Set(playRows.slice(-5).map((row) => row.id));
   return playRows.map((row) => lastFiveIds.has(row.id)
@@ -427,8 +427,8 @@ function normalizeTurningPointRows({ payload = {}, scoringSummary = [], playByPl
     if (Number(row.quarter) >= 4 && row.tags?.includes('explosive')) add({ id: `turning-${row.id}`, quarter: row.quarter, clock: row.clock, teamAbbr: row.teamAbbr, text: row.text });
   });
 
-  const home = toNum(finalScore.home);
-  const away = toNum(finalScore.away);
+  const home = finalScore.home;
+  const away = finalScore.away;
   if (inferred.length === 0 && home != null && away != null && Math.abs(home - away) <= 8) {
     playByPlayRows.filter((row) => row.isKey).slice(-2).forEach((row) => add({ id: `turning-close-${row.id}`, quarter: row.quarter, clock: row.clock, teamAbbr: row.teamAbbr, text: row.text }));
   }
@@ -500,8 +500,9 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
   }
   const homeId = payload?.homeId ?? payload?.home;
   const awayId = payload?.awayId ?? payload?.away;
-  const homeScore = toNum(payload?.homeScore);
-  const awayScore = toNum(payload?.awayScore);
+  const strictFinalScore = readStrictFinalScore(payload);
+  const homeScore = strictFinalScore?.home ?? null;
+  const awayScore = strictFinalScore?.away ?? null;
   const quarterScores = payload?.quarterScores ?? null;
   const scoringSummary = normalizeScoringSummary(payload?.scoringSummary);
   const teamStats = payload?.teamStats ?? payload?.stats?.team ?? {};

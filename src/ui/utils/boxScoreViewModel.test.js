@@ -59,6 +59,22 @@ describe('buildBoxScoreViewModel', () => {
     expect(vm.turningPointRows).toEqual([]);
   });
 
+  it('does not coerce null or blank finals into 0-0 Game Book scores', () => {
+    for (const game of [
+      { played: true, homeScore: null, awayScore: null },
+      { played: true, homeScore: '', awayScore: '   ' },
+      { played: true, homeScore: 21, awayScore: null },
+      { played: false, homeScore: 0, awayScore: 0 },
+    ]) {
+      const vm = buildBoxScoreViewModel({ game });
+      expect(vm.archiveQuality).toBe('Missing detail');
+      expect(vm.availableData.finalScore).toBe(false);
+      expect(vm.finalScore).toEqual({ home: null, away: null });
+      expect(vm.finalScoreLine).toBe('AWAY — - — HOME');
+      expect(vm.headlineSummary).toBe(game.played === false ? 'Game not final' : 'Final score unavailable');
+    }
+  });
+
   it('builds factual game story bullets from available data only', () => {
     const vm = buildBoxScoreViewModel({ game: { homeId: 1, awayId: 2, homeScore: 17, awayScore: 20, teamStats: { home: { turnovers: 2, totalYards: 290 }, away: { turnovers: 0, totalYards: 350 } }, playerStats: { away: { 1: { name: 'A QB', stats: { passYd: 294, passTD: 3 } } }, home: {} } } });
     const story = buildGameBookStory(vm).join(' ');

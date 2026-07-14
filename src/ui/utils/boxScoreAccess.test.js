@@ -59,4 +59,22 @@ describe('box score access clickthrough', () => {
     expect(driveOnly.archiveQuality).toBe('partial');
     expect(driveOnly.statusLabel).toBe('Partial detail');
   });
+
+  it('does not open pending or partial score rows via nullable/blank coercion', () => {
+    const onOpen = vi.fn();
+    const pendingRows = [
+      { gameId: '2026_w1_1_2', played: true, homeId: 1, awayId: 2, homeScore: null, awayScore: null },
+      { gameId: '2026_w1_1_2', played: true, homeId: 1, awayId: 2, homeScore: '', awayScore: '   ' },
+      { gameId: '2026_w1_1_2', played: true, homeId: 1, awayId: 2, homeScore: 17, awayScore: null },
+      { gameId: '2026_w1_1_2', played: false, homeId: 1, awayId: 2, homeScore: 0, awayScore: 0 },
+    ];
+
+    for (const game of pendingRows) {
+      const presentation = buildCompletedGamePresentation(game, { seasonId: '2026', week: 1 });
+      expect(presentation.canOpen).toBe(false);
+      expect(presentation.displayScoreLine).toBe('AWY — - — HME');
+      expect(openResolvedBoxScore(game, { seasonId: '2026', week: 1 }, onOpen)).toBe(false);
+    }
+    expect(onOpen).not.toHaveBeenCalled();
+  });
 });

@@ -2,7 +2,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
-import { cleanup, render, act } from '@testing-library/react';
+import { cleanup, fireEvent, render, act, screen } from '@testing-library/react';
 import PostGameScreen from './PostGameScreen.jsx';
 
 describe('PostGameScreen resilience', () => {
@@ -117,5 +117,59 @@ describe('PostGameScreen onArchiveReady payload', () => {
     expect(payload.playerStats).toBeDefined();
     expect(payload.playerStats.home).toEqual({});
     expect(payload.playerStats.away).toEqual({});
+  });
+
+  it('does not persist archives or allow Game Book navigation when the strict final is missing', async () => {
+    const archiveSpy = vi.fn();
+    const openSpy = vi.fn();
+    await act(async () => {
+      render(
+        <PostGameScreen
+          homeTeam={{ id: 1, abbr: 'HME', name: 'Home' }}
+          awayTeam={{ id: 2, abbr: 'AWY', name: 'Away' }}
+          homeScore={null}
+          awayScore={null}
+          userTeamId={1}
+          boxScoreGameId="pending-game"
+          logs={[]}
+          week={2}
+          onArchiveReady={archiveSpy}
+          onOpenBoxScore={openSpy}
+          onContinue={() => {}}
+        />,
+      );
+    });
+
+    expect(document.body.textContent).not.toMatch(/VICTORY|DEFEAT|\\bTIE\\b|Game saved/i);
+    expect(archiveSpy).not.toHaveBeenCalled();
+    const cta = screen.getByTestId('box-score-trigger');
+    expect(cta.disabled).toBe(true);
+    fireEvent.click(cta);
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it('treats a genuine 0-0 canonical result as a real tie', async () => {
+    const archiveSpy = vi.fn();
+    await act(async () => {
+      render(
+        <PostGameScreen
+          homeTeam={{ id: 1, abbr: 'HME', name: 'Home' }}
+          awayTeam={{ id: 2, abbr: 'AWY', name: 'Away' }}
+          homeScore={0}
+          awayScore={0}
+          userTeamId={1}
+          boxScoreGameId="zero-zero-game"
+          logs={[]}
+          week={2}
+          onArchiveReady={archiveSpy}
+          onContinue={() => {}}
+        />,
+      );
+    });
+
+    expect(screen.getByTestId('postgame-result-banner').textContent).toContain('TIE');
+    expect(screen.getByTestId('box-score-trigger').disabled).toBe(false);
+    expect(archiveSpy).toHaveBeenCalledOnce();
+    expect(archiveSpy.mock.calls[0][0]).toMatchObject({ homeScore: 0, awayScore: 0 });
   });
 });
