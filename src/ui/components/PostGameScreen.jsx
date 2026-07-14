@@ -15,6 +15,7 @@ import PlayerCard from "./PlayerCard.jsx";
 import AdvancedStats from "./AdvancedStats.jsx";
 import { buildGameFlowSummary } from "../../core/sim/gameFlowSummary.js";
 import { buildReasoningBullets } from "../../core/gameSummary.js";
+import { readStrictFinalScore } from "../../core/gameArchive.js";
 import ReplayableGameFlowViewer from "./ReplayableGameFlowViewer.jsx";
 
 // ── Error boundary so a crash here never freezes the whole app ────────────────
@@ -380,6 +381,8 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
   const archiveSavedRef = React.useRef(false);
   React.useEffect(() => {
     if (archiveSavedRef.current || !boxScoreGameId || typeof onArchiveReady !== "function") return;
+    const finalScore = readStrictFinalScore({ homeScore, awayScore });
+    if (!finalScore) return;
     archiveSavedRef.current = true;
     const recapText = notableMoments.length
       ? notableMoments.map((m) => `Q${m.quarter ?? "?"} ${m.clock ?? ""} ${m.text ?? "Momentum swing"}`).join(" ")
@@ -393,8 +396,8 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
       awayId: awayTeam?.id,
       homeAbbr: homeTeam?.abbr,
       awayAbbr: awayTeam?.abbr,
-      homeScore,
-      awayScore,
+      homeScore: finalScore.home,
+      awayScore: finalScore.away,
       recapText,
       logs,
       playerStats: derivedPlayerStats,

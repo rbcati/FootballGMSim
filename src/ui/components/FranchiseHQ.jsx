@@ -21,6 +21,7 @@ import FranchiseBrandHQ from './FranchiseBrandHQ.jsx';
 import JobSecurityCard from './JobSecurityCard.jsx';
 import ActivityToastStack from './ActivityToastStack.jsx';
 import GameResultSummaryCard from './GameResultSummaryCard.jsx';
+import { readStrictFinalScore } from '../../core/gameArchive.js';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -96,9 +97,8 @@ function getLatestUserResultFromRecentResults(lastResults, { league, lastSimWeek
     const homeId = Number(result?.homeId ?? result?.homeTeamId ?? result?.home?.id ?? result?.home);
     const awayId = Number(result?.awayId ?? result?.awayTeamId ?? result?.away?.id ?? result?.away);
     if (homeId !== userTeamId && awayId !== userTeamId) continue;
-    const homeScore = Number(result?.homeScore ?? result?.scoreHome ?? result?.score?.home);
-    const awayScore = Number(result?.awayScore ?? result?.scoreAway ?? result?.score?.away);
-    if (!Number.isFinite(homeId) || !Number.isFinite(awayId) || !Number.isFinite(homeScore) || !Number.isFinite(awayScore)) continue;
+    const finalScore = readStrictFinalScore(result);
+    if (!Number.isFinite(homeId) || !Number.isFinite(awayId) || !finalScore) continue;
     const home = teams.find((team) => Number(team?.id) === homeId) ?? null;
     const away = teams.find((team) => Number(team?.id) === awayId) ?? null;
     return {
@@ -111,9 +111,9 @@ function getLatestUserResultFromRecentResults(lastResults, { league, lastSimWeek
       away,
       homeAbbr: result?.homeAbbr ?? home?.abbr ?? result?.homeName?.slice?.(0, 3) ?? 'HOME',
       awayAbbr: result?.awayAbbr ?? away?.abbr ?? result?.awayName?.slice?.(0, 3) ?? 'AWAY',
-      homeScore,
-      awayScore,
-      score: { home: homeScore, away: awayScore },
+      homeScore: finalScore.home,
+      awayScore: finalScore.away,
+      score: { home: finalScore.home, away: finalScore.away },
       played: true,
       week: safeNum(result?.week, fallbackWeek),
     };

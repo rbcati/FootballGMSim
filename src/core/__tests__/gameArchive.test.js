@@ -85,6 +85,28 @@ describe('gameArchive helpers', () => {
     expect(recovered?.homeScore).toBe(14);
   });
 
+  it('requires complete strict final scores for archive normalization and schedule recovery', () => {
+    for (const scoreFields of [
+      { homeScore: null, awayScore: null },
+      { homeScore: '', awayScore: '   ' },
+      { homeScore: 14, awayScore: null },
+      { homeScore: null, awayScore: 10 },
+    ]) {
+      const normalized = normalizeArchivedGamePayload({
+        id: 'pending',
+        homeId: 5,
+        awayId: 6,
+        played: true,
+        ...scoreFields,
+      });
+      expect([normalized.homeScore, normalized.awayScore]).not.toEqual([0, 0]);
+      expect(normalized.archiveQuality).toBe('missing');
+      expect(recoverArchivedGameFromSchedule('2031_w7_5_6', {
+        schedule: { weeks: [{ week: 7, games: [{ home: 5, away: 6, played: true, ...scoreFields }] }] },
+      })).toBeNull();
+    }
+  });
+
   it('flags contradictory full markers on validation summaries', () => {
     const defects = summarizeArchiveDefects({
       id: 'x',

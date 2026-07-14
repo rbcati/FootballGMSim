@@ -63,6 +63,7 @@ import {
 } from './utils/leagueBootstrap.js';
 import { clearWeeklyPrepForWeek, pruneWeeklyPrepStorage } from './utils/weeklyPrep.js';
 import { buildCanonicalGameId } from '../core/gameIdentity.js';
+import { readStrictFinalScore } from '../core/gameArchive.js';
 import { getRecentGames, saveGame } from '../core/archive/gameArchive.ts';
 import { applyEventDecision } from './utils/franchiseEvents.js';
 import { logChronicleEvent } from './utils/franchiseChronicle.js';
@@ -1706,11 +1707,7 @@ function AppContent() {
         // watch session. The narrated play stream runs on a different engine
         // whose running score can contradict it — never treat viewer-reported
         // scores as the result when the canonical final exists.
-        const canonicalFinal = userEvent
-          && Number.isFinite(Number(userEvent.homeScore))
-          && Number.isFinite(Number(userEvent.awayScore))
-          ? { home: Number(userEvent.homeScore), away: Number(userEvent.awayScore) }
-          : null;
+        const canonicalFinal = readStrictFinalScore(userEvent);
         return (
           <GameSimErrorBoundary onFallback={() => {
             // If GameSimulation crashes, recover directly to advancing the week
@@ -1736,11 +1733,15 @@ function AppContent() {
                   // Belt-and-suspenders save immediately on game completion
                   if (activeSlot) actions.saveSlot(activeSlot);
                   // Capture final scores + logs for PostGameScreen, then clear the viewer
+                  const completedFinal = canonicalFinal ?? readStrictFinalScore({
+                    homeScore: scores?.homeScore,
+                    awayScore: scores?.awayScore,
+                  });
                   setPostGameResult({
                     homeTeam,
                     awayTeam,
-                    homeScore: canonicalFinal?.home ?? scores?.homeScore ?? 0,
-                    awayScore: canonicalFinal?.away ?? scores?.awayScore ?? 0,
+                    homeScore: completedFinal?.home ?? null,
+                    awayScore: completedFinal?.away ?? null,
                     userTeamId: league?.userTeamId,
                     week: league?.week,
                     phase: league?.phase,
