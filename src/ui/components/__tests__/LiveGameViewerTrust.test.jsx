@@ -66,8 +66,12 @@ describe('LiveGameViewer — score authority', () => {
   });
 
   it('shows an honest pending note instead of a fabricated final when no canonical score exists', () => {
-    renderViewer({ initialMode: 'instant', finalScore: null });
+    const onComplete = vi.fn();
+    renderViewer({ initialMode: 'instant', finalScore: null, onComplete });
     expect(screen.getByTestId('watch-final-pending')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Open Final Game Book/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Continue to recovery/i }));
+    expect(onComplete).toHaveBeenCalledWith({});
     const bug = screen.getByTestId('watch-scorebug');
     expect(bug.textContent).not.toMatch(/26|41|35/);
   });

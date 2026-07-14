@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import Scorebug from './Scorebug/Scorebug.jsx';
 import GameEventFeed from './GameEventFeed/GameEventFeed.jsx';
 import { mapArchiveEventsToLiveFeed, getNextImportantEvent } from '../../core/liveGame/liveGameEvents.js';
+import { readStrictFinalScore } from '../../core/gameArchive.js';
 import { getCurrentStandoutPlayers, summarizeGameSwing } from '../utils/liveGamePresentation.js';
 
 const SPEED_STEPS = [
@@ -17,19 +18,12 @@ const TENDENCY_CONFIG = {
   CONSERVATIVE: { label: 'Conservative', chipClass: 'conservative' },
 };
 
-function finiteScore(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
 export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComplete, initialMode = 'watch', onPlaycallOverride, userTendency = 'BALANCED', finalScore = null }) {
   // Canonical final: the league-recorded result (GAME_EVENT payload). The
   // narrated play stream is a separate engine whose running score can
   // contradict it, so this is the only score the viewer will ever display.
   const canonicalFinal = useMemo(() => {
-    const home = finiteScore(finalScore?.home ?? finalScore?.homeScore);
-    const away = finiteScore(finalScore?.away ?? finalScore?.awayScore);
-    return home != null && away != null ? { home, away } : null;
+    return readStrictFinalScore({ score: finalScore });
   }, [finalScore]);
 
   const events = useMemo(() => mapArchiveEventsToLiveFeed(logs, {
@@ -157,14 +151,14 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
                 </div>
               ) : (
                 <div className="watch-final-pending" data-testid="watch-final-pending">
-                  Final score is being recorded — open the Game Book for the official result.
+                  Official score is still being recorded. Game Book review unlocks after the league records both scores.
                 </div>
               )}
               <button
                 className="finish"
                 onClick={() => onComplete?.(displayScore ? { homeScore: displayScore.home, awayScore: displayScore.away } : {})}
               >
-                Open Final Game Book
+                {displayScore ? 'Open Final Game Book' : 'Continue to recovery'}
               </button>
             </div>
           ) : null}

@@ -161,6 +161,45 @@ function safeSkipScore(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+export function buildWatchPostGameResult({
+  canonicalFinal,
+  viewerScores,
+  homeTeam,
+  awayTeam,
+  userTeamId,
+  week,
+  phase,
+  logs = [],
+  liveStats = null,
+  gameReasoningFlags = [],
+  seasonId,
+} = {}) {
+  const completedFinal = readStrictFinalScore({ score: canonicalFinal }) ?? readStrictFinalScore({
+    homeScore: viewerScores?.homeScore,
+    awayScore: viewerScores?.awayScore,
+  });
+  if (!completedFinal) return null;
+  return {
+    homeTeam,
+    awayTeam,
+    homeScore: completedFinal.home,
+    awayScore: completedFinal.away,
+    userTeamId,
+    week,
+    phase,
+    logs,
+    liveStats,
+    gameReasoningFlags,
+    seasonId,
+    gameId: buildCanonicalGameId({
+      seasonId,
+      week,
+      homeId: homeTeam?.id,
+      awayId: awayTeam?.id,
+    }),
+  };
+}
+
 function AppContent() {
   const { state, actions } = useWorker();
   const {
@@ -199,6 +238,7 @@ function AppContent() {
 
   // Post-game result shown after GameSimulation watch mode completes
   const [postGameResult, setPostGameResult] = useState(null);
+  const [postGameRecovery, setPostGameRecovery] = useState(null);
   // Stash preserves postGameResult while the user browses Game Book, so it can be restored on return.
   const [postGameResultStash, setPostGameResultStash] = useState(null);
   // Skip-mode summary shown after advanceWeek({ skipUserGame: true }) completes
@@ -1732,16 +1772,15 @@ function AppContent() {
                 try {
                   // Belt-and-suspenders save immediately on game completion
                   if (activeSlot) actions.saveSlot(activeSlot);
-                  // Capture final scores + logs for PostGameScreen, then clear the viewer
-                  const completedFinal = canonicalFinal ?? readStrictFinalScore({
-                    homeScore: scores?.homeScore,
-                    awayScore: scores?.awayScore,
-                  });
-                  setPostGameResult({
+                  // Capture final scores + logs for PostGameScreen, then clear the viewer.
+                  // If neither the canonical GAME_EVENT nor the viewer callback has a
+                  // strict pair, do not mount the normal result screen: it would have
+                  // no trustworthy W/L/T or archive payload.
+                  const nextPostGameResult = buildWatchPostGameResult({
+                    canonicalFinal,
+                    viewerScores: scores,
                     homeTeam,
                     awayTeam,
-                    homeScore: completedFinal?.home ?? null,
-                    awayScore: completedFinal?.away ?? null,
                     userTeamId: league?.userTeamId,
                     week: league?.week,
                     phase: league?.phase,
@@ -1749,13 +1788,15 @@ function AppContent() {
                     liveStats: userGameLiveStats || null,
                     gameReasoningFlags: userGameReasoningFlags || [],
                     seasonId: league?.seasonId,
-                    gameId: buildCanonicalGameId({
-                      seasonId: league?.seasonId,
-                      week: league?.week,
-                      homeId: homeTeam?.id,
-                      awayId: awayTeam?.id,
-                    }),
                   });
+                  if (nextPostGameResult) {
+                    setPostGameRecovery(null);
+                    setPostGameResult(nextPostGameResult);
+                  } else {
+                    setPostGameResult(null);
+                    setPostGameResultStash(null);
+                    setPostGameRecovery({ week: league?.week, phase: league?.phase, homeTeam, awayTeam });
+                  }
                   setWatchMode('watch');
                   actions.clearUserGame();
                 } catch (err) {
@@ -1815,8 +1856,66 @@ function AppContent() {
         />
       )}
 
+      {postGameRecovery && !postGameResult && (
+        <div
+          data-testid="postgame-missing-final-recovery"
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed", inset: 0, zIndex: 9700,
+            background: "rgba(0,0,0,0.88)",
+            backdropFilter: "blur(16px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "24px 16px",
+          }}
+        >
+          <div style={{
+            width: "100%", maxWidth: 420,
+            background: "var(--surface)",
+            border: "1px solid var(--hairline)",
+            borderRadius: 16,
+            padding: 20,
+            textAlign: "center",
+          }}>
+            <div style={{ fontSize: "1.2rem", fontWeight: 900, marginBottom: 8 }}>
+              Official result pending
+            </div>
+            <p style={{ color: "var(--text-muted)", marginBottom: 16 }}>
+              The league record did not provide a complete score for {postGameRecovery.awayTeam?.abbr ?? "AWY"} at {postGameRecovery.homeTeam?.abbr ?? "HME"}. No Game Book was opened or persisted.
+            </p>
+            <button
+              type="button"
+              data-testid="postgame-missing-final-continue"
+              onClick={() => {
+                setPostGameRecovery(null);
+                setPostGameResultStash(null);
+                setTimeout(() => {
+                  try {
+                    actions.advanceWeek({ skipUserGame: true });
+                  } catch (err) {
+                    console.error('[PostGameRecovery] advanceWeek failed:', err);
+                  }
+                }, 150);
+              }}
+              style={{
+                cursor: "pointer",
+                fontWeight: 800,
+                fontSize: "0.85rem",
+                padding: "10px 20px",
+                borderRadius: 999,
+                border: "1px solid var(--accent)",
+                background: "var(--accent-muted)",
+                color: "var(--accent)",
+              }}
+            >
+              Continue week processing
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Skip-mode Post-Game Summary ────────────────────────────────── */}
-      {skipGameSummary && !postGameResult && (
+      {skipGameSummary && !postGameResult && !postGameRecovery && (
         <PostGameSummary
           gameResult={skipGameSummary}
           injuries={skipGameSummary.injuries}
