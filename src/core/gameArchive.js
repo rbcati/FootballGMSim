@@ -11,13 +11,30 @@ const asNumberOrNull = (value) => {
   return Number.isFinite(n) ? n : null;
 };
 
+export const parseStrictFinalScore = (value) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') return null;
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+};
+
+export function readStrictFinalScore(game) {
+  if (!game || typeof game !== 'object') return null;
+  if (game?.played === false || game?.played === 0) return null;
+  const home = parseStrictFinalScore(game?.homeScore ?? game?.scoreHome ?? game?.score?.home);
+  const away = parseStrictFinalScore(game?.awayScore ?? game?.scoreAway ?? game?.score?.away);
+  return home == null || away == null ? null : { home, away };
+}
+
 const hasValues = (obj) => Boolean(obj && typeof obj === 'object' && Object.keys(obj).length > 0);
 
 // Rows explicitly marked unplayed carry serialization-default 0-0 scores
 // (schedule buffers can't hold null) — they are never a real final.
-const hasFinalScore = (game) => !(game?.played === false || game?.played === 0)
-  && Number.isFinite(Number(game?.homeScore ?? game?.scoreHome ?? game?.score?.home))
-  && Number.isFinite(Number(game?.awayScore ?? game?.scoreAway ?? game?.score?.away));
+const hasFinalScore = (game) => readStrictFinalScore(game) != null;
 
 function teamLabel(rawGame, side, key) {
   return rawGame?.[`${side}${key}`] ?? rawGame?.[side]?.[key.toLowerCase()] ?? rawGame?.[side]?.[key] ?? null;
@@ -85,7 +102,7 @@ export function deriveTeamStatsFromPlayerRows(playerRows = {}) {
 
 export function classifyArchiveQuality(rawGame) {
   if (!rawGame || typeof rawGame !== 'object') return QUALITY.missing;
-  const hasFinal = Number.isFinite(Number(rawGame?.homeScore)) && Number.isFinite(Number(rawGame?.awayScore));
+  const hasFinal = readStrictFinalScore(rawGame) != null;
   const hasTeamStats = hasValues(rawGame?.teamStats?.home) && hasValues(rawGame?.teamStats?.away);
   const hasPlayerStats = hasValues(rawGame?.playerStats?.home) && hasValues(rawGame?.playerStats?.away);
   const hasSections = (rawGame?.scoringSummary?.length ?? 0) > 0
@@ -104,7 +121,7 @@ export function summarizeArchiveDefects(rawGame) {
   if (!g?.id) defects.push('missing_id');
   if (!Number.isFinite(Number(g?.homeId))) defects.push('missing_home_id');
   if (!Number.isFinite(Number(g?.awayId))) defects.push('missing_away_id');
-  if (!Number.isFinite(Number(g?.homeScore)) || !Number.isFinite(Number(g?.awayScore))) defects.push('missing_final_score');
+  if (readStrictFinalScore(g) == null) defects.push('missing_final_score');
   const classified = classifyArchiveQuality(g);
   if (declaredQuality === QUALITY.full) {
     if (!(hasValues(g?.teamStats?.home) && hasValues(g?.teamStats?.away))) defects.push('full_without_team_stats');
@@ -186,8 +203,8 @@ export function normalizeArchivedGamePayload(rawGame) {
     awayAbbr: teamLabel(rawGame, 'away', 'Abbr'),
     homeName: teamLabel(rawGame, 'home', 'Name'),
     awayName: teamLabel(rawGame, 'away', 'Name'),
-    homeScore: asNumberOrNull(rawGame?.homeScore ?? rawGame?.scoreHome ?? rawGame?.score?.home),
-    awayScore: asNumberOrNull(rawGame?.awayScore ?? rawGame?.scoreAway ?? rawGame?.score?.away),
+    homeScore: parseStrictFinalScore(rawGame?.homeScore ?? rawGame?.scoreHome ?? rawGame?.score?.home),
+    awayScore: parseStrictFinalScore(rawGame?.awayScore ?? rawGame?.scoreAway ?? rawGame?.score?.away),
     quarterScores: normalizeQuarterScores(rawGame?.quarterScores ?? rawGame?.linescore),
     recap: rawGame?.recap ?? null,
     recapText: rawGame?.recapText ?? null,
@@ -357,20 +374,20 @@ export function recoverArchivedGameFromSchedule(gameId, leagueState) {
       const rowHome = toTeamId(row?.homeId ?? row?.home?.id ?? row?.home);
       const rowAway = toTeamId(row?.awayId ?? row?.away?.id ?? row?.away);
       if (rowHome !== Number(homeValue) || rowAway !== Number(awayValue)) continue;
-      if (row?.homeScore == null && row?.awayScore == null) continue;
+      const finalScore = readStrictFinalScore(row);
+      if (!finalScore) continue;
       // The serialized slim schedule packs unplayed games with default 0-0
       // scores (Int32Array slots can't hold null — see worker/serialization.js),
       // so a row explicitly marked unplayed must never be recovered as a
       // "final". Otherwise a pre-game row surfaces as a fake 0-0 tie.
-      if (row?.played === false || row?.played === 0) continue;
       return normalizeArchivedGamePayload({
         id: gameId,
         seasonId: row?.seasonId ?? seasonId,
         week: row?.week ?? weekNumber,
         homeId: rowHome,
         awayId: rowAway,
-        homeScore: row?.homeScore,
-        awayScore: row?.awayScore,
+        homeScore: finalScore.home,
+        awayScore: finalScore.away,
         homeAbbr: row?.homeAbbr ?? row?.home?.abbr ?? null,
         awayAbbr: row?.awayAbbr ?? row?.away?.abbr ?? null,
         homeName: row?.homeName ?? row?.home?.name ?? null,
