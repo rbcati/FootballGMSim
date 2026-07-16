@@ -13,8 +13,17 @@ test('league pulse appears after one weekly advance and opens full timeline', as
 
   const startWeek = await page.evaluate(() => window?.state?.league?.week ?? 1);
   await page.getByTestId('advance-week-cta').click();
-  await page.getByTestId('gate-advance-anyway-btn').click({ timeout: 2000 }).catch(() => {});
-  await page.getByRole('button', { name: /Simulate \(Skip\)/i }).click({ timeout: 10000 }).catch(() => {});
+
+  const gateAdvanceBtn = page.getByTestId('gate-advance-anyway-btn');
+  if (await gateAdvanceBtn.isVisible().catch(() => false)) {
+    await gateAdvanceBtn.click({ timeout: 2000 });
+  }
+
+  const skipBtn = page.getByRole('button', { name: /Simulate \(Skip\)/i });
+  if (await skipBtn.isVisible().catch(() => false)) {
+    await skipBtn.click({ timeout: 10000 });
+  }
+
   await page.waitForFunction(
     (baseline) => {
       const state = window?.state;

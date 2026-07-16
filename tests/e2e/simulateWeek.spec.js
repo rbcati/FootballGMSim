@@ -53,7 +53,10 @@ test('simulate week produces non-zero box score and standings win', async ({ pag
     await closeViewer.click();
   }
   if (!(await page.getByTestId('franchise-hq').isVisible({ timeout: 3000 }).catch(() => false))) {
-    await page.getByRole('button', { name: /^Back to HQ$/i }).click().catch(() => {});
+    const backToHqBtn = page.getByRole('button', { name: /^Back to HQ$/i });
+    if (await backToHqBtn.isVisible().catch(() => false)) {
+      await backToHqBtn.click();
+    }
   }
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
 
