@@ -97,6 +97,8 @@ export function handleWorkerMessage(msg, setState) {
         type: 'PLAY_LOGS',
         logs: payload.logs,
         liveStats: payload.liveStats,
+        playerStats: payload.playerStats,
+        teamStats: payload.teamStats,
         gameReasoningFlags: payload.gameReasoningFlags,
       });
       return true;

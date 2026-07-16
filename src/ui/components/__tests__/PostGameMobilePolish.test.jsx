@@ -45,16 +45,16 @@ describe('PostGameScreen — compact leaders with partial data', () => {
   afterEach(() => cleanup());
 
   it('renders available leaders compactly and omits missing ones without crashing', async () => {
-    // Only a passing leader is derivable from these logs.
-    const logs = [
-      { teamId: 1, passer: { id: 10, name: 'Home QB', pos: 'QB' }, passYds: 240, completed: true },
-      { teamId: 1, passer: { id: 10, name: 'Home QB', pos: 'QB' }, passYds: 18, completed: true, isTouchdown: true, tdType: 'pass' },
-    ];
+    // Only a passing leader is present in the CANONICAL box score.
+    const playerStats = {
+      home: { 10: { name: 'Home QB', pos: 'QB', stats: { passComp: 22, passAtt: 31, passYd: 258, passTD: 2 } } },
+      away: {},
+    };
 
     let container;
     await act(async () => {
       ({ container } = render(
-        <PostGameScreen {...baseProps} logs={logs} boxScoreGameId="g2" week={5} />,
+        <PostGameScreen {...baseProps} playerStats={playerStats} boxScoreGameId="g2" week={5} />,
       ));
     });
 

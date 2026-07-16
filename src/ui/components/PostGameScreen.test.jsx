@@ -25,13 +25,21 @@ describe('PostGameScreen resilience', () => {
 describe('PostGameScreen onArchiveReady payload', () => {
   beforeEach(() => { cleanup(); });
 
-  it('includes playerStats derived from logs in the archive payload', async () => {
+  it('persists the canonical playerStats (not narration logs) in the archive payload', async () => {
     const archiveSpy = vi.fn();
+    // Canonical box score is the authority; narration logs must NOT be the
+    // source of archived player totals.
+    const playerStats = {
+      home: {
+        10: { name: 'Home QB', pos: 'QB', stats: { passComp: 24, passAtt: 34, passYd: 288, passTD: 3 } },
+        30: { name: 'Home RB', pos: 'RB', stats: { rushAtt: 18, rushYd: 92, rushTD: 1 } },
+      },
+      away: {
+        20: { name: 'Away QB', pos: 'QB', stats: { passComp: 19, passAtt: 30, passYd: 205 } },
+      },
+    };
     const logs = [
-      { teamId: 1, passer: { id: 10, name: 'Home QB', pos: 'QB' }, passYds: 220, completed: true },
-      { teamId: 1, passer: { id: 10, name: 'Home QB', pos: 'QB' }, passYds: 15, completed: true, isTouchdown: true, tdType: 'pass' },
-      { teamId: 2, passer: { id: 20, name: 'Away QB', pos: 'QB' }, passYds: 180, completed: true },
-      { teamId: 1, player: { id: 30, name: 'Home RB', pos: 'RB' }, rushYds: 55, type: 'run' },
+      { teamId: 1, passer: { id: 99, name: 'Narration Ghost QB', pos: 'QB' }, passYds: 15, completed: true },
     ];
 
     await act(async () => {
@@ -44,6 +52,7 @@ describe('PostGameScreen onArchiveReady payload', () => {
           userTeamId={1}
           boxScoreGameId="test-game-123"
           logs={logs}
+          playerStats={playerStats}
           week={3}
           onArchiveReady={archiveSpy}
           onContinue={() => {}}
@@ -53,17 +62,18 @@ describe('PostGameScreen onArchiveReady payload', () => {
 
     expect(archiveSpy).toHaveBeenCalledOnce();
     const payload = archiveSpy.mock.calls[0][0];
-    expect(payload.playerStats).toBeDefined();
-    expect(payload.playerStats.home).toBeDefined();
-    expect(payload.playerStats.away).toBeDefined();
+    expect(payload.playerStats).toEqual(playerStats);
+    // The narration-only "ghost" passer never leaks into archived player stats.
+    const allNames = [...Object.values(payload.playerStats.home), ...Object.values(payload.playerStats.away)].map((r) => r.name);
+    expect(allNames).not.toContain('Narration Ghost QB');
   });
 
-  it('preserves player names in derived playerStats', async () => {
+  it('preserves player names in canonical playerStats', async () => {
     const archiveSpy = vi.fn();
-    const logs = [
-      { teamId: 1, passer: { id: 10, name: 'Home QB', pos: 'QB' }, passYds: 200, completed: true },
-      { teamId: 2, passer: { id: 20, name: 'Away QB', pos: 'QB' }, passYds: 150, completed: true },
-    ];
+    const playerStats = {
+      home: { 10: { name: 'Home QB', pos: 'QB', stats: { passComp: 18, passAtt: 27, passYd: 210 } } },
+      away: { 20: { name: 'Away QB', pos: 'QB', stats: { passComp: 14, passAtt: 24, passYd: 160 } } },
+    };
 
     await act(async () => {
       render(
@@ -74,7 +84,7 @@ describe('PostGameScreen onArchiveReady payload', () => {
           awayScore={14}
           userTeamId={1}
           boxScoreGameId="test-game-456"
-          logs={logs}
+          playerStats={playerStats}
           week={1}
           onArchiveReady={archiveSpy}
           onContinue={() => {}}
@@ -84,17 +94,15 @@ describe('PostGameScreen onArchiveReady payload', () => {
 
     expect(archiveSpy).toHaveBeenCalledOnce();
     const payload = archiveSpy.mock.calls[0][0];
-    const homeRows = Object.values(payload.playerStats.home);
-    const awayRows = Object.values(payload.playerStats.away);
-    const homeQB = homeRows.find((r) => r.name === 'Home QB');
-    const awayQB = awayRows.find((r) => r.name === 'Away QB');
+    const homeQB = Object.values(payload.playerStats.home).find((r) => r.name === 'Home QB');
+    const awayQB = Object.values(payload.playerStats.away).find((r) => r.name === 'Away QB');
     expect(homeQB).toBeDefined();
     expect(awayQB).toBeDefined();
     expect(homeQB.stats.passAtt).toBeGreaterThanOrEqual(1);
     expect(awayQB.stats.passAtt).toBeGreaterThanOrEqual(1);
   });
 
-  it('does not crash when logs are empty and still calls onArchiveReady with empty playerStats', async () => {
+  it('does not crash when canonical stats are absent and still archives empty playerStats', async () => {
     const archiveSpy = vi.fn();
     await act(async () => {
       render(

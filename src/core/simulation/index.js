@@ -1425,6 +1425,55 @@ export function simGameStats(home, away, options = {}) {
         if (origOvr !== undefined) rec.ovr = origOvr;
       });
 
+      // ── Reconcile the passing game to its receivers ─────────────────────────
+      // generateQBStats and generateReceiverStats/generateRBStats each draw their
+      // own yardage, so the QB's completions/yards diverge from the receivers who
+      // actually caught the passes (a ~100-yard "hidden gap"). Re-derive each
+      // passing QB's completions and passing yards from the real receiving
+      // production so the canonical box score reconciles exactly:
+      //   sum(all receptions) == sum(QB passComp)
+      //   sum(all recYd)      == sum(QB passYd)
+      // Pure/deterministic: no RNG draws — only reassignment of already-generated
+      // values. Derived rate fields are nulled so the box-score normalizer
+      // recomputes completionPct/passerRating from the reconciled line.
+      {
+        let teamReceptions = 0;
+        let teamRecYd = 0;
+        team.roster.forEach((p) => {
+          const g = p?.stats?.game;
+          if (!g || p.pos === 'QB') return;
+          teamReceptions += g.receptions || 0;
+          teamRecYd += g.recYd || 0;
+        });
+        const passingQbs = qbs
+          .filter((q) => q?.stats?.game && (q.stats.game.passAtt || 0) > 0)
+          .sort((a, b) => (b.stats.game.passAtt || 0) - (a.stats.game.passAtt || 0));
+        if (passingQbs.length > 0) {
+          const totalGenComp = passingQbs.reduce((acc, q) => acc + (q.stats.game.passComp || 0), 0);
+          let assignedRec = 0;
+          let assignedYd = 0;
+          passingQbs.forEach((q, i) => {
+            const g = q.stats.game;
+            const frac = totalGenComp > 0 ? (g.passComp || 0) / totalGenComp : (i === 0 ? 1 : 0);
+            g.passComp = Math.max(0, Math.round(teamReceptions * frac));
+            g.passYd = Math.max(0, Math.round(teamRecYd * frac));
+            assignedRec += g.passComp;
+            assignedYd += g.passYd;
+          });
+          // Assign any rounding remainder to the starter (highest attempts).
+          const starter = passingQbs[0].stats.game;
+          starter.passComp = Math.max(0, starter.passComp + (teamReceptions - assignedRec));
+          starter.passYd = Math.max(0, starter.passYd + (teamRecYd - assignedYd));
+          // A QB can't complete more passes than they attempted.
+          passingQbs.forEach((q) => {
+            const g = q.stats.game;
+            if ((g.passAtt || 0) < g.passComp) g.passAtt = g.passComp;
+            g.completionPct = null;
+            g.passerRating = null;
+          });
+        }
+      }
+
       const ols = (groups['OL'] || []).slice(0, 5);
       ols.forEach(ol => {
         Object.assign(ol.stats.game, generateOLStats(ol, oppDefenseStrength, U));
