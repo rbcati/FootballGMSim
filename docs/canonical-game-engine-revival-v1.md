@@ -1,4 +1,8 @@
-# Canonical Game Engine Revival V1 (#1696)
+# Canonical Game Engine Revival V1 (#1698)
+
+> PR numbering note: this work ships as **#1698**. The follow-up for canonical
+> play-by-play / score-after events is **#1699** (#1696 and #1697 are already
+> occupied).
 
 ## 1. Executive summary
 
@@ -84,12 +88,21 @@ the UI had no canonical source to consume.
 
 ## 8. Chosen canonical game package
 
-The existing committed result already carries a canonical package
-(`commitGameResult` → `resultObj`): `boxScore { home, away }`, `teamStats`,
-`scoringSummary`, `quarterScores`, `driveSummary`, `playLogs`, `recapText`,
-`gameReasoningFlags`, `simSeed`. We **reuse** it — no competing schema was
-introduced. The only transport change is that `res.boxScore` and `res.teamStats`
-are now delivered to the postgame UI alongside the (presentation-only) logs.
+The existing committed result already carries the package (`commitGameResult` →
+`resultObj`); we **reuse** it — no competing schema. The **claimed canonical
+(reconciled) surface** of this PR is:
+
+- `finalScore` (drive engine — authority for the score);
+- `boxScore { home, away }` (per-player lines — authority for all player stats);
+- `teamStats { home, away }` (team totals **derived from the player box score**,
+  §10).
+
+Explicitly **NOT** claimed as canonical/reconciled in #1698:
+`scoringSummary`, `quarterScores`, `driveSummary`, and `playLogs` remain
+**narration-derived presentation data**. They are shipped in the package for the
+Game Book story layer but are not asserted to reconcile to the final score
+(§24). The transport change is that `res.boxScore` and `res.teamStats` are now
+delivered to the postgame UI alongside the presentation-only logs.
 
 ## 9. Score reconciliation rules
 
@@ -104,10 +117,21 @@ defensive/special-teams scores are counted explicitly.
 
 ## 10. Team-stat reconciliation rules
 
-Team offensive totals are the sum of the players' canonical lines
-(`deriveCanonicalTeamSideStats`). Interceptions thrown (passer rows) and
-interceptions made (defender rows) are kept apart so takeaways never cancel
-giveaways.
+**One yardage authority: the player box score.** `deriveCanonicalTeamSideStats`
+now derives team pass/rush yards, attempts, completions, and pass/rush TDs from
+the **sum of the players' canonical lines** whenever offensive player rows exist
+— the drive engine's independent yardage estimate is used only as a legacy
+fallback when a record has team stats but no box score. Previously the team
+totals came from the drive engine while player totals came from the box score,
+so `result.teamStats` and `result.boxScore` disagreed by up to ~198 passing
+yards and by whole passing TDs. Per the guardrails we do **not** rescale player
+yards to hit a drive total; instead the team total *is* the player sum, so the
+two agree by construction. Verified by `reconcilePlayerToTeam` against the real
+`result.boxScore` / `result.teamStats` across the seed matrix (§22). Drive-only
+fields the box score can't supply (first downs, third down, red zone, time of
+possession, penalties) still come from the drive engine. Interceptions thrown
+(passer rows) and interceptions made (defender rows) are kept apart so takeaways
+never cancel giveaways.
 
 ## 11. Player-stat reconciliation rules
 
@@ -127,12 +151,21 @@ reconciled line. Gross vs net passing yards: player passing yards are **gross**
 (sacks are tracked separately as `sacked`/`sacksAllowed`); documented, not forced
 to equal net.
 
+**Passing-TD allocation.** A passing TD equals a receiving TD, so the team's
+passing-TD total is `sum(recTD)`. It is now split across the passing QBs by the
+**same reconciled completion share** used for attempts/completions/yards — an
+injury-substituted backup receives a proportional share of passing TDs instead
+of the starter being credited with the backup's touchdowns (regression: forced
+QB injury, §22).
+
 ## 12. QB participation policy
 
 - The designated starter (`groups.QB[0]`) receives the normal workload share
   (`[1.0]`).
 - A backup receives meaningful attempts only on an in-game injury
-  (`rollInGameInjury` → `resolveInjurySubstitutionShare`).
+  (`rollInGameInjury` → `resolveInjurySubstitutionShare`), and the substituted
+  backup's attempts, completions, yards, **and passing TDs** all follow the same
+  workload split (regression covers a forced QB injury end to end, §22).
 - QB selection does not change per play in the canonical box score.
 - Depth-chart authority is unchanged.
 
@@ -202,7 +235,8 @@ non-negative and internally consistent. See the regression suite.
 
 ## 21. Files changed
 
-- `src/core/simulation/index.js` — QB↔receiver passing reconciliation.
+- `src/core/simulation/index.js` — QB↔receiver passing reconciliation + passing-TD workload split.
+- `src/core/simulation/gameSummaryBuilder.js` — team totals derive from the player box score (one yardage authority).
 - `src/core/simulation/gameStatReconciliation.js` — new pure reconciliation invariants.
 - `src/ui/utils/gamePerformanceGrades.js` — new canonical grade module.
 - `src/ui/components/AdvancedStats.jsx` — rewritten to canonical box score + team filter + no PFF/snaps.
@@ -212,9 +246,13 @@ non-negative and internally consistent. See the regression suite.
 
 ## 22. Tests added
 
-- `src/ui/utils/gamePerformanceGrades.test.js`
-- `src/ui/components/__tests__/AdvancedStatsCanonical.test.jsx`
-- `src/core/__tests__/simulation/canonicalGameAuthority.test.js`
+- `src/ui/utils/gamePerformanceGrades.test.js` — deterministic/bounded grades + small-sample protection.
+- `src/ui/components/__tests__/AdvancedStatsCanonical.test.jsx` — no PFF/snaps, team attribution, filters.
+- `src/core/__tests__/simulation/canonicalGameAuthority.test.js` — QB participation; **real result-package
+  `reconcilePlayerToTeam(res.boxScore, res.teamStats)` across the seed matrix**; one-yardage-authority equality;
+  **forced-QB-injury regression** (attempts/completions/yards/passing-TD split reconciles); grade source.
+- `src/ui/components/__tests__/CanonicalPostgameIntegration.test.jsx` — **integration**: `simulateBatch → worker
+  PLAY_LOGS payload → PostGameScreen → archive → Game Book view model` shows the same passing leader and final score.
 - Updated `PostGameScreen.test.jsx`, `PostGameMobilePolish.test.jsx`.
 
 ## 23. Explicit untouched systems
@@ -228,18 +266,21 @@ placeholders are all unchanged.
 
 The **scoring summary** and **quarter scores** are still derived from the
 narration stream (`buildScoringSummaryFromSimulation`), whose per-quarter
-attribution can lag the authoritative drive-engine total. Postgame does not
-present these as authoritative (it shows the canonical final score and
-presentation-only key moments), and `reconcileQuarterTotals` is provided to flag
-any gap. A fully canonical play-by-play with `scoreAfter` events is deferred.
+attribution can lag the authoritative drive-engine total. They are therefore
+**explicitly excluded from #1698's canonical/reconciled scope** (§8): postgame
+shows the canonical final score and presentation-only key moments, and the
+`reconcileQuarterTotals` helper is provided so the gap can be *surfaced* rather
+than silently claimed as reconciled. A fully canonical play-by-play with
+`scoreAfter` events is deferred to the follow-up below.
 
-## 25. Recommended #1697 scope
+## 25. Recommended #1699 scope
 
-**#1697 — Canonical Play-by-Play & Score-After Events V1**: have the drive engine
-emit a canonical event ledger (`{ eventId, driveId, sequence, quarter,
-possessionTeamId, eventType, points, scoreAfter{home,away},
-primaryPlayerId, secondaryPlayerId, text }`), derive the scoring summary and
-quarter scores from that ledger (so quarter totals equal the final score by
-construction), let the Live scorebug update only from canonical score-after
+**#1699 — Canonical Play-by-Play & Score-After Events V1** (numbered #1699
+because #1696 and #1697 are occupied): have the drive engine emit a canonical
+event ledger (`{ eventId, driveId, sequence, quarter, possessionTeamId,
+eventType, points, scoreAfter{home,away}, primaryPlayerId, secondaryPlayerId,
+text }`), derive the scoring summary and quarter scores from that ledger (so
+quarter totals equal the final score by construction — bringing them into
+canonical scope), let the Live scorebug update only from canonical score-after
 events, and reduce `simulateFullGame` narration to formatting canonical events.
 This retires the last narration-derived factual surface.

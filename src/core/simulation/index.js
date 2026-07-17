@@ -1603,10 +1603,26 @@ export function simGameStats(home, away, options = {}) {
           }
       }
 
-      // Assign Pass TDs to QB (receiving TDs = passing TDs for the QB)
-      const starterQB = qbs.length > 0 ? qbs[0] : null;
-      if (starterQB && starterQB.stats.game) {
-          starterQB.stats.game.passTD = totalRecTDs;
+      // Assign Pass TDs to the QB(s) who threw them. A passing TD equals a
+      // receiving TD, so the team's passing-TD total is `totalRecTDs`. Split it
+      // across the passing QBs using the SAME deterministic workload basis
+      // (reconciled completions) already used for attempts/completions/yards, so
+      // an injury-substituted backup receives a proportional share rather than
+      // the starter being credited with a backup's touchdowns.
+      const passingQbsForTD = qbs
+        .filter((q) => q?.stats?.game && (q.stats.game.passAtt || 0) > 0)
+        .sort((a, b) => (b.stats.game.passAtt || 0) - (a.stats.game.passAtt || 0));
+      if (passingQbsForTD.length > 0) {
+        const totalComp = passingQbsForTD.reduce((acc, q) => acc + (q.stats.game.passComp || 0), 0);
+        let assignedTD = 0;
+        passingQbsForTD.forEach((q, i) => {
+          const frac = totalComp > 0 ? (q.stats.game.passComp || 0) / totalComp : (i === 0 ? 1 : 0);
+          q.stats.game.passTD = Math.round(totalRecTDs * frac);
+          assignedTD += q.stats.game.passTD;
+        });
+        // Rounding remainder to the starter (highest attempts).
+        passingQbsForTD[0].stats.game.passTD += (totalRecTDs - assignedTD);
+        if (passingQbsForTD[0].stats.game.passTD < 0) passingQbsForTD[0].stats.game.passTD = 0;
       }
 
 

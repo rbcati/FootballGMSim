@@ -18,9 +18,10 @@
 
 import { describe, it, expect } from 'vitest';
 import { Utils as U } from '../../utils.js';
-import { simGameStats } from '../../simulation/index.js';
+import { simGameStats, simulateBatch } from '../../simulation/index.js';
 import {
   reconcilePlayerIdentities,
+  reconcilePlayerToTeam,
   reconcileScoreBreakdown,
   sumBoxScoreSide,
 } from '../../simulation/gameStatReconciliation.js';
@@ -80,6 +81,19 @@ function runGame(seed) {
   return { result, home, away };
 }
 
+/**
+ * Run the FULL production commit path (simulateBatch → commitGameResult) so the
+ * result package carries the real `boxScore` and `teamStats` the worker emits.
+ */
+function runBatch(seed, options = {}) {
+  const home = buildTeam(1, 'NYJ');
+  const away = buildTeam(2, 'BAL');
+  const league = { id: 'L', week: 6, seasonId: 2026, year: 2026, teams: [home, away], globalSeed: seed };
+  U.setSeed(seed);
+  const [res] = simulateBatch([{ home, away, week: 6 }], { league, generateLogs: true, ...options });
+  return { res, home, away };
+}
+
 const SEEDS = [6, 39, 123, 777, 2026, 4242, 8888];
 
 describe('canonical box score owns QB participation (no rotation)', () => {
@@ -106,6 +120,41 @@ describe('canonical box score owns QB participation (no rotation)', () => {
       + team.roster.filter((p) => p.pos === 'QB').reduce((s, p) => s + (p.stats.game.passYd || 0), 0), 0);
     expect(canonYds).toBeGreaterThan(liveQBYds);
   });
+
+  it('forced QB injury transfers a real workload — attempts, completions, yards AND TDs — to the backup', () => {
+    // Seed 122 with a high injury factor deterministically injures the NYJ (home)
+    // starting QB; the backup must inherit a meaningful, reconciled workload.
+    const { res, home } = runBatch(122, { injuryFactor: 8 });
+    expect(res?.boxScore).toBeTruthy();
+
+    const qbLines = home.roster
+      .filter((p) => p.pos === 'QB' && (p.stats.game.passAtt || 0) > 0)
+      .sort((a, b) => (b.stats.game.passAtt || 0) - (a.stats.game.passAtt || 0));
+
+    // A QB injury was recorded and two QBs share the passing workload.
+    expect((res.injuries || []).some((inj) => String(inj.playerId).includes('qb'))).toBe(true);
+    expect(qbLines).toHaveLength(2);
+
+    const [starter, backup] = qbLines;
+    // The backup received meaningful attempts, completions, and yards…
+    expect(backup.stats.game.passAtt).toBeGreaterThan(0);
+    expect(backup.stats.game.passComp).toBeGreaterThan(0);
+    expect(backup.stats.game.passYd).toBeGreaterThan(0);
+
+    // …and passing TDs were split by the same workload basis, not dumped on the
+    // starter. Team receiving TDs equal the sum of both QBs' passing TDs.
+    const teamPassTD = starter.stats.game.passTD + backup.stats.game.passTD;
+    const teamRecTD = sumBoxScoreSide(res.boxScore.home).recTD;
+    expect(teamPassTD).toBe(teamRecTD);
+    if (teamPassTD > 1) {
+      // With multiple passing TDs and a genuine two-QB split, the backup shares.
+      expect(backup.stats.game.passTD).toBeGreaterThan(0);
+    }
+
+    // The whole side still reconciles player↔team after the substitution.
+    const rep = reconcilePlayerToTeam(res.boxScore.home, res.teamStats.home);
+    expect(rep.ok).toBe(true);
+  });
 });
 
 describe('canonical player-stat reconciliation', () => {
@@ -131,22 +180,35 @@ describe('canonical player-stat reconciliation', () => {
   });
 });
 
-describe('canonical score reconciliation', () => {
-  it('the score breakdown sums to the final score for both teams', () => {
+describe('real result package: player totals reconcile to team totals', () => {
+  it('sum(player) == team totals on the actual res.boxScore / res.teamStats for every seed', () => {
     for (const seed of SEEDS) {
-      const { result } = runGame(seed);
-      // The engine exposes defensive/ST and safety counts; offensive TDs and FGs
-      // are the remainder implied by the final score. We verify the identity by
-      // reconstructing from the box-score TD/FG counts on the roster is out of
-      // scope here (drive engine owns it) — instead confirm the published score
-      // is internally consistent with its published components.
-      expect(Number.isFinite(result.homeScore)).toBe(true);
-      expect(Number.isFinite(result.awayScore)).toBe(true);
-      expect(result.homeScore).toBeGreaterThanOrEqual(0);
-      expect(result.awayScore).toBeGreaterThanOrEqual(0);
+      const { res } = runBatch(seed);
+      expect(res?.boxScore, `seed ${seed} produced no box score`).toBeTruthy();
+      expect(res?.teamStats, `seed ${seed} produced no team stats`).toBeTruthy();
+      for (const side of ['home', 'away']) {
+        const rep = reconcilePlayerToTeam(res.boxScore[side], res.teamStats[side]);
+        const failures = Object.entries(rep.report)
+          .filter(([, v]) => v && !v.ok)
+          .map(([k, v]) => `${k} player=${v.player} team=${v.team} Δ${v.delta}`);
+        expect(rep.ok, `seed ${seed} ${side}: ${failures.join('; ')}`).toBe(true);
+      }
     }
   });
 
+  it('there is one yardage authority — team pass/rush yards equal the player sums exactly', () => {
+    const { res } = runBatch(123);
+    for (const side of ['home', 'away']) {
+      const p = sumBoxScoreSide(res.boxScore[side]);
+      expect(res.teamStats[side].passYards).toBe(p.passYd);
+      expect(res.teamStats[side].rushYards).toBe(p.rushYd);
+      expect(res.teamStats[side].passTD).toBe(p.passTD);
+      expect(res.teamStats[side].rushTD).toBe(p.rushTD);
+    }
+  });
+});
+
+describe('reconcileScoreBreakdown helper', () => {
   it('reconcileScoreBreakdown correctly proves a composed score', () => {
     // 39 = 5 TD (30) + 4 XP (missed one) + 1 FG (3) + 1 safety (2) = 30+4+3+2 = 39
     const r = reconcileScoreBreakdown({

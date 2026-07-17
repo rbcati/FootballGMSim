@@ -315,22 +315,39 @@ function deriveCanonicalTeamSideStats(playerRows = {}, driveStats = {}, rawTeamS
     || Number(stats?.targets ?? 0) > 0
     || Number(stats?.receptions ?? 0) > 0
   );
-  const passYards = Number(drive?.passYards ?? drive?.passYd ?? drive?.passYds)
-    || sumPlayerStat(rows, 'passYd', offenseRow);
-  const rushYards = Number(drive?.rushYards ?? drive?.rushYd ?? drive?.rushYds)
-    || sumPlayerStat(rows, 'rushYd', offenseRow);
-  const passAtt = Number(drive?.passAtt) || sumPlayerStat(rows, 'passAtt', offenseRow);
-  const passComp = Number(drive?.passComp ?? drive?.comp) || sumPlayerStat(rows, 'passComp', offenseRow);
-  const rushAtt = Number(drive?.rushAtt) || sumPlayerStat(rows, 'rushAtt', offenseRow);
-  const totalYards = Number(drive?.totalYards) || passYards + rushYards;
-  const plays = Number(drive?.plays) || passAtt + rushAtt + Number(drive?.sacksAllowed ?? 0);
+
+  // ── One yardage authority: the canonical player box score ──────────────────
+  // Team offensive production is the SUM of the players' canonical lines, never
+  // the drive engine's independent yardage estimate — otherwise team totals and
+  // player totals disagree by tens of yards (a hidden gap). Player yards are the
+  // authority; the drive engine remains the authority for the SCORE and for the
+  // drive-only fields below (first downs, third down, red zone, possession).
+  // Drive figures are used only as a fallback when there are no offensive player
+  // rows (e.g. a legacy archive with team stats but no box score).
+  const hasOffensiveRows = Object.values(rows).some((row) => offenseRow(row?.stats ?? row ?? {}));
+  const playerFirst = (playerVal, ...driveKeys) => {
+    if (hasOffensiveRows) return playerVal;
+    for (const k of driveKeys) { if (drive?.[k] != null) return Number(drive[k]); }
+    return playerVal;
+  };
+
+  const passYards = playerFirst(sumPlayerStat(rows, 'passYd', offenseRow), 'passYards', 'passYd', 'passYds');
+  const rushYards = playerFirst(sumPlayerStat(rows, 'rushYd', offenseRow), 'rushYards', 'rushYd', 'rushYds');
+  const passAtt = playerFirst(sumPlayerStat(rows, 'passAtt', offenseRow), 'passAtt');
+  const passComp = playerFirst(sumPlayerStat(rows, 'passComp', offenseRow), 'passComp', 'comp');
+  const rushAtt = playerFirst(sumPlayerStat(rows, 'rushAtt', offenseRow), 'rushAtt');
+  const passTD = playerFirst(sumPlayerStat(rows, 'passTD', offenseRow), 'passTD');
+  const rushTD = playerFirst(sumPlayerStat(rows, 'rushTD', offenseRow), 'rushTD');
   const offensiveInterceptions = sumPlayerStat(rows, 'interceptions', (stats) => Number(stats?.passAtt ?? 0) > 0);
   const fumblesLost = sumPlayerStat(rows, 'fumblesLost', offenseRow)
     || sumPlayerStat(rows, 'fumbles', offenseRow);
-  const sacksAllowed = Number(drive?.sacksAllowed)
-    || sumPlayerStat(rows, 'sacked', (stats) => Number(stats?.passAtt ?? 0) > 0)
-    || sumPlayerStat(rows, 'sacksTaken', (stats) => Number(stats?.passAtt ?? 0) > 0)
-    || sumPlayerStat(rows, 'sacks', (stats) => Number(stats?.passAtt ?? 0) > 0);
+  const sacksAllowed = (hasOffensiveRows
+    ? (sumPlayerStat(rows, 'sacked', (stats) => Number(stats?.passAtt ?? 0) > 0)
+      || sumPlayerStat(rows, 'sacksTaken', (stats) => Number(stats?.passAtt ?? 0) > 0))
+    : Number(drive?.sacksAllowed ?? 0))
+    || Number(drive?.sacksAllowed ?? 0);
+  const totalYards = passYards + rushYards;
+  const plays = passAtt + rushAtt + sacksAllowed;
 
   return {
     ...raw,
@@ -340,11 +357,11 @@ function deriveCanonicalTeamSideStats(playerRows = {}, driveStats = {}, rawTeamS
     passComp,
     passYards,
     passYd: passYards,
-    passTD: Number(drive?.passTD ?? raw?.passTD ?? 0) || sumPlayerStat(rows, 'passTD', offenseRow),
+    passTD,
     rushAtt,
     rushYards,
     rushYd: rushYards,
-    rushTD: Number(drive?.rushTD ?? raw?.rushTD ?? 0) || sumPlayerStat(rows, 'rushTD', offenseRow),
+    rushTD,
     totalYards,
     yardsPerPlay: plays > 0 ? U.round(totalYards / plays, 2) : 0,
     turnovers: Number(drive?.turnovers ?? raw?.turnovers ?? 0) || offensiveInterceptions + fumblesLost,
