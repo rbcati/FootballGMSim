@@ -14,7 +14,7 @@ import React, { useMemo, useState, Component } from "react";
 import PlayerCard from "./PlayerCard.jsx";
 import AdvancedStats from "./AdvancedStats.jsx";
 import { buildGameFlowSummary } from "../../core/sim/gameFlowSummary.js";
-import { buildReasoningBullets } from "../../core/gameSummary.js";
+import { buildReasoningBullets, buildPlayerLeadersFromArchive } from "../../core/gameSummary.js";
 import { readStrictFinalScore } from "../../core/gameArchive.js";
 import ReplayableGameFlowViewer from "./ReplayableGameFlowViewer.jsx";
 
@@ -141,136 +141,60 @@ function Confetti({ colors }) {
   );
 }
 
+
+const asNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
 /**
- * Derives structured playerStats ({ home: {[pid]: {name,pos,stats}}, away: {...} })
- * from raw play-by-play logs. Used to populate the archive so the Game Book
- * can display player names when the game is reopened.
+ * Derive game leaders from the CANONICAL player box score (the same authority
+ * that owns the final score) — never from narration play-logs. Returns
+ * team-attributed, pre-formatted leader cards for Passing / Rushing / Receiving
+ * / Defense. When canonical stats are absent, returns no leaders (honest empty
+ * state) rather than recounting narration references.
  */
-function derivePlayerStatsFromLogs(logs, homeId, awayId) {
-  const home = {};
-  const away = {};
-
-  const getSide = (teamId) => {
-    const tid = Number(teamId);
-    if (Number.isFinite(tid)) {
-      if (tid === Number(homeId)) return home;
-      if (tid === Number(awayId)) return away;
-    }
-    return null;
-  };
-
-  const addStats = (player, side, statKey, value = 1) => {
-    if (!player || typeof player !== 'object' || !side) return;
-    const pid = String(player.id ?? player.name ?? '?');
-    if (pid === '?') return;
-    if (!side[pid]) {
-      side[pid] = { name: player.name ?? null, pos: player.pos ?? player.position ?? '—', stats: {} };
-    }
-    if (player.name && !side[pid].name) side[pid].name = player.name;
-    side[pid].stats[statKey] = (side[pid].stats[statKey] ?? 0) + (Number(value) || 0);
-  };
-
-  for (const log of (Array.isArray(logs) ? logs : [])) {
-    if (!log || typeof log !== 'object') continue;
-    const offTeamId = log.teamId ?? log.offenseTeamId ?? log.possessionTeamId ?? null;
-    const offSide = getSide(offTeamId);
-    const defTeamId = offTeamId != null
-      ? (Number(offTeamId) === Number(homeId) ? awayId : homeId)
-      : null;
-    const defSide = getSide(defTeamId);
-
-    if (log.passer) {
-      const pSide = getSide(log.passer.teamId) ?? offSide;
-      addStats(log.passer, pSide, 'passAtt');
-      if (log.completed) {
-        addStats(log.passer, pSide, 'passComp');
-        addStats(log.passer, pSide, 'passYd', log.passYds ?? log.yards ?? 0);
-      }
-      if (log.isTouchdown && log.tdType === 'pass') addStats(log.passer, pSide, 'passTD');
-    }
-
-    if (log.player) {
-      const plSide = getSide(log.player.teamId) ?? offSide;
-      if (log.type === 'run' || log.tdType === 'rush' || (log.rushYds != null && !log.passer)) {
-        addStats(log.player, plSide, 'rushAtt');
-        addStats(log.player, plSide, 'rushYd', log.rushYds ?? log.yards ?? 0);
-        if (log.isTouchdown) addStats(log.player, plSide, 'rushTD');
-      }
-      if (log.completed && log.recYds != null) {
-        addStats(log.player, plSide, 'receptions');
-        addStats(log.player, plSide, 'recYd', log.recYds ?? log.yards ?? 0);
-        if (log.isTouchdown && log.tdType === 'pass') addStats(log.player, plSide, 'recTD');
-      }
-    }
-
-    if (log.tackler) {
-      const tSide = getSide(log.tackler.teamId) ?? defSide;
-      addStats(log.tackler, tSide, 'tackles');
-    }
-    if (log.defender) {
-      const dSide = getSide(log.defender.teamId) ?? defSide;
-      addStats(log.defender, dSide, 'passesDefended');
-    }
-  }
-
-  return { home, away };
-}
-
-// Derive game leaders from play logs (accumulated stats per player)
-function useGameLeaders(logs) {
+function useCanonicalLeaders(playerStats, context) {
   return useMemo(() => {
     const empty = { qb: null, receiver: null, rusher: null, defender: null };
     try {
-      if (!Array.isArray(logs) || !logs.length) return empty;
-      const acc = {};
-      const addP = (p, key, val = 1) => {
-        if (!p || typeof p !== "object") return;
-        const id = String(p.id ?? p.name ?? "?");
-        if (!acc[id]) acc[id] = { ref: p, passAtt: 0, passComp: 0, passYds: 0, passTDs: 0, rushAtt: 0, rushYds: 0, rushTDs: 0, receptions: 0, recYds: 0, recTDs: 0, sacks: 0, ints: 0, tackles: 0, passDefls: 0, forcedFumbles: 0 };
-        acc[id][key] = (acc[id][key] || 0) + (Number(val) || 0);
+      const hasStats = playerStats
+        && (Object.keys(playerStats.home ?? {}).length || Object.keys(playerStats.away ?? {}).length);
+      if (!hasStats) return empty;
+      const { categories } = buildPlayerLeadersFromArchive(playerStats, context);
+      const teamAbbr = (teamId) => (
+        Number(teamId) === Number(context.homeId) ? context.homeAbbr
+          : Number(teamId) === Number(context.awayId) ? context.awayAbbr : null
+      );
+      const format = (row, kind) => {
+        if (!row) return null;
+        const s = row.stats ?? {};
+        let statLine = "";
+        if (kind === "passing") statLine = `${asNum(s.passComp)}/${asNum(s.passAtt)} · ${asNum(s.passYd)} yds${asNum(s.passTD) ? ` · ${asNum(s.passTD)} TD` : ""}`;
+        else if (kind === "receiving") statLine = `${asNum(s.receptions)} rec · ${asNum(s.recYd)} yds${asNum(s.recTD) ? ` · ${asNum(s.recTD)} TD` : ""}`;
+        else if (kind === "rushing") statLine = `${asNum(s.rushAtt)} car · ${asNum(s.rushYd)} yds${asNum(s.rushTD) ? ` · ${asNum(s.rushTD)} TD` : ""}`;
+        else {
+          statLine = [
+            asNum(s.tackles) ? `${asNum(s.tackles)} tkl` : "",
+            asNum(s.sacks) ? `${asNum(s.sacks)} sack${asNum(s.sacks) > 1 ? "s" : ""}` : "",
+            asNum(s.interceptions) ? `${asNum(s.interceptions)} INT` : "",
+            asNum(s.passesDefended) ? `${asNum(s.passesDefended)} PD` : "",
+          ].filter(Boolean).join(" · ");
+        }
+        return { name: row.name, pos: row.pos, teamAbbr: teamAbbr(row.teamId), statLine };
       };
-      for (const l of logs) {
-        if (!l || typeof l !== "object") continue;
-        if (l.passer) {
-          addP(l.passer, "passAtt");
-          if (l.completed) { addP(l.passer, "passComp"); addP(l.passer, "passYds", l.passYds || l.yards || 0); }
-          if (l.isTouchdown && l.tdType === "pass") addP(l.passer, "passTDs");
-        }
-        if (l.rushYds != null && l.player && (l.type === "run" || l.tdType === "rush")) {
-          addP(l.player, "rushAtt");
-          addP(l.player, "rushYds", l.rushYds || l.yards || 0);
-          if (l.isTouchdown) addP(l.player, "rushTDs");
-        }
-        if (l.recYds != null && l.player && l.completed) {
-          addP(l.player, "receptions");
-          addP(l.player, "recYds", l.recYds || l.yards || 0);
-          if (l.isTouchdown && l.tdType === "pass") addP(l.player, "recTDs");
-        }
-        if (l.type === "sack" && l.player) addP(l.player, "sacks");
-        if (l.type === "interception" && l.player) addP(l.player, "ints");
-        if (l.tackler) addP(l.tackler, "tackles");
-        if (l.defender) addP(l.defender, "passDefls");
-        if (l.forcedFumble) addP(l.forcedFumble, "forcedFumbles");
-      }
-      const players = Object.values(acc);
-      const qb = players.filter(p => p.ref?.pos === "QB").sort((a, b) => b.passYds - a.passYds)[0] || null;
-      const receiver = players.filter(p => p.ref?.pos !== "QB" && p.recYds > 0).sort((a, b) => b.recYds - a.recYds)[0] || null;
-      const rusher = players.filter(p => p.ref?.pos !== "QB" && p.rushYds > 0 && p !== receiver).sort((a, b) => b.rushYds - a.rushYds)[0] || null;
-      const defender = players
-        .filter(p => p.sacks > 0 || p.ints > 0 || p.tackles > 0 || p.passDefls > 0 || p.forcedFumbles > 0)
-        .sort((a, b) => (b.sacks * 4 + b.ints * 5 + b.tackles * 1 + b.passDefls * 2 + b.forcedFumbles * 3)
-                      - (a.sacks * 4 + a.ints * 5 + a.tackles * 1 + a.passDefls * 2 + a.forcedFumbles * 3))[0] || null;
-      return { qb, receiver, rusher, defender };
+      return {
+        qb: format(categories.passing, "passing"),
+        receiver: format(categories.receiving, "receiving"),
+        rusher: format(categories.rushing, "rushing"),
+        defender: format(categories.defense, "defense"),
+      };
     } catch (err) {
-      console.error('[useGameLeaders] error:', err);
+      console.error('[useCanonicalLeaders] error:', err);
       return empty;
     }
-  }, [logs]);
+  }, [playerStats, context]);
 }
 
-function LeaderCard({ label, statLine, player, color }) {
-  if (!player) return null;
-  const p = player.ref;
+function LeaderCard({ label, player, color }) {
+  if (!player || !player.statLine) return null;
   return (
     <div style={{
       background: "var(--surface)", border: "1px solid var(--hairline)",
@@ -283,17 +207,25 @@ function LeaderCard({ label, statLine, player, color }) {
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: "0.68rem", fontWeight: 900, color,
       }}>
-        {p?.pos || "?"}
+        {player.pos || "?"}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: "0.62rem", fontWeight: 700, color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 2 }}>
           {label}
         </div>
-        <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {p?.name || "?"}
+        <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
+          {player.teamAbbr && (
+            <span style={{
+              fontSize: "0.55rem", fontWeight: 800, color: "var(--text-subtle)",
+              background: "var(--surface-strong, rgba(255,255,255,0.08))",
+              border: "1px solid var(--hairline)", borderRadius: 5,
+              padding: "1px 5px", letterSpacing: "0.5px", flexShrink: 0,
+            }}>{player.teamAbbr}</span>
+          )}
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{player.name || "?"}</span>
         </div>
         <div style={{ fontSize: "0.72rem", color, fontWeight: 700, marginTop: 1 }}>
-          {statLine}
+          {player.statLine}
         </div>
       </div>
     </div>
@@ -308,7 +240,8 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
   userTeamId,
   mvpPlayer,          // optional player object (legacy)
   stats = {},         // { totalYards, passYards, rushYards, turnovers }
-  logs = [],          // play-by-play logs for deriving leaders
+  logs = [],          // play-by-play logs (presentation-only: game flow / key moments)
+  playerStats = null, // CANONICAL box score { home: {[pid]:{name,pos,stats}}, away: {...} }
   gameReasoningFlags = [],
   boxScoreGameId,
   onOpenBoxScore,
@@ -344,7 +277,14 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
     return () => clearTimeout(t);
   }, []);
 
-  const { qb, receiver, rusher, defender } = useGameLeaders(logs);
+  const leaderContext = useMemo(() => ({
+    homeId: homeTeam?.id, awayId: awayTeam?.id,
+    homeAbbr: homeTeam?.abbr, awayAbbr: awayTeam?.abbr,
+  }), [homeTeam?.id, awayTeam?.id, homeTeam?.abbr, awayTeam?.abbr]);
+  const { qb, receiver, rusher, defender } = useCanonicalLeaders(playerStats, leaderContext);
+  const hasCanonicalStats = Boolean(
+    playerStats && (Object.keys(playerStats.home ?? {}).length || Object.keys(playerStats.away ?? {}).length),
+  );
   const gfs = useMemo(() => buildGameFlowSummary(rawGameRecord ?? boxScoreGame ?? gameRecord ?? null), [rawGameRecord, boxScoreGame, gameRecord]);
   const [showReplay, setShowReplay] = useState(false);
 
@@ -355,27 +295,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
   // Only render the interactive Game Flow card when it has real content.
   const hasGameFlow = Boolean(gfs) || notableMoments.length > 0;
 
-  // Build leader stat lines
-  const qbLine = qb
-    ? `${qb.passComp}/${qb.passAtt} · ${qb.passYds} yds${qb.passTDs > 0 ? ` · ${qb.passTDs} TD` : ""}`
-    : null;
-  const recLine = receiver
-    ? `${receiver.receptions} rec · ${receiver.recYds} yds${receiver.recTDs > 0 ? ` · ${receiver.recTDs} TD` : ""}`
-    : null;
-  const rushLine = rusher
-    ? `${rusher.rushAtt} car · ${rusher.rushYds} yds${rusher.rushTDs > 0 ? ` · ${rusher.rushTDs} TD` : ""}`
-    : null;
-  const defLine = defender
-    ? [
-        defender.tackles > 0 ? `${defender.tackles} tkl` : "",
-        defender.sacks > 0 ? `${defender.sacks} sack${defender.sacks > 1 ? "s" : ""}` : "",
-        defender.ints > 0 ? `${defender.ints} INT` : "",
-        defender.passDefls > 0 ? `${defender.passDefls} PD` : "",
-        defender.forcedFumbles > 0 ? `${defender.forcedFumbles} FF` : "",
-      ].filter(Boolean).join(" · ")
-    : null;
-
-  const showLeaders = qb || receiver || rusher || defender;
+  const showLeaders = Boolean(qb || receiver || rusher || defender);
 
   console.debug('[PostGameScreen] gameReasoningFlags length:', gameReasoningFlags?.length ?? 0);
   const reasoningBullets = useMemo(
@@ -389,7 +309,13 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
     const recapText = notableMoments.length
       ? notableMoments.map((m) => `Q${m.quarter ?? "?"} ${m.clock ?? ""} ${m.text ?? "Momentum swing"}`).join(" ")
       : `${awayTeam?.abbr ?? "AWY"} ${strictFinalScore.away} - ${strictFinalScore.home} ${homeTeam?.abbr ?? "HME"}`;
-    const derivedPlayerStats = derivePlayerStatsFromLogs(logs, homeTeam?.id, awayTeam?.id);
+    // Persist the CANONICAL box score, never narration-derived player totals, so
+    // the Game Book and season accumulation read the same authority the score
+    // came from. Fall back to empty sides when canonical stats are unavailable
+    // rather than recounting play-log references.
+    const canonicalPlayerStats = hasCanonicalStats
+      ? { home: playerStats.home ?? {}, away: playerStats.away ?? {} }
+      : { home: {}, away: {} };
     onArchiveReady({
       gameId: boxScoreGameId,
       season: null,
@@ -402,14 +328,14 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
       awayScore: strictFinalScore.away,
       recapText,
       logs,
-      playerStats: derivedPlayerStats,
+      playerStats: canonicalPlayerStats,
       scoringSummary: notableMoments,
       summary: {
         storyline: recapText,
         simOutputs: null,
       },
     });
-  }, [awayScore, awayTeam?.abbr, awayTeam?.id, boxScoreGameId, homeScore, homeTeam?.abbr, homeTeam?.id, logs, notableMoments, onArchiveReady, strictFinalScore, week]);
+  }, [awayScore, awayTeam?.abbr, awayTeam?.id, boxScoreGameId, hasCanonicalStats, homeScore, homeTeam?.abbr, homeTeam?.id, logs, notableMoments, onArchiveReady, playerStats, strictFinalScore, week]);
 
   const canOpenGameBook = Boolean(boxScoreGameId && hasStrictFinal);
 
@@ -650,7 +576,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
           )}
 
           {/* ── Tab switcher (Leaders / Grades) ── */}
-          {(showLeaders || logs.length > 0) && (
+          {(showLeaders || hasCanonicalStats) && (
             <div style={{
               display: "flex", background: "var(--surface)",
               border: "1px solid var(--hairline)", borderRadius: 10,
@@ -674,30 +600,27 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
             </div>
           )}
 
-          {/* ── Game Leaders ── */}
+          {/* ── Game Leaders (canonical box score) ── */}
           {activeTab === "leaders" && showLeaders && (
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {qb && qbLine && (
-                  <LeaderCard label="Passing" statLine={qbLine} player={qb} color="#FF9F0A" />
-                )}
-                {receiver && recLine && (
-                  <LeaderCard label="Receiving" statLine={recLine} player={receiver} color="#0A84FF" />
-                )}
-                {rusher && rushLine && (
-                  <LeaderCard label="Rushing" statLine={rushLine} player={rusher} color="#34C759" />
-                )}
-                {defender && defLine && (
-                  <LeaderCard label="Defense" statLine={defLine} player={defender} color="#FF453A" />
-                )}
+                <LeaderCard label="Passing" player={qb} color="#FF9F0A" />
+                <LeaderCard label="Receiving" player={receiver} color="#0A84FF" />
+                <LeaderCard label="Rushing" player={rusher} color="#34C759" />
+                <LeaderCard label="Defense" player={defender} color="#FF453A" />
               </div>
             </div>
           )}
 
-          {/* ── PFF Grades tab ── */}
-          {activeTab === "grades" && logs.length > 0 && (
+          {/* ── Grades tab (canonical box score) ── */}
+          {activeTab === "grades" && hasCanonicalStats && (
             <div style={{ marginBottom: 16, background: "var(--surface)", borderRadius: 12, overflow: "hidden", border: "1px solid var(--hairline)" }}>
-              <AdvancedStats logs={logs} homeTeam={homeTeam} awayTeam={awayTeam} />
+              <AdvancedStats
+                playerStats={playerStats}
+                homeTeam={homeTeam}
+                awayTeam={awayTeam}
+                userTeamId={userTeamId}
+              />
             </div>
           )}
 

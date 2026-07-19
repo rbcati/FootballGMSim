@@ -14524,6 +14524,12 @@ async function handleWatchGame(payload, id) {
     post(toUI.PLAY_LOGS, {
       logs: res.playLogs || [],
       liveStats: res.liveStats || {},
+      // Canonical player box score (the same authority that owns the final
+      // score). The postgame Leaders + Grades consume THIS, never the narrated
+      // liveStats/logs — so a single starter QB's real workload is shown rather
+      // than the play-by-play's randomized QB rotation.
+      playerStats: res.boxScore ? { home: res.boxScore.home ?? {}, away: res.boxScore.away ?? {} } : null,
+      teamStats: res.teamStats ?? null,
       gameReasoningFlags: Array.isArray(res.gameReasoningFlags) ? res.gameReasoningFlags : [],
     }, id);
 

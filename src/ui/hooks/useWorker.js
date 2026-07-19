@@ -72,6 +72,8 @@ export const INITIAL_WORKER_STATE = {
   promptUserGame: false,
   userGameLogs: null,
   userGameLiveStats: null,
+  userGamePlayerStats: null,
+  userGameTeamStats: null,
   userGameReasoningFlags: null,
   lastWorkerMessageType: null,
 };
@@ -147,13 +149,13 @@ export function workerReducer(state, action) {
     case 'PROMPT_USER_GAME':
       return { ...state, busy: false, simulating: false, simProgress: 0, promptUserGame: true, userGameLogs: null };
     case 'PLAY_LOGS':
-      return { ...state, busy: false, simulating: false, promptUserGame: false, userGameLogs: action.logs, userGameLiveStats: action.liveStats || null, userGameReasoningFlags: action.gameReasoningFlags || [] };
+      return { ...state, busy: false, simulating: false, promptUserGame: false, userGameLogs: action.logs, userGameLiveStats: action.liveStats || null, userGamePlayerStats: action.playerStats || null, userGameTeamStats: action.teamStats || null, userGameReasoningFlags: action.gameReasoningFlags || [] };
     case 'CLEAR_USER_GAME':
-      return { ...state, promptUserGame: false, userGameLogs: null, userGameLiveStats: null, userGameReasoningFlags: null };
+      return { ...state, promptUserGame: false, userGameLogs: null, userGameLiveStats: null, userGamePlayerStats: null, userGameTeamStats: null, userGameReasoningFlags: null };
     case 'CLEAR_RESULTS':
       return { ...state, lastResults: [], lastSimWeek: null, gameEvents: [] };
     case 'SIM_START':
-      return { ...state, simulating: true, simProgress: 0, gameEvents: [], promptUserGame: false, userGameLogs: null, userGameReasoningFlags: null };
+      return { ...state, simulating: true, simProgress: 0, gameEvents: [], promptUserGame: false, userGameLogs: null, userGamePlayerStats: null, userGameTeamStats: null, userGameReasoningFlags: null };
     case 'BATCH_SIM_START':
       return { ...state, busy: true, batchSim: { currentWeek: 0, phase: '', targetPhase: action.targetPhase, status: 'running' } };
     case 'BATCH_SIM_PROGRESS':
