@@ -110,3 +110,38 @@ describe('archived team stats (post-engine-flip stabilization)', () => {
     expect(fallback.home.turnovers).toBe(3);
   });
 });
+
+describe('postgame leader interception semantics', () => {
+  it('uses passer interceptions as turnovers, never defensive takeaways', async () => {
+    const { buildPlayerLeadersFromArchive } = await import('../gameSummary.js');
+    const boxScore = {
+      home: {
+        qb: { name: 'Turnover QB', pos: 'QB', stats: { passAtt: 35, passComp: 24, passYd: 300, passTD: 3, interceptions: 3 } },
+        cb: { name: 'Takeaway CB', pos: 'CB', stats: { interceptions: 1, tackles: 2 } },
+      },
+      away: {},
+    };
+    const leaders = buildPlayerLeadersFromArchive(boxScore, { homeId: 1, awayId: 2 });
+    expect(leaders.categories.defense?.name).toBe('Takeaway CB');
+    expect(leaders.categories.defense?.stats?.interceptions).toBe(1);
+    expect(leaders.standouts.find((p) => p.name === 'Turnover QB')?.stats?.interceptions).toBe(3);
+  });
+
+  it('does not promote a passer into defense when no defender has production', async () => {
+    const { buildPlayerLeadersFromArchive } = await import('../gameSummary.js');
+    const leaders = buildPlayerLeadersFromArchive({
+      home: { qb: { name: 'Only QB', pos: 'QB', stats: { passAtt: 28, passYd: 220, interceptions: 4 } } },
+      away: {},
+    }, { homeId: 1, awayId: 2 });
+    expect(leaders.categories.defense).toBeNull();
+  });
+
+  it('penalizes otherwise identical passers for interceptions thrown', async () => {
+    const { buildPlayerLeadersFromArchive } = await import('../gameSummary.js');
+    const leaders = buildPlayerLeadersFromArchive({
+      home: { clean: { name: 'Clean QB', pos: 'QB', stats: { passAtt: 30, passComp: 20, passYd: 300, passTD: 3, interceptions: 0 } } },
+      away: { risky: { name: 'Risky QB', pos: 'QB', stats: { passAtt: 30, passComp: 20, passYd: 300, passTD: 3, interceptions: 3 } } },
+    }, { homeId: 1, awayId: 2 });
+    expect(leaders.playerOfGame?.name).toBe('Clean QB');
+  });
+});

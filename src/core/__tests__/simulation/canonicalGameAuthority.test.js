@@ -140,6 +140,16 @@ describe('canonical box score owns QB participation (no rotation)', () => {
     expect(backup.stats.game.passAtt).toBeGreaterThan(0);
     expect(backup.stats.game.passComp).toBeGreaterThan(0);
     expect(backup.stats.game.passYd).toBeGreaterThan(0);
+    for (const qb of [starter, backup]) {
+      const g = qb.stats.game;
+      const sacksTaken = Number(g.sacked ?? g.sacksTaken ?? g.sacks ?? 0);
+      expect(g.passComp).toBeLessThanOrEqual(g.passAtt);
+      expect(g.dropbacks).toBe(g.passAtt + sacksTaken);
+      expect(g.longestPass).toBeLessThanOrEqual(g.passYd);
+      if (g.passComp === 0 || g.passYd === 0) expect(g.longestPass).toBe(0);
+      expect(g.completionPct).toBe(Math.round((g.passComp / Math.max(1, g.passAtt)) * 1000) / 10);
+      expect(g.passerRating).not.toBeNull();
+    }
 
     // …and passing TDs were split by the same workload basis, not dumped on the
     // starter. Team receiving TDs equal the sum of both QBs' passing TDs.
@@ -164,6 +174,25 @@ describe('canonical player-stat reconciliation', () => {
       for (const team of [home, away]) {
         const rep = reconcilePlayerIdentities(boxScoreSideFromRoster(team));
         expect(rep.ok, `seed ${seed} ${team.abbr}: ${JSON.stringify(rep.checks)}`).toBe(true);
+      }
+    }
+  });
+
+
+
+  it('reconciled QB dependent fields remain possible across deterministic seeds', () => {
+    for (const seed of SEEDS) {
+      const { home, away } = runGame(seed);
+      for (const team of [home, away]) {
+        const qbs = team.roster.filter((p) => p.pos === 'QB' && (p.stats.game.passAtt || 0) > 0);
+        for (const qb of qbs) {
+          const g = qb.stats.game;
+          const sacksTaken = Number(g.sacked ?? g.sacksTaken ?? g.sacks ?? 0);
+          expect(g.passComp, `seed ${seed} ${team.abbr} ${qb.id} comp`).toBeLessThanOrEqual(g.passAtt);
+          expect(g.dropbacks, `seed ${seed} ${team.abbr} ${qb.id} dropbacks`).toBe(g.passAtt + sacksTaken);
+          expect(g.longestPass, `seed ${seed} ${team.abbr} ${qb.id} long`).toBeLessThanOrEqual(g.passYd);
+          if (g.passComp === 0 || g.passYd === 0) expect(g.longestPass).toBe(0);
+        }
       }
     }
   });

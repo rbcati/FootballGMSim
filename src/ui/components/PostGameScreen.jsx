@@ -242,6 +242,7 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
   stats = {},         // { totalYards, passYards, rushYards, turnovers }
   logs = [],          // play-by-play logs (presentation-only: game flow / key moments)
   playerStats = null, // CANONICAL box score { home: {[pid]:{name,pos,stats}}, away: {...} }
+  teamStats = null,
   gameReasoningFlags = [],
   boxScoreGameId,
   onOpenBoxScore,
@@ -329,13 +330,14 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
       recapText,
       logs,
       playerStats: canonicalPlayerStats,
+      ...(teamStats ? { teamStats } : {}),
       scoringSummary: notableMoments,
       summary: {
         storyline: recapText,
         simOutputs: null,
       },
     });
-  }, [awayScore, awayTeam?.abbr, awayTeam?.id, boxScoreGameId, hasCanonicalStats, homeScore, homeTeam?.abbr, homeTeam?.id, logs, notableMoments, onArchiveReady, playerStats, strictFinalScore, week]);
+  }, [awayScore, awayTeam?.abbr, awayTeam?.id, boxScoreGameId, hasCanonicalStats, homeScore, homeTeam?.abbr, homeTeam?.id, logs, notableMoments, onArchiveReady, playerStats, strictFinalScore, teamStats, week]);
 
   const canOpenGameBook = Boolean(boxScoreGameId && hasStrictFinal);
 
