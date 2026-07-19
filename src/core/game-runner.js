@@ -167,6 +167,20 @@ class GameRunner {
             }
         }
 
+        // Undefeated / Winless early season
+        if (stakes === 0 && week >= 3 && week <= 5) {
+            const wins = team.wins || team.record?.w || 0;
+            const losses = team.losses || team.record?.l || 0;
+
+            if (wins === 0 && losses >= 2) {
+                // Pressure of 0-2, 0-3...
+                stakes = 80 + (losses * 2);
+            } else if (losses === 0 && wins >= 2) {
+                // Hype of 2-0, 3-0...
+                stakes = 75 + (wins * 2);
+            }
+        }
+
         // 2. Playoff Bubble
         if (stakes === 0 && week >= 13) {
             const confTeams = league.teams.filter(t => t.conf === team.conf).sort((a, b) => ((b.wins || b.record?.w || 0) - (a.wins || a.record?.w || 0)));
