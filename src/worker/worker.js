@@ -3157,11 +3157,21 @@ async function handleAdvanceWeek(payload, id) {
   // whose pre-cutdown payroll happens to exceed that season's grown cap.
   if (meta.phase === 'preseason') {
     const batchSim = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
+    const rosterLimit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
 
-    // Headless/batch lifecycle: no interactive user to make the 53-man cutdown,
-    // so the user team is cut with the same logic as every AI team.
+    // INTERACTIVE user cuts down manually. Block a doomed Start Season BEFORE any
+    // AI mutation runs, so a failed attempt never releases/restructures AI players
+    // or writes transactions while the season does not advance. HEADLESS/batch
+    // lifecycles have no interactive user, so the user team is cut with the AI
+    // teams below (includeUserTeam) instead.
     if (payload?.skipUserGame) {
       await AiLogic.executeAICutdowns({ includeUserTeam: true });
+    } else {
+      const userRoster = cache.getPlayersByTeam(meta.userTeamId);
+      if (userRoster.length > rosterLimit) {
+        post(toUI.ERROR, { message: `Roster limit exceeded! You have ${userRoster.length} players. Cut down to ${rosterLimit} to advance.` }, id);
+        return;
+      }
     }
 
     // AI roster cutdowns (53-man limit) for all AI teams.
@@ -3194,19 +3204,11 @@ async function handleAdvanceWeek(payload, id) {
     }
   }
 
-  // ── Preseason Cutdown Check ──────────────────────────────────────────────
+  // ── Preseason → Regular transition ────────────────────────────────────────
   if (meta.phase === 'preseason') {
-    const limit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
-
-    // AI cutdowns + AI cap management + depth repair already ran above (before
-    // the legality gate). For an INTERACTIVE user the roster is cut manually, so
-    // block the season start until the user is at the 53-man limit. In a headless
-    // lifecycle the user team was already cut above via includeUserTeam.
-    const userRoster = cache.getPlayersByTeam(meta.userTeamId);
-    if (userRoster.length > limit) {
-      post(toUI.ERROR, { message: `Roster limit exceeded! You have ${userRoster.length} players. Cut down to ${limit} to advance.` }, id);
-      return;
-    }
+    // Roster cutdowns, AI cap management, depth repair, and the interactive-user
+    // 53-man gate all ran above (before the legality gate). Nothing to block on
+    // here — proceed to season-stat initialization and the phase transition.
 
     // Priority 4: Initialize zeroed-out season stat entries for EVERY active player
     // on EVERY team before the first game is simulated. This guarantees that:

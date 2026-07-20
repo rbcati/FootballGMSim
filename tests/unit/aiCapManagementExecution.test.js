@@ -114,6 +114,34 @@ describe('executeAICapManagement — legality & structure', () => {
     expect(committed(0).isLegallyCompliant).toBe(true);
   });
 
+  it('commits NOTHING and reports a structured failure when no legal plan exists', async () => {
+    // Team at exact position floors, expensive, un-restructurable (1 yr left),
+    // and massively over a tiny live cap — no legal plan is possible.
+    const floors = { QB: 2, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1 };
+    const players = new Map();
+    for (const [pos, count] of Object.entries(floors)) {
+      for (let k = 0; k < count; k++) {
+        const id = `imp-${pos}-${k}`;
+        players.set(id, { id, teamId: 7, pos, ovr: 80, age: 30, status: 'active', contract: contract(20, 0, 1, 1) });
+      }
+    }
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: 50 }, currentSeasonId: 's4', currentWeek: 1, year: 2029 },
+      teams: new Map([[7, { id: 7, abbr: 'IMP', capTotal: 50, deadCap: 0 }]]),
+      players,
+    };
+    const before = JSON.stringify([...h.state.store.players.values()].map((p) => [p.id, p.teamId, p.contract]));
+
+    const res = await AiLogic.executeAICapManagement({ autoManageUserCap: false });
+
+    const after = JSON.stringify([...h.state.store.players.values()].map((p) => [p.id, p.teamId, p.contract]));
+    expect(h.state.txLog.length).toBe(0);       // no destructive actions committed
+    expect(after).toBe(before);                 // roster + contracts intact
+    expect(res.failures.length).toBe(1);
+    expect(res.failures[0].teamId).toBe(7);
+    expect(res.failures[0].remainingOverage).toBeGreaterThan(0);
+  });
+
   it('emits one transaction per committed action', async () => {
     await AiLogic.executeAICapManagement({ autoManageUserCap: false });
     // Only AI teams (1) acted; team 2 legal. Every tx is RESTRUCTURE or RELEASE.

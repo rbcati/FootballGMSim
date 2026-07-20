@@ -421,7 +421,18 @@ class AiLogic {
             if (snapshot.isWithinPlanningTarget) continue;
 
             const plan = AiLogic.buildAiCapCompliancePlan(freshTeam, roster, { legalCap, targetBuffer, season });
-            if (plan.actions.length === 0 && snapshot.isLegallyCompliant) continue;
+
+            // If no legal plan exists, do NOT commit partial destructive actions.
+            // Committing releases/restructures that cannot eliminate the overage
+            // would strip players/contracts for no compliance benefit and leave
+            // retries operating on a needlessly mutated roster. Record the
+            // structured failure and leave the roster intact instead.
+            if (plan.failure) {
+                failures.push({ ...plan.failure, legalCap });
+                continue;
+            }
+
+            if (plan.actions.length === 0) continue;
             teamsManaged += 1;
 
             for (const action of plan.actions) {
