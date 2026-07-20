@@ -98,24 +98,35 @@ export default function LiveGameViewer({ logs = [], canonicalEvents = null, play
 
   const scoreState = {
     score: displayScore,
-    quarter: currentEvent.quarter || 1,
+    // Canonical events own no chronological quarter — the scorebug shows the
+    // honest period label ("Drive 8" / "OT") instead. Legacy narration keeps its
+    // numeric quarter.
+    quarter: useCanonical ? null : (currentEvent.quarter || 1),
+    periodLabel: useCanonical
+      ? (finished ? 'Final' : (currentEvent.periodLabel ?? (currentEvent.isOvertime ? 'OT' : null)))
+      : undefined,
+    isOvertime: useCanonical ? Boolean(currentEvent.isOvertime) : undefined,
     // No trustworthy per-play clock exists (drive-granular estimates only) —
-    // the scorebug shows quarter + event progress instead of a fake clock.
+    // the scorebug shows the period label + possession instead of a fake clock.
     clock: null,
     progressLabel: finished
       ? 'Final'
       : (useCanonical
-        ? `Drive ${Math.min(index + 1, events.length)} of ${events.length}`
+        ? null
         : `Play ${Math.min(index + 1, events.length)} of ${events.length}`),
     downDistance: useCanonical
       ? (currentEvent.plays != null ? `${currentEvent.plays} plays · ${currentEvent.yards || 0} yds` : 'Drive update')
       : (currentEvent.down ? `${currentEvent.down}${ordinal(currentEvent.down)} & ${currentEvent.distance || 10}` : 'Drive update'),
-    ballSpot: currentEvent.fieldPosition != null ? `Ball on ${Math.round(Number(currentEvent.fieldPosition) || 50)}` : 'Ball spot --',
+    ballSpot: useCanonical
+      ? '—'
+      : (currentEvent.fieldPosition != null ? `Ball on ${Math.round(Number(currentEvent.fieldPosition) || 50)}` : 'Ball spot --'),
     fieldPosition: currentEvent.fieldPosition,
     possessionTeamId: currentEvent.possessionTeamId,
     isFinal: finished,
   };
-  const isLateGame = Number(scoreState.quarter) >= 4 && index >= Math.floor((events.length - 1) * 0.85);
+  const isLateGame = useCanonical
+    ? (Boolean(currentEvent.isOvertime) && !finished)
+    : (Number(scoreState.quarter) >= 4 && index >= Math.floor((events.length - 1) * 0.85));
 
   const modeLabel = paused ? 'Paused' : `Watch · ${SPEED_STEPS.find((step) => step.key === speed)?.label ?? 'Normal'}`;
 

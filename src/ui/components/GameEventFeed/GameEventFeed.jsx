@@ -32,13 +32,19 @@ export default function GameEventFeed({ events = [], activeIndex = 0 }) {
         const scoreHome = finiteScore(event.score?.home);
         const scoreAway = finiteScore(event.score?.away);
         const scoreText = scoreHome != null && scoreAway != null ? `${scoreAway}–${scoreHome}` : '';
-        const isMajor = ['touchdown', 'field_goal', 'turnover', 'sack', 'explosive_play', 'game_end', 'turning_point'].includes(event.eventType);
-        const showQuarterMarker = previousQuarter !== null && previousQuarter !== event.quarter;
+        const isMajor = ['touchdown', 'field_goal', 'turnover', 'sack', 'explosive_play', 'game_end', 'turning_point', 'overtime_start'].includes(event.eventType);
+        // Canonical events carry `periodLabel` ("Drive 8" / "OT") and a null
+        // quarter; legacy narration events carry a numeric quarter. Prefer the
+        // honest period label, falling back to Q{n} only for legacy events.
+        const periodText = event.periodLabel
+          ?? (event.quarter != null ? `Q${event.quarter}` : null);
+        const showQuarterMarker = event.quarter != null
+          && previousQuarter !== null && previousQuarter !== event.quarter;
         const showPossessionDivider = !showQuarterMarker
           && previousPossession !== null
           && event.possessionTeamId != null
           && previousPossession !== event.possessionTeamId
-          && !['halftime', 'quarter_end', 'game_end'].includes(event.eventType);
+          && !['halftime', 'quarter_end', 'game_end', 'overtime_start'].includes(event.eventType);
         previousQuarter = event.quarter;
         previousPossession = event.possessionTeamId ?? previousPossession;
         return (
@@ -51,12 +57,12 @@ export default function GameEventFeed({ events = [], activeIndex = 0 }) {
               <div className="feed-possession-divider" aria-hidden="true" />
             ) : null}
             <article className={`feed-row${isLatest ? ' latest' : ''}${isMajor ? ' major' : ' routine'}`}>
-              {/* Quarter + event-sequence indicator. The narration engine only has
-                  drive-level clock estimates (every play in a drive shares one
-                  randomized stamp), so no per-play clock is displayed. */}
+              {/* Period + event-sequence indicator. No per-play clock exists, and
+                  the sim owns no chronological quarter, so this shows the honest
+                  period label ("Drive 8" / "OT") or a legacy Q{n}. */}
               <div className="feed-time">
-                Q{event.quarter}
-                {event.sequence != null ? <span className="feed-clock">#{event.sequence}</span> : null}
+                {periodText || `#${event.sequence ?? ''}`}
+                {periodText && event.sequence != null ? <span className="feed-clock">#{event.sequence}</span> : null}
               </div>
               <div className="feed-body">
                 <div className="feed-headline">{event.headline}</div>

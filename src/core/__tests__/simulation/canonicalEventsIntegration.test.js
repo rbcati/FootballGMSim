@@ -72,10 +72,9 @@ describe('simGameStats emits a canonical event ledger that reconciles to the fin
     const finalScore = { home: result.homeScore, away: result.awayScore };
     assertLedgerReconciles(result.canonicalEvents, finalScore);
 
-    // Quarter totals equal the final score.
-    const total = (arr) => (arr || []).reduce((a, b) => a + b, 0);
-    expect(total(result.quarterScores?.home)).toBe(finalScore.home);
-    expect(total(result.quarterScores?.away)).toBe(finalScore.away);
+    // No fabricated quarter authority: the sim owns no chronological regulation
+    // timeline, so no quarter-score table is published.
+    expect(result.quarterScores).toBeNull();
 
     // Scoring summary totals equal the final score.
     const ssHome = (result.scoringSummary || []).filter((r) => r.teamId === 1).reduce((a, r) => a + r.points, 0);

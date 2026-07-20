@@ -40,6 +40,23 @@ describe('LiveGameViewer — canonical event ledger', () => {
     expect(within(bug).queryByLabelText(/score shown at the final whistle/i)).toBeNull();
   });
 
+  it('scorebug shows the honest period label + possession ("Drive N · ABBR possession"), never a fabricated quarter', () => {
+    render(
+      <LiveGameViewer
+        canonicalEvents={canonicalEvents}
+        homeTeam={homeTeam}
+        awayTeam={awayTeam}
+        initialMode="pause"
+        finalScore={canonicalFinal}
+      />,
+    );
+    const bug = screen.getByTestId('watch-scorebug');
+    // First canonical event is MIA's opening TD drive → "Drive 1 · MIA possession".
+    expect(within(bug).getByText(/Drive 1 · MIA possession/)).toBeTruthy();
+    // No fabricated quarter label anywhere on the scorebug.
+    expect(within(bug).queryByText(/^Q\d/)).toBeNull();
+  });
+
   it('shows the canonical final once complete, matching the league-recorded score', () => {
     render(
       <LiveGameViewer

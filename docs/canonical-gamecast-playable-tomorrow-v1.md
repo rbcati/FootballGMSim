@@ -14,6 +14,20 @@ fabricates play-by-play, a clock, or player attribution.
 
 The canonical player/team-stat authority from #1698/#1699 is untouched.
 
+## 1a. Post-review revisions
+
+**Defect #1 — fabricated quarter authority (FIXED).** The first build assigned
+regulation quarters by evenly dividing interleaved drives into four buckets and
+published a quarter-score table from them. That was deterministic but not
+canonical timing. It is removed: canonical events now carry `quarter: null` +
+an honest `periodLabel` (`"Drive 8"` / `"OT"`), `quarterScores` is `null`, and
+the UI (scorebug + feed) shows `Drive {n} · {ABBR} possession` instead of a
+fabricated `Q{n}`. Overtime is flagged `isOvertime: true` / `periodLabel: "OT"`,
+never `Q5`. See §6, §8, §10, §13.
+
+Review defects #2–#4 from the follow-up request were truncated in transmission
+and are not yet addressed in this revision.
+
 ## 2. Before-fix authority map
 
 | Surface | Producer (before) | Authoritative? |
@@ -67,14 +81,23 @@ Q2 · BAL drive · 8 plays, 71 yards · Touchdown · NYJ 10 — BAL 14
 Produced by `src/core/simulation/canonicalGameEvents.js`:
 
 ```
-{ eventId, gameId, driveId, sequence, quarter, clock: null,
+{ eventId, gameId, driveId, sequence, driveNumber,
+  quarter: null, periodLabel, isOvertime, clock: null,
   possessionTeamId, scoringTeamId, eventType, driveResult, points,
-  scoreAfter: { home, away }, plays, yards, isScore, isOvertime,
+  scoreAfter: { home, away }, plays, yards, isScore,
   primaryPlayerId: null, secondaryPlayerId: null, teamAbbr, text }
 ```
 
 Every score-changing event carries: stable `eventId`, deterministic `sequence`,
-`quarter`, `scoringTeamId`, `eventType`, `points`, and `scoreAfter.{home,away}`.
+`scoringTeamId`, `eventType`, `points`, and `scoreAfter.{home,away}`.
+
+**Honest period, not a fabricated quarter (post-review fix — defect #1).** The
+drive engine generates separate home and away drive logs with no shared clock,
+so there is *no* canonical mapping of a drive to Q1–Q4. Publishing evenly-divided
+"quarters" would be invented authority. Therefore `quarter` is `null` for all
+regulation *and* overtime events; the honest ordering signal is `sequence` +
+`periodLabel` (`"Drive 8"`). Overtime — the one period the sim tracks distinctly
+— carries `isOvertime: true` and `periodLabel: "OT"` (never a fabricated `Q5`).
 
 ## 7. Score reconciliation
 
@@ -85,12 +108,17 @@ per-drive log (which sums to the drive-engine score); OT points are captured fro
 the OT loop and appended, so the total equals the post-OT final. TDs are scored
 as 6/7/8 explicitly (no "every TD is 7" assumption); FGs are 3.
 
-## 8. Quarter-score reconciliation
+## 8. Quarter-score authority (post-review fix — defect #1)
 
-`quarterScores = sum of canonical scoring-event points by quarter`. Regulation
-drives are interleaved (deterministic, seed-driven) and split into four quarters;
-`sum(quarter scores, per side) === final score`. A quarter with no scoring shows
-0; a genuine 0–0 game yields four zero quarters and remains valid.
+There is **no canonical quarter-score table**. The authoritative engine does not
+simulate a chronological regulation timeline, so `canonicalGameEvents` sets
+`quarterScores: null` — the established "unavailable" representation the Game Book
+/ box-score view model already handle (they simply do not render a linescore).
+This replaces the earlier build, which divided interleaved drives evenly into four
+buckets and published them as quarter scores; that was deterministic but was
+**invented quarter timing**, and is removed. The scoring summary and running
+score remain fully canonical (§7, §9) — only the fabricated quarter placement is
+gone.
 
 ## 9. Scoring-summary reconciliation
 
@@ -101,8 +129,9 @@ team, quarter, scoring type, point value, and running score (`scoreAfter`).
 ## 10. Clock policy
 
 No clock is invented. `clock` is always `null`; the scorebug shows
-`Q{n} · Drive {i} of {N}` and the feed shows `Q{n} · #{sequence}`. No fake
-`15:10`-style values anywhere.
+`Drive {n} · {ABBR} possession` (or `OT · …`) and the feed shows the honest
+`periodLabel` (`"Drive 8"` / `"OT"`) with the event `#{sequence}`. No fake
+`15:10`-style values and no fabricated quarter labels anywhere.
 
 ## 11. Player-attribution policy
 
@@ -125,8 +154,10 @@ new RNG is consumed to format the canonical events (pure transform).
 `LiveGameViewer` prefers the canonical ledger: the scorebug reads the current
 canonical event's `scoreAfter` (a real, monotonic running score) and shows the
 league-recorded final at the end. It never parses narration or shows a narrated
-running score. Legacy archives with no ledger fall back to the #1692 honest
-placeholder (final only at the end).
+running score. The period cell shows the honest `Drive {n} · {ABBR} possession`
+(defect #1 fix), never a fabricated quarter. Legacy archives with no ledger fall
+back to the #1692 honest placeholder (final only at the end) and keep their
+numeric quarter labels.
 
 At completion: live scorebug === GAME_EVENT final === PostGameScreen final ===
 schedule result === Game Book final.
@@ -219,9 +250,11 @@ One P0 fix beyond the core change: the `workerApi.js` PLAY_LOGS transport gap
 
 ## 23. Unit-test result
 
-`npm run test:unit` → **454 files, 5582 tests passed** (+32 new). Includes 14
-ledger-invariant tests, 14 full-path integration tests, 3 canonical-viewer tests,
-and 1 canonical-archive test.
+`npm run test:unit` → **454 files, 5584 tests passed**. Includes 14
+ledger-invariant tests (now asserting null quarter authority + honest
+`periodLabel`), 14 full-path integration tests, 4 canonical-viewer tests
+(incl. the `Drive N · ABBR possession` scorebug), 1 canonical-archive test, and
+the PLAY_LOGS transport regression.
 
 ## 24. Build result
 

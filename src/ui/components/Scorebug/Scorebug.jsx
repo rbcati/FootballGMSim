@@ -20,14 +20,24 @@ function finiteScore(value) {
  */
 export default function Scorebug({ homeTeam, awayTeam, state }) {
   const possession = state?.possessionTeamId;
-  const quarter = Number(state?.quarter ?? 1);
+  const quarter = state?.quarter != null ? Number(state.quarter) : null;
   const homeScore = finiteScore(state?.score?.home);
   const awayScore = finiteScore(state?.score?.away);
   const hasScore = homeScore != null && awayScore != null;
   const fieldPosition = Number(state?.fieldPosition ?? 50);
   const inRedZone = Number.isFinite(fieldPosition) && fieldPosition >= 80;
-  const isOvertime = quarter > 4;
+  // Overtime is an explicit signal from the canonical ledger; fall back to the
+  // legacy quarter>4 heuristic only when no explicit flag is provided.
+  const isOvertime = state?.isOvertime != null ? Boolean(state.isOvertime) : (quarter != null && quarter > 4);
   const isFinal = Boolean(state?.isFinal);
+  // Honest period label: "Drive 8" / "OT" from the canonical ledger, or Q{n}
+  // for the legacy narration path. The sim owns no chronological quarter, so a
+  // bare "Q1" is never fabricated when a period label is available.
+  const periodLabel = state?.periodLabel
+    ?? (quarter != null ? `Q${quarter}` : '—');
+  const possessionAbbr = possession != null && possession === homeTeam?.id
+    ? (homeTeam?.abbr ?? null)
+    : (possession != null && possession === awayTeam?.id ? (awayTeam?.abbr ?? null) : null);
   const scoreCell = (value, teamLabel) => (
     hasScore
       ? <strong>{value}</strong>
@@ -47,7 +57,7 @@ export default function Scorebug({ homeTeam, awayTeam, state }) {
         {scoreCell(awayScore, awayTeam?.abbr || 'Away')}
       </div>
       <div className="sb-center">
-        <div>Q{quarter}{state?.progressLabel ? ` · ${state.progressLabel}` : ''}</div>
+        <div>{periodLabel}{possessionAbbr ? ` · ${possessionAbbr} possession` : (state?.progressLabel ? ` · ${state.progressLabel}` : '')}</div>
         <div>{state?.downDistance || '—'} · {state?.ballSpot || 'Ball on --'}</div>
         <div className="sb-flags">
           {isFinal ? <span className="sb-flag final">FINAL</span> : null}

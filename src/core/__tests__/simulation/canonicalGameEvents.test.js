@@ -45,12 +45,23 @@ describe('canonical game event ledger (#1700)', () => {
     }
   });
 
-  it('3. quarter totals equal the final score', () => {
+  it('3. NO fabricated quarter authority: quarterScores is null and events carry null quarter + honest periodLabel', () => {
     for (const seed of SEEDS) {
-      const { ledger, finalScore } = ledgerForSeed(seed);
-      const total = (arr) => arr.reduce((a, b) => a + b, 0);
-      expect(total(ledger.quarterScores.home)).toBe(finalScore.home);
-      expect(total(ledger.quarterScores.away)).toBe(finalScore.away);
+      const { ledger } = ledgerForSeed(seed);
+      // The sim owns no chronological regulation quarters — no quarter-score table.
+      expect(ledger.quarterScores).toBeNull();
+      // Every regulation drive event has a null quarter and an honest "Drive N" label.
+      const driveEvents = ledger.events.filter((e) => e.eventType !== 'game_end');
+      driveEvents.forEach((e, i) => {
+        expect(e.quarter).toBeNull();
+        expect(e.periodLabel).toBe(`Drive ${i + 1}`);
+        expect(e.isOvertime).toBe(false);
+      });
+      // Scoring summary rows also drop the fabricated quarter.
+      ledger.scoringSummary.forEach((r) => {
+        expect(r.quarter).toBeNull();
+        expect(typeof r.periodLabel).toBe('string');
+      });
     }
   });
 
@@ -114,7 +125,7 @@ describe('canonical game event ledger (#1700)', () => {
     expect(ledger.scoringSummary[0].teamId).toBe(1);
   });
 
-  it('10. overtime is represented honestly (Q5 column, not folded into Q4)', () => {
+  it('10. overtime is represented honestly (isOvertime + OT label, never a fabricated Q5)', () => {
     const ledger = buildCanonicalGameEvents({
       gameId: 'ot', homeId: 1, awayId: 2, homeAbbr: 'H', awayAbbr: 'A',
       homeDriveLog: [{ result: 'FIELD_GOAL', points: 3, plays: 8, yards: 60 }],
@@ -122,11 +133,17 @@ describe('canonical game event ledger (#1700)', () => {
       overtimeEvents: [{ side: 'home', points: 3, result: 'FIELD_GOAL' }],
       seed: 2,
     });
-    expect(ledger.quarterScores.home).toHaveLength(5);
-    expect(ledger.quarterScores.home[4]).toBe(3); // OT points in the OT column
+    // No fabricated quarter table, even with overtime.
+    expect(ledger.quarterScores).toBeNull();
+    const otEvent = ledger.events.find((e) => e.isOvertime && e.isScore);
+    expect(otEvent).toBeTruthy();
+    expect(otEvent.periodLabel).toBe('OT');
+    expect(otEvent.quarter).toBeNull();
+    // No event is ever labeled Q5.
+    expect(ledger.events.some((e) => e.periodLabel === 'Q5' || e.quarter === 5)).toBe(false);
     const last = ledger.events[ledger.events.length - 1];
     expect(last.scoreAfter).toEqual({ home: 6, away: 3 });
-    expect(ledger.events.some((e) => e.isOvertime && e.isScore)).toBe(true);
+    expect(last.isOvertime).toBe(true);
   });
 
   it('11. field goals, TDs, and 2-pt conversions are accounted for accurately', () => {
@@ -147,7 +164,7 @@ describe('canonical game event ledger (#1700)', () => {
     expect(homeRows.find((r) => r.points === 8).type).toMatch(/2-PT/i);
   });
 
-  it('12. a genuine 0-0 game remains valid (4 zero quarters, no scoring rows)', () => {
+  it('12. a genuine 0-0 game remains valid (no scoring rows, null quarter table)', () => {
     const ledger = buildCanonicalGameEvents({
       gameId: 'zero', homeId: 1, awayId: 2,
       homeDriveLog: [{ result: 'PUNT', points: 0, plays: 3, yards: 5 }],
@@ -155,15 +172,14 @@ describe('canonical game event ledger (#1700)', () => {
       seed: 4,
     });
     expect(ledger.scoringSummary).toHaveLength(0);
-    expect(ledger.quarterScores.home).toEqual([0, 0, 0, 0]);
-    expect(ledger.quarterScores.away).toEqual([0, 0, 0, 0]);
+    expect(ledger.quarterScores).toBeNull();
     const last = ledger.events[ledger.events.length - 1];
     expect(last.scoreAfter).toEqual({ home: 0, away: 0 });
   });
 
   it('13. same seed produces identical event fingerprints', () => {
     const fp = (seed) => ledgerForSeed(seed).ledger.events
-      .map((e) => `${e.sequence}:${e.quarter}:${e.eventType}:${e.points}:${e.scoreAfter.home}-${e.scoreAfter.away}:${e.possessionTeamId}`)
+      .map((e) => `${e.sequence}:${e.periodLabel}:${e.eventType}:${e.points}:${e.scoreAfter.home}-${e.scoreAfter.away}:${e.possessionTeamId}`)
       .join('|');
     for (const seed of SEEDS) {
       expect(fp(seed)).toBe(fp(seed));

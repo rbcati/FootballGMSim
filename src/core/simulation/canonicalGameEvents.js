@@ -6,26 +6,31 @@
  * turns those two drive logs into ONE canonical, deterministic event ledger —
  * the single authority for:
  *   - the scoring summary,
- *   - the quarter scores,
  *   - the live scorebug's running score (scoreAfter), and
  *   - the drive-by-drive gamecast feed.
  *
  * LANE B (canonical drive-level gamecast). The authoritative engine owns drives
- * and drive outcomes but NOT individual plays, a trustworthy clock, or per-play
- * player attribution. Accordingly this ledger:
+ * and drive outcomes but NOT individual plays, a trustworthy clock, per-play
+ * player attribution, OR a chronological regulation timeline. Accordingly this
+ * ledger:
  *   - represents each possession as one drive event (plays + yards + result),
- *   - never invents a game clock (clock is always null; sequence + quarter are
- *     the honest ordering signal),
- *   - never invents player attribution (primary/secondary player ids are null).
+ *   - never invents a game clock (clock is always null),
+ *   - never invents player attribution (primary/secondary player ids are null),
+ *   - never invents a QUARTER. The engine generates separate home and away
+ *     drive logs with no shared clock, so there is no canonical mapping of a
+ *     drive to Q1–Q4. Regulation `quarter` is therefore `null`; the honest
+ *     ordering signal is `sequence` + `periodLabel` ("Drive 8"). No official
+ *     quarter-score table is published for regulation (`quarterScores: null`).
+ *   - Overtime is the only period the sim tracks distinctly: OT events carry
+ *     `isOvertime: true` and `periodLabel: 'OT'` (never a fabricated Q5).
  *
  * DETERMINISM. Everything here is a pure transform of already-drawn values plus
  * the seed. No RNG is consumed, so the same seed yields an identical event
- * fingerprint (id / sequence / quarter / team / type / points / scoreAfter).
+ * fingerprint (id / sequence / periodLabel / team / type / points / scoreAfter).
  *
  * RECONCILIATION (guaranteed by construction, verified by tests):
  *   sum(scoring-event points, per side) === final score
  *   last scoreAfter                     === final score
- *   sum(quarter scores, per side)       === final score
  *   scoreAfter is monotonic and changes only on a scoring event
  *   event sequence is strictly ordered and event ids are unique
  */
@@ -127,35 +132,25 @@ export function buildCanonicalGameEvents({
 
   const homeFirst = (Number(seed) >>> 0) % 2 === 0;
   const seq = interleaveDrives(home, away, homeFirst);
-
-  const totalReg = seq.length;
-  const drivesPerQuarter = Math.max(1, Math.ceil(totalReg / 4));
   const hasOt = ot.length > 0;
-  const numQuarters = 4 + (hasOt ? 1 : 0);
-
-  const quarterHome = Array.from({ length: numQuarters }, () => 0);
-  const quarterAway = Array.from({ length: numQuarters }, () => 0);
 
   const events = [];
   const scoringSummary = [];
   let runHome = 0;
   let runAway = 0;
   let sequence = 0;
+  let driveNumber = 0;
 
   const teamIdFor = (side) => (side === 'home' ? homeId : awayId);
 
-  const pushEvent = ({ side, drive, quarter, isOt = false }) => {
+  const pushEvent = ({ side, drive, isOt = false }) => {
     sequence += 1;
+    driveNumber += 1;
     const result = drive?.result ?? 'PUNT';
     const points = Math.max(0, Number(drive?.points) || 0);
     const isScore = SCORING_RESULTS.has(result) && points > 0;
     if (side === 'home') runHome += points;
     else runAway += points;
-    const qIdx = quarter - 1;
-    if (isScore) {
-      if (side === 'home') quarterHome[qIdx] += points;
-      else quarterAway[qIdx] += points;
-    }
     const eventType = RESULT_TO_EVENT_TYPE[result] || 'punt';
     const label = resultLabel(result, points);
     const teamId = teamIdFor(side);
@@ -164,6 +159,9 @@ export function buildCanonicalGameEvents({
     const plays = Math.max(0, Number(drive?.plays) || 0);
     const yards = Math.max(0, Number(drive?.yards) || 0);
     const driveId = `${gameId}-drv-${sequence}`;
+    // Honest period label: the sim owns no chronological quarter for regulation,
+    // so drives are labeled by their game-order number; overtime is labeled OT.
+    const periodLabel = isOt ? 'OT' : `Drive ${driveNumber}`;
     const text = isScore
       ? `${abbr ?? 'Offense'} ${label} — ${plays} plays, ${yards} yards`
       : `${abbr ?? 'Offense'} drive: ${label} (${plays} plays, ${yards} yards)`;
@@ -172,7 +170,12 @@ export function buildCanonicalGameEvents({
       gameId,
       driveId,
       sequence,
-      quarter,
+      driveNumber,
+      // No fabricated quarter — see module header. `quarter` stays null for
+      // regulation AND overtime; `periodLabel` / `isOvertime` are the honest
+      // presentation signals.
+      quarter: null,
+      periodLabel,
       clock: null,
       possessionTeamId: teamId,
       scoringTeamId: isScore ? teamId : null,
@@ -193,7 +196,9 @@ export function buildCanonicalGameEvents({
     if (isScore) {
       scoringSummary.push({
         id: event.eventId,
-        quarter,
+        quarter: null,
+        periodLabel,
+        isOvertime: isOt,
         clock: null,
         teamId,
         teamAbbr: abbr,
@@ -213,19 +218,19 @@ export function buildCanonicalGameEvents({
     }
   };
 
-  seq.forEach((entry, i) => {
-    const quarter = Math.min(4, Math.floor(i / drivesPerQuarter) + 1);
-    pushEvent({ side: entry.side, drive: entry.drive, quarter });
+  seq.forEach((entry) => {
+    pushEvent({ side: entry.side, drive: entry.drive });
   });
 
-  // Overtime: extend the quarter array (Q5 = OT) rather than folding OT points
-  // into the fourth quarter.
+  // Overtime is the one period the sim tracks distinctly. OT events are honestly
+  // flagged (isOvertime + periodLabel 'OT') — never folded into regulation and
+  // never relabeled as a fabricated Q5.
   ot.forEach((otEvent) => {
     const side = otEvent?.side === 'home' ? 'home' : 'away';
     const points = Math.max(0, Number(otEvent?.points) || 0);
     if (points <= 0) return;
     const result = otEvent?.result === 'FIELD_GOAL' ? 'FIELD_GOAL' : 'TOUCHDOWN';
-    pushEvent({ side, drive: { result, points, plays: 0, yards: 0 }, quarter: 5, isOt: true });
+    pushEvent({ side, drive: { result, points, plays: 0, yards: 0 }, isOt: true });
   });
 
   // Terminal game-end marker carries the final scoreAfter so the last canonical
@@ -236,7 +241,9 @@ export function buildCanonicalGameEvents({
     gameId,
     driveId: null,
     sequence,
-    quarter: hasOt ? 5 : 4,
+    driveNumber,
+    quarter: null,
+    periodLabel: 'Final',
     clock: null,
     possessionTeamId: null,
     scoringTeamId: null,
@@ -257,7 +264,10 @@ export function buildCanonicalGameEvents({
   return {
     events,
     scoringSummary,
-    quarterScores: { home: quarterHome, away: quarterAway },
+    // The sim owns no chronological regulation quarters, so no official
+    // quarter-score table is published. `null` is the established "unavailable"
+    // representation the Game Book / box-score view model already handle.
+    quarterScores: null,
   };
 }
 

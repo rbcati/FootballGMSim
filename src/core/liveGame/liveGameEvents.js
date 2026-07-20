@@ -124,8 +124,12 @@ export function mapArchiveEventsToLiveFeed(playLogs = [], context = {}) {
  * viewer renders. Unlike the narration path, every canonical event carries a
  * trustworthy `scoreAfter` (the drive engine's running score), so the scorebug
  * and the feed can show a real, monotonic score progression — no narration
- * score is ever consulted. Quarter-change markers are inserted the same way as
- * the narration path so the feed still reads as a game.
+ * score is ever consulted.
+ *
+ * The sim owns no chronological regulation quarters, so the feed does NOT insert
+ * fabricated quarter/halftime markers. Drives are ordered and labeled by their
+ * honest `periodLabel` ("Drive 8"); the one real period boundary — the start of
+ * overtime — is marked explicitly.
  */
 export function mapCanonicalEventsToLiveFeed(canonicalEvents = [], context = {}) {
   const list = Array.isArray(canonicalEvents) ? canonicalEvents : [];
@@ -142,7 +146,11 @@ export function mapCanonicalEventsToLiveFeed(canonicalEvents = [], context = {})
     return {
       id: event.eventId,
       gameId: event.gameId || context.gameId || 'game',
-      quarter: Number(event.quarter || 1),
+      // No fabricated quarter — regulation carries `quarter: null` and the honest
+      // `periodLabel` ("Drive 8"); OT carries isOvertime + periodLabel 'OT'.
+      quarter: null,
+      periodLabel: event.periodLabel ?? (event.isOvertime ? 'OT' : null),
+      driveNumber: event.driveNumber ?? null,
       clock: null,
       sequence: event.sequence,
       eventType,
@@ -170,14 +178,15 @@ export function mapCanonicalEventsToLiveFeed(canonicalEvents = [], context = {})
     const event = list[i];
     feed.push(toFeed(event));
     const next = list[i + 1];
-    if (next && Number(next.quarter) !== Number(event.quarter) && event.eventType !== 'game_end') {
-      const q = Number(event.quarter);
+    // The only honest period boundary is the start of overtime.
+    if (next && next.isOvertime && !event.isOvertime && event.eventType !== 'game_end') {
       feed.push({
         ...toFeed(event),
-        id: `${event.eventId}-q-end`,
-        eventType: q === 2 ? 'halftime' : 'quarter_end',
-        headline: q === 2 ? 'Halftime.' : `End of Q${q}`,
-        impactTag: q === 2 ? 'swing' : 'routine',
+        id: `${event.eventId}-ot-start`,
+        eventType: 'overtime_start',
+        periodLabel: 'OT',
+        headline: 'Overtime',
+        impactTag: 'swing',
         score: null,
         isScore: false,
       });
