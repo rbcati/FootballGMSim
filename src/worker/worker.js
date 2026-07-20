@@ -3145,6 +3145,39 @@ async function handleAdvanceWeek(payload, id) {
       post(toUI.ERROR, { message: `Cannot advance week in phase "${meta.phase}". Use the correct action.` }, id);
       return;
   }
+
+  // ── Preseason AI cutdown + cap management MUST precede the legality gate ────
+  // The pre-advance legality gate below evaluates every team's cap against the
+  // live salary cap. During preseason a team still carries its full offseason
+  // roster (well over 53), so its aggregate cap hit is meaningless until the
+  // cutdown + AI cap-management pass has produced the legal 53-man roster.
+  // Running that pass here — before the gate — is what lets AI teams (and, in an
+  // explicit headless lifecycle, the auto-managed user team) enter the regular
+  // season legally instead of deadlocking the franchise at the first AI team
+  // whose pre-cutdown payroll happens to exceed that season's grown cap.
+  if (meta.phase === 'preseason') {
+    const batchSim = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
+
+    // Headless/batch lifecycle: no interactive user to make the 53-man cutdown,
+    // so the user team is cut with the same logic as every AI team.
+    if (payload?.skipUserGame) {
+      await AiLogic.executeAICutdowns({ includeUserTeam: true });
+    }
+
+    // AI roster cutdowns (53-man limit) for all AI teams.
+    await AiLogic.executeAICutdowns();
+
+    // AI cap management: bring every AI team legally under the LIVE cap using the
+    // least-destructive plan. The interactive user team is NEVER auto-managed;
+    // only an explicit headless lifecycle (durability batch-sim) opts it in.
+    await AiLogic.executeAICapManagement({ autoManageUserCap: batchSim });
+
+    // Cutdowns/releases above release players directly (teamId -> null) without
+    // touching team.depthChart, leaving dangling starter/backup references.
+    // Repair them before the legality gate validates depth-chart integrity.
+    validateAndRepairAllTeamDepthCharts('post-ai-cutdown');
+  }
+
   const legality = runLegalityValidation({ stage: 'pre-advance' }).issues.filter((issue) => issue.severity === 'error');
   if (legality.length > 0) {
     post(toUI.ERROR, { message: legality[0].message }, id);
@@ -3165,34 +3198,15 @@ async function handleAdvanceWeek(payload, id) {
   if (meta.phase === 'preseason') {
     const limit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
 
-    // Headless/batch simulation (skipUserGame) has no interactive user to make
-    // the preseason 53-man cutdown, so the user team is cut down by the same AI
-    // logic as every other team — otherwise the new season can never start and
-    // the franchise cannot survive into subsequent years. Interactive play is
-    // unchanged: skipUserGame is only set by the batch orchestrator, so the
-    // manual-cutdown gate below still applies to real players.
-    if (payload?.skipUserGame) {
-      await AiLogic.executeAICutdowns({ includeUserTeam: true });
-    }
-
+    // AI cutdowns + AI cap management + depth repair already ran above (before
+    // the legality gate). For an INTERACTIVE user the roster is cut manually, so
+    // block the season start until the user is at the 53-man limit. In a headless
+    // lifecycle the user team was already cut above via includeUserTeam.
     const userRoster = cache.getPlayersByTeam(meta.userTeamId);
     if (userRoster.length > limit) {
       post(toUI.ERROR, { message: `Roster limit exceeded! You have ${userRoster.length} players. Cut down to ${limit} to advance.` }, id);
       return;
     }
-
-    // Execute AI Cutdowns (53-man roster limit)
-    await AiLogic.executeAICutdowns();
-
-    // Execute AI Cap Management — restructure stars or cut cap-inefficient
-    // veterans so all AI teams are under the $301.2M hard cap at season start.
-    await AiLogic.executeAICapManagement();
-
-    // Both cutdown passes above release players directly (teamId -> null)
-    // without touching team.depthChart, so cut players would otherwise linger
-    // as dangling starter/backup references until the next pre-sim rebuild.
-    // Repair immediately using the same canonical utility as a manual release.
-    validateAndRepairAllTeamDepthCharts('post-ai-cutdown');
 
     // Priority 4: Initialize zeroed-out season stat entries for EVERY active player
     // on EVERY team before the first game is simulated. This guarantees that:

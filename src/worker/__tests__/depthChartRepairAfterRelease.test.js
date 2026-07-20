@@ -60,7 +60,7 @@ describe('AI preseason cutdowns / cap management — depth chart repair', () => 
 
   it('calls the canonical depth-chart repair after AI cutdowns and cap management', () => {
     const cutdownIdx = fn.indexOf('AiLogic.executeAICutdowns()');
-    const capMgmtIdx = fn.indexOf('AiLogic.executeAICapManagement()');
+    const capMgmtIdx = fn.indexOf('AiLogic.executeAICapManagement(');
     const repairIdx = fn.indexOf("validateAndRepairAllTeamDepthCharts('post-ai-cutdown')");
 
     expect(cutdownIdx).toBeGreaterThan(-1);

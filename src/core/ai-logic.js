@@ -22,6 +22,8 @@ import { buildContractFromMarket, evaluateContractMarket } from './contractModel
 import { evaluatePendingOfferCapReservation } from './pendingOfferCapModel.js';
 import { evaluatePlayerMarketRealism, normalizePositionGroup } from './marketRealismModel.js';
 import { executeAIOffseasonCuts } from './roster/aiRosterCuts.js';
+import { buildTeamCapSnapshot, getActiveCapHit } from './contracts/contractObligations.js';
+import { canRestructure, computeRestructure, applyRestructure } from './contracts/restructureEngine.js';
 import { executeAIOffseasonExtensions } from './retention/aiRetentionLogic.js';
 import { calculateTeamDepthDeficiencies, getNeedLevelForPlayer, POSITION_NEED_LEVEL } from './trades/tradePositionalNeeds.js';
 import { buildFranchiseTagContract, buildRFATenderContract, TENDER_CONFIG } from './contracts/tenderLogic.js';
@@ -231,120 +233,248 @@ class AiLogic {
     }
 
     /**
-     * Execute AI Cap Management for the start of the regular season.
-     *
-     * If a team is over the $301.2M hard cap after cutdowns, the AI will:
-     *   1. First try to restructure the highest-paid star players (OVR ≥ 80)
-     *      by converting 50% of their base salary to prorated bonus.
-     *   2. If still over cap, cut the most "cap-inefficient" veterans:
-     *      players with the worst (cap hit / OVR) ratio, skipping essential
-     *      starters (OVR ≥ 85) if possible.
-     *
-     * This runs for all AI teams; the user's team must manage its own cap.
+     * Difficulty-based PLANNING buffer ($M below the legal cap). This is a
+     * planning target only — it never changes the legal ceiling and must never
+     * drive destructive cuts once a team is already legally under the cap.
      */
-    static async executeAICapManagement() {
+    static _capPlanningBuffer(difficulty) {
+        if (difficulty === 'Hard') return 10;
+        if (difficulty === 'Legendary') return 25;
+        return 0;
+    }
+
+    /**
+     * Post-June-1 dead-cap split for a release. Preseason cap management runs in
+     * a POST_JUNE1 phase, so only the current year's bonus proration hits the
+     * current cap; the remainder defers to deadMoneyNextYear. Mirrors the split
+     * used by executeAICutdowns so the two paths agree.
+     */
+    static _releaseDeadCapSplit(player) {
+        const c = player?.contract ?? {};
+        const yearsTotal = Math.max(1, Number(c.yearsTotal ?? c.years ?? 1));
+        const yearsRemaining = Math.max(0, Number(c.years ?? c.yearsRemaining ?? 1));
+        const annualBonus = Math.max(0, Number(c.signingBonus ?? 0)) / yearsTotal;
+        const currentYearDead = Math.round(annualBonus * 100) / 100;
+        const futureYearsDead = Math.round(annualBonus * Math.max(0, yearsRemaining - 1) * 100) / 100;
+        return { currentYearDead, futureYearsDead };
+    }
+
+    /**
+     * Build a deterministic, side-effect-free cap-compliance plan for one team.
+     *
+     * The plan is discovered against clones so nothing is mutated while we are
+     * still deciding whether a legal plan exists. Compliance uses the SAME
+     * canonical equation as the pre-advance legality gate:
+     *
+     *   totalCommitted = Σ activeCapHit(roster) + team.deadCap
+     *   legal          ⇔ totalCommitted ≤ liveSalaryCap
+     *
+     * Least-destructive ordering:
+     *   1. Restructures (non-destructive) toward the PLANNING TARGET
+     *      (legalCap − difficulty buffer). Only actions with proven positive
+     *      current-year relief are kept; no player is restructured twice in the
+     *      same season.
+     *   2. Releases (destructive) ONLY while still over the LEGAL cap — never to
+     *      chase the buffer. Ranked by realizable NET current-year relief
+     *      (capHit − new current-year dead cap); zero/negative-relief players are
+     *      never chosen, and no position is cut below its floor.
+     *
+     * @returns {{ actions: object[], projected: object, failure: object|null }}
+     */
+    static buildAiCapCompliancePlan(team, roster, { legalCap, targetBuffer = 0, season = 0 } = {}) {
+        const actions = [];
+        let workRoster = roster.map((p) => ({ ...p, contract: { ...(p?.contract ?? {}) } }));
+        let deadCap = Math.max(0, Number(team?.deadCap ?? 0));
+        const snap = () => buildTeamCapSnapshot({ team: { deadCap }, roster: workRoster, salaryCap: legalCap, targetBuffer });
+
+        // ── Phase 1: restructures toward the planning target ──────────────────
+        const touched = new Set();
+        let guard = 0;
+        while (snap().totalCommitted > snap().targetCommitted && guard++ < 500) {
+            const s = snap();
+            const candidates = workRoster
+                .filter((p) => !touched.has(p.id))
+                .filter((p) => Number(p?.contract?.lastRestructuredSeason) !== Number(season))
+                .filter((p) => canRestructure(p, { capRoom: s.capRoom, deadCapItems: [] }).eligible)
+                .map((p) => ({ p, hit: getActiveCapHit(p) }))
+                .sort((a, b) => (b.hit - a.hit) || String(a.p.id).localeCompare(String(b.p.id)));
+            if (!candidates.length) break;
+
+            let applied = false;
+            for (const { p, hit } of candidates) {
+                const yearsLeft = Number(p.contract?.yearsRemaining ?? p.contract?.years ?? 1);
+                const preview = computeRestructure(p, hit, yearsLeft, season);
+                // Never convert more base than exists — a restructure must not
+                // drive base salary negative.
+                if (!(preview.conversionAmount > 0) || preview.conversionAmount > Number(p.contract?.baseAnnual ?? 0)) {
+                    touched.add(p.id);
+                    continue;
+                }
+                const { updatedPlayer, updatedTeam } = applyRestructure(p, team ?? {}, preview, season);
+                const relief = Math.round((getActiveCapHit(p) - getActiveCapHit(updatedPlayer)) * 100) / 100;
+                touched.add(p.id);
+                if (relief <= 0) continue; // no genuine current-year relief → skip
+                const idx = workRoster.findIndex((r) => r.id === p.id);
+                workRoster[idx] = { ...updatedPlayer, contract: { ...updatedPlayer.contract, lastRestructuredSeason: Number(season) } };
+                const newDeadCapItem = Array.isArray(updatedTeam?.deadCapItems)
+                    ? updatedTeam.deadCapItems[updatedTeam.deadCapItems.length - 1]
+                    : null;
+                actions.push({
+                    type: 'RESTRUCTURE',
+                    playerId: p.id,
+                    conversionAmount: preview.conversionAmount,
+                    relief,
+                    newContract: workRoster[idx].contract,
+                    deadCapItem: newDeadCapItem,
+                });
+                applied = true;
+                break;
+            }
+            if (!applied) break;
+        }
+
+        // ── Phase 2: releases — only while still over the LEGAL cap ────────────
+        const posCount = {};
+        for (const p of workRoster) posCount[p.pos] = (posCount[p.pos] ?? 0) + 1;
+
+        guard = 0;
+        while (snap().totalCommitted > legalCap && guard++ < 500) {
+            const candidates = workRoster
+                .map((p) => {
+                    const { currentYearDead, futureYearsDead } = AiLogic._releaseDeadCapSplit(p);
+                    const netRelief = Math.round((getActiveCapHit(p) - currentYearDead) * 100) / 100;
+                    return { p, netRelief, currentYearDead, futureYearsDead };
+                })
+                .filter((c) => c.netRelief > 0)
+                .filter((c) => (posCount[c.p.pos] ?? 0) > (AiLogic.POSITION_FLOOR[c.p.pos] ?? 1))
+                .sort((a, b) => (b.netRelief - a.netRelief)
+                    || ((a.p.ovr ?? 0) - (b.p.ovr ?? 0))
+                    || String(a.p.id).localeCompare(String(b.p.id)));
+            if (!candidates.length) break;
+
+            const choice = candidates[0];
+            workRoster = workRoster.filter((r) => r.id !== choice.p.id);
+            posCount[choice.p.pos] = (posCount[choice.p.pos] ?? 1) - 1;
+            deadCap = Math.round((deadCap + choice.currentYearDead) * 100) / 100;
+            actions.push({
+                type: 'RELEASE',
+                playerId: choice.p.id,
+                currentYearDead: choice.currentYearDead,
+                futureYearsDead: choice.futureYearsDead,
+                netRelief: choice.netRelief,
+            });
+        }
+
+        const projected = snap();
+        const failure = projected.isLegallyCompliant ? null : {
+            teamId: team?.id,
+            abbr: team?.abbr,
+            reason: 'no_legal_plan',
+            remainingOverage: projected.overageVsLegal,
+            rosterCap: projected.rosterCap,
+            deadCap: projected.deadCap,
+            totalCommitted: projected.totalCommitted,
+            legalCap,
+            protectedPositions: Object.keys(AiLogic.POSITION_FLOOR).filter((pos) => (posCount[pos] ?? 0) <= (AiLogic.POSITION_FLOOR[pos] ?? 1)),
+        };
+
+        return { actions, projected, failure };
+    }
+
+    /**
+     * Execute AI Cap Management before the start of the regular season.
+     *
+     * Every AI team is brought to a legally cap-compliant state against the LIVE
+     * salary cap using the least-destructive plan (restructures first, then
+     * net-positive releases). Restructures and releases are committed through the
+     * canonical contract helpers so cap state, dead money and transaction records
+     * all stay consistent.
+     *
+     * The interactive user team is NEVER auto-managed. Headless/durability
+     * lifecycles pass `autoManageUserCap: true` (gated on the explicit batch-sim
+     * capability by the caller) so the franchise can start a season without an
+     * interactive front office.
+     *
+     * @param {{autoManageUserCap?: boolean}} [opts]
+     * @returns {Promise<{failures: object[], teamsManaged: number}>}
+     */
+    static async executeAICapManagement({ autoManageUserCap = false } = {}) {
         const txsToCommit = [];
         const meta        = cache.getMeta();
         const userTeamId  = meta.userTeamId;
-        let targetCap = Constants.SALARY_CAP.HARD_CAP;
-        // On higher difficulties, AI targets a lower cap utilization to preserve space for free agency
-        if (meta.difficulty === 'Hard') targetCap = Constants.SALARY_CAP.HARD_CAP - 10; // Target $10M buffer
-        if (meta.difficulty === 'Legendary') targetCap = Constants.SALARY_CAP.HARD_CAP - 25; // Target $25M buffer
-        const hardCap = targetCap;
+        const seasonId    = meta.currentSeasonId;
+        const week        = meta.currentWeek;
+        const season      = Number(meta?.year ?? 0);
+        const legalCap    = AiLogic._getSalaryCap();
+        const targetBuffer = AiLogic._capPlanningBuffer(meta.difficulty);
         const allTeams    = cache.getAllTeams();
+        const failures    = [];
+        let teamsManaged  = 0;
 
         for (const team of allTeams) {
-            if (team.id === userTeamId) continue;
+            if (team.id === userTeamId && !autoManageUserCap) continue;
 
             this.updateTeamCap(team.id);
-            let freshTeam = cache.getTeam(team.id);
-            if ((freshTeam.capUsed ?? 0) <= hardCap) continue;
-
+            const freshTeam = cache.getTeam(team.id);
             const roster = cache.getPlayersByTeam(team.id);
+            const snapshot = buildTeamCapSnapshot({ team: freshTeam, roster, salaryCap: legalCap, targetBuffer });
+            if (snapshot.isWithinPlanningTarget) continue;
 
-            // ── Step 1: Restructure star players (OVR ≥ 80, ≥ 2 yrs remaining) ──
-            const restructureCandidates = roster
-                .filter(p => (p.ovr ?? 0) >= 80 && (p.contract?.years ?? 1) >= 2)
-                .sort((a, b) => {
-                    const hitA = (a.contract?.baseAnnual ?? 0) + ((a.contract?.signingBonus ?? 0) / (a.contract?.yearsTotal || 1));
-                    const hitB = (b.contract?.baseAnnual ?? 0) + ((b.contract?.signingBonus ?? 0) / (b.contract?.yearsTotal || 1));
-                    return hitB - hitA; // highest cap hit first
-                });
+            const plan = AiLogic.buildAiCapCompliancePlan(freshTeam, roster, { legalCap, targetBuffer, season });
+            if (plan.actions.length === 0 && snapshot.isLegallyCompliant) continue;
+            teamsManaged += 1;
 
-            for (const p of restructureCandidates) {
-                freshTeam = cache.getTeam(team.id);
-                if ((freshTeam.capUsed ?? 0) <= hardCap) break;
+            for (const action of plan.actions) {
+                const player = cache.getPlayer(action.playerId);
+                if (!player) continue;
 
-                const c = p.contract;
-                if (!c) continue;
-                const yearsRemaining  = Math.max(c.years ?? 1, 2);
-                const base            = c.baseAnnual ?? 0;
-                const convertAmount   = Math.round(base * Constants.SALARY_CAP.RESTRUCTURE_MAX_CONVERT_PCT * 100) / 100;
-                if (convertAmount <= 0) continue;
-
-                const newBase         = Math.round((base - convertAmount) * 100) / 100;
-                const addedBonusTotal = convertAmount * yearsRemaining;
-                const newSigningBonus = Math.round(((c.signingBonus ?? 0) + addedBonusTotal) * 100) / 100;
-
-                cache.updatePlayer(p.id, {
-                    contract: { ...c, baseAnnual: newBase, signingBonus: newSigningBonus },
-                });
-                this.updateTeamCap(team.id);
-
-                txsToCommit.push({
-                    type: 'RESTRUCTURE', seasonId: meta.currentSeasonId,
-                    week: meta.currentWeek, teamId: team.id,
-                    details: { playerId: p.id, convertAmount, aiInitiated: true },
-                });
+                if (action.type === 'RESTRUCTURE') {
+                    cache.updatePlayer(player.id, {
+                        contract: { ...action.newContract, lastRestructuredSeason: season },
+                    });
+                    if (action.deadCapItem) {
+                        const t = cache.getTeam(team.id);
+                        const existing = Array.isArray(t?.deadCapItems) ? t.deadCapItems : [];
+                        cache.updateTeam(team.id, { deadCapItems: [...existing, action.deadCapItem] });
+                    }
+                    this.updateTeamCap(team.id);
+                    txsToCommit.push({
+                        type: 'RESTRUCTURE', seasonId, week, teamId: team.id,
+                        details: { playerId: player.id, convertAmount: action.conversionAmount, relief: action.relief, aiInitiated: true },
+                    });
+                } else if (action.type === 'RELEASE') {
+                    cache.updatePlayer(player.id, { teamId: null, status: 'free_agent' });
+                    const t = cache.getTeam(team.id);
+                    if (action.currentYearDead > 0) {
+                        cache.updateTeam(team.id, { deadCap: Math.round(((t.deadCap ?? 0) + action.currentYearDead) * 100) / 100 });
+                    }
+                    const t2 = cache.getTeam(team.id);
+                    if (action.futureYearsDead > 0) {
+                        cache.updateTeam(team.id, { deadMoneyNextYear: Math.round(((t2.deadMoneyNextYear ?? 0) + action.futureYearsDead) * 100) / 100 });
+                    }
+                    this.updateTeamCap(team.id);
+                    txsToCommit.push({
+                        type: 'RELEASE', seasonId, week, teamId: team.id,
+                        details: { playerId: player.id, deadCap: action.currentYearDead, aiCapCut: true },
+                    });
+                }
             }
 
-            // ── Step 2: Cut cap-inefficient veterans if still over cap ──────────
-            freshTeam = cache.getTeam(team.id);
-            if ((freshTeam.capUsed ?? 0) <= hardCap) continue;
-
-            // Score by inefficiency = cap hit / OVR  (higher = more inefficient)
-            const cutCandidates = roster
-                .filter(p => {
-                    // Don't cut essential starters or rookies
-                    const ovr = p.ovr ?? 0;
-                    const age = p.age ?? 28;
-                    return ovr < 85 && age >= 27;
-                })
-                .map(p => {
-                    const base  = p.contract?.baseAnnual  ?? p.baseAnnual  ?? 0;
-                    const bonus = p.contract?.signingBonus ?? p.signingBonus ?? 0;
-                    const yrs   = p.contract?.yearsTotal   ?? p.yearsTotal   ?? 1;
-                    const capHit = base + bonus / (yrs || 1);
-                    const ovr   = p.ovr ?? 50;
-                    return { ...p, _capHit: capHit, _inefficiency: ovr > 0 ? capHit / ovr : capHit };
-                })
-                .sort((a, b) => b._inefficiency - a._inefficiency); // most inefficient first
-
-            for (const p of cutCandidates) {
-                freshTeam = cache.getTeam(team.id);
-                if ((freshTeam.capUsed ?? 0) <= hardCap) break;
-
-                // Calculate dead cap (Preseason is Post-June 1)
-                const c           = p.contract;
-                const annualBonus = (c?.signingBonus ?? 0) / (c?.yearsTotal || 1);
-                const yearsRemaining = c?.years || 1;
-                const currentYearDead = annualBonus;
-                const futureYearsDead = annualBonus * Math.max(0, yearsRemaining - 1);
-
-                cache.updatePlayer(p.id, { teamId: null, status: 'free_agent' });
-                const t = cache.getTeam(team.id);
-                if (currentYearDead > 0) {
-                    cache.updateTeam(team.id, { deadCap: (t.deadCap ?? 0) + currentYearDead });
-                }
-                if (futureYearsDead > 0) {
-                    cache.updateTeam(team.id, { deadMoneyNextYear: (t.deadMoneyNextYear ?? 0) + futureYearsDead });
-                }
-                this.updateTeamCap(team.id);
-
-                txsToCommit.push({
-                    type: 'RELEASE', seasonId: meta.currentSeasonId,
-                    week: meta.currentWeek, teamId: team.id,
-                    details: { playerId: p.id, deadCap: currentYearDead, aiCapCut: true },
+            // Confirm the live committed result rather than trusting projections.
+            this.updateTeamCap(team.id);
+            const liveTeam = cache.getTeam(team.id);
+            const liveRoster = cache.getPlayersByTeam(team.id);
+            const liveSnap = buildTeamCapSnapshot({ team: liveTeam, roster: liveRoster, salaryCap: legalCap });
+            if (!liveSnap.isLegallyCompliant) {
+                failures.push({
+                    teamId: team.id,
+                    abbr: team.abbr,
+                    remainingOverage: liveSnap.overageVsLegal,
+                    rosterCap: liveSnap.rosterCap,
+                    deadCap: liveSnap.deadCap,
+                    totalCommitted: liveSnap.totalCommitted,
+                    legalCap,
+                    ...(plan.failure ?? {}),
                 });
             }
         }
@@ -352,6 +482,13 @@ class AiLogic {
         if (txsToCommit.length > 0) {
             await Promise.all(txsToCommit.map(tx => Transactions.add(tx)));
         }
+
+        if (failures.length > 0) {
+            console.warn(`[AiLogic] executeAICapManagement: ${failures.length} team(s) could not reach a legal cap plan:`,
+                failures.map((f) => `${f.abbr}(${f.teamId}) over by $${f.remainingOverage}M`).join(', '));
+        }
+
+        return { failures, teamsManaged };
     }
 
     /**
