@@ -28,6 +28,42 @@ import {
   buildScoringSummaryFromSimulation,
 } from '../gameSummary.js';
 
+
+const nQbStat = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
+
+export function calculateCanonicalPasserRating({ passComp = 0, passAtt = 0, passYd = 0, passTD = 0, interceptions = 0 } = {}) {
+  const att = Math.max(1, nQbStat(passAtt));
+  const comp = Math.max(0, nQbStat(passComp));
+  const yards = Math.max(0, nQbStat(passYd));
+  const tds = Math.max(0, nQbStat(passTD));
+  const ints = Math.max(0, nQbStat(interceptions));
+  const a = Math.max(0, Math.min(2.375, ((comp / att) - 0.3) / 0.2));
+  const b = Math.max(0, Math.min(2.375, ((yards / att) - 3) / 4));
+  const c = Math.max(0, Math.min(2.375, (tds / att) / 0.05));
+  const d = Math.max(0, Math.min(2.375, 2.375 - (ints / att) / 0.04));
+  return Math.round(((a + b + c + d) / 6) * 100 * 10) / 10;
+}
+
+function recomputeReconciledQbDependentStats(g = {}) {
+  const n = nQbStat;
+  g.passAtt = Math.max(0, Math.round(n(g.passAtt)));
+  g.passComp = Math.max(0, Math.min(g.passAtt, Math.round(n(g.passComp))));
+  g.passYd = Math.max(0, Math.round(n(g.passYd)));
+  g.passTD = Math.max(0, Math.round(n(g.passTD)));
+  g.interceptions = Math.max(0, Math.round(n(g.interceptions)));
+  const sacksTaken = Math.max(0, Math.round(n(g.sacked ?? g.sacksTaken ?? g.sacks)));
+  g.dropbacks = g.passAtt + sacksTaken;
+  if (g.passComp === 0 || g.passYd === 0) g.longestPass = 0;
+  else g.longestPass = Math.max(0, Math.min(Math.round(n(g.longestPass)), g.passYd));
+  g.completionPct = Math.round((g.passComp / Math.max(1, g.passAtt)) * 1000) / 10;
+  g.passerRating = calculateCanonicalPasserRating(g);
+  if ('yardsPerAttempt' in g) g.yardsPerAttempt = Math.round((g.passYd / Math.max(1, g.passAtt)) * 10) / 10;
+  if ('sackPct' in g) g.sackPct = Math.round((sacksTaken / Math.max(1, g.dropbacks)) * 1000) / 10;
+  if ('tdRate' in g) g.tdRate = Math.round((g.passTD / Math.max(1, g.passAtt)) * 1000) / 10;
+  if ('intRate' in g) g.intRate = Math.round((g.interceptions / Math.max(1, g.passAtt)) * 1000) / 10;
+  return g;
+}
+
 // ── Domain modules ──────────────────────────────────────────────────────────
 import {
   getActiveGroups,
@@ -1468,8 +1504,7 @@ export function simGameStats(home, away, options = {}) {
           passingQbs.forEach((q) => {
             const g = q.stats.game;
             if ((g.passAtt || 0) < g.passComp) g.passAtt = g.passComp;
-            g.completionPct = null;
-            g.passerRating = null;
+            recomputeReconciledQbDependentStats(g);
           });
         }
       }
@@ -1623,6 +1658,7 @@ export function simGameStats(home, away, options = {}) {
         // Rounding remainder to the starter (highest attempts).
         passingQbsForTD[0].stats.game.passTD += (totalRecTDs - assignedTD);
         if (passingQbsForTD[0].stats.game.passTD < 0) passingQbsForTD[0].stats.game.passTD = 0;
+        passingQbsForTD.forEach((q) => recomputeReconciledQbDependentStats(q.stats.game));
       }
 
 

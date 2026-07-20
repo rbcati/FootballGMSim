@@ -86,6 +86,7 @@ describe('canonical postgame integration: simulateBatch → PLAY_LOGS → PostGa
           boxScoreGameId="integration-game"
           logs={playLogsPayload.logs}
           playerStats={playLogsPayload.playerStats}
+          teamStats={playLogsPayload.teamStats}
           week={6}
           onArchiveReady={archiveSpy}
           onContinue={() => {}}
@@ -97,6 +98,7 @@ describe('canonical postgame integration: simulateBatch → PLAY_LOGS → PostGa
     expect(archiveSpy).toHaveBeenCalledOnce();
     const archive = archiveSpy.mock.calls[0][0];
     expect(archive.playerStats).toEqual(playLogsPayload.playerStats);
+    expect(archive.teamStats).toEqual(playLogsPayload.teamStats);
 
     // 4) The canonical passing leader is the same computed from res.boxScore and
     //    from the archived playerStats.
@@ -114,6 +116,17 @@ describe('canonical postgame integration: simulateBatch → PLAY_LOGS → PostGa
     const vm = buildBoxScoreViewModel({ league, game: archive, gameId: archive.gameId });
     expect(vm.finalScore.home).toBe(finalHome);
     expect(vm.finalScore.away).toBe(finalAway);
+
+    for (const side of ['home', 'away']) {
+      for (const key of [
+        'passYards', 'rushYards', 'totalYards', 'firstDowns',
+        'thirdDownMade', 'thirdDownAtt', 'redZoneMade', 'redZoneAtt',
+        'turnovers', 'plays', 'yardsPerPlay', 'penalties', 'timePossession',
+      ]) {
+        expect(vm.teamTotals[side]?.[key], `${side}.${key} survives into Game Book`).toBe(playLogsPayload.teamStats[side]?.[key]);
+      }
+    }
+
     const gameBookLeaderSide = resLeader.teamId === home.id ? vm.playerTables.home : vm.playerTables.away;
     const gameBookLeader = gameBookLeaderSide.find((p) => p.name === resLeader.name);
     expect(gameBookLeader, 'passing leader must appear in the Game Book player tables').toBeTruthy();

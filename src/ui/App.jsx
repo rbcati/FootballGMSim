@@ -172,6 +172,7 @@ export function buildWatchPostGameResult({
   logs = [],
   liveStats = null,
   playerStats = null,
+  teamStats = null,
   gameReasoningFlags = [],
   seasonId,
 } = {}) {
@@ -191,6 +192,7 @@ export function buildWatchPostGameResult({
     logs,
     liveStats,
     playerStats,
+    teamStats,
     gameReasoningFlags,
     seasonId,
     gameId: buildCanonicalGameId({
@@ -214,6 +216,7 @@ function AppContent() {
     userGameLogs,
     userGameLiveStats,
     userGamePlayerStats,
+    userGameTeamStats,
     userGameReasoningFlags,
     lastWorkerMessageType,
   } = state;
@@ -1790,6 +1793,7 @@ function AppContent() {
                     logs: userGameLogs || [],
                     liveStats: userGameLiveStats || null,
                     playerStats: userGamePlayerStats || null,
+                    teamStats: userGameTeamStats || null,
                     gameReasoningFlags: userGameReasoningFlags || [],
                     seasonId: league?.seasonId,
                   });
@@ -1826,6 +1830,7 @@ function AppContent() {
           phase={postGameResult.phase}
           logs={postGameResult.logs || []}
           playerStats={postGameResult.playerStats || null}
+          teamStats={postGameResult.teamStats || null}
           gameReasoningFlags={postGameResult.gameReasoningFlags || []}
           boxScoreGameId={postGameResult.gameId}
           onOpenBoxScore={(gameId) => {

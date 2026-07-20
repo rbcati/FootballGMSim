@@ -68,6 +68,36 @@ describe('PostGameScreen onArchiveReady payload', () => {
     expect(allNames).not.toContain('Narration Ghost QB');
   });
 
+  it('persists canonical teamStats unchanged when supplied', async () => {
+    const archiveSpy = vi.fn();
+    const playerStats = { home: { 10: { name: 'Home QB', pos: 'QB', stats: { passAtt: 1, passComp: 1, passYd: 12 } } }, away: {} };
+    const teamStats = {
+      home: { passYards: 12, rushYards: 90, totalYards: 102, firstDowns: 11, thirdDownMade: 4, thirdDownAtt: 9, redZoneMade: 1, redZoneAtt: 2, turnovers: 0, plays: 55, yardsPerPlay: 1.85 },
+      away: { passYards: 0, rushYards: 80, totalYards: 80, firstDowns: 8, thirdDownMade: 2, thirdDownAtt: 8, redZoneMade: 0, redZoneAtt: 1, turnovers: 1, plays: 50, yardsPerPlay: 1.6 },
+    };
+
+    await act(async () => {
+      render(
+        <PostGameScreen
+          homeTeam={{ id: 1, abbr: 'HME', name: 'Home' }}
+          awayTeam={{ id: 2, abbr: 'AWY', name: 'Away' }}
+          homeScore={10}
+          awayScore={7}
+          userTeamId={1}
+          boxScoreGameId="team-stats-game"
+          playerStats={playerStats}
+          teamStats={teamStats}
+          week={1}
+          onArchiveReady={archiveSpy}
+          onContinue={() => {}}
+        />,
+      );
+    });
+
+    expect(archiveSpy).toHaveBeenCalledOnce();
+    expect(archiveSpy.mock.calls[0][0].teamStats).toBe(teamStats);
+  });
+
   it('preserves player names in canonical playerStats', async () => {
     const archiveSpy = vi.fn();
     const playerStats = {

@@ -64,4 +64,25 @@ describe('App watch-mode postgame result contract', () => {
     });
     expect(result.homeScore).toBe(result.awayScore);
   });
+
+  it('carries canonical playerStats and teamStats through watch postgame helper', () => {
+    const playerStats = { home: { qb: { stats: { passYd: 250 } } }, away: {} };
+    const teamStats = { home: { passYards: 250, firstDowns: 20 }, away: { passYards: 180, firstDowns: 16 } };
+    const result = buildWatchPostGameResult({
+      canonicalFinal: { home: 24, away: 17 },
+      viewerScores: {},
+      homeTeam,
+      awayTeam,
+      userTeamId: homeTeam.id,
+      week: 4,
+      phase: 'regular',
+      seasonId: '2031',
+      playerStats,
+      teamStats,
+    });
+
+    expect(result.playerStats).toBe(playerStats);
+    expect(result.teamStats).toBe(teamStats);
+  });
+
 });

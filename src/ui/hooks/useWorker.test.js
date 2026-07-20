@@ -33,3 +33,19 @@ describe('workerReducer', () => {
     expect(shouldAcceptBootScopedPayload({ phase: 'regular' }, null, ['boot_1'])).toBe(true);
   });
 });
+
+it('transports and clears watched-game canonical player and team stats together', () => {
+  const playerStats = { home: { qb: { stats: { passYd: 250 } } }, away: {} };
+  const teamStats = { home: { passYards: 250, firstDowns: 20 }, away: { passYards: 180, firstDowns: 15 } };
+  const played = workerReducer(INITIAL_WORKER_STATE, { type: 'PLAY_LOGS', logs: [], playerStats, teamStats });
+  expect(played.userGamePlayerStats).toBe(playerStats);
+  expect(played.userGameTeamStats).toBe(teamStats);
+
+  const cleared = workerReducer(played, { type: 'CLEAR_USER_GAME' });
+  expect(cleared.userGamePlayerStats).toBeNull();
+  expect(cleared.userGameTeamStats).toBeNull();
+
+  const restarted = workerReducer(played, { type: 'SIM_START' });
+  expect(restarted.userGamePlayerStats).toBeNull();
+  expect(restarted.userGameTeamStats).toBeNull();
+});

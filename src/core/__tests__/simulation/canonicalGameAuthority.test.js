@@ -18,7 +18,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { Utils as U } from '../../utils.js';
-import { simGameStats, simulateBatch } from '../../simulation/index.js';
+import { calculateCanonicalPasserRating, simGameStats, simulateBatch } from '../../simulation/index.js';
 import {
   reconcilePlayerIdentities,
   reconcilePlayerToTeam,
@@ -140,6 +140,16 @@ describe('canonical box score owns QB participation (no rotation)', () => {
     expect(backup.stats.game.passAtt).toBeGreaterThan(0);
     expect(backup.stats.game.passComp).toBeGreaterThan(0);
     expect(backup.stats.game.passYd).toBeGreaterThan(0);
+    for (const qb of [starter, backup]) {
+      const g = qb.stats.game;
+      const sacksTaken = Number(g.sacked ?? g.sacksTaken ?? g.sacks ?? 0);
+      expect(g.passComp).toBeLessThanOrEqual(g.passAtt);
+      expect(g.dropbacks).toBe(g.passAtt + sacksTaken);
+      expect(g.longestPass).toBeLessThanOrEqual(g.passYd);
+      if (g.passComp === 0 || g.passYd === 0) expect(g.longestPass).toBe(0);
+      expect(g.completionPct).toBe(Math.round((g.passComp / Math.max(1, g.passAtt)) * 1000) / 10);
+      expect(g.passerRating).not.toBeNull();
+    }
 
     // …and passing TDs were split by the same workload basis, not dumped on the
     // starter. Team receiving TDs equal the sum of both QBs' passing TDs.
@@ -164,6 +174,48 @@ describe('canonical player-stat reconciliation', () => {
       for (const team of [home, away]) {
         const rep = reconcilePlayerIdentities(boxScoreSideFromRoster(team));
         expect(rep.ok, `seed ${seed} ${team.abbr}: ${JSON.stringify(rep.checks)}`).toBe(true);
+      }
+    }
+  });
+
+
+  it('uses the exact canonical passer-rating formula after final passing-TD allocation', () => {
+    const line = { passComp: 24, passAtt: 33, passYd: 288, passTD: 3, interceptions: 1 };
+    const a = Math.max(0, Math.min(2.375, ((line.passComp / line.passAtt) - 0.3) / 0.2));
+    const b = Math.max(0, Math.min(2.375, ((line.passYd / line.passAtt) - 3) / 4));
+    const c = Math.max(0, Math.min(2.375, (line.passTD / line.passAtt) / 0.05));
+    const d = Math.max(0, Math.min(2.375, 2.375 - (line.interceptions / line.passAtt) / 0.04));
+    const expected = Math.round(((a + b + c + d) / 6) * 100 * 10) / 10;
+    expect(calculateCanonicalPasserRating(line)).toBe(expected);
+  });
+
+  it('passer rating and rate fields reflect the final passing-TD split', () => {
+    const { res, home } = runBatch(122, { injuryFactor: 8 });
+    expect(res?.boxScore).toBeTruthy();
+    const qbs = home.roster.filter((p) => p.pos === 'QB' && (p.stats.game.passAtt || 0) > 0);
+    expect(qbs.length).toBeGreaterThan(1);
+    for (const qb of qbs) {
+      const g = qb.stats.game;
+      expect(g.passerRating).toBe(calculateCanonicalPasserRating(g));
+      if ('tdRate' in g) expect(g.tdRate).toBe(Math.round((g.passTD / Math.max(1, g.passAtt)) * 1000) / 10);
+      if ('yardsPerAttempt' in g) expect(g.yardsPerAttempt).toBe(Math.round((g.passYd / Math.max(1, g.passAtt)) * 10) / 10);
+      if ('intRate' in g) expect(g.intRate).toBe(Math.round((g.interceptions / Math.max(1, g.passAtt)) * 1000) / 10);
+    }
+  });
+
+  it('reconciled QB dependent fields remain possible across deterministic seeds', () => {
+    for (const seed of SEEDS) {
+      const { home, away } = runGame(seed);
+      for (const team of [home, away]) {
+        const qbs = team.roster.filter((p) => p.pos === 'QB' && (p.stats.game.passAtt || 0) > 0);
+        for (const qb of qbs) {
+          const g = qb.stats.game;
+          const sacksTaken = Number(g.sacked ?? g.sacksTaken ?? g.sacks ?? 0);
+          expect(g.passComp, `seed ${seed} ${team.abbr} ${qb.id} comp`).toBeLessThanOrEqual(g.passAtt);
+          expect(g.dropbacks, `seed ${seed} ${team.abbr} ${qb.id} dropbacks`).toBe(g.passAtt + sacksTaken);
+          expect(g.longestPass, `seed ${seed} ${team.abbr} ${qb.id} long`).toBeLessThanOrEqual(g.passYd);
+          if (g.passComp === 0 || g.passYd === 0) expect(g.longestPass).toBe(0);
+        }
       }
     }
   });

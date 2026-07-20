@@ -188,12 +188,34 @@ export function buildTurningPointsFromGameEvents(playLogs = [], context = {}) {
   return points.slice(0, 6);
 }
 
+export function isPassingRow(row) {
+  const pos = String(row?.pos ?? row?.position ?? '').toUpperCase();
+  return asNum(row?.stats?.passAtt) > 0 || pos === 'QB';
+}
+
+export function defensiveInterceptions(row) {
+  return isPassingRow(row) ? 0 : Math.max(0, asNum(row?.stats?.interceptions));
+}
+
+export function interceptionsThrown(row) {
+  return isPassingRow(row) ? Math.max(0, asNum(row?.stats?.interceptions)) : 0;
+}
+
 export function buildPlayerLeadersFromArchive(boxScore = {}, context = {}) {
   const rows = toRows(boxScore, context);
   const pick = (key, min = 1) => rows.filter((r) => asNum(r.stats?.[key]) >= min).sort((a, b) => asNum(b.stats?.[key]) - asNum(a.stats?.[key]))[0] ?? null;
-  const defense = rows
-    .filter((r) => asNum(r.stats?.sacks) + asNum(r.stats?.interceptions) + asNum(r.stats?.tacklesForLoss) + asNum(r.stats?.tackles) > 0)
-    .sort((a, b) => (asNum(b.stats?.sacks) * 2 + asNum(b.stats?.interceptions) * 2 + asNum(b.stats?.tacklesForLoss) + asNum(b.stats?.tackles)) - (asNum(a.stats?.sacks) * 2 + asNum(a.stats?.interceptions) * 2 + asNum(a.stats?.tacklesForLoss) + asNum(a.stats?.tackles)))[0] ?? null;
+  const defenseScore = (r) => asNum(r.stats?.sacks) * 2
+    + defensiveInterceptions(r) * 2
+    + asNum(r.stats?.tacklesForLoss)
+    + asNum(r.stats?.tackles)
+    + asNum(r.stats?.passesDefended)
+    + asNum(r.stats?.forcedFumbles) * 2
+    + asNum(r.stats?.fumbleRecoveries) * 2
+    + asNum(r.stats?.defTD) * 6;
+  const rawDefense = rows
+    .filter((r) => defenseScore(r) > 0)
+    .sort((a, b) => defenseScore(b) - defenseScore(a))[0] ?? null;
+  const defense = rawDefense ? { ...rawDefense, stats: { ...(rawDefense.stats ?? {}), interceptions: defensiveInterceptions(rawDefense) } } : null;
 
   const categories = {
     passing: pick('passYd', 20),
@@ -204,7 +226,7 @@ export function buildPlayerLeadersFromArchive(boxScore = {}, context = {}) {
   };
 
   const scored = rows
-    .map((row) => ({ row, impact: asNum(row.stats?.passYd) / 12 + asNum(row.stats?.passTD) * 5 + asNum(row.stats?.rushYd) / 10 + asNum(row.stats?.rushTD) * 6 + asNum(row.stats?.recYd) / 10 + asNum(row.stats?.recTD) * 6 + asNum(row.stats?.sacks) * 4 + asNum(row.stats?.interceptions) * 5 + asNum(row.stats?.fieldGoalsMade) * 3 }))
+    .map((row) => ({ row, impact: asNum(row.stats?.passYd) / 12 + asNum(row.stats?.passTD) * 5 + asNum(row.stats?.rushYd) / 10 + asNum(row.stats?.rushTD) * 6 + asNum(row.stats?.recYd) / 10 + asNum(row.stats?.recTD) * 6 + asNum(row.stats?.sacks) * 4 + defensiveInterceptions(row) * 5 + asNum(row.stats?.fieldGoalsMade) * 3 - interceptionsThrown(row) * 2 }))
     .sort((a, b) => b.impact - a.impact);
 
   const playerOfGame = scored[0]?.row ?? null;
