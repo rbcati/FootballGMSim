@@ -26,9 +26,10 @@ export default function LiveGameViewer({ logs = [], canonicalEvents = null, play
   }, [finalScore]);
 
   // Prefer the canonical drive-level event ledger (#1700): every event carries a
-  // trustworthy scoreAfter, so the scorebug shows a real live score progression.
-  // Fall back to the legacy narration feed only when no canonical ledger exists
-  // (e.g. a legacy archive) — that path shows the final score only at the end.
+  // scoreAfter, so the scorebug shows a reconstructed score progression toward
+  // the official final (labeled "Reconstructed order"; only the final is
+  // official). Fall back to the legacy narration feed only when no canonical
+  // ledger exists (e.g. a legacy archive) — that path shows the final only at the end.
   const useCanonical = Array.isArray(canonicalEvents) && canonicalEvents.length > 0;
 
   const events = useMemo(() => {
@@ -68,25 +69,30 @@ export default function LiveGameViewer({ logs = [], canonicalEvents = null, play
   }, [paused, speed, index, events.length]);
 
   const currentEvent = events[index] || {};
-  // Standouts (a.k.a. live leaders): in canonical mode these come from the
-  // canonical box score — the same authority PostGameScreen Leaders use — never
-  // the narration stream. Legacy mode keeps the narration-derived standouts.
+  const finished = index >= events.length - 1;
+  // Standouts (game leaders): in canonical mode these are the FINAL box-score
+  // totals (the same authority PostGameScreen Leaders use), so they are only
+  // meaningful at the final whistle. Showing final totals mid-game would be
+  // misleading, so they stay hidden until `finished`. Legacy mode keeps the
+  // narration-derived running standouts.
   const canonicalStandouts = useMemo(
-    () => (useCanonical ? deriveStandoutsFromBoxScore(playerStats) : null),
-    [useCanonical, playerStats],
+    () => (useCanonical && finished ? deriveStandoutsFromBoxScore(playerStats) : null),
+    [useCanonical, finished, playerStats],
   );
   const narrationStandouts = useMemo(
     () => (useCanonical ? null : getCurrentStandoutPlayers(events, index + 1)),
     [useCanonical, events, index],
   );
   const standout = canonicalStandouts ?? narrationStandouts ?? {};
+  // Canonical standouts are withheld until the final whistle (see above).
+  const standoutsLocked = useCanonical && !finished;
   const swing = useMemo(() => summarizeGameSwing(events, index + 1), [events, index]);
-
-  const finished = index >= events.length - 1;
   // Score policy:
-  //   Canonical mode — the scorebug reads the CURRENT canonical event's
-  //     scoreAfter (a real, monotonic running score); at the end it equals the
-  //     league-recorded final.
+  //   Canonical mode — the scorebug reads the current canonical event's
+  //     scoreAfter: a monotonic running total over a RECONSTRUCTED possession
+  //     order (see canonicalGameEvents.js). The intermediate value is
+  //     illustrative — labeled "Reconstructed order" in the UI — while the final
+  //     equals the league-recorded official result exactly.
   //   Legacy mode — no trustworthy running score exists, so the score is shown
   //     only once the canonical final is in play (#1692 honest placeholder).
   const runningScore = useCanonical
@@ -165,6 +171,19 @@ export default function LiveGameViewer({ logs = [], canonicalEvents = null, play
         <Scorebug homeTeam={homeTeam} awayTeam={awayTeam} state={scoreState} />
         <div className="watch-state-strip">
           <span className="watch-mode-chip">{modeLabel}</span>
+          {/* Honest framing: the drive-by-drive order and the running score shown
+              before the final are a deterministic RECONSTRUCTION of possessions,
+              not the game's recorded chronology (the engine simulates each side's
+              drives separately and owns no clock). Only the final is official. */}
+          {useCanonical && !finished ? (
+            <span
+              className="watch-mode-chip reconstructed"
+              data-testid="reconstructed-order-chip"
+              title="Drive order and the running score are a reconstructed progression toward the official final — not a recorded play-by-play timeline."
+            >
+              Reconstructed order
+            </span>
+          ) : null}
           {isLateGame && !finished ? <span className="watch-mode-chip clutch">Late Game</span> : null}
           {finished ? <span className="watch-mode-chip final">Complete</span> : null}
           {(() => {
@@ -191,13 +210,19 @@ export default function LiveGameViewer({ logs = [], canonicalEvents = null, play
         <aside className="watch-side">
           <details className="standout-panel" open>
             <summary className="watch-side-title">Standouts</summary>
-            <ul className="standout-list">
-              <li><span className="standout-pos">QB</span>{formatQb(standout.qb)}</li>
-              <li><span className="standout-pos">Rush</span>{formatRush(standout.rusher)}</li>
-              <li><span className="standout-pos">Rec</span>{formatRec(standout.receiver)}</li>
-              <li><span className="standout-pos">Sacks</span>{standout.sacks ? `${standout.sacks.player} (${standout.sacks.sacks})` : '—'}</li>
-              <li><span className="standout-pos">INT</span>{standout.picks ? `${standout.picks.player} (${standout.picks.picks})` : '—'}</li>
-            </ul>
+            {standoutsLocked ? (
+              <p className="standout-locked" data-testid="standouts-locked">
+                Game leaders unlock at the final whistle.
+              </p>
+            ) : (
+              <ul className="standout-list">
+                <li><span className="standout-pos">QB</span>{formatQb(standout.qb)}</li>
+                <li><span className="standout-pos">Rush</span>{formatRush(standout.rusher)}</li>
+                <li><span className="standout-pos">Rec</span>{formatRec(standout.receiver)}</li>
+                <li><span className="standout-pos">Sacks</span>{standout.sacks ? `${standout.sacks.player} (${standout.sacks.sacks})` : '—'}</li>
+                <li><span className="standout-pos">INT</span>{standout.picks ? `${standout.picks.player} (${standout.picks.picks})` : '—'}</li>
+              </ul>
+            )}
           </details>
 
           {finished ? (
@@ -305,6 +330,8 @@ const styles = `
 .watch-mode-chip.tendency-aggressive { border-color:#ff453a; color:#ffb3b0; background:rgba(255,69,58,.15); }
 .watch-mode-chip.tendency-balanced { border-color:#0a84ff; color:#a8d4ff; background:rgba(10,132,255,.12); }
 .watch-mode-chip.tendency-conservative { border-color:#34c759; color:#a3f0b8; background:rgba(52,199,89,.12); }
+.watch-mode-chip.reconstructed { border-color:#7c8db0; color:#c3d2ec; background:rgba(124,141,176,.14); }
+.standout-locked { font-size:12px; color:#93a7c9; margin:0; line-height:1.4; }
 
 /* ── Moment banner ───────────────────────────────────────────────────── */
 .watch-moment-banner { margin-top:6px; font-size:12px; font-weight:800; border-radius:8px; padding:5px 10px; }

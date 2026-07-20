@@ -11,18 +11,27 @@
  *
  * LANE B (canonical drive-level gamecast). The authoritative engine owns drives
  * and drive outcomes but NOT individual plays, a trustworthy clock, per-play
- * player attribution, OR a chronological regulation timeline. Accordingly this
- * ledger:
+ * player attribution, OR a chronological timeline. Accordingly this ledger:
  *   - represents each possession as one drive event (plays + yards + result),
  *   - never invents a game clock (clock is always null),
  *   - never invents player attribution (primary/secondary player ids are null),
  *   - never invents a QUARTER. The engine generates separate home and away
  *     drive logs with no shared clock, so there is no canonical mapping of a
- *     drive to Q1–Q4. Regulation `quarter` is therefore `null`; the honest
- *     ordering signal is `sequence` + `periodLabel` ("Drive 8"). No official
- *     quarter-score table is published for regulation (`quarterScores: null`).
+ *     drive to Q1–Q4. Regulation `quarter` is therefore `null`; drives are
+ *     labeled by `periodLabel` ("Drive 8"). No quarter-score table is published
+ *     for regulation (`quarterScores: null`).
  *   - Overtime is the only period the sim tracks distinctly: OT events carry
  *     `isOvertime: true` and `periodLabel: 'OT'` (never a fabricated Q5).
+ *
+ * WHAT IS CANONICAL vs RECONSTRUCTED. The engine simulates each team's drives
+ * separately and has NO real possession chronology. The interleaved possession
+ * ORDER (and therefore every INTERMEDIATE `scoreAfter` shown before the final)
+ * is a deterministic RECONSTRUCTION for presentation — it is not the recorded
+ * order in which the game happened. What IS canonical and reconciles exactly:
+ * the final score, the set of scoring events, their point values, and each
+ * side's per-event totals. Consumers must present the mid-game progression as a
+ * reconstruction, not as a recorded play-by-play timeline; only the final is
+ * official.
  *
  * DETERMINISM. Everything here is a pure transform of already-drawn values plus
  * the seed. No RNG is consumed, so the same seed yields an identical event
@@ -33,6 +42,8 @@
  *   last scoreAfter                     === final score
  *   scoreAfter is monotonic and changes only on a scoring event
  *   event sequence is strictly ordered and event ids are unique
+ * (Note: monotonicity and the final total are canonical; the specific drive at
+ *  which an intermediate scoreAfter lands is reconstructed, not recorded.)
  */
 
 const SCORING_RESULTS = new Set(['TOUCHDOWN', 'FIELD_GOAL']);
@@ -75,10 +86,13 @@ function abbrFor(side, homeAbbr, awayAbbr) {
 }
 
 /**
- * Interleave the two teams' regulation drive logs into a single plausible
- * possession order. Football alternates possessions, so we alternate starting
- * from a seed-derived first possession; when one team has more drives the extra
- * drives append in order. Deterministic (seed-driven), consumes no RNG.
+ * Interleave the two teams' regulation drive logs into a single presentation
+ * order. This is a RECONSTRUCTION, not the game's recorded chronology: the
+ * engine simulated each side's drives separately and owns no real possession
+ * order. We alternate possessions (as football does) from a seed-derived first
+ * possession and append any surplus drives in order. Deterministic (seed-driven)
+ * and consumes no RNG, but the resulting order — and every intermediate running
+ * score derived from it — is illustrative; only the final total is canonical.
  */
 function interleaveDrives(homeDriveLog, awayDriveLog, homeFirst) {
   const seq = [];

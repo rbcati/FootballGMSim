@@ -74,6 +74,68 @@ describe('LiveGameViewer — canonical event ledger', () => {
     expect(within(bug).queryByText(/of 3/)).toBeNull();
   });
 
+  it('labels the intermediate progression honestly with a "Reconstructed order" chip during playback (post-review point 2)', () => {
+    // Mid-game (paused): the reconstruction is disclosed.
+    const { unmount } = render(
+      <LiveGameViewer
+        canonicalEvents={canonicalEvents}
+        homeTeam={homeTeam}
+        awayTeam={awayTeam}
+        initialMode="pause"
+        finalScore={canonicalFinal}
+      />,
+    );
+    expect(screen.getByTestId('reconstructed-order-chip').textContent).toMatch(/Reconstructed order/i);
+    unmount();
+
+    // At the final whistle the chip disappears (the final IS official).
+    render(
+      <LiveGameViewer
+        canonicalEvents={canonicalEvents}
+        homeTeam={homeTeam}
+        awayTeam={awayTeam}
+        initialMode="instant"
+        finalScore={canonicalFinal}
+      />,
+    );
+    expect(screen.queryByTestId('reconstructed-order-chip')).toBeNull();
+  });
+
+  it('hides final box-score Standouts until the final whistle (post-review point 3)', () => {
+    const playerStats = {
+      home: { qb: { name: 'Home QB', pos: 'QB', stats: { passAtt: 30, passComp: 20, passYd: 260, passTD: 2 } } },
+      away: {},
+    };
+    // Paused mid-game: standouts are locked, the QB's final line is NOT shown.
+    const { unmount } = render(
+      <LiveGameViewer
+        canonicalEvents={canonicalEvents}
+        playerStats={playerStats}
+        homeTeam={homeTeam}
+        awayTeam={awayTeam}
+        initialMode="pause"
+        finalScore={canonicalFinal}
+      />,
+    );
+    expect(screen.getByTestId('standouts-locked').textContent).toMatch(/unlock at the final whistle/i);
+    expect(screen.queryByText(/260y/)).toBeNull();
+    unmount();
+
+    // At the final whistle the standouts appear.
+    render(
+      <LiveGameViewer
+        canonicalEvents={canonicalEvents}
+        playerStats={playerStats}
+        homeTeam={homeTeam}
+        awayTeam={awayTeam}
+        initialMode="instant"
+        finalScore={canonicalFinal}
+      />,
+    );
+    expect(screen.queryByTestId('standouts-locked')).toBeNull();
+    expect(screen.getByText(/260y/)).toBeTruthy();
+  });
+
   it('canonical playback renders NO Run Heavy / Pass Heavy / Timeout controls (defect #2)', () => {
     const overrideSpy = () => { throw new Error('onPlaycallOverride must never be called in canonical playback'); };
     render(

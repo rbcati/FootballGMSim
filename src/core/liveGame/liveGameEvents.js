@@ -121,15 +121,17 @@ export function mapArchiveEventsToLiveFeed(playLogs = [], context = {}) {
 
 /**
  * Map the CANONICAL drive-level event ledger (#1700) to the live-feed shape the
- * viewer renders. Unlike the narration path, every canonical event carries a
- * trustworthy `scoreAfter` (the drive engine's running score), so the scorebug
- * and the feed can show a real, monotonic score progression — no narration
- * score is ever consulted.
+ * viewer renders. Every canonical event carries a `scoreAfter` derived from the
+ * drive engine's outcomes, so the scorebug and feed show a monotonic score
+ * progression toward the official final — no narration score is ever consulted.
+ * The possession ORDER (and thus the intermediate running score) is a
+ * deterministic reconstruction, not a recorded chronology; the viewer labels it
+ * "Reconstructed order" and only the final total is official.
  *
- * The sim owns no chronological regulation quarters, so the feed does NOT insert
- * fabricated quarter/halftime markers. Drives are ordered and labeled by their
- * honest `periodLabel` ("Drive 8"); the one real period boundary — the start of
- * overtime — is marked explicitly.
+ * The sim owns no chronological quarters, so the feed does NOT insert fabricated
+ * quarter/halftime markers. Drives are labeled by their `periodLabel`
+ * ("Drive 8"); the one period boundary the sim tracks — the start of overtime —
+ * is marked explicitly.
  */
 export function mapCanonicalEventsToLiveFeed(canonicalEvents = [], context = {}) {
   const list = Array.isArray(canonicalEvents) ? canonicalEvents : [];

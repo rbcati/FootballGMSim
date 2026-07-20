@@ -3,14 +3,17 @@
 ## 1. Executive verdict
 
 **Merge-ready.** The last narration-owned factual surface — the watched-game
-event stream (scoring summary, quarter scores, live scorebug) — now derives from
-**one canonical drive-level event ledger** built from the same drive engine that
-owns the official final score. Every factual surface (live scorebug → final →
-quarter scores → scoring summary → PostGameScreen → Game Book → save/reload)
-describes the same game. The change is **Lane B** (canonical drive-level
-gamecast): the authoritative engine owns drives and drive outcomes, not
-individual plays or a clock, so the ledger is honest at the drive level and never
-fabricates play-by-play, a clock, or player attribution.
+event stream (scoring summary + live scorebug) — now derives from **one canonical
+drive-level event ledger** built from the same drive engine that owns the
+official final score. Every factual surface (live scorebug → final → scoring
+summary → PostGameScreen → Game Book → save/reload) describes the same game. The
+change is **Lane B** (canonical drive-level gamecast): the authoritative engine
+owns drives and drive outcomes, not individual plays, a clock, or a chronological
+timeline, so the ledger is honest at the drive level and never fabricates
+play-by-play, a clock, quarter placement, or player attribution. The mid-game
+possession order and running score are a labeled reconstruction; only the final
+is official. No canonical quarter-score table is published (the engine owns no
+quarter timing).
 
 The canonical player/team-stat authority from #1698/#1699 is untouched.
 
@@ -51,6 +54,36 @@ Sacks standout. Genuine defender sacks are unaffected. See §11.
 is not a drive. A pure helper `countCanonicalRegulationDrives(events)` excludes it
 (and the OT divider), so the scorebug reads `Drive 24 of 24`, never `of 25`, and
 shows `Final` at the terminal marker. See §13.
+
+## 1b. Post-review round 2 (honesty of the reconstruction)
+
+1. **Reconstructed order is no longer called canonical chronology.** The engine
+   simulates each side's drives separately and owns no possession chronology; the
+   interleaved order — and every intermediate `scoreAfter` before the final — is a
+   deterministic *reconstruction*. Module/UI comments now say so; what stays
+   canonical is the final score, the scoring events, their points, and per-side
+   totals (`canonicalGameEvents.js`, `liveGameEvents.js`, `LiveGameViewer.jsx`).
+2. **The intermediate gamecast progression is labeled honestly.** During canonical
+   playback the viewer shows a **"Reconstructed order"** chip (with a tooltip)
+   clarifying the mid-game order/running score are illustrative and only the final
+   is official.
+3. **Final box-score Standouts are hidden until the final whistle.** They are final
+   totals, so showing them mid-game was misleading; the panel now shows *"Game
+   leaders unlock at the final whistle."* until `finished`.
+4. **Stale quarter wording removed** from this document and the PR title.
+5. The two production-build Playwright flows were re-run (see §25).
+
+**Additional P1 fixed while re-running the flows — watch→Game Book recovery race.**
+Re-running `mobile_game_day_trust` surfaced a genuine, pre-existing race
+(reproduced 3/3 on the prior commit): the Game Book resolved the just-watched
+game only from the **async** worker fetch (`getBoxScore`) and never from the
+**synchronous** localStorage postgame archive that `PostGameScreen` writes
+(`saveGame`). When the worker fetch lost the race it landed on the honest
+"recovery" state instead of the game the user just watched. Fix:
+`GameDetailScreen` now also consults `getGame(gameId)` (localStorage) and
+`resolveCanonicalCompletedGame` accepts a `localArchivedGame` source and uses
+whichever archive carries a valid final. The flow is now stable across repeated
+runs. Regression: `src/ui/utils/canonicalCompletedGame.test.js`.
 
 ## 2. Before-fix authority map
 
@@ -191,11 +224,15 @@ new RNG is consumed to format the canonical events (pure transform).
 ## 13. Live scorebug behavior
 
 `LiveGameViewer` prefers the canonical ledger: the scorebug reads the current
-canonical event's `scoreAfter` (a real, monotonic running score) and shows the
-league-recorded final at the end. It never parses narration or shows a narrated
-running score. The period cell shows the honest `Drive {n} · {ABBR} possession`
-(defect #1 fix), never a fabricated quarter. Legacy archives with no ledger fall
-back to the #1692 honest placeholder (final only at the end) and keep their
+canonical event's `scoreAfter` — a monotonic running total over a **reconstructed
+possession order** — and shows the league-recorded final at the end. It never
+parses narration or shows a narrated running score. During playback a
+**"Reconstructed order"** chip makes clear the mid-game order and running score
+are illustrative (only the final is official — post-review point 2), the period
+cell shows the honest `Drive {n} of {N} · {ABBR} possession` (never a fabricated
+quarter), and the box-score **Standouts stay hidden until the final whistle**
+(post-review point 3) since they are final totals. Legacy archives with no ledger
+fall back to the #1692 honest placeholder (final only at the end) and keep their
 numeric quarter labels.
 
 At completion: live scorebug === GAME_EVENT final === PostGameScreen final ===
@@ -287,18 +324,25 @@ green in the unit suite. No new dead doors were introduced by this PR.
 
 ## 22. Additional P0/P1 fixes
 
-One P0 fix beyond the core change: the `workerApi.js` PLAY_LOGS transport gap
-(§20) — required for the canonical live scorebug to work in the real app.
+Two fixes beyond the core change, both surfaced by the real browser journey:
+1. **P0** — the `workerApi.js` PLAY_LOGS transport gap (§20): required for the
+   canonical live scorebug to work in the real app.
+2. **P1** — the watch→Game Book recovery race (§1b): the Game Book resolved the
+   just-watched game only from the async worker fetch and could land on the
+   recovery state; it now also consults the synchronous localStorage postgame
+   archive. Reproduced 3/3 before the fix; stable across repeated runs after.
 
 ## 23. Unit-test result
 
-`npm run test:unit` → **455 files, 5596 tests passed**. Includes: 14
+`npm run test:unit` → **456 files, 5602 tests passed**. Includes: 14
 ledger-invariant tests (null quarter authority + honest `periodLabel`); 14
 full-path integration tests; canonical-viewer tests (drive-progress `Drive N of
-N`, `Final` at the terminal marker, and no play-call controls); sack-semantics
+N`, `Final` at the terminal marker, the "Reconstructed order" chip, hidden
+Standouts until the final whistle, and no play-call controls); sack-semantics
 regressions in `gameSummary.test.js` and `liveGameStandouts.test.js` (the review's
 QB-5-sacks-taken / EDGE-1-sack fixture); Game-Book quarter-unavailable +
-`periodLabel` DOM tests; and the `deriveQuarterScores` canonical-guard test.
+`periodLabel` DOM tests; the `deriveQuarterScores` canonical-guard test; and the
+`resolveCanonicalCompletedGame` local-archive fallback test.
 
 ## 24. Build result
 
@@ -306,7 +350,9 @@ QB-5-sacks-taken / EDGE-1-sack fixture); Game-Book quarter-unavailable +
 
 ## 25. Playwright result
 
-Against the **production build**: `mobile_game_day_trust.spec.js` **2/2 pass**;
+Against the **production build**: `mobile_game_day_trust.spec.js` **2/2 pass**
+(re-run repeatedly — 6 consecutive clean runs after the §22 Game Book race fix;
+it had failed 3/3 before);
 `fresh_franchise_first_week_smoke.spec.js` **1/1 pass**. Chromium was available
 (`/opt/pw-browsers/chromium-1194`); execution was **not** blocked.
 
@@ -337,7 +383,8 @@ canonical-event work.
 ## 29. Merge recommendation
 
 **Merge #1700.** The watched game now tells one coherent, truthful story: the live
-scorebug, quarter scores, scoring summary, PostGameScreen, Game Book, and
-save/reload all describe the single game the drive engine simulated. Unit, build,
+scorebug, scoring summary, PostGameScreen, Game Book, and save/reload all describe
+the single game the drive engine simulated, with the mid-game progression
+honestly labeled as a reconstruction and no fabricated quarter table. Unit, build,
 and the critical browser journeys pass; the only durability failure is a
 documented, pre-existing, out-of-scope rollover issue deferred to #1701.
