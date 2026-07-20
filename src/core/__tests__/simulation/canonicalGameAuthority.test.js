@@ -18,7 +18,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { Utils as U } from '../../utils.js';
-import { simGameStats, simulateBatch } from '../../simulation/index.js';
+import { calculateCanonicalPasserRating, simGameStats, simulateBatch } from '../../simulation/index.js';
 import {
   reconcilePlayerIdentities,
   reconcilePlayerToTeam,
@@ -179,6 +179,29 @@ describe('canonical player-stat reconciliation', () => {
   });
 
 
+  it('uses the exact canonical passer-rating formula after final passing-TD allocation', () => {
+    const line = { passComp: 24, passAtt: 33, passYd: 288, passTD: 3, interceptions: 1 };
+    const a = Math.max(0, Math.min(2.375, ((line.passComp / line.passAtt) - 0.3) / 0.2));
+    const b = Math.max(0, Math.min(2.375, ((line.passYd / line.passAtt) - 3) / 4));
+    const c = Math.max(0, Math.min(2.375, (line.passTD / line.passAtt) / 0.05));
+    const d = Math.max(0, Math.min(2.375, 2.375 - (line.interceptions / line.passAtt) / 0.04));
+    const expected = Math.round(((a + b + c + d) / 6) * 100 * 10) / 10;
+    expect(calculateCanonicalPasserRating(line)).toBe(expected);
+  });
+
+  it('passer rating and rate fields reflect the final passing-TD split', () => {
+    const { res, home } = runBatch(122, { injuryFactor: 8 });
+    expect(res?.boxScore).toBeTruthy();
+    const qbs = home.roster.filter((p) => p.pos === 'QB' && (p.stats.game.passAtt || 0) > 0);
+    expect(qbs.length).toBeGreaterThan(1);
+    for (const qb of qbs) {
+      const g = qb.stats.game;
+      expect(g.passerRating).toBe(calculateCanonicalPasserRating(g));
+      if ('tdRate' in g) expect(g.tdRate).toBe(Math.round((g.passTD / Math.max(1, g.passAtt)) * 1000) / 10);
+      if ('yardsPerAttempt' in g) expect(g.yardsPerAttempt).toBe(Math.round((g.passYd / Math.max(1, g.passAtt)) * 10) / 10);
+      if ('intRate' in g) expect(g.intRate).toBe(Math.round((g.interceptions / Math.max(1, g.passAtt)) * 1000) / 10);
+    }
+  });
 
   it('reconciled QB dependent fields remain possible across deterministic seeds', () => {
     for (const seed of SEEDS) {

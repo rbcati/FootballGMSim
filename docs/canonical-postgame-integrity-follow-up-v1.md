@@ -21,7 +21,7 @@ Defensive leaders score only defensive production: sacks made, defensive interce
 Player of Game impact now applies a modest deterministic penalty for interceptions thrown. The policy is intentionally narrow: legitimate passing, rushing, receiving, defensive, and kicking production remain positive, but passer interceptions cannot add positive impact.
 
 ## QB dependent-field authority
-After final passing reconciliation, each QB line is clamped to nonnegative attempts, completions, yards, touchdowns, interceptions, and sacks taken. Completion percentage and passer rating are recomputed from the final line.
+After final passing reconciliation, each QB line is clamped to nonnegative attempts, completions, yards, touchdowns, interceptions, and sacks taken. Completion percentage and passer rating are recomputed from the final line both after yardage/completion reconciliation and again after the final passing-TD allocation.
 
 ## Longest-pass policy
 Receiver-to-QB attribution is not available at this seam. The honest repair is deterministic clamping: no completions or no passing yards means `longestPass = 0`; otherwise `longestPass = min(existingLongestPass, passYd)`. No RNG draw is consumed and receiving yards are not redistributed.
@@ -49,7 +49,7 @@ Games without canonical team stats continue through the existing fallback path. 
 - Focused unit tests for those seams
 
 ## Tests added
-Regression tests cover defensive interception semantics, Player of Game turnover penalty, App team-stat carry, useWorker team-stat transport/clearing, and PostGameScreen archive preservation.
+Regression tests cover defensive interception semantics, Player of Game turnover penalty, exact passer-rating math after final TD allocation, App team-stat carry, useWorker team-stat transport/clearing, PostGameScreen archive preservation, and the canonical postgame integration path into the Game Book team comparison totals.
 
 ## Determinism confirmation
 The QB reconciliation repair uses no random numbers, does not redistribute receiving yards, and does not alter injury probability or workload generation.
