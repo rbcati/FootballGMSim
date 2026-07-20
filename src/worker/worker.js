@@ -279,6 +279,7 @@ import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonality
 import { applyTeamCultureWeek, classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../core/teamCulture.js';
 import { selectCultureAlerts } from '../core/broadcastNarrative.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
+import { canonicalIdKey, resolveTeamRefId } from '../core/referenceIntegrity.js';
 import {
   computeSeed,
   computeScoutedRange,
@@ -2601,7 +2602,7 @@ async function handleNewLeague(payload, id) {
     }
 
     // Store schedule in meta (it's small: just matchup IDs, no objects)
-    const slimSchedule = slimifySchedule(league.schedule, league.teams);
+    const slimSchedule = slimifySchedule(league.schedule, league.teams, seasonId);
     cache.setMeta({ schedule: slimSchedule });
 
     // Arm the flush guard — new league is now created and ready for writes.
@@ -2651,22 +2652,130 @@ async function handleNewLeague(payload, id) {
  * Convert a schedule from team-objects to team-id references only.
  * This keeps the schedule small enough to live in the meta record.
  */
-function slimifySchedule(schedule, teams) {
+/**
+ * Normalize a full generator schedule into the canonical persisted (slim) shape.
+ *
+ * Canonical persisted contract (matches the season-1 default-league schedule):
+ *   - `week.games` contains ONLY real games; each carries a canonical gameId,
+ *     seasonId, and numeric home/away team IDs (never a team object, never an
+ *     undefined reference).
+ *   - Byes are carried on `week.teamsWithBye` (array of team IDs) — NEVER as a
+ *     pseudo-game with undefined home/away. The generator emits byes as either a
+ *     `{ bye: [...] }` entry inside `games` or a `week.teamsWithBye` array; both
+ *     are folded into the canonical `teamsWithBye` field here.
+ *
+ * A `seasonId` should be passed so fresh (un-played) games receive a stable
+ * canonical gameId at generation time, exactly like the season-1 schedule. When
+ * omitted, existing ids are preserved and un-idable games are left without one
+ * (the sim assigns a canonical id at play time).
+ */
+function slimifySchedule(schedule, teams, seasonId = null) {
   if (!schedule?.weeks) return null;
   return {
-    weeks: schedule.weeks.map(week => ({
-      week:  week.week,
-      games: (week.games ?? []).map(g => ({
-        id:     g.id ?? g.gameId,
-        gameId: g.gameId ?? g.id,
-        seasonId: g.seasonId,
-        week:   g.week ?? week.week,
-        home:   (typeof g.home === 'object') ? g.home.id : g.home,
-        away:   (typeof g.away === 'object') ? g.away.id : g.away,
-        played: g.played ?? false,
-      })),
-    })),
+    weeks: schedule.weeks.map(week => {
+      const weekNum = week.week ?? week.weekNumber;
+      const byeIds = new Set();
+      // Pre-seed byes declared on the week itself.
+      for (const t of Array.isArray(week.teamsWithBye) ? week.teamsWithBye : []) {
+        const key = resolveTeamRefId(t);
+        if (key !== null) byeIds.add(key);
+      }
+      const games = [];
+      for (const g of (week.games ?? [])) {
+        // Bye marker — fold its teams into teamsWithBye, never a game.
+        if (g && g.bye != null) {
+          for (const t of Array.isArray(g.bye) ? g.bye : [g.bye]) {
+            const key = resolveTeamRefId(t);
+            if (key !== null) byeIds.add(key);
+          }
+          continue;
+        }
+        const home = (typeof g.home === 'object' && g.home) ? g.home.id : g.home;
+        const away = (typeof g.away === 'object' && g.away) ? g.away.id : g.away;
+        // A real game requires both references; anything else is not a game and
+        // is not silently coerced into one (it is dropped from `games`, never
+        // turned into a self-game or a team-0 placeholder).
+        if (canonicalIdKey(home) === null || canonicalIdKey(away) === null) continue;
+        const homeId = typeof home === 'number' ? home : (Number.isFinite(Number(home)) ? Number(home) : home);
+        const awayId = typeof away === 'number' ? away : (Number.isFinite(Number(away)) ? Number(away) : away);
+        const canonicalGameId = (g.id ?? g.gameId)
+          ?? (seasonId ? buildCanonicalGameId({ seasonId, week: weekNum, homeId, awayId }) : undefined);
+        games.push({
+          id:       canonicalGameId,
+          gameId:   canonicalGameId,
+          seasonId: g.seasonId ?? seasonId ?? undefined,
+          week:     g.week ?? weekNum,
+          home:     homeId,
+          away:     awayId,
+          played:   g.played ?? false,
+        });
+      }
+      // Any team that neither plays nor is already flagged as a bye this week is
+      // implicitly on bye (defensive completeness for downstream bye readers).
+      const playing = new Set();
+      for (const g of games) {
+        const h = canonicalIdKey(g.home);
+        const a = canonicalIdKey(g.away);
+        if (h !== null) playing.add(h);
+        if (a !== null) playing.add(a);
+      }
+      for (const t of teams ?? []) {
+        const key = resolveTeamRefId(t);
+        if (key !== null && !playing.has(key)) byeIds.add(key);
+      }
+      const teamsWithBye = [...byeIds].map(k => {
+        const n = Number(k);
+        return Number.isFinite(n) && String(n) === k ? n : k;
+      });
+      return { week: weekNum, games, teamsWithBye };
+    }),
   };
+}
+
+/**
+ * Validate a slim schedule's references against the canonical team-ID set
+ * BEFORE it is assigned to live league state. Returns { valid, errors }.
+ * Uses the canonical team-ID set (not array length) and honors team 0.
+ */
+function validateSlimScheduleReferences(slimSchedule, teams) {
+  const errors = [];
+  const validKeys = new Set();
+  for (const t of teams ?? []) {
+    const key = resolveTeamRefId(t);
+    if (key !== null) validKeys.add(key);
+  }
+  const weeks = Array.isArray(slimSchedule?.weeks) ? slimSchedule.weeks : null;
+  if (!weeks || !weeks.length) {
+    return { valid: false, errors: ['schedule has no weeks'] };
+  }
+  for (const wk of weeks) {
+    const seenThisWeek = new Set();
+    for (let gi = 0; gi < (wk.games ?? []).length; gi++) {
+      const g = wk.games[gi];
+      const hk = canonicalIdKey(g?.home);
+      const ak = canonicalIdKey(g?.away);
+      if (hk === null || ak === null) {
+        errors.push(`week ${wk.week} game ${gi}: missing home/away reference (home=${String(g?.home)}, away=${String(g?.away)})`);
+        continue;
+      }
+      if (!validKeys.has(hk)) errors.push(`week ${wk.week} game ${gi}: home ${hk} is not a known team`);
+      if (!validKeys.has(ak)) errors.push(`week ${wk.week} game ${gi}: away ${ak} is not a known team`);
+      if (hk === ak) errors.push(`week ${wk.week} game ${gi}: self-game (${hk} vs ${ak})`);
+      if (seenThisWeek.has(hk)) errors.push(`week ${wk.week}: team ${hk} appears twice`);
+      if (seenThisWeek.has(ak)) errors.push(`week ${wk.week}: team ${ak} appears twice`);
+      seenThisWeek.add(hk);
+      seenThisWeek.add(ak);
+    }
+    for (const b of Array.isArray(wk.teamsWithBye) ? wk.teamsWithBye : []) {
+      const bk = canonicalIdKey(b);
+      if (bk === null || !validKeys.has(bk)) {
+        errors.push(`week ${wk.week}: bye references unknown team ${String(b)}`);
+      } else if (seenThisWeek.has(bk)) {
+        errors.push(`week ${wk.week}: team ${bk} both plays and has a bye`);
+      }
+    }
+  }
+  return { valid: errors.length === 0, errors };
 }
 
 /** Rebuild a full league-style schedule from the slimified version + cache teams. */
@@ -2801,7 +2910,7 @@ async function handleUseSafeStarterLeague(payload, id) {
     for (const team of cache.getAllTeams()) {
       recalculateTeamCap(team.id);
     }
-    cache.setMeta({ schedule: slimifySchedule(safeLeague.schedule, safeLeague.teams) });
+    cache.setMeta({ schedule: slimifySchedule(safeLeague.schedule, safeLeague.teams, seasonId) });
 
     _saveIsExplicitlyLoaded = true;
     await Meta.save(cache.getMeta());
@@ -3054,9 +3163,19 @@ async function handleAdvanceWeek(payload, id) {
 
   // ── Preseason Cutdown Check ──────────────────────────────────────────────
   if (meta.phase === 'preseason') {
-    const userRoster = cache.getPlayersByTeam(meta.userTeamId);
     const limit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
 
+    // Headless/batch simulation (skipUserGame) has no interactive user to make
+    // the preseason 53-man cutdown, so the user team is cut down by the same AI
+    // logic as every other team — otherwise the new season can never start and
+    // the franchise cannot survive into subsequent years. Interactive play is
+    // unchanged: skipUserGame is only set by the batch orchestrator, so the
+    // manual-cutdown gate below still applies to real players.
+    if (payload?.skipUserGame) {
+      await AiLogic.executeAICutdowns({ includeUserTeam: true });
+    }
+
+    const userRoster = cache.getPlayersByTeam(meta.userTeamId);
     if (userRoster.length > limit) {
       post(toUI.ERROR, { message: `Roster limit exceeded! You have ${userRoster.length} players. Cut down to ${limit} to advance.` }, id);
       return;
@@ -13229,7 +13348,30 @@ async function handleStartNewSeason(payload, id) {
 
   const teamDefs = cache.getAllTeams();
   const rawSchedule  = makeScheduleFn(teamDefs);
-  const slimSchedule = slimifySchedule(rawSchedule, teamDefs);
+  let slimSchedule   = slimifySchedule(rawSchedule, teamDefs, newSeasonId);
+
+  // Validate the new schedule's references against the canonical team-ID set
+  // BEFORE it is committed to live league state. A schedule that references an
+  // unknown team, pairs a team with itself, or double-books a team must never
+  // enter the save. On failure, fall back to the simple validated generator
+  // rather than persisting a corrupt schedule.
+  let scheduleValidation = validateSlimScheduleReferences(slimSchedule, teamDefs);
+  if (!scheduleValidation.valid) {
+    console.error('[Worker] New-season schedule failed reference validation:',
+      scheduleValidation.errors.slice(0, 8));
+    const fallbackRaw  = Scheduler.createSimpleSchedule(teamDefs);
+    const fallbackSlim = slimifySchedule(fallbackRaw, teamDefs, newSeasonId);
+    const fallbackValidation = validateSlimScheduleReferences(fallbackSlim, teamDefs);
+    if (!fallbackValidation.valid) {
+      post(toUI.ERROR, {
+        message: `Cannot generate a valid ${newSeasonId} schedule: ${scheduleValidation.errors[0] ?? 'unknown'}`,
+      }, id);
+      return;
+    }
+    slimSchedule = fallbackSlim;
+    scheduleValidation = fallbackValidation;
+    console.warn('[Worker] Recovered new-season schedule via simple validated fallback.');
+  }
 
   // V1 Coaching Carousel: generate coaching market at season start.
   // Collect coaches fired last season from all teams' coachHistory.
