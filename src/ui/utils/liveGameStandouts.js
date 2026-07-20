@@ -10,6 +10,8 @@
  * at the final whistle); they are never fabricated.
  */
 
+import { defensiveSacks } from '../../core/gameSummary.js';
+
 function num(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
@@ -55,7 +57,11 @@ export function deriveStandoutsFromBoxScore(playerStats) {
   const qbRow = topBy(rows, 'passYd', 1);
   const rushRow = topBy(rows, 'rushYd', 1);
   const recRow = topBy(rows, 'recYd', 1);
-  const sackRow = topBy(rows, 'sacks', 1);
+  // Defensive sacks only — a QB's `sacks` field is sacks TAKEN, never defensive
+  // production. Uses the shared semantic helper so leaders and standouts agree.
+  const sackRow = rows
+    .filter((r) => defensiveSacks(r) >= 1)
+    .sort((a, b) => defensiveSacks(b) - defensiveSacks(a))[0] || null;
   // Defensive interceptions only (a passer's `interceptions` are thrown, not
   // takeaways) — mirror the postgame defensive-leader policy.
   const pickRow = rows
@@ -82,7 +88,7 @@ export function deriveStandoutsFromBoxScore(playerStats) {
       rec: num(recRow.stats?.receptions ?? recRow.stats?.rec),
       td: num(recRow.stats?.recTD),
     } : null,
-    sacks: sackRow ? { player: shortName(sackRow), sacks: num(sackRow.stats?.sacks) } : null,
+    sacks: sackRow ? { player: shortName(sackRow), sacks: defensiveSacks(sackRow) } : null,
     picks: pickRow ? { player: shortName(pickRow), picks: num(pickRow.stats?.interceptions) } : null,
   };
 }

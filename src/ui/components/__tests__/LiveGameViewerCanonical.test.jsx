@@ -40,7 +40,7 @@ describe('LiveGameViewer — canonical event ledger', () => {
     expect(within(bug).queryByLabelText(/score shown at the final whistle/i)).toBeNull();
   });
 
-  it('scorebug shows the honest period label + possession ("Drive N · ABBR possession"), never a fabricated quarter', () => {
+  it('scorebug shows honest drive progress + possession, never a fabricated quarter', () => {
     render(
       <LiveGameViewer
         canonicalEvents={canonicalEvents}
@@ -51,10 +51,48 @@ describe('LiveGameViewer — canonical event ledger', () => {
       />,
     );
     const bug = screen.getByTestId('watch-scorebug');
-    // First canonical event is MIA's opening TD drive → "Drive 1 · MIA possession".
-    expect(within(bug).getByText(/Drive 1 · MIA possession/)).toBeTruthy();
+    // First canonical event is MIA's opening TD drive. Two regulation drives in
+    // the fixture, and the game_end marker is NOT counted (defect #4) → "of 2".
+    expect(within(bug).getByText(/Drive 1 of 2 · MIA possession/)).toBeTruthy();
     // No fabricated quarter label anywhere on the scorebug.
     expect(within(bug).queryByText(/^Q\d/)).toBeNull();
+  });
+
+  it('drive progress excludes the terminal game_end marker and shows Final at the end (defect #4)', () => {
+    render(
+      <LiveGameViewer
+        canonicalEvents={canonicalEvents}
+        homeTeam={homeTeam}
+        awayTeam={awayTeam}
+        initialMode="instant"
+        finalScore={canonicalFinal}
+      />,
+    );
+    const bug = screen.getByTestId('watch-scorebug');
+    // At the terminal marker the scorebug reads "Final", never "Drive 3 of 2".
+    expect(within(bug).getByText(/Final/)).toBeTruthy();
+    expect(within(bug).queryByText(/of 3/)).toBeNull();
+  });
+
+  it('canonical playback renders NO Run Heavy / Pass Heavy / Timeout controls (defect #2)', () => {
+    const overrideSpy = () => { throw new Error('onPlaycallOverride must never be called in canonical playback'); };
+    render(
+      <LiveGameViewer
+        canonicalEvents={canonicalEvents}
+        homeTeam={homeTeam}
+        awayTeam={awayTeam}
+        initialMode="pause"
+        finalScore={canonicalFinal}
+        onPlaycallOverride={overrideSpy}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /Run Heavy/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Pass Heavy/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Timeout/i })).toBeNull();
+    // Preserved controls remain reachable.
+    expect(screen.getByRole('button', { name: /Slow/i })).toBeTruthy();
+    // Honest copy replaces the fake strategic agency.
+    expect(screen.getByTestId('strategy-locked-note').textContent).toMatch(/locked when simulation began/i);
   });
 
   it('shows the canonical final once complete, matching the league-recorded score', () => {

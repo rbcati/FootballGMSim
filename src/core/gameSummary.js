@@ -201,10 +201,25 @@ export function interceptionsThrown(row) {
   return isPassingRow(row) ? Math.max(0, asNum(row?.stats?.interceptions)) : 0;
 }
 
+/**
+ * Sack semantics are overloaded on the canonical player row: on a passing row
+ * `sacks` means sacks TAKEN (offensive attrition); on a defensive row it means
+ * sacks MADE (defensive production). These two helpers are the single source of
+ * truth so the postgame leaders and the live standouts never credit a QB's
+ * sacks-taken as defensive production.
+ */
+export function defensiveSacks(row) {
+  return isPassingRow(row) ? 0 : Math.max(0, asNum(row?.stats?.sacks));
+}
+
+export function sacksTaken(row) {
+  return isPassingRow(row) ? Math.max(0, asNum(row?.stats?.sacks)) : 0;
+}
+
 export function buildPlayerLeadersFromArchive(boxScore = {}, context = {}) {
   const rows = toRows(boxScore, context);
   const pick = (key, min = 1) => rows.filter((r) => asNum(r.stats?.[key]) >= min).sort((a, b) => asNum(b.stats?.[key]) - asNum(a.stats?.[key]))[0] ?? null;
-  const defenseScore = (r) => asNum(r.stats?.sacks) * 2
+  const defenseScore = (r) => defensiveSacks(r) * 2
     + defensiveInterceptions(r) * 2
     + asNum(r.stats?.tacklesForLoss)
     + asNum(r.stats?.tackles)
@@ -226,7 +241,7 @@ export function buildPlayerLeadersFromArchive(boxScore = {}, context = {}) {
   };
 
   const scored = rows
-    .map((row) => ({ row, impact: asNum(row.stats?.passYd) / 12 + asNum(row.stats?.passTD) * 5 + asNum(row.stats?.rushYd) / 10 + asNum(row.stats?.rushTD) * 6 + asNum(row.stats?.recYd) / 10 + asNum(row.stats?.recTD) * 6 + asNum(row.stats?.sacks) * 4 + defensiveInterceptions(row) * 5 + asNum(row.stats?.fieldGoalsMade) * 3 - interceptionsThrown(row) * 2 }))
+    .map((row) => ({ row, impact: asNum(row.stats?.passYd) / 12 + asNum(row.stats?.passTD) * 5 + asNum(row.stats?.rushYd) / 10 + asNum(row.stats?.rushTD) * 6 + asNum(row.stats?.recYd) / 10 + asNum(row.stats?.recTD) * 6 + defensiveSacks(row) * 4 + defensiveInterceptions(row) * 5 + asNum(row.stats?.fieldGoalsMade) * 3 - interceptionsThrown(row) * 2 }))
     .sort((a, b) => b.impact - a.impact);
 
   const playerOfGame = scored[0]?.row ?? null;

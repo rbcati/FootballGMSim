@@ -16,17 +16,41 @@ The canonical player/team-stat authority from #1698/#1699 is untouched.
 
 ## 1a. Post-review revisions
 
+All four follow-up review defects are fixed.
+
 **Defect #1 — fabricated quarter authority (FIXED).** The first build assigned
 regulation quarters by evenly dividing interleaved drives into four buckets and
 published a quarter-score table from them. That was deterministic but not
-canonical timing. It is removed: canonical events now carry `quarter: null` +
-an honest `periodLabel` (`"Drive 8"` / `"OT"`), `quarterScores` is `null`, and
-the UI (scorebug + feed) shows `Drive {n} · {ABBR} possession` instead of a
+canonical timing. Removed: canonical events now carry `quarter: null` + an honest
+`periodLabel` (`"Drive 8"` / `"OT"`), `quarterScores` is `null`, and the UI
+(scorebug + feed) shows `Drive {n} of {N} · {ABBR} possession` instead of a
 fabricated `Q{n}`. Overtime is flagged `isOvertime: true` / `periodLabel: "OT"`,
-never `Q5`. See §6, §8, §10, §13.
+never `Q5`. PostGameScreen / Game Book now show an honest **"Quarter breakdown
+unavailable for this game."** note for canonical-ledger games (legacy archives
+with genuine stored quarter data still display it), and `deriveQuarterScores`
+never reconstructs a fabricated quarter table from the narration stream for a
+canonical-ledger game. See §6, §8, §10, §13.
 
-Review defects #2–#4 from the follow-up request were truncated in transmission
-and are not yet addressed in this revision.
+**Defect #2 — fake play-call agency (FIXED).** The Run Heavy / Pass Heavy /
+Timeout buttons claimed strategic effect but the watched game is fully simulated
+before playback, so they could not change the result on any path (and App never
+wired `onPlaycallOverride`). They are **removed** (not merely hidden) on every
+path; canonical playback shows the honest note *"Game strategy was locked when
+simulation began."* `onPlaycallOverride` is never invoked. Pause / speed / next
+score / key moment / sim-to-end controls are preserved. See §14.
+
+**Defect #3 — offensive sacks miscounted as defensive (FIXED).** A passing row's
+`sacks` field means sacks *taken*; a defensive row's means sacks *made*. New
+shared semantic helpers `defensiveSacks(row)` / `sacksTaken(row)` (alongside the
+existing `isPassingRow`) are used by both `buildPlayerLeadersFromArchive` and
+`deriveStandoutsFromBoxScore`, so a QB's sacks-taken can never make it the
+defensive/sack leader, add positive Player-of-Game impact, or become the live
+Sacks standout. Genuine defender sacks are unaffected. See §11.
+
+**Defect #4 — drive progress miscount (FIXED).** The terminal `game_end` marker
+is not a drive. A pure helper `countCanonicalRegulationDrives(events)` excludes it
+(and the OT divider), so the scorebug reads `Drive 24 of 24`, never `of 25`, and
+shows `Final` at the terminal marker. See §13.
 
 ## 2. Before-fix authority map
 
@@ -120,10 +144,17 @@ buckets and published them as quarter scores; that was deterministic but was
 score remain fully canonical (§7, §9) — only the fabricated quarter placement is
 gone.
 
+PostGameScreen and the Game Book render an honest **"Quarter breakdown
+unavailable for this game."** note for canonical-ledger games and drop the
+`Q{n}` prefix from scoring rows in favor of the `periodLabel` (`"Drive 8"`).
+`boxScorePresentation.deriveQuarterScores` refuses to reconstruct a fabricated
+quarter table from the narration stream whenever a canonical ledger is present.
+Legacy archives that carry genuine stored `quarterScores` still display them.
+
 ## 9. Scoring-summary reconciliation
 
 The scoring summary is the `isScore` slice of the ledger. Each row agrees on
-team, quarter, scoring type, point value, and running score (`scoreAfter`).
+team, period label, scoring type, point value, and running score (`scoreAfter`).
 `sum(scoring-summary points, per side) === final score`.
 
 ## 10. Clock policy
@@ -141,6 +172,14 @@ team-level text. Player totals are **never** recounted from event text — the
 canonical box score from #1698/#1699 remains the sole player-stat authority. The
 live "Standouts" panel now derives from that canonical box score
 (`liveGameStandouts.js`), never the narration stream.
+
+**Sack semantics (review defect #3).** `sacks` is overloaded on the canonical
+row: on a passing row it is sacks *taken*; on a defensive row it is sacks *made*.
+Shared helpers `defensiveSacks(row)` / `sacksTaken(row)` (with `isPassingRow`) are
+the single source of truth, used by both `buildPlayerLeadersFromArchive` and
+`deriveStandoutsFromBoxScore`. A QB's sacks-taken never counts as defensive
+production (defensive/sack leader, positive Player-of-Game impact, or the live
+Sacks standout); genuine defender sacks still count.
 
 ## 12. Narration role after the fix
 
@@ -164,13 +203,16 @@ schedule result === Game Book final.
 
 ## 14. User play-call control audit
 
-The viewer's Run Heavy / Pass Heavy / Timeout controls (`onPlaycallOverride`) are
-**presentation-only** in the watched flow — the authoritative drive engine is
-already fully simulated before playback begins, so they cannot change the
-outcome. They remain as viewing preferences; this PR does **not** claim they
-steer the canonical result. Pause / speed / skip / jump controls are preserved
-and fully functional. (Wiring live play-calls into the authoritative engine is
-out of scope; flagged as a future item, not a #1700 deliverable.)
+The authoritative drive engine is fully simulated **before** playback begins, so
+Run Heavy / Pass Heavy / Timeout could not change the outcome on any path — and
+App never wired `onPlaycallOverride` at all. Per review defect #2 these controls
+are **removed** (not hidden, and not rebranded as "viewing preferences"), because
+they claimed a strategic effect they did not have. Canonical playback shows the
+honest note *"Game strategy was locked when simulation began."* and
+`onPlaycallOverride` is never invoked. The controls that do real work — pause,
+speed, next score, key moment, sim-to-end, jump filters — are preserved and
+fully functional. (Wiring live play-calls into the authoritative engine remains
+out of scope; a future item, not a #1700 deliverable.)
 
 ## 15. Archive and save/reload behavior
 
@@ -250,11 +292,13 @@ One P0 fix beyond the core change: the `workerApi.js` PLAY_LOGS transport gap
 
 ## 23. Unit-test result
 
-`npm run test:unit` → **454 files, 5584 tests passed**. Includes 14
-ledger-invariant tests (now asserting null quarter authority + honest
-`periodLabel`), 14 full-path integration tests, 4 canonical-viewer tests
-(incl. the `Drive N · ABBR possession` scorebug), 1 canonical-archive test, and
-the PLAY_LOGS transport regression.
+`npm run test:unit` → **455 files, 5596 tests passed**. Includes: 14
+ledger-invariant tests (null quarter authority + honest `periodLabel`); 14
+full-path integration tests; canonical-viewer tests (drive-progress `Drive N of
+N`, `Final` at the terminal marker, and no play-call controls); sack-semantics
+regressions in `gameSummary.test.js` and `liveGameStandouts.test.js` (the review's
+QB-5-sacks-taken / EDGE-1-sack fixture); Game-Book quarter-unavailable +
+`periodLabel` DOM tests; and the `deriveQuarterScores` canonical-guard test.
 
 ## 24. Build result
 

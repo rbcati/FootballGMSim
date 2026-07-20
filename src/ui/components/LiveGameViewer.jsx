@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import Scorebug from './Scorebug/Scorebug.jsx';
 import GameEventFeed from './GameEventFeed/GameEventFeed.jsx';
-import { mapArchiveEventsToLiveFeed, mapCanonicalEventsToLiveFeed, getNextImportantEvent } from '../../core/liveGame/liveGameEvents.js';
+import { mapArchiveEventsToLiveFeed, mapCanonicalEventsToLiveFeed, getNextImportantEvent, countCanonicalRegulationDrives } from '../../core/liveGame/liveGameEvents.js';
 import { readStrictFinalScore } from '../../core/gameArchive.js';
 import { getCurrentStandoutPlayers, summarizeGameSwing } from '../utils/liveGamePresentation.js';
 import { deriveStandoutsFromBoxScore } from '../utils/liveGameStandouts.js';
@@ -96,15 +96,25 @@ export default function LiveGameViewer({ logs = [], canonicalEvents = null, play
     ? (finished && canonicalFinal ? canonicalFinal : runningScore)
     : (finished && canonicalFinal ? canonicalFinal : null);
 
+  // Real regulation drive total — excludes the terminal game_end marker and the
+  // overtime divider (#1700 review defect #4), so the scorebug reads
+  // "Drive N of {drives}", never "of {drives+1}".
+  const regulationDriveTotal = useCanonical ? countCanonicalRegulationDrives(events) : 0;
+  const canonicalPeriodLabel = () => {
+    if (finished) return 'Final';
+    if (currentEvent.isOvertime) return 'OT';
+    if (Number.isFinite(Number(currentEvent.driveNumber)) && regulationDriveTotal > 0) {
+      return `Drive ${currentEvent.driveNumber} of ${regulationDriveTotal}`;
+    }
+    return currentEvent.periodLabel ?? null;
+  };
   const scoreState = {
     score: displayScore,
     // Canonical events own no chronological quarter — the scorebug shows the
-    // honest period label ("Drive 8" / "OT") instead. Legacy narration keeps its
-    // numeric quarter.
+    // honest drive progress ("Drive 8 of 24" / "OT" / "Final") instead. Legacy
+    // narration keeps its numeric quarter.
     quarter: useCanonical ? null : (currentEvent.quarter || 1),
-    periodLabel: useCanonical
-      ? (finished ? 'Final' : (currentEvent.periodLabel ?? (currentEvent.isOvertime ? 'OT' : null)))
-      : undefined,
+    periodLabel: useCanonical ? canonicalPeriodLabel() : undefined,
     isOvertime: useCanonical ? Boolean(currentEvent.isOvertime) : undefined,
     // No trustworthy per-play clock exists (drive-granular estimates only) —
     // the scorebug shows the period label + possession instead of a fake clock.
@@ -242,12 +252,15 @@ export default function LiveGameViewer({ logs = [], canonicalEvents = null, play
             <button className="ctrl-btn" onClick={() => setIndex(getNextImportantEvent(events, index, 'score'))}>Next Score</button>
             <button className="ctrl-btn" onClick={() => setIndex(getNextImportantEvent(events, index, 'keyPlay'))}>Key Play</button>
             <button className="ctrl-btn" onClick={() => setIndex(events.length - 1)}>Sim End</button>
-            {onPlaycallOverride ? (
-              <>
-                <button className="ctrl-btn" title="Lean run on next drive." onClick={() => onPlaycallOverride?.({ type: 'run_heavy' })}>Run Heavy</button>
-                <button className="ctrl-btn" title="Lean pass on next drive." onClick={() => onPlaycallOverride?.({ type: 'pass_heavy' })}>Pass Heavy</button>
-                <button className="ctrl-btn" title="Request a timeout." onClick={() => onPlaycallOverride?.({ type: 'timeout' })}>Timeout</button>
-              </>
+            {/* Run Heavy / Pass Heavy / Timeout removed (#1700 review defect #2):
+                the watched game is fully simulated before playback, so these
+                could not affect the canonical result on any path — displaying
+                them claimed strategic agency that did not exist. onPlaycallOverride
+                is intentionally never invoked during canonical playback. */}
+            {useCanonical ? (
+              <span className="skip-menu-note" data-testid="strategy-locked-note">
+                Game strategy was locked when simulation began.
+              </span>
             ) : null}
           </div>
         </details>
@@ -379,6 +392,7 @@ const styles = `
   background:#0f1c38; border:1px solid #334870; border-radius:10px;
   padding:6px; min-width:132px; box-shadow:0 -8px 24px rgba(0,0,0,.45); z-index:3;
 }
+.skip-menu-note { font-size:10px; color:#93a7c9; line-height:1.35; padding:4px 2px 2px; max-width:160px; }
 
 /* ── Final card ──────────────────────────────────────────────────────── */
 .watch-final-card { border:1px solid #3d5378; border-radius:10px; margin-top:12px; padding:10px; background:#13203a; }

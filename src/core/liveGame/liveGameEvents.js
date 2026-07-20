@@ -195,6 +195,25 @@ export function mapCanonicalEventsToLiveFeed(canonicalEvents = [], context = {})
   return feed;
 }
 
+/**
+ * Count the real regulation DRIVES in a canonical feed/ledger. The terminal
+ * `game_end` marker and the `overtime_start` divider are NOT drives, and OT
+ * possessions are counted separately — so a game with 24 regulation drives plus
+ * a final marker returns 24, never 25 (#1700 review defect #4). Pure; never
+ * mutates the event package.
+ */
+export function countCanonicalRegulationDrives(events = []) {
+  const list = Array.isArray(events) ? events : [];
+  let max = 0;
+  for (const e of list) {
+    if (!e || e.isOvertime) continue;
+    if (e.eventType === 'game_end' || e.eventType === 'overtime_start') continue;
+    const n = Number(e.driveNumber);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max;
+}
+
 export function getNextImportantEvent(events = [], startIndex = 0, filter = 'score') {
   const important = {
     score: (event) => event.eventType === 'touchdown' || event.eventType === 'field_goal',

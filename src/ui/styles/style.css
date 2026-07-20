@@ -8394,6 +8394,13 @@ details[open] .nav-summary::after {
   flex: 1;
 }
 
+.bs-sheet-quarter-unavailable {
+  font-size: 12px;
+  color: var(--text-muted, #98a7c0);
+  padding: 6px 2px;
+  font-style: italic;
+}
+
 /* ── Collapsed dense sections (scoring summary, team stats, player stats,
    play-by-play) — native <details>/<summary>, mirrors the Weekly Prep
    Matchup Intel pattern so dense content stays out of the first viewport. */

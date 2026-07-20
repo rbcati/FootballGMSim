@@ -24,6 +24,10 @@ function normalizeTeam(team) {
 function formatPeriodLabel(game) {
   const quarterCount = Number(game?.quarterScores?.home?.length ?? game?.quarterScores?.away?.length ?? 0);
   if (quarterCount > 4) return `Final/OT${quarterCount - 4 > 1 ? quarterCount - 4 : ''}`;
+  // Canonical-ledger games publish no quarter table (#1700), so detect overtime
+  // from the honest event flag instead of a fabricated quarter count.
+  const events = Array.isArray(game?.canonicalEvents) ? game.canonicalEvents : [];
+  if (events.some((e) => e && e.isOvertime)) return 'Final/OT';
   return 'Final';
 }
 

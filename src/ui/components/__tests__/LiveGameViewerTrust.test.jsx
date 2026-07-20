@@ -113,10 +113,15 @@ describe('LiveGameViewer — compact mobile controls', () => {
     expect(within(skipMenu).getByRole('button', { name: /Next Score/i })).toBeTruthy();
   });
 
-  it('keeps playcall overrides available when the hook is provided', () => {
+  it('never renders play-call controls that claim strategic agency (#1700 review defect #2)', () => {
+    // The watched game is fully simulated before playback, so Run Heavy / Pass
+    // Heavy / Timeout could not affect the result on any path. They are removed
+    // (not merely hidden) and onPlaycallOverride is never invoked.
     const onPlaycallOverride = vi.fn();
     renderViewer({ onPlaycallOverride });
-    fireEvent.click(screen.getByRole('button', { name: /Run Heavy/i }));
-    expect(onPlaycallOverride).toHaveBeenCalledWith({ type: 'run_heavy' });
+    expect(screen.queryByRole('button', { name: /Run Heavy/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Pass Heavy/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Timeout/i })).toBeNull();
+    expect(onPlaycallOverride).not.toHaveBeenCalled();
   });
 });

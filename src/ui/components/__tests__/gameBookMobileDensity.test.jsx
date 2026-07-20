@@ -113,6 +113,42 @@ describe('Game Book mobile density — section hierarchy', () => {
     expect(isBefore(hero, playerStats)).toBe(true);
   });
 
+  it('for a canonical-ledger game: shows the honest quarter-unavailable note, uses periodLabel, and never a fabricated Q1–Q4 (#1700 review defect #1)', () => {
+    const canonicalGame = {
+      gameId: 'g-canon',
+      homeId: 1,
+      awayId: 2,
+      homeScore: 10,
+      awayScore: 7,
+      // Canonical ledger present, no quarter table, scoring rows carry periodLabel.
+      canonicalEvents: [
+        { eventId: 'g-evt-1', sequence: 1, isScore: true, scoringTeamId: 1, periodLabel: 'Drive 2', quarter: null, scoreAfter: { home: 7, away: 0 } },
+        { eventId: 'g-evt-2', sequence: 2, isScore: true, scoringTeamId: 2, periodLabel: 'Drive 5', quarter: null, scoreAfter: { home: 7, away: 7 } },
+      ],
+      quarterScores: null,
+      scoringSummary: [
+        { id: 'g-evt-1', quarter: null, periodLabel: 'Drive 2', teamAbbr: 'HME', type: 'Touchdown', description: 'HME Touchdown', scoreAfter: { home: 7, away: 0 } },
+        { id: 'g-evt-2', quarter: null, periodLabel: 'Drive 5', teamAbbr: 'AWY', type: 'Touchdown', description: 'AWY Touchdown', scoreAfter: { home: 7, away: 7 } },
+      ],
+    };
+    const { getByTestId } = render(
+      <BoxScore gameId="g-canon" league={{ ...league, gameById: { 'g-canon': canonicalGame } }} embedded />,
+    );
+    // Honest note appears; final score + canonical scoring summary still render.
+    expect(getByTestId('game-book-quarter-unavailable').textContent).toMatch(/Quarter breakdown unavailable/i);
+    const summary = getByTestId('game-book-scoring-summary');
+    expect(summary.textContent).toContain('Drive 2');
+    expect(summary.textContent).toContain('Drive 5');
+    // No fabricated quarter label anywhere in the scoring summary.
+    expect(summary.textContent).not.toMatch(/Q[1-4]\b/);
+  });
+
+  it('legacy game with quarter numbers does NOT show the canonical unavailable note', () => {
+    // richGame has no canonicalEvents → legacy path, note suppressed.
+    const { queryByTestId } = renderRichBoxScore();
+    expect(queryByTestId('game-book-quarter-unavailable')).toBeNull();
+  });
+
   it('renders key leaders above the full player stat tables', () => {
     const { getByTestId } = renderRichBoxScore();
     const leaders = getByTestId('game-book-leaders');

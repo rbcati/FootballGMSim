@@ -145,3 +145,39 @@ describe('postgame leader interception semantics', () => {
     expect(leaders.playerOfGame?.name).toBe('Clean QB');
   });
 });
+
+describe('postgame sack semantics — offensive sacks-taken are not defensive production (#1700 review defect #3)', () => {
+  // Fixture from the review: a QB with 5 sacks TAKEN and an EDGE with 1 sack MADE.
+  const boxScore = {
+    home: { qb: { name: 'Sacked QB', pos: 'QB', stats: { passAtt: 32, passComp: 20, passYd: 240, sacks: 5 } } },
+    away: { edge: { name: 'Edge Rusher', pos: 'EDGE', stats: { passAtt: 0, sacks: 1, tackles: 3 } } },
+  };
+
+  it('the EDGE (sacks made) is the defensive leader, never the QB (sacks taken)', async () => {
+    const { buildPlayerLeadersFromArchive } = await import('../gameSummary.js');
+    const leaders = buildPlayerLeadersFromArchive(boxScore, { homeId: 1, awayId: 2 });
+    expect(leaders.categories.defense?.name).toBe('Edge Rusher');
+    expect(leaders.categories.defense?.name).not.toBe('Sacked QB');
+  });
+
+  it("a QB's sacks taken add NO positive Player-of-Game impact", async () => {
+    const { buildPlayerLeadersFromArchive } = await import('../gameSummary.js');
+    // Two QBs identical except: one took 5 sacks, the other took 0 and threw for
+    // one more yard. If sacks-taken added impact the sacked QB would win; it must
+    // not — the extra yard decides it.
+    const leaders = buildPlayerLeadersFromArchive({
+      home: { sacked: { name: 'Sacked QB', pos: 'QB', stats: { passAtt: 32, passComp: 20, passYd: 300, sacks: 5 } } },
+      away: { clean: { name: 'Clean QB', pos: 'QB', stats: { passAtt: 32, passComp: 20, passYd: 301, sacks: 0 } } },
+    }, { homeId: 1, awayId: 2 });
+    expect(leaders.playerOfGame?.name).toBe('Clean QB');
+  });
+
+  it('genuine defender sacks still count as defensive production', async () => {
+    const { buildPlayerLeadersFromArchive } = await import('../gameSummary.js');
+    const leaders = buildPlayerLeadersFromArchive({
+      home: { edge: { name: 'Real Sacker', pos: 'EDGE', stats: { passAtt: 0, sacks: 3 } } },
+      away: {},
+    }, { homeId: 1, awayId: 2 });
+    expect(leaders.categories.defense?.name).toBe('Real Sacker');
+  });
+});

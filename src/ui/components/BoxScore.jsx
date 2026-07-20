@@ -254,11 +254,22 @@ function BoxScore({
           {decisiveMoments.map((m, i) => (
             <div key={m.id ?? i} className="bs-sheet-moment-row">
               <span className="bs-sheet-moment-meta">
-                {m.quarter != null ? `Q${m.quarter}` : ""}{(m.time ?? m.clock) ? ` ${m.time ?? m.clock}` : ""}
+                {m.periodLabel ?? (m.quarter != null ? `Q${m.quarter}` : "")}{(m.time ?? m.clock) ? ` ${m.time ?? m.clock}` : ""}
               </span>
               <span className="bs-sheet-moment-text">{m.text ?? m.description ?? "Momentum swing"}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── QUARTER BREAKDOWN — honest availability (#1700 review defect #1) ─
+          Canonical-ledger games own no chronological quarters, so no quarter
+          table is shown; a compact honest note appears instead. Legacy archives
+          with genuine stored quarter data still render their linescore. The
+          final score + scoring summary below remain fully canonical either way. */}
+      {vm.isCanonicalLedger && !vm.availableData?.quarterScores && (
+        <div className="bs-sheet-quarter-unavailable" data-testid="game-book-quarter-unavailable">
+          Quarter breakdown unavailable for this game.
         </div>
       )}
 
@@ -270,7 +281,7 @@ function BoxScore({
             {scoringSummaryRows.map((row) => (
               <div key={row.id} className="bs-sheet-row">
                 <span className="bs-sheet-row-meta">
-                  {row.quarter != null ? `Q${row.quarter}` : ""}{row.time ? ` ${row.time}` : ""}
+                  {row.periodLabel ?? (row.quarter != null ? `Q${row.quarter}` : "")}{row.time ? ` ${row.time}` : ""}
                 </span>
                 <span>{[row.teamAbbr, row.type, row.description].filter(Boolean).join(" — ")}</span>
               </div>
