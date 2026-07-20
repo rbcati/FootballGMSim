@@ -214,10 +214,12 @@ export async function simulateSingleWeek(page, options = {}) {
         window.localStorage.setItem(PREP_KEY, JSON.stringify(stored));
       } catch (_e) { /* non-fatal */ }
     });
-    // Wait for the button to become enabled if it's rendered
+    // Let the readiness state settle if the CTA is rendered. This is a probe,
+    // not an assertion: readiness may still be gated (that is exactly what the
+    // "Advance anyway" branch below exists to bypass), so we must not fail here.
     const advanceCta = page.getByTestId('advance-week-cta');
     if (await advanceCta.isVisible().catch(() => false)) {
-      await expect(advanceCta).toBeEnabled({ timeout: 5000 }).catch(() => {});
+      await advanceCta.isEnabled().catch(() => false);
     }
   }
 
@@ -231,10 +233,24 @@ export async function simulateSingleWeek(page, options = {}) {
       else if (window.handleGlobalAdvance) window.handleGlobalAdvance();
     });
   }
+  // The advance flow can present two dialogs in order: an optional readiness
+  // gate ("Advance anyway"), then the user-game prompt ("Simulate (Skip)").
+  // Each is handled with an explicit visibility probe — but once we commit to a
+  // branch, the button's enabled state is asserted and the click is NOT
+  // swallowed. A missing button that WAS visible then fails loudly; the final
+  // week-advance assertion below guarantees the transition actually happened.
   if (advanceAnyway) {
-    await page.getByRole('button', { name: /Advance anyway/i }).click({ timeout: 1000 }).catch(() => {});
+    const advanceAnywayBtn = page.getByRole('button', { name: /Advance anyway/i });
+    if (await advanceAnywayBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await expect(advanceAnywayBtn).toBeEnabled({ timeout: 5000 });
+      await advanceAnywayBtn.click();
+    }
   }
-  await page.getByRole('button', { name: /Simulate \(Skip\)/i }).click({ timeout: 10000 }).catch(() => {});
+  const skipPromptBtn = page.getByRole('button', { name: /Simulate \(Skip\)/i });
+  if (await skipPromptBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
+    await expect(skipPromptBtn).toBeEnabled({ timeout: 5000 });
+    await skipPromptBtn.click();
+  }
   await page.waitForFunction(
     (baseline) => {
       const week = window?.state?.league?.week ?? baseline;

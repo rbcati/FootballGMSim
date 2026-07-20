@@ -128,8 +128,13 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   if (await gateAdvanceBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
     await gateAdvanceBtn.click();
   }
+  // The Simulate (Skip) prompt is REQUIRED in this flow (fresh franchise, the
+  // user always has a Week 1 game). Assert it appears and is clickable rather
+  // than swallowing a missing button — a vanished prompt is a real defect.
   const skipPrompt = page.getByRole('button', { name: /Simulate \(Skip\)/i });
-  await skipPrompt.click({ timeout: 10000 }).catch(() => {});
+  await expect(skipPrompt).toBeVisible({ timeout: 10000 });
+  await expect(skipPrompt).toBeEnabled();
+  await skipPrompt.click();
   await page.waitForFunction(
     (baseline) => {
       const state = window?.state;

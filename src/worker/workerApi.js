@@ -99,6 +99,11 @@ export function handleWorkerMessage(msg, setState) {
         liveStats: payload.liveStats,
         playerStats: payload.playerStats,
         teamStats: payload.teamStats,
+        // Canonical drive-level event ledger (#1700) + its derived scoring
+        // surfaces — feed the live scorebug/feed and the postgame archive.
+        canonicalEvents: payload.canonicalEvents,
+        scoringSummary: payload.scoringSummary,
+        quarterScores: payload.quarterScores,
         gameReasoningFlags: payload.gameReasoningFlags,
       });
       return true;

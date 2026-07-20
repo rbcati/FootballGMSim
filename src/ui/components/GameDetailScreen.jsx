@@ -5,6 +5,7 @@ import { buildWeeklyDecisionImpact } from '../utils/weeklyDecisionImpact.js';
 import { buildBoxScoreViewModel, unwrapBoxScoreResponse } from '../utils/boxScoreViewModel.js';
 import useStableRouteRequest from '../hooks/useStableRouteRequest.js';
 import { resolveCanonicalCompletedGame } from '../utils/canonicalCompletedGame.js';
+import { getGame as getLocalArchivedGame } from '../../core/archive/gameArchive.ts';
 
 function findScheduleGame(league, gameId) {
   for (const week of league?.schedule?.weeks ?? []) {
@@ -85,7 +86,15 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
     warnLabel: 'GameDetailScreen',
   });
   const archivedGame = unwrapBoxScoreResponse(archiveResponse);
-  const canonicalGame = resolveCanonicalCompletedGame({ league, gameId, scheduleGame, archivedGame });
+  // Synchronous localStorage archive written by PostGameScreen (onArchiveReady →
+  // saveGame). It is available the moment the postgame screen mounts — before the
+  // user can navigate — so consulting it lets the Game Book open the just-watched
+  // game immediately instead of racing (and sometimes losing to) the async
+  // worker fetch, which was landing on the recovery state intermittently.
+  const localArchivedGame = useMemo(() => {
+    try { return getLocalArchivedGame(gameId); } catch { return null; }
+  }, [gameId]);
+  const canonicalGame = resolveCanonicalCompletedGame({ league, gameId, scheduleGame, archivedGame, localArchivedGame });
   const userTeam = (league?.teams ?? []).find((team) => Number(team?.id) === Number(league?.userTeamId));
   const prepContext = buildWeeklyDecisionImpact({ league, userTeam, lastGame: scheduleGame });
   const detailVm = useMemo(

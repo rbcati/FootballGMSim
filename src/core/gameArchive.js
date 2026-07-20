@@ -216,6 +216,10 @@ export function normalizeArchivedGamePayload(rawGame) {
     teamStats,
     playerStats,
     scoringSummary,
+    // Canonical drive-level event ledger (#1700) — preserved so the Game Book
+    // knows this is a canonical-ledger game (no fabricated quarter table) and
+    // can replay the same scoreAfter progression.
+    canonicalEvents: Array.isArray(rawGame?.canonicalEvents) ? rawGame.canonicalEvents : [],
     driveSummary: Array.isArray(rawGame?.driveSummary)
       ? rawGame.driveSummary
       : (Array.isArray(rawGame?.drives)
@@ -303,6 +307,9 @@ export function mergeArchivedGameWithScheduleResult(archivedGame, scheduleGame) 
     homeScore: archived.homeScore ?? schedule.homeScore,
     awayScore: archived.awayScore ?? schedule.awayScore,
     quarterScores: archived.quarterScores ?? schedule.quarterScores,
+    canonicalEvents: (Array.isArray(archived.canonicalEvents) && archived.canonicalEvents.length)
+      ? archived.canonicalEvents
+      : (Array.isArray(schedule.canonicalEvents) ? schedule.canonicalEvents : []),
     recap: archived.recap ?? schedule.recap,
     recapText: archived.recapText ?? schedule.recapText,
     summary: archived.summary ?? schedule.summary,

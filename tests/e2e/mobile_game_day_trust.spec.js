@@ -59,11 +59,23 @@ test.describe('Mobile game-day trust loop', () => {
     });
     expect(canonical).not.toBeNull();
 
-    // During playback the scorebug never shows a numeric score that could
-    // contradict the recorded final.
+    // During playback the scorebug shows the CANONICAL running score — the
+    // scoreAfter values from the drive-level event ledger (#1700). It must be
+    // numeric (no pending dashes) and must never exceed the league-recorded
+    // final, proving it is derived from canonical scoreAfter and never from a
+    // contradicting narration score.
     const bug = page.getByTestId('watch-scorebug');
     await expect(bug).toBeVisible();
-    await expect(bug.locator('.sb-score-pending')).toHaveCount(2);
+    await expect(bug.locator('.sb-score-pending')).toHaveCount(0);
+    const liveScores = await bug.locator('.sb-team strong').allTextContents();
+    const liveNums = liveScores.map((t) => parseInt(t.trim(), 10)).filter((n) => Number.isFinite(n));
+    expect(liveNums.length).toBe(2);
+    // Scorebug DOM order is away, then home.
+    const [liveAway, liveHome] = liveNums;
+    expect(liveHome).toBeGreaterThanOrEqual(0);
+    expect(liveHome).toBeLessThanOrEqual(canonical.home);
+    expect(liveAway).toBeGreaterThanOrEqual(0);
+    expect(liveAway).toBeLessThanOrEqual(canonical.away);
 
     // No horizontal overflow, and the compact control tray is on-screen.
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

@@ -6,7 +6,12 @@ import { readStrictFinalScore } from '../../core/gameArchive.js';
  * Archive-first canonical resolution for any completed-game display surface.
  *
  * Priority rule:
- *  1. archivedGame with valid final score wins absolutely for homeScore/awayScore.
+ *  1. an archive with a valid final score wins absolutely for homeScore/awayScore.
+ *     Two archive sources are accepted: `archivedGame` (async worker response)
+ *     and `localArchivedGame` (the synchronous localStorage postgame archive
+ *     written by PostGameScreen). Whichever carries a valid final is used; this
+ *     lets the Game Book open the just-watched game immediately, without waiting
+ *     on — or racing — the async worker fetch.
  *  2. scheduleGame fills only missing metadata (abbr, week, ids); never overrides archived scores.
  *  3. league.gameById[gameId] is last resort with the same merge rules.
  *
@@ -22,8 +27,13 @@ function hasValidFinalScore(game) {
   return readStrictFinalScore(game) != null;
 }
 
-export function resolveCanonicalCompletedGame({ league, gameId, scheduleGame, archivedGame } = {}) {
-  const archived = archivedGame ?? null;
+export function resolveCanonicalCompletedGame({ league, gameId, scheduleGame, archivedGame, localArchivedGame } = {}) {
+  // Prefer whichever archive source actually carries a valid final. The async
+  // worker response (`archivedGame`) and the synchronous localStorage archive
+  // (`localArchivedGame`) are interchangeable here; using either eliminates the
+  // watch→Game Book race where the worker fetch had not yet resolved.
+  const archiveCandidates = [archivedGame, localArchivedGame].filter(Boolean);
+  const archived = archiveCandidates.find(hasValidFinalScore) ?? archiveCandidates[0] ?? null;
   const schedule = scheduleGame ?? null;
   const byId = (gameId != null && league?.gameById)
     ? (league.gameById[String(gameId)] ?? null)

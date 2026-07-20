@@ -173,6 +173,9 @@ export function buildWatchPostGameResult({
   liveStats = null,
   playerStats = null,
   teamStats = null,
+  canonicalEvents = null,
+  scoringSummary = null,
+  quarterScores = null,
   gameReasoningFlags = [],
   seasonId,
 } = {}) {
@@ -193,6 +196,9 @@ export function buildWatchPostGameResult({
     liveStats,
     playerStats,
     teamStats,
+    canonicalEvents,
+    scoringSummary,
+    quarterScores,
     gameReasoningFlags,
     seasonId,
     gameId: buildCanonicalGameId({
@@ -217,6 +223,9 @@ function AppContent() {
     userGameLiveStats,
     userGamePlayerStats,
     userGameTeamStats,
+    userGameCanonicalEvents,
+    userGameScoringSummary,
+    userGameQuarterScores,
     userGameReasoningFlags,
     lastWorkerMessageType,
   } = state;
@@ -1762,6 +1771,8 @@ function AppContent() {
           }}>
             <LiveGameView
               logs={userGameLogs}
+              canonicalEvents={userGameCanonicalEvents}
+              playerStats={userGamePlayerStats}
               homeTeam={homeTeam}
               awayTeam={awayTeam}
               initialMode={watchMode}
@@ -1794,6 +1805,9 @@ function AppContent() {
                     liveStats: userGameLiveStats || null,
                     playerStats: userGamePlayerStats || null,
                     teamStats: userGameTeamStats || null,
+                    canonicalEvents: userGameCanonicalEvents || null,
+                    scoringSummary: userGameScoringSummary || null,
+                    quarterScores: userGameQuarterScores || null,
                     gameReasoningFlags: userGameReasoningFlags || [],
                     seasonId: league?.seasonId,
                   });
@@ -1831,6 +1845,9 @@ function AppContent() {
           logs={postGameResult.logs || []}
           playerStats={postGameResult.playerStats || null}
           teamStats={postGameResult.teamStats || null}
+          scoringSummary={postGameResult.scoringSummary || null}
+          quarterScores={postGameResult.quarterScores || null}
+          canonicalEvents={postGameResult.canonicalEvents || null}
           gameReasoningFlags={postGameResult.gameReasoningFlags || []}
           boxScoreGameId={postGameResult.gameId}
           onOpenBoxScore={(gameId) => {

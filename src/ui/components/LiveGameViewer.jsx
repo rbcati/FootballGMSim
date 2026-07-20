@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import Scorebug from './Scorebug/Scorebug.jsx';
 import GameEventFeed from './GameEventFeed/GameEventFeed.jsx';
-import { mapArchiveEventsToLiveFeed, getNextImportantEvent } from '../../core/liveGame/liveGameEvents.js';
+import { mapArchiveEventsToLiveFeed, mapCanonicalEventsToLiveFeed, getNextImportantEvent, countCanonicalRegulationDrives } from '../../core/liveGame/liveGameEvents.js';
 import { readStrictFinalScore } from '../../core/gameArchive.js';
 import { getCurrentStandoutPlayers, summarizeGameSwing } from '../utils/liveGamePresentation.js';
+import { deriveStandoutsFromBoxScore } from '../utils/liveGameStandouts.js';
 
 const SPEED_STEPS = [
   { key: 'slow',     label: 'Slow',      ms: 1400 },
@@ -18,20 +19,32 @@ const TENDENCY_CONFIG = {
   CONSERVATIVE: { label: 'Conservative', chipClass: 'conservative' },
 };
 
-export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComplete, initialMode = 'watch', onPlaycallOverride, userTendency = 'BALANCED', finalScore = null }) {
-  // Canonical final: the league-recorded result (GAME_EVENT payload). The
-  // narrated play stream is a separate engine whose running score can
-  // contradict it, so this is the only score the viewer will ever display.
+export default function LiveGameViewer({ logs = [], canonicalEvents = null, playerStats = null, homeTeam, awayTeam, onComplete, initialMode = 'watch', onPlaycallOverride, userTendency = 'BALANCED', finalScore = null }) {
+  // Canonical final: the league-recorded result (GAME_EVENT payload).
   const canonicalFinal = useMemo(() => {
     return readStrictFinalScore({ score: finalScore });
   }, [finalScore]);
 
-  const events = useMemo(() => mapArchiveEventsToLiveFeed(logs, {
-    gameId: `${homeTeam?.id || 'h'}-${awayTeam?.id || 'a'}`,
-    homeTeamId: homeTeam?.id,
-    awayTeamId: awayTeam?.id,
-    finalScore: canonicalFinal,
-  }), [logs, homeTeam?.id, awayTeam?.id, canonicalFinal]);
+  // Prefer the canonical drive-level event ledger (#1700): every event carries a
+  // scoreAfter, so the scorebug shows a reconstructed score progression toward
+  // the official final (labeled "Reconstructed order"; only the final is
+  // official). Fall back to the legacy narration feed only when no canonical
+  // ledger exists (e.g. a legacy archive) — that path shows the final only at the end.
+  const useCanonical = Array.isArray(canonicalEvents) && canonicalEvents.length > 0;
+
+  const events = useMemo(() => {
+    if (useCanonical) {
+      return mapCanonicalEventsToLiveFeed(canonicalEvents, {
+        gameId: `${homeTeam?.id || 'h'}-${awayTeam?.id || 'a'}`,
+      });
+    }
+    return mapArchiveEventsToLiveFeed(logs, {
+      gameId: `${homeTeam?.id || 'h'}-${awayTeam?.id || 'a'}`,
+      homeTeamId: homeTeam?.id,
+      awayTeamId: awayTeam?.id,
+      finalScore: canonicalFinal,
+    });
+  }, [useCanonical, canonicalEvents, logs, homeTeam?.id, awayTeam?.id, canonicalFinal]);
 
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(initialMode === 'pause');
@@ -56,28 +69,80 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
   }, [paused, speed, index, events.length]);
 
   const currentEvent = events[index] || {};
-  const standout = useMemo(() => getCurrentStandoutPlayers(events, index + 1), [events, index]);
-  const swing = useMemo(() => summarizeGameSwing(events, index + 1), [events, index]);
-
   const finished = index >= events.length - 1;
-  // Scores shown only once the canonical final is in play — never the narrated
-  // per-play snapshots, which belong to a different scoring engine.
-  const displayScore = finished && canonicalFinal ? canonicalFinal : null;
+  // Standouts (game leaders): in canonical mode these are the FINAL box-score
+  // totals (the same authority PostGameScreen Leaders use), so they are only
+  // meaningful at the final whistle. Showing final totals mid-game would be
+  // misleading, so they stay hidden until `finished`. Legacy mode keeps the
+  // narration-derived running standouts.
+  const canonicalStandouts = useMemo(
+    () => (useCanonical && finished ? deriveStandoutsFromBoxScore(playerStats) : null),
+    [useCanonical, finished, playerStats],
+  );
+  const narrationStandouts = useMemo(
+    () => (useCanonical ? null : getCurrentStandoutPlayers(events, index + 1)),
+    [useCanonical, events, index],
+  );
+  const standout = canonicalStandouts ?? narrationStandouts ?? {};
+  // Canonical standouts are withheld until the final whistle (see above).
+  const standoutsLocked = useCanonical && !finished;
+  const swing = useMemo(() => summarizeGameSwing(events, index + 1), [events, index]);
+  // Score policy:
+  //   Canonical mode — the scorebug reads the current canonical event's
+  //     scoreAfter: a monotonic running total over a RECONSTRUCTED possession
+  //     order (see canonicalGameEvents.js). The intermediate value is
+  //     illustrative — labeled "Reconstructed order" in the UI — while the final
+  //     equals the league-recorded official result exactly.
+  //   Legacy mode — no trustworthy running score exists, so the score is shown
+  //     only once the canonical final is in play (#1692 honest placeholder).
+  const runningScore = useCanonical
+    ? (currentEvent.scoreAfter ?? { home: 0, away: 0 })
+    : null;
+  const displayScore = useCanonical
+    ? (finished && canonicalFinal ? canonicalFinal : runningScore)
+    : (finished && canonicalFinal ? canonicalFinal : null);
 
+  // Real regulation drive total — excludes the terminal game_end marker and the
+  // overtime divider (#1700 review defect #4), so the scorebug reads
+  // "Drive N of {drives}", never "of {drives+1}".
+  const regulationDriveTotal = useCanonical ? countCanonicalRegulationDrives(events) : 0;
+  const canonicalPeriodLabel = () => {
+    if (finished) return 'Final';
+    if (currentEvent.isOvertime) return 'OT';
+    if (Number.isFinite(Number(currentEvent.driveNumber)) && regulationDriveTotal > 0) {
+      return `Drive ${currentEvent.driveNumber} of ${regulationDriveTotal}`;
+    }
+    return currentEvent.periodLabel ?? null;
+  };
   const scoreState = {
     score: displayScore,
-    quarter: currentEvent.quarter || 1,
+    // Canonical events own no chronological quarter — the scorebug shows the
+    // honest drive progress ("Drive 8 of 24" / "OT" / "Final") instead. Legacy
+    // narration keeps its numeric quarter.
+    quarter: useCanonical ? null : (currentEvent.quarter || 1),
+    periodLabel: useCanonical ? canonicalPeriodLabel() : undefined,
+    isOvertime: useCanonical ? Boolean(currentEvent.isOvertime) : undefined,
     // No trustworthy per-play clock exists (drive-granular estimates only) —
-    // the scorebug shows quarter + event progress instead of a fake clock.
+    // the scorebug shows the period label + possession instead of a fake clock.
     clock: null,
-    progressLabel: finished ? 'Final' : `Play ${Math.min(index + 1, events.length)} of ${events.length}`,
-    downDistance: currentEvent.down ? `${currentEvent.down}${ordinal(currentEvent.down)} & ${currentEvent.distance || 10}` : 'Drive update',
-    ballSpot: currentEvent.fieldPosition != null ? `Ball on ${Math.round(Number(currentEvent.fieldPosition) || 50)}` : 'Ball spot --',
+    progressLabel: finished
+      ? 'Final'
+      : (useCanonical
+        ? null
+        : `Play ${Math.min(index + 1, events.length)} of ${events.length}`),
+    downDistance: useCanonical
+      ? (currentEvent.plays != null ? `${currentEvent.plays} plays · ${currentEvent.yards || 0} yds` : 'Drive update')
+      : (currentEvent.down ? `${currentEvent.down}${ordinal(currentEvent.down)} & ${currentEvent.distance || 10}` : 'Drive update'),
+    ballSpot: useCanonical
+      ? '—'
+      : (currentEvent.fieldPosition != null ? `Ball on ${Math.round(Number(currentEvent.fieldPosition) || 50)}` : 'Ball spot --'),
     fieldPosition: currentEvent.fieldPosition,
     possessionTeamId: currentEvent.possessionTeamId,
     isFinal: finished,
   };
-  const isLateGame = Number(scoreState.quarter) >= 4 && index >= Math.floor((events.length - 1) * 0.85);
+  const isLateGame = useCanonical
+    ? (Boolean(currentEvent.isOvertime) && !finished)
+    : (Number(scoreState.quarter) >= 4 && index >= Math.floor((events.length - 1) * 0.85));
 
   const modeLabel = paused ? 'Paused' : `Watch · ${SPEED_STEPS.find((step) => step.key === speed)?.label ?? 'Normal'}`;
 
@@ -106,6 +171,19 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
         <Scorebug homeTeam={homeTeam} awayTeam={awayTeam} state={scoreState} />
         <div className="watch-state-strip">
           <span className="watch-mode-chip">{modeLabel}</span>
+          {/* Honest framing: the drive-by-drive order and the running score shown
+              before the final are a deterministic RECONSTRUCTION of possessions,
+              not the game's recorded chronology (the engine simulates each side's
+              drives separately and owns no clock). Only the final is official. */}
+          {useCanonical && !finished ? (
+            <span
+              className="watch-mode-chip reconstructed"
+              data-testid="reconstructed-order-chip"
+              title="Drive order and the running score are a reconstructed progression toward the official final — not a recorded play-by-play timeline."
+            >
+              Reconstructed order
+            </span>
+          ) : null}
           {isLateGame && !finished ? <span className="watch-mode-chip clutch">Late Game</span> : null}
           {finished ? <span className="watch-mode-chip final">Complete</span> : null}
           {(() => {
@@ -132,13 +210,19 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
         <aside className="watch-side">
           <details className="standout-panel" open>
             <summary className="watch-side-title">Standouts</summary>
-            <ul className="standout-list">
-              <li><span className="standout-pos">QB</span>{formatQb(standout.qb)}</li>
-              <li><span className="standout-pos">Rush</span>{formatRush(standout.rusher)}</li>
-              <li><span className="standout-pos">Rec</span>{formatRec(standout.receiver)}</li>
-              <li><span className="standout-pos">Sacks</span>{standout.sacks ? `${standout.sacks.player} (${standout.sacks.sacks})` : '—'}</li>
-              <li><span className="standout-pos">INT</span>{standout.picks ? `${standout.picks.player} (${standout.picks.picks})` : '—'}</li>
-            </ul>
+            {standoutsLocked ? (
+              <p className="standout-locked" data-testid="standouts-locked">
+                Game leaders unlock at the final whistle.
+              </p>
+            ) : (
+              <ul className="standout-list">
+                <li><span className="standout-pos">QB</span>{formatQb(standout.qb)}</li>
+                <li><span className="standout-pos">Rush</span>{formatRush(standout.rusher)}</li>
+                <li><span className="standout-pos">Rec</span>{formatRec(standout.receiver)}</li>
+                <li><span className="standout-pos">Sacks</span>{standout.sacks ? `${standout.sacks.player} (${standout.sacks.sacks})` : '—'}</li>
+                <li><span className="standout-pos">INT</span>{standout.picks ? `${standout.picks.player} (${standout.picks.picks})` : '—'}</li>
+              </ul>
+            )}
           </details>
 
           {finished ? (
@@ -193,12 +277,15 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
             <button className="ctrl-btn" onClick={() => setIndex(getNextImportantEvent(events, index, 'score'))}>Next Score</button>
             <button className="ctrl-btn" onClick={() => setIndex(getNextImportantEvent(events, index, 'keyPlay'))}>Key Play</button>
             <button className="ctrl-btn" onClick={() => setIndex(events.length - 1)}>Sim End</button>
-            {onPlaycallOverride ? (
-              <>
-                <button className="ctrl-btn" title="Lean run on next drive." onClick={() => onPlaycallOverride?.({ type: 'run_heavy' })}>Run Heavy</button>
-                <button className="ctrl-btn" title="Lean pass on next drive." onClick={() => onPlaycallOverride?.({ type: 'pass_heavy' })}>Pass Heavy</button>
-                <button className="ctrl-btn" title="Request a timeout." onClick={() => onPlaycallOverride?.({ type: 'timeout' })}>Timeout</button>
-              </>
+            {/* Run Heavy / Pass Heavy / Timeout removed (#1700 review defect #2):
+                the watched game is fully simulated before playback, so these
+                could not affect the canonical result on any path — displaying
+                them claimed strategic agency that did not exist. onPlaycallOverride
+                is intentionally never invoked during canonical playback. */}
+            {useCanonical ? (
+              <span className="skip-menu-note" data-testid="strategy-locked-note">
+                Game strategy was locked when simulation began.
+              </span>
             ) : null}
           </div>
         </details>
@@ -243,6 +330,8 @@ const styles = `
 .watch-mode-chip.tendency-aggressive { border-color:#ff453a; color:#ffb3b0; background:rgba(255,69,58,.15); }
 .watch-mode-chip.tendency-balanced { border-color:#0a84ff; color:#a8d4ff; background:rgba(10,132,255,.12); }
 .watch-mode-chip.tendency-conservative { border-color:#34c759; color:#a3f0b8; background:rgba(52,199,89,.12); }
+.watch-mode-chip.reconstructed { border-color:#7c8db0; color:#c3d2ec; background:rgba(124,141,176,.14); }
+.standout-locked { font-size:12px; color:#93a7c9; margin:0; line-height:1.4; }
 
 /* ── Moment banner ───────────────────────────────────────────────────── */
 .watch-moment-banner { margin-top:6px; font-size:12px; font-weight:800; border-radius:8px; padding:5px 10px; }
@@ -330,6 +419,7 @@ const styles = `
   background:#0f1c38; border:1px solid #334870; border-radius:10px;
   padding:6px; min-width:132px; box-shadow:0 -8px 24px rgba(0,0,0,.45); z-index:3;
 }
+.skip-menu-note { font-size:10px; color:#93a7c9; line-height:1.35; padding:4px 2px 2px; max-width:160px; }
 
 /* ── Final card ──────────────────────────────────────────────────────── */
 .watch-final-card { border:1px solid #3d5378; border-radius:10px; margin-top:12px; padding:10px; background:#13203a; }

@@ -172,6 +172,11 @@ export function deriveQuarterScores(game, logs = []) {
     };
   }
 
+  // #1700 review defect #1: a canonical-ledger game owns no chronological
+  // quarters, so NEVER reconstruct a fabricated quarter table from the narration
+  // stream. Return the honest "unavailable" shape and let the UI say so.
+  if (Array.isArray(game?.canonicalEvents) && game.canonicalEvents.length) return fallback;
+
   if (!logs.length) return fallback;
 
   const maxQuarter = Math.max(4, ...logs.map((log) => Number(log?.quarter ?? 1)));

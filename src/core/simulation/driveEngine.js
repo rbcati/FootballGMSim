@@ -255,6 +255,11 @@ export function buildDriveBasedSummary({
 
   const simTeam = (offOvr, defOvr, drives, teamStats, isHome, netEdge = 0) => {
     let score = 0;
+    // Ordered per-drive outcome log — the raw material for the canonical event
+    // ledger (#1700). Populated purely by RECORDING values already drawn from
+    // the rng() stream; it consumes NO additional draws, so the seeded score is
+    // byte-for-byte unchanged whether or not this log is built.
+    const driveLog = [];
     // Scoring-play breakdown — authoritative source for box-score reconciliation.
     // A touchdown is 6 points plus its PAT (made XP = +1, made 2-pt = +2, failed
     // 2-pt = +0), so the identity
@@ -336,6 +341,18 @@ export function buildDriveBasedSummary({
      * estDistance is derived from drive yardage (no rng draw).
      */
     for (let i = 0; i < drives; i++) {
+      // Snapshot the mutable scoring counters so the drive's outcome can be
+      // classified purely from deltas after it resolves (no extra rng draw).
+      const scoreBefore = score;
+      const tdsBefore = tds;
+      const fgsBefore = fgs;
+      const passTDBefore = teamStats.passTD;
+      const fgAttBefore = teamStats.fgAttempts;
+      const puntsBefore = teamStats.punts;
+      const twoMadeBefore = teamStats.twoPointMade;
+      const twoAttBefore = teamStats.twoPointAttempts;
+      let sackThisDrive = false;
+      let turnoverThisDrive = false;
       // Field position is scoring-model bookkeeping only — local to simTeam.
       let yardLine = 25 + randInt(-10, 15);
       const passHeavy = chance(0.56);
@@ -352,38 +369,64 @@ export function buildDriveBasedSummary({
       yardLine = U.clamp(yardLine + passYds + rushYds, 1, 99);
       if (chance(U.clamp(0.17 + (defOvr - offOvr) * 0.0025, 0.08, 0.34))) {
         teamStats.sacks += 1;
+        sackThisDrive = true;
       }
       if (chance(U.clamp(0.08 + (defOvr - offOvr) * 0.002, 0.03, 0.2))) {
         teamStats.turnovers += 1;
+        turnoverThisDrive = true;
         if (chance(0.7)) teamStats.INT += 1;
       }
-      const convertedDrive = chance(driveSuccess);
-      if (convertedDrive) {
-        resolveScoringDrive(yardLine);
-        continue;
-      }
-      // Drive stalled → fourth-down decision from field position.
-      // Estimated yards-to-go on the stalled 4th down, derived from the
-      // drive's own yardage (deterministic, costs no rng draw): 1..10.
-      const estDistance = 10 - ((passYds + rushYds) % 10);
-      if (estDistance <= 2 && yardLine >= 60 && chance(0.30)) {
-        // Short-yardage go-for-it instead of the FG try.
-        if (chance(0.52)) {
+      // Resolve the drive to a score / punt / turnover-on-downs. Extracted into
+      // a local closure (returning instead of `continue`) so the rng() draw
+      // order is preserved exactly while the outcome can be recorded once below.
+      const resolveDrive = () => {
+        const convertedDrive = chance(driveSuccess);
+        if (convertedDrive) {
           resolveScoringDrive(yardLine);
+          return;
         }
-        // Failure: turnover on downs — no score, possession changes.
-        continue;
-      }
-      if (yardLine >= 60) {
-        attemptFieldGoal(yardLine);
-      } else if (yardLine >= 40) {
-        if (chance(0.45)) attemptFieldGoal(yardLine);
-        else teamStats.punts += 1;
-      } else {
-        teamStats.punts += 1;
-      }
+        // Drive stalled → fourth-down decision from field position.
+        // Estimated yards-to-go on the stalled 4th down, derived from the
+        // drive's own yardage (deterministic, costs no rng draw): 1..10.
+        const estDistance = 10 - ((passYds + rushYds) % 10);
+        if (estDistance <= 2 && yardLine >= 60 && chance(0.30)) {
+          // Short-yardage go-for-it instead of the FG try.
+          if (chance(0.52)) {
+            resolveScoringDrive(yardLine);
+          }
+          // Failure: turnover on downs — no score, possession changes.
+          return;
+        }
+        if (yardLine >= 60) {
+          attemptFieldGoal(yardLine);
+        } else if (yardLine >= 40) {
+          if (chance(0.45)) attemptFieldGoal(yardLine);
+          else teamStats.punts += 1;
+        } else {
+          teamStats.punts += 1;
+        }
+      };
+      resolveDrive();
+
+      // Classify the drive outcome from the counter deltas.
+      let result;
+      if (tds > tdsBefore) result = 'TOUCHDOWN';
+      else if (fgs > fgsBefore) result = 'FIELD_GOAL';
+      else if (teamStats.fgAttempts > fgAttBefore) result = 'MISSED_FG';
+      else if (turnoverThisDrive) result = 'TURNOVER';
+      else if (teamStats.punts > puntsBefore) result = 'PUNT';
+      else result = 'DOWNS';
+      driveLog.push({
+        plays: passAtt + rushAtt + (sackThisDrive ? 1 : 0),
+        yards: Math.max(0, passYds + rushYds),
+        result,
+        points: score - scoreBefore,
+        isPassTD: result === 'TOUCHDOWN' && teamStats.passTD > passTDBefore,
+        twoPointMade: teamStats.twoPointMade > twoMadeBefore,
+        twoPointAttempt: teamStats.twoPointAttempts > twoAttBefore,
+      });
     }
-    return { score, tds, fgs, xps };
+    return { score, tds, fgs, xps, driveLog };
   };
 
   const homeResult = simTeam(homeOff, awayDef, homeDrives, homeStats, true, homeNetEdge);
@@ -407,6 +450,9 @@ export function buildDriveBasedSummary({
     awayFGs: awayResult.fgs,
     homeXPs: homeResult.xps,
     awayXPs: awayResult.xps,
+    // Ordered per-drive outcome logs (regulation only) — canonical event source.
+    homeDriveLog: homeResult.driveLog,
+    awayDriveLog: awayResult.driveLog,
     homeStats: { ...homeStats, qbRating: homeQbRating, rushYPC: homeYpc },
     awayStats: { ...awayStats, qbRating: awayQbRating, rushYPC: awayYpc },
   };

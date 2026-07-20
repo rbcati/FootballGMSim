@@ -242,6 +242,10 @@ function normalizeScoringSummary(rows) {
   return rows.map((row, idx) => ({
     id: row?.id ?? `score-${idx}`,
     quarter: row?.quarter ?? row?.period ?? null,
+    // Honest period label from the canonical ledger ("Drive 8" / "OT"). The sim
+    // owns no chronological quarter, so this — not a fabricated Q{n} — is what
+    // the Game Book shows for canonical games.
+    periodLabel: row?.periodLabel ?? null,
     time: row?.time ?? row?.clock ?? null,
     teamAbbr: row?.teamAbbr ?? row?.team ?? null,
     type: row?.type ?? row?.scoreType ?? null,
@@ -513,6 +517,10 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
 
   const hasScore = homeScore != null && awayScore != null;
   const hasQuarter = Array.isArray(quarterScores?.home) || Array.isArray(quarterScores?.away);
+  // A canonical-ledger game (#1700) owns no chronological quarters, so it never
+  // has a quarter table; the Game Book shows an honest "unavailable" note only
+  // for these games (legacy archives without a ledger keep their old behavior).
+  const isCanonicalLedger = Array.isArray(payload?.canonicalEvents) && payload.canonicalEvents.length > 0;
   const hasTeamTotals = hasValues(teamStats?.home) || hasValues(teamStats?.away);
   const hasPlayerStats = homePlayers.length > 0 || awayPlayers.length > 0;
   const hasScoringSummary = scoringSummary.length > 0;
@@ -578,6 +586,7 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {}, sch
     winnerSide,
     margin: hasScore ? Math.abs(homeScore - awayScore) : null,
     quarterScores,
+    isCanonicalLedger,
     teamTotals,
     teamComparisonRows: buildTeamComparisonRows(teamTotals),
     specialTeams,

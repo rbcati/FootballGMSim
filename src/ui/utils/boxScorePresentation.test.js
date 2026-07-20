@@ -23,6 +23,28 @@ describe('box score presentation fallback', () => {
     expect(out.home[3]).toBe(1);
   });
 
+  it('NEVER reconstructs a fabricated quarter table from narration for a canonical-ledger game (#1700 review defect #1)', () => {
+    const game = {
+      homeId: 1, awayId: 2,
+      // Presence of a canonical ledger means the sim owns no chronological
+      // quarters — the narration logs must not be used to fabricate a table.
+      canonicalEvents: [{ eventId: 'g-evt-1', isScore: true, scoreAfter: { home: 7, away: 0 } }],
+    };
+    const logs = [
+      { quarter: 1, teamId: 2, text: 'Field goal', points: 3 },
+      { quarter: 2, teamId: 1, isTouchdown: true, points: 6 },
+    ];
+    const out = deriveQuarterScores(game, logs);
+    expect(out).toEqual({ home: [null, null, null, null], away: [null, null, null, null] });
+  });
+
+  it('still displays genuine stored quarter data for legacy archives', () => {
+    const game = { homeId: 1, awayId: 2, quarterScores: { home: [7, 0, 3, 0], away: [0, 7, 0, 3] } };
+    const out = deriveQuarterScores(game, []);
+    expect(out.home).toEqual([7, 0, 3, 0]);
+    expect(out.away).toEqual([0, 7, 0, 3]);
+  });
+
   it('renders scoring summary entries from partial logs', () => {
     const rows = deriveScoringSummary([{ quarter: 3, clock: '2:11', text: 'Touchdown pass', teamId: 2 }], { 2: { abbr: 'BUF' } });
     expect(rows).toHaveLength(1);

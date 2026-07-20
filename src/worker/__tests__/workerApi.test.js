@@ -51,6 +51,26 @@ describe('handleWorkerMessage routing', () => {
     expect(setState).toHaveBeenCalledWith(expect.objectContaining({ type: 'WEEK_COMPLETE', week: 4, nextWeek: 5 }));
   });
 
+  it('forwards the canonical event ledger fields on a PLAY_LOGS message (#1700)', () => {
+    // Regression: workerApi previously dropped canonicalEvents/scoringSummary/
+    // quarterScores, so the live scorebug never received the canonical ledger.
+    const setState = vi.fn();
+    const canonicalEvents = [{ eventId: 'g-evt-1', sequence: 1, isScore: true, scoreAfter: { home: 7, away: 0 } }];
+    const scoringSummary = [{ id: 'g-evt-1', quarter: 1, teamId: 1, points: 7 }];
+    const quarterScores = { home: [7, 0, 0, 0], away: [0, 0, 0, 0] };
+    const handled = handleWorkerMessage(
+      { type: toUI.PLAY_LOGS, payload: { logs: [], liveStats: {}, playerStats: {}, teamStats: {}, canonicalEvents, scoringSummary, quarterScores, gameReasoningFlags: [] } },
+      setState,
+    );
+    expect(handled).toBe(true);
+    expect(setState).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'PLAY_LOGS',
+      canonicalEvents,
+      scoringSummary,
+      quarterScores,
+    }));
+  });
+
   it('returns false for stateful messages it intentionally leaves to the hook', () => {
     const setState = vi.fn();
     expect(handleWorkerMessage({ type: toUI.FULL_STATE, payload: {} }, setState)).toBe(false);

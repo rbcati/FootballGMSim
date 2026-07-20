@@ -119,6 +119,103 @@ export function mapArchiveEventsToLiveFeed(playLogs = [], context = {}) {
   return withMarkers;
 }
 
+/**
+ * Map the CANONICAL drive-level event ledger (#1700) to the live-feed shape the
+ * viewer renders. Every canonical event carries a `scoreAfter` derived from the
+ * drive engine's outcomes, so the scorebug and feed show a monotonic score
+ * progression toward the official final — no narration score is ever consulted.
+ * The possession ORDER (and thus the intermediate running score) is a
+ * deterministic reconstruction, not a recorded chronology; the viewer labels it
+ * "Reconstructed order" and only the final total is official.
+ *
+ * The sim owns no chronological quarters, so the feed does NOT insert fabricated
+ * quarter/halftime markers. Drives are labeled by their `periodLabel`
+ * ("Drive 8"); the one period boundary the sim tracks — the start of overtime —
+ * is marked explicitly.
+ */
+export function mapCanonicalEventsToLiveFeed(canonicalEvents = [], context = {}) {
+  const list = Array.isArray(canonicalEvents) ? canonicalEvents : [];
+  if (!list.length) return [];
+
+  const toFeed = (event) => {
+    const eventType = event.eventType || 'routine';
+    const isScore = Boolean(event.isScore);
+    const impactTag = EVENT_TYPE_TO_TAG[eventType]
+      || (event.isOvertime ? 'swing' : 'routine');
+    const scoreAfter = event.scoreAfter && Number.isFinite(Number(event.scoreAfter.home))
+      ? { home: Number(event.scoreAfter.home), away: Number(event.scoreAfter.away) }
+      : null;
+    return {
+      id: event.eventId,
+      gameId: event.gameId || context.gameId || 'game',
+      // No fabricated quarter — regulation carries `quarter: null` and the honest
+      // `periodLabel` ("Drive 8"); OT carries isOvertime + periodLabel 'OT'.
+      quarter: null,
+      periodLabel: event.periodLabel ?? (event.isOvertime ? 'OT' : null),
+      driveNumber: event.driveNumber ?? null,
+      clock: null,
+      sequence: event.sequence,
+      eventType,
+      headline: String(event.text || 'Drive').trim(),
+      possessionTeamId: event.possessionTeamId ?? null,
+      scoringTeamId: event.scoringTeamId ?? null,
+      // Canonical running score after this event — the ONLY score the scorebug
+      // and feed ever read. On non-scoring events it carries the unchanged
+      // running total so the scorebug can display live progress at any index.
+      scoreAfter,
+      // Score chip renders on scoring events and the final marker.
+      score: (isScore || eventType === 'game_end') ? scoreAfter : null,
+      fieldPosition: null,
+      plays: event.plays ?? 0,
+      yards: event.yards ?? 0,
+      isScore,
+      isOvertime: Boolean(event.isOvertime),
+      impactTag,
+      raw: event,
+    };
+  };
+
+  const feed = [];
+  for (let i = 0; i < list.length; i += 1) {
+    const event = list[i];
+    feed.push(toFeed(event));
+    const next = list[i + 1];
+    // The only honest period boundary is the start of overtime.
+    if (next && next.isOvertime && !event.isOvertime && event.eventType !== 'game_end') {
+      feed.push({
+        ...toFeed(event),
+        id: `${event.eventId}-ot-start`,
+        eventType: 'overtime_start',
+        periodLabel: 'OT',
+        headline: 'Overtime',
+        impactTag: 'swing',
+        score: null,
+        isScore: false,
+      });
+    }
+  }
+  return feed;
+}
+
+/**
+ * Count the real regulation DRIVES in a canonical feed/ledger. The terminal
+ * `game_end` marker and the `overtime_start` divider are NOT drives, and OT
+ * possessions are counted separately — so a game with 24 regulation drives plus
+ * a final marker returns 24, never 25 (#1700 review defect #4). Pure; never
+ * mutates the event package.
+ */
+export function countCanonicalRegulationDrives(events = []) {
+  const list = Array.isArray(events) ? events : [];
+  let max = 0;
+  for (const e of list) {
+    if (!e || e.isOvertime) continue;
+    if (e.eventType === 'game_end' || e.eventType === 'overtime_start') continue;
+    const n = Number(e.driveNumber);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max;
+}
+
 export function getNextImportantEvent(events = [], startIndex = 0, filter = 'score') {
   const important = {
     score: (event) => event.eventType === 'touchdown' || event.eventType === 'field_goal',
