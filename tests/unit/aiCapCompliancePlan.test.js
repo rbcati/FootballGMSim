@@ -139,6 +139,23 @@ describe('AiLogic.buildAiCapCompliancePlan — releases by net relief', () => {
     for (const r of releases) expect(r.netRelief).toBeGreaterThan(0);
   });
 
+  it('never releases a player it just restructured (excludes restructured IDs from the cut pool)', () => {
+    // Star is restructured in phase 1 but the team is still over the legal cap,
+    // forcing phase-2 cuts. A restructured player has inflated dead cap / reduced
+    // net relief, so he must NOT be the release target — cheaper depth is cut.
+    const star = player({ id: 'STAR', pos: 'QB', ovr: 95, age: 28, base: 50, sb: 0, yearsTotal: 4, years: 4 });
+    const roster = [star, ...depthFiller(52, 5)]; // rosterCap = 50 + 260 = 310
+    const team = { id: 5, abbr: 'CIN', deadCap: 0 };
+    const plan = AiLogic.buildAiCapCompliancePlan(team, roster, { legalCap: 285, targetBuffer: 0, season: 2029 });
+
+    const restructuredStar = plan.actions.find((a) => a.type === 'RESTRUCTURE' && a.playerId === 'STAR');
+    const releasedStar = plan.actions.find((a) => a.type === 'RELEASE' && a.playerId === 'STAR');
+    expect(restructuredStar).toBeDefined();
+    expect(releasedStar).toBeUndefined();
+    expect(plan.actions.some((a) => a.type === 'RELEASE')).toBe(true); // reached legal via depth cuts
+    expect(plan.projected.isLegallyCompliant).toBe(true);
+  });
+
   it('never chooses a zero/negative-net-relief release for cap compliance', () => {
     // Player with all-bonus contract → net relief 0.
     const zero = player({ id: 'Z', pos: 'WR', ovr: 70, age: 30, base: 0, sb: 20, yearsTotal: 4, years: 4 }); // hit 5, dead 5, net 0

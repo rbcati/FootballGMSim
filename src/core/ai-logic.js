@@ -334,12 +334,22 @@ class AiLogic {
         }
 
         // ── Phase 2: releases — only while still over the LEGAL cap ────────────
+        // Exclude players already restructured in phase 1 from the release pool.
+        // Restructuring converts base to prorated bonus, so a just-restructured
+        // player has HIGHER dead cap and LOWER net release relief than he did
+        // originally — restructuring and then releasing the same player is
+        // strictly worse than a direct release would have been. Keep the players
+        // we chose to restructure; cut from the rest.
+        const restructuredIds = new Set(
+            actions.filter((a) => a.type === 'RESTRUCTURE').map((a) => a.playerId),
+        );
         const posCount = {};
         for (const p of workRoster) posCount[p.pos] = (posCount[p.pos] ?? 0) + 1;
 
         guard = 0;
         while (snap().totalCommitted > legalCap && guard++ < 500) {
             const candidates = workRoster
+                .filter((p) => !restructuredIds.has(p.id))
                 .map((p) => {
                     const { currentYearDead, futureYearsDead } = AiLogic._releaseDeadCapSplit(p);
                     const netRelief = Math.round((getActiveCapHit(p) - currentYearDead) * 100) / 100;
