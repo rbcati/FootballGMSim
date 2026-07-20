@@ -217,7 +217,7 @@ export async function simulateSingleWeek(page, options = {}) {
     // Wait for the button to become enabled if it's rendered
     const advanceCta = page.getByTestId('advance-week-cta');
     if (await advanceCta.isVisible().catch(() => false)) {
-      await expect(advanceCta).toBeEnabled({ timeout: 5000 }).catch(() => {});
+      await expect(advanceCta).toBeEnabled({ timeout: 5000 });
     }
   }
 
@@ -232,9 +232,9 @@ export async function simulateSingleWeek(page, options = {}) {
     });
   }
   if (advanceAnyway) {
-    await page.getByRole('button', { name: /Advance anyway/i }).click({ timeout: 1000 }).catch(() => {});
+    await page.getByRole('button', { name: /Advance anyway/i }).click();
   }
-  await page.getByRole('button', { name: /Simulate \(Skip\)/i }).click({ timeout: 10000 }).catch(() => {});
+  await page.getByRole('button', { name: /Simulate \(Skip\)/i }).click();
   await page.waitForFunction(
     (baseline) => {
       const week = window?.state?.league?.week ?? baseline;

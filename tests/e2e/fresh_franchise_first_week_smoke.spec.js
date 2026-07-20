@@ -129,7 +129,7 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
     await gateAdvanceBtn.click();
   }
   const skipPrompt = page.getByRole('button', { name: /Simulate \(Skip\)/i });
-  await skipPrompt.click({ timeout: 10000 }).catch(() => {});
+  await skipPrompt.click();
   await page.waitForFunction(
     (baseline) => {
       const state = window?.state;
