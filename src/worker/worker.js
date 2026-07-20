@@ -3172,6 +3172,18 @@ async function handleAdvanceWeek(payload, id) {
         post(toUI.ERROR, { message: `Roster limit exceeded! You have ${userRoster.length} players. Cut down to ${rosterLimit} to advance.` }, id);
         return;
       }
+      // Also confirm the user team is cap-legal BEFORE mutating AI teams, so a
+      // doomed Start Season (user at 53 but over the cap) never releases or
+      // restructures AI players or writes transactions. The full gate below
+      // re-checks every team once the AI teams have been made legal. Scope to
+      // cap only — depth-chart issues are auto-repaired by the pass below and
+      // must not falsely block here.
+      const userCapIssues = runLegalityValidation({ stage: 'pre-advance', teamIds: [meta.userTeamId] })
+        .issues.filter((issue) => issue.severity === 'error' && issue.code === 'cap_limit');
+      if (userCapIssues.length > 0) {
+        post(toUI.ERROR, { message: userCapIssues[0].message }, id);
+        return;
+      }
     }
 
     // AI roster cutdowns (53-man limit) for all AI teams.
