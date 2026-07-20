@@ -10,6 +10,7 @@ import {
   HOF_MIN_SEASONS,
 } from './legacyScore.js';
 import { getMostPlayedTeam } from './records.js';
+import { resolveTeamRefId } from './referenceIntegrity.js';
 
 const REVIEW_PREMIUM_POSITIONS = new Set(['QB', 'WR', 'OT', 'EDGE', 'DE', 'CB']);
 
@@ -580,12 +581,31 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
     });
   }
 
+  // Canonical champion reference: a stable team ID that survives save/reload
+  // and any later re-branding of the live team. `champion` is retained purely
+  // as an optional display snapshot (name/abbr/wins); consumers that need the
+  // identity read `championTeamId`, never the snapshot object.
+  const championRefKey = resolveTeamRefId(champion);
+  const championTeamId = championRefKey == null
+    ? null
+    : (Number.isFinite(Number(championRefKey)) && String(Number(championRefKey)) === championRefKey
+        ? Number(championRefKey)
+        : championRefKey);
+  const runnerUpRefKey = resolveTeamRefId(runnerUp);
+  const runnerUpTeamId = runnerUpRefKey == null
+    ? null
+    : (Number.isFinite(Number(runnerUpRefKey)) && String(Number(runnerUpRefKey)) === runnerUpRefKey
+        ? Number(runnerUpRefKey)
+        : runnerUpRefKey);
+
   const out = {
     id: seasonId,
     year,
     seasonId,
     schemaVersion: 1,
     completedAt: new Date().toISOString(),
+    championTeamId,
+    runnerUpTeamId,
     champion,
     runnerUp,
     championshipGameId: championshipGameId ?? championshipGame?.id ?? championshipGame?.gameId ?? null,

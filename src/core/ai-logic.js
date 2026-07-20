@@ -137,15 +137,17 @@ class AiLogic {
      * Execute AI Roster Cutdowns for Preseason.
      * Forces all AI teams to cut down to 53 players.
      */
-    static async executeAICutdowns() {
+    static async executeAICutdowns({ includeUserTeam = false } = {}) {
         const meta = cache.getMeta();
         const userTeamId = meta.userTeamId;
         const allTeams = cache.getAllTeams();
         const limit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
 
         for (const team of allTeams) {
-            // Skip user team (they must cut manually)
-            if (team.id === userTeamId) continue;
+            // Skip user team (they normally cut manually). In headless/batch
+            // simulation there is no interactive user, so callers may opt the
+            // user team in via includeUserTeam so the season can still start.
+            if (!includeUserTeam && team.id === userTeamId) continue;
 
             const roster = cache.getPlayersByTeam(team.id);
             if (roster.length <= limit) continue;

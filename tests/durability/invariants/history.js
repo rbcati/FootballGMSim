@@ -8,6 +8,7 @@
  */
 import { pass, fail, skip, findDuplicateIds, hasId } from './helpers.js';
 import { leagueHistory, teamIdSet } from './derive.js';
+import { resolveTeamRefId } from '../../../src/core/referenceIntegrity.js';
 
 export const id = 'history';
 
@@ -49,9 +50,24 @@ export function check(ctx) {
     const badTeamRef = [];
     const dupSeasons = findDuplicateIds(history, (h) => h?.id ?? h?.seasonId ?? h?.year);
     for (const h of history) {
-      const champ = h?.championTeamId ?? h?.champion ?? h?.champTeamId;
-      if (champ != null && !validTeamIds.has(String(champ))) {
-        badTeamRef.push({ seasonId: h?.id ?? h?.year, champ });
+      // Canonical champion reference resolution: prefer the stable *TeamId
+      // fields, then normalize a champion display snapshot (object) or scalar
+      // to its id. A team object is NEVER mistaken for an id.
+      const rawChamp = h?.championTeamId ?? h?.champTeamId ?? h?.championId ?? h?.champion;
+      if (rawChamp == null) continue; // no champion recorded for this archive
+      const resolved = resolveTeamRefId(rawChamp);
+      if (resolved === null || !validTeamIds.has(resolved)) {
+        badTeamRef.push({
+          seasonId: h?.id ?? h?.year,
+          rawChampFields: {
+            championTeamId: h?.championTeamId ?? null,
+            champTeamId: h?.champTeamId ?? null,
+            championId: h?.championId ?? null,
+            champion: h?.champion ?? null,
+          },
+          candidateNormalizedId: resolved,
+          knownTeamIds: [...validTeamIds],
+        });
       }
     }
     if (badTeamRef.length) {

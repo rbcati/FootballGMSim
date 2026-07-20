@@ -9,6 +9,18 @@
  */
 import { pass, fail, skip, isFiniteNumber, isUnsafeNumber, hasId, gamePhase } from './helpers.js';
 import { viewTeams, teamIdSet } from './derive.js';
+import { canonicalIdKey, sameEntityId } from '../../../src/core/referenceIntegrity.js';
+
+/**
+ * A schedule entry is a "bye marker" (not a real game) when it explicitly
+ * carries a `bye` field, or — for legacy slim schedules written before the
+ * canonical bye fix — when it lacks BOTH a home and an away reference. Such
+ * entries are validated as byes, never as team-reference games or self-games.
+ */
+function isByeEntry(g) {
+  if (g && g.bye != null) return true;
+  return canonicalIdKey(g?.home) === null && canonicalIdKey(g?.away) === null;
+}
 
 export const id = 'schedule';
 
@@ -48,23 +60,56 @@ export function check(ctx) {
   // ── schedule references valid teams; no self-games ───────────────────────
   const schedule = ctx?.view?.schedule;
   const weeks = Array.isArray(schedule?.weeks) ? schedule.weeks : null;
+  const knownIds = [...validTeamIds];
+  const scheduleMetaType = schedule == null ? 'null' : (Array.isArray(schedule) ? 'array' : typeof schedule);
   if (weeks) {
     const badGames = [];
+    const selfGamesDetail = [];
+    const badByeRefs = [];
+    const playAndByeConflicts = [];
     let selfGames = 0;
     let completedNoResult = 0;
     let played = 0;
     for (const wk of weeks) {
-      for (const g of Array.isArray(wk?.games) ? wk.games : []) {
+      const gamesArr = Array.isArray(wk?.games) ? wk.games : [];
+      const playingKeys = new Set();
+      for (let gi = 0; gi < gamesArr.length; gi++) {
+        const g = gamesArr[gi];
+        if (isByeEntry(g)) continue; // byes validated below, never as games
         const home = g?.home;
         const away = g?.away;
-        if (!validTeamIds.has(String(home)) || !validTeamIds.has(String(away))) {
-          badGames.push({ week: wk.week, home, away, reason: 'invalid-team-ref' });
+        const homeKey = canonicalIdKey(home);
+        const awayKey = canonicalIdKey(away);
+        if (homeKey === null || awayKey === null || !validTeamIds.has(homeKey) || !validTeamIds.has(awayKey)) {
+          badGames.push({
+            week: wk.week, gameIndex: gi,
+            home, homeType: typeof home, homeKey,
+            away, awayType: typeof away, awayKey,
+            reason: 'invalid-team-ref',
+          });
         }
-        if (String(home) === String(away)) selfGames += 1;
+        if (homeKey !== null) playingKeys.add(homeKey);
+        if (awayKey !== null) playingKeys.add(awayKey);
+        if (sameEntityId(home, away)) {
+          selfGames += 1;
+          if (selfGamesDetail.length < 5) {
+            selfGamesDetail.push({ week: wk.week, gameIndex: gi, home, homeKey, away, awayKey });
+          }
+        }
         if (g?.played) {
           played += 1;
           const hasResult = g.homeScore != null && g.awayScore != null;
           if (!hasResult) completedNoResult += 1;
+        }
+      }
+      // Bye references must resolve to a valid team and must not also play.
+      const byes = Array.isArray(wk?.teamsWithBye) ? wk.teamsWithBye : [];
+      for (const b of byes) {
+        const bk = canonicalIdKey(b);
+        if (bk === null || !validTeamIds.has(bk)) {
+          badByeRefs.push({ week: wk.week, bye: b, byeType: typeof b, byeKey: bk });
+        } else if (playingKeys.has(bk)) {
+          playAndByeConflicts.push({ week: wk.week, team: bk });
         }
       }
     }
@@ -72,7 +117,7 @@ export function check(ctx) {
       out.push(fail(ctx, 'schedule.games-reference-valid-teams', {
         entityType: 'game', entityId: null,
         message: `${badGames.length} scheduled games reference an unknown team`,
-        details: { count: badGames.length, sample: badGames.slice(0, 5) },
+        details: { count: badGames.length, sample: badGames.slice(0, 5), knownIds, scheduleMetaType },
       }));
     } else {
       out.push(pass(ctx, 'schedule.games-reference-valid-teams', 'All scheduled games reference valid teams'));
@@ -81,10 +126,28 @@ export function check(ctx) {
       out.push(fail(ctx, 'schedule.no-self-games', {
         entityType: 'game', entityId: null,
         message: `${selfGames} games list the same team as home and away`,
-        details: { count: selfGames },
+        details: { count: selfGames, sample: selfGamesDetail },
       }));
     } else {
       out.push(pass(ctx, 'schedule.no-self-games', 'No game has identical home & away team'));
+    }
+    if (badByeRefs.length) {
+      out.push(fail(ctx, 'schedule.bye-refs-valid', {
+        entityType: 'game', entityId: null,
+        message: `${badByeRefs.length} bye entries reference an unknown team`,
+        details: { count: badByeRefs.length, sample: badByeRefs.slice(0, 5), knownIds },
+      }));
+    } else {
+      out.push(pass(ctx, 'schedule.bye-refs-valid', 'All bye entries reference valid teams'));
+    }
+    if (playAndByeConflicts.length) {
+      out.push(fail(ctx, 'schedule.no-play-and-bye', {
+        entityType: 'game', entityId: null,
+        message: `${playAndByeConflicts.length} teams both play and have a bye in the same week`,
+        details: { count: playAndByeConflicts.length, sample: playAndByeConflicts.slice(0, 5) },
+      }));
+    } else {
+      out.push(pass(ctx, 'schedule.no-play-and-bye', 'No team both plays and has a bye in the same week'));
     }
     if (completedNoResult) {
       out.push(fail(ctx, 'schedule.completed-games-have-result', {
