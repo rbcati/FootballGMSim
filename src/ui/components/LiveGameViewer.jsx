@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import Scorebug from './Scorebug/Scorebug.jsx';
 import GameEventFeed from './GameEventFeed/GameEventFeed.jsx';
-import { mapArchiveEventsToLiveFeed, getNextImportantEvent } from '../../core/liveGame/liveGameEvents.js';
+import { mapArchiveEventsToLiveFeed, mapCanonicalEventsToLiveFeed, getNextImportantEvent } from '../../core/liveGame/liveGameEvents.js';
 import { readStrictFinalScore } from '../../core/gameArchive.js';
 import { getCurrentStandoutPlayers, summarizeGameSwing } from '../utils/liveGamePresentation.js';
+import { deriveStandoutsFromBoxScore } from '../utils/liveGameStandouts.js';
 
 const SPEED_STEPS = [
   { key: 'slow',     label: 'Slow',      ms: 1400 },
@@ -18,20 +19,31 @@ const TENDENCY_CONFIG = {
   CONSERVATIVE: { label: 'Conservative', chipClass: 'conservative' },
 };
 
-export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComplete, initialMode = 'watch', onPlaycallOverride, userTendency = 'BALANCED', finalScore = null }) {
-  // Canonical final: the league-recorded result (GAME_EVENT payload). The
-  // narrated play stream is a separate engine whose running score can
-  // contradict it, so this is the only score the viewer will ever display.
+export default function LiveGameViewer({ logs = [], canonicalEvents = null, playerStats = null, homeTeam, awayTeam, onComplete, initialMode = 'watch', onPlaycallOverride, userTendency = 'BALANCED', finalScore = null }) {
+  // Canonical final: the league-recorded result (GAME_EVENT payload).
   const canonicalFinal = useMemo(() => {
     return readStrictFinalScore({ score: finalScore });
   }, [finalScore]);
 
-  const events = useMemo(() => mapArchiveEventsToLiveFeed(logs, {
-    gameId: `${homeTeam?.id || 'h'}-${awayTeam?.id || 'a'}`,
-    homeTeamId: homeTeam?.id,
-    awayTeamId: awayTeam?.id,
-    finalScore: canonicalFinal,
-  }), [logs, homeTeam?.id, awayTeam?.id, canonicalFinal]);
+  // Prefer the canonical drive-level event ledger (#1700): every event carries a
+  // trustworthy scoreAfter, so the scorebug shows a real live score progression.
+  // Fall back to the legacy narration feed only when no canonical ledger exists
+  // (e.g. a legacy archive) — that path shows the final score only at the end.
+  const useCanonical = Array.isArray(canonicalEvents) && canonicalEvents.length > 0;
+
+  const events = useMemo(() => {
+    if (useCanonical) {
+      return mapCanonicalEventsToLiveFeed(canonicalEvents, {
+        gameId: `${homeTeam?.id || 'h'}-${awayTeam?.id || 'a'}`,
+      });
+    }
+    return mapArchiveEventsToLiveFeed(logs, {
+      gameId: `${homeTeam?.id || 'h'}-${awayTeam?.id || 'a'}`,
+      homeTeamId: homeTeam?.id,
+      awayTeamId: awayTeam?.id,
+      finalScore: canonicalFinal,
+    });
+  }, [useCanonical, canonicalEvents, logs, homeTeam?.id, awayTeam?.id, canonicalFinal]);
 
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(initialMode === 'pause');
@@ -56,13 +68,33 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
   }, [paused, speed, index, events.length]);
 
   const currentEvent = events[index] || {};
-  const standout = useMemo(() => getCurrentStandoutPlayers(events, index + 1), [events, index]);
+  // Standouts (a.k.a. live leaders): in canonical mode these come from the
+  // canonical box score — the same authority PostGameScreen Leaders use — never
+  // the narration stream. Legacy mode keeps the narration-derived standouts.
+  const canonicalStandouts = useMemo(
+    () => (useCanonical ? deriveStandoutsFromBoxScore(playerStats) : null),
+    [useCanonical, playerStats],
+  );
+  const narrationStandouts = useMemo(
+    () => (useCanonical ? null : getCurrentStandoutPlayers(events, index + 1)),
+    [useCanonical, events, index],
+  );
+  const standout = canonicalStandouts ?? narrationStandouts ?? {};
   const swing = useMemo(() => summarizeGameSwing(events, index + 1), [events, index]);
 
   const finished = index >= events.length - 1;
-  // Scores shown only once the canonical final is in play — never the narrated
-  // per-play snapshots, which belong to a different scoring engine.
-  const displayScore = finished && canonicalFinal ? canonicalFinal : null;
+  // Score policy:
+  //   Canonical mode — the scorebug reads the CURRENT canonical event's
+  //     scoreAfter (a real, monotonic running score); at the end it equals the
+  //     league-recorded final.
+  //   Legacy mode — no trustworthy running score exists, so the score is shown
+  //     only once the canonical final is in play (#1692 honest placeholder).
+  const runningScore = useCanonical
+    ? (currentEvent.scoreAfter ?? { home: 0, away: 0 })
+    : null;
+  const displayScore = useCanonical
+    ? (finished && canonicalFinal ? canonicalFinal : runningScore)
+    : (finished && canonicalFinal ? canonicalFinal : null);
 
   const scoreState = {
     score: displayScore,
@@ -70,8 +102,14 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
     // No trustworthy per-play clock exists (drive-granular estimates only) —
     // the scorebug shows quarter + event progress instead of a fake clock.
     clock: null,
-    progressLabel: finished ? 'Final' : `Play ${Math.min(index + 1, events.length)} of ${events.length}`,
-    downDistance: currentEvent.down ? `${currentEvent.down}${ordinal(currentEvent.down)} & ${currentEvent.distance || 10}` : 'Drive update',
+    progressLabel: finished
+      ? 'Final'
+      : (useCanonical
+        ? `Drive ${Math.min(index + 1, events.length)} of ${events.length}`
+        : `Play ${Math.min(index + 1, events.length)} of ${events.length}`),
+    downDistance: useCanonical
+      ? (currentEvent.plays != null ? `${currentEvent.plays} plays · ${currentEvent.yards || 0} yds` : 'Drive update')
+      : (currentEvent.down ? `${currentEvent.down}${ordinal(currentEvent.down)} & ${currentEvent.distance || 10}` : 'Drive update'),
     ballSpot: currentEvent.fieldPosition != null ? `Ball on ${Math.round(Number(currentEvent.fieldPosition) || 50)}` : 'Ball spot --',
     fieldPosition: currentEvent.fieldPosition,
     possessionTeamId: currentEvent.possessionTeamId,

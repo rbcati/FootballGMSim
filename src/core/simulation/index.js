@@ -27,6 +27,8 @@ import {
   buildQuarterScoresFromScoring,
   buildScoringSummaryFromSimulation,
 } from '../gameSummary.js';
+import { buildCanonicalGameEvents } from './canonicalGameEvents.js';
+import { buildCanonicalGameId } from '../gameIdentity.js';
 
 
 const nQbStat = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
@@ -1222,6 +1224,11 @@ export function simGameStats(home, away, options = {}) {
     let homeXPs = driveSummary?.homeXPs ?? homeRes.xpMade;
     let awayXPs = driveSummary?.awayXPs ?? awayRes.xpMade;
 
+    // Ordered overtime scoring events, captured for the canonical event ledger
+    // (#1700). Regulation drives come from driveSummary.home/awayDriveLog; OT
+    // points are generated here (a separate loop) so they are recorded here.
+    const overtimeEvents = [];
+
     // --- OVERTIME LOGIC WITH CLUTCH MECHANICS ---
     // If tied at end of regulation, simulate OT
     // Clutch trait on QB gives a scoring boost in OT
@@ -1295,6 +1302,11 @@ export function simGameStats(home, away, options = {}) {
                 } else {
                     awayScore += drivePoints;
                 }
+                overtimeEvents.push({
+                    side: possession,
+                    points: drivePoints,
+                    result: drivePoints >= 6 ? 'TOUCHDOWN' : 'FIELD_GOAL',
+                });
             }
 
             // End-of-game decision (NFL 2024+ / college rules) owned by clockManager.
@@ -1309,8 +1321,8 @@ export function simGameStats(home, away, options = {}) {
             console.warn(`[SIM-DEBUG] OT hit hard iteration cap (${HARD_ITERATION_CAP}). Forcing end.`);
             // Force a winner if still tied after safety cap
             if (homeScore === awayScore) {
-                if (U.random() < 0.5) homeScore += 3;
-                else awayScore += 3;
+                if (U.random() < 0.5) { homeScore += 3; overtimeEvents.push({ side: 'home', points: 3, result: 'FIELD_GOAL' }); }
+                else { awayScore += 3; overtimeEvents.push({ side: 'away', points: 3, result: 'FIELD_GOAL' }); }
             }
         }
 
@@ -1733,9 +1745,35 @@ export function simGameStats(home, away, options = {}) {
       awayAbbr: away?.abbr,
     };
     const normalizedPlayLogs = normalizePlayLogs(fullGameResult.playLogs || [], summaryContext);
-    const scoringSummary = buildScoringSummaryFromSimulation(normalizedPlayLogs, summaryContext);
+    // Drive-level narration cards remain a presentation-only flavor layer.
     const driveSummaryRows = buildDriveSummaryFromSimulation(normalizedPlayLogs, summaryContext);
-    const quarterScores = buildQuarterScoresFromScoring(scoringSummary, summaryContext);
+
+    // ── CANONICAL EVENT LEDGER (#1700) ──────────────────────────────────────
+    // The scoring summary and quarter scores are now derived from the drive
+    // engine's ordered per-drive outcome logs (the same authority that owns the
+    // final score) PLUS any overtime scoring captured above — never from the
+    // narration play stream. This makes quarter totals and the scoring summary
+    // reconcile to the official final by construction.
+    const canonicalGameId = buildCanonicalGameId({
+      seasonId: options?.league?.seasonId ?? options?.league?.year ?? 0,
+      week: options?.league?.week ?? 1,
+      homeId: home?.id,
+      awayId: away?.id,
+    });
+    const canonicalLedger = buildCanonicalGameEvents({
+      gameId: canonicalGameId,
+      homeId: home?.id,
+      awayId: away?.id,
+      homeAbbr: home?.abbr,
+      awayAbbr: away?.abbr,
+      homeDriveLog: driveSummary?.homeDriveLog ?? [],
+      awayDriveLog: driveSummary?.awayDriveLog ?? [],
+      overtimeEvents,
+      seed: driveSummary?.seed ?? 0,
+    });
+    const canonicalEvents = canonicalLedger.events;
+    const scoringSummary = canonicalLedger.scoringSummary;
+    const quarterScores = canonicalLedger.quarterScores;
 
     // --- EXECUTIVE POSTGAME DIAGNOSTICS (gameReasoningFlags) ---
     // Detect whether in-game attrition forced a clearly lower-rated backup into
@@ -1816,6 +1854,7 @@ export function simGameStats(home, away, options = {}) {
       driveSummary: driveSummaryRows,
       scoringSummary,
       quarterScores,
+      canonicalEvents,
       recapText,
       simSeed: driveSummary?.seed ?? null,
     };
@@ -2092,6 +2131,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         driveSummary: gameData.driveSummary || [],
         scoringSummary: gameData.scoringSummary || [],
         quarterScores: gameData.quarterScores || null,
+        canonicalEvents: gameData.canonicalEvents || [],
         recapText: gameData.recapText || null,
         simSeed: gameData.simSeed ?? null,
         gameReasoningFlags: Array.isArray(gameData.gameReasoningFlags) ? gameData.gameReasoningFlags : [],
@@ -2105,6 +2145,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         scheduledGame.boxScore = resultObj.boxScore;
         scheduledGame.scoringSummary = resultObj.scoringSummary;
         scheduledGame.quarterScores = resultObj.quarterScores;
+        scheduledGame.canonicalEvents = resultObj.canonicalEvents;
         scheduledGame.driveSummary = resultObj.driveSummary;
         scheduledGame.playLogs = resultObj.playLogs;
         scheduledGame.playLog = resultObj.playLogs;
@@ -2318,6 +2359,7 @@ export function simulateBatch(games, options = {}) {
                 pair._driveSummary = gameScores.driveSummary || [];
                 pair._scoringSummary = gameScores.scoringSummary || [];
                 pair._quarterScores = gameScores.quarterScores || null;
+                pair._canonicalEvents = gameScores.canonicalEvents || [];
                 pair._recapText = gameScores.recapText || null;
                 pair._simSeed = gameScores.simSeed ?? null;
                 pair._gameReasoningFlags = Array.isArray(gameScores.gameReasoningFlags) ? gameScores.gameReasoningFlags : [];
@@ -2445,6 +2487,7 @@ export function simulateBatch(games, options = {}) {
                 driveSummary: pair._driveSummary || [],
                 scoringSummary: pair._scoringSummary || [],
                 quarterScores: pair._quarterScores || null,
+                canonicalEvents: pair._canonicalEvents || [],
                 recapText: pair._recapText || null,
                 simSeed: pair._simSeed ?? null,
                 gameReasoningFlags: pair._gameReasoningFlags || [],
@@ -2482,6 +2525,7 @@ export function simulateBatch(games, options = {}) {
                     driveSummary: pair._driveSummary || [],
                     scoringSummary: pair._scoringSummary || [],
                     quarterScores: pair._quarterScores || null,
+                    canonicalEvents: pair._canonicalEvents || [],
                     recapText: pair._recapText || null,
                     simSeed: pair._simSeed ?? null,
                     gameReasoningFlags: pair._gameReasoningFlags || [],

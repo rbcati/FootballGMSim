@@ -186,6 +186,56 @@ describe('PostGameScreen onArchiveReady payload', () => {
     expect(openSpy).not.toHaveBeenCalled();
   });
 
+  it('archives the CANONICAL scoring summary / quarter scores / event ledger, not narration moments (#1700)', async () => {
+    const archiveSpy = vi.fn();
+    // Narration logs that would otherwise seed a narration-derived scoring
+    // summary via notableMoments — these must NOT win over the canonical ledger.
+    const logs = [
+      { text: 'TOUCHDOWN narration', isTouchdown: true, quarter: 1 },
+      { text: 'field goal narration', quarter: 2 },
+    ];
+    const canonicalScoringSummary = [
+      { id: 'g-evt-1', quarter: 1, teamId: 1, scoreType: 'touchdown', type: 'Touchdown', points: 7, scoreAfter: { home: 7, away: 0 } },
+      { id: 'g-evt-2', quarter: 3, teamId: 2, scoreType: 'field_goal', type: 'Field Goal', points: 3, scoreAfter: { home: 7, away: 3 } },
+    ];
+    const canonicalQuarterScores = { home: [7, 0, 0, 0], away: [0, 0, 3, 0] };
+    const canonicalEvents = [
+      { eventId: 'g-evt-1', sequence: 1, quarter: 1, isScore: true, scoringTeamId: 1, points: 7, scoreAfter: { home: 7, away: 0 } },
+      { eventId: 'g-evt-2', sequence: 2, quarter: 3, isScore: true, scoringTeamId: 2, points: 3, scoreAfter: { home: 7, away: 3 } },
+    ];
+
+    await act(async () => {
+      render(
+        <PostGameScreen
+          homeTeam={{ id: 1, abbr: 'HME', name: 'Home' }}
+          awayTeam={{ id: 2, abbr: 'AWY', name: 'Away' }}
+          homeScore={7}
+          awayScore={3}
+          userTeamId={1}
+          boxScoreGameId="canonical-ledger-game"
+          logs={logs}
+          scoringSummary={canonicalScoringSummary}
+          quarterScores={canonicalQuarterScores}
+          canonicalEvents={canonicalEvents}
+          week={4}
+          onArchiveReady={archiveSpy}
+          onContinue={() => {}}
+        />,
+      );
+    });
+
+    expect(archiveSpy).toHaveBeenCalledOnce();
+    const payload = archiveSpy.mock.calls[0][0];
+    // Canonical ledger wins — not the narration notableMoments.
+    expect(payload.scoringSummary).toBe(canonicalScoringSummary);
+    expect(payload.quarterScores).toEqual(canonicalQuarterScores);
+    expect(payload.canonicalEvents).toBe(canonicalEvents);
+    // Quarter totals reconcile to the final score.
+    const total = (a) => a.reduce((x, y) => x + y, 0);
+    expect(total(payload.quarterScores.home)).toBe(7);
+    expect(total(payload.quarterScores.away)).toBe(3);
+  });
+
   it('treats a genuine 0-0 canonical result as a real tie', async () => {
     const archiveSpy = vi.fn();
     await act(async () => {

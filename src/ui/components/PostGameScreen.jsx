@@ -243,6 +243,9 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
   logs = [],          // play-by-play logs (presentation-only: game flow / key moments)
   playerStats = null, // CANONICAL box score { home: {[pid]:{name,pos,stats}}, away: {...} }
   teamStats = null,
+  scoringSummary = null,   // CANONICAL scoring summary (drive-level event ledger, #1700)
+  quarterScores = null,    // CANONICAL quarter scores derived from the ledger
+  canonicalEvents = null,  // CANONICAL drive-level event ledger
   gameReasoningFlags = [],
   boxScoreGameId,
   onOpenBoxScore,
@@ -317,6 +320,12 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
     const canonicalPlayerStats = hasCanonicalStats
       ? { home: playerStats.home ?? {}, away: playerStats.away ?? {} }
       : { home: {}, away: {} };
+    // Persist the CANONICAL scoring summary / quarter scores / event ledger
+    // (#1700) so the Game Book replays the exact same scoreAfter progression
+    // the live viewer showed — never the narration-derived `notableMoments`.
+    // Legacy fallback to notableMoments only when no canonical ledger exists.
+    const hasCanonicalLedger = Array.isArray(scoringSummary);
+    const archivedScoringSummary = hasCanonicalLedger ? scoringSummary : notableMoments;
     onArchiveReady({
       gameId: boxScoreGameId,
       season: null,
@@ -331,13 +340,15 @@ function PostGameScreenInner({ rawGameRecord, boxScoreGame, gameRecord,
       logs,
       playerStats: canonicalPlayerStats,
       ...(teamStats ? { teamStats } : {}),
-      scoringSummary: notableMoments,
+      scoringSummary: archivedScoringSummary,
+      ...(quarterScores ? { quarterScores } : {}),
+      ...(Array.isArray(canonicalEvents) && canonicalEvents.length ? { canonicalEvents } : {}),
       summary: {
         storyline: recapText,
         simOutputs: null,
       },
     });
-  }, [awayScore, awayTeam?.abbr, awayTeam?.id, boxScoreGameId, hasCanonicalStats, homeScore, homeTeam?.abbr, homeTeam?.id, logs, notableMoments, onArchiveReady, playerStats, strictFinalScore, teamStats, week]);
+  }, [awayScore, awayTeam?.abbr, awayTeam?.id, boxScoreGameId, canonicalEvents, hasCanonicalStats, homeScore, homeTeam?.abbr, homeTeam?.id, logs, notableMoments, onArchiveReady, playerStats, quarterScores, scoringSummary, strictFinalScore, teamStats, week]);
 
   const canOpenGameBook = Boolean(boxScoreGameId && hasStrictFinal);
 

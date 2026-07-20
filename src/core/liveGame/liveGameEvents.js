@@ -119,6 +119,73 @@ export function mapArchiveEventsToLiveFeed(playLogs = [], context = {}) {
   return withMarkers;
 }
 
+/**
+ * Map the CANONICAL drive-level event ledger (#1700) to the live-feed shape the
+ * viewer renders. Unlike the narration path, every canonical event carries a
+ * trustworthy `scoreAfter` (the drive engine's running score), so the scorebug
+ * and the feed can show a real, monotonic score progression — no narration
+ * score is ever consulted. Quarter-change markers are inserted the same way as
+ * the narration path so the feed still reads as a game.
+ */
+export function mapCanonicalEventsToLiveFeed(canonicalEvents = [], context = {}) {
+  const list = Array.isArray(canonicalEvents) ? canonicalEvents : [];
+  if (!list.length) return [];
+
+  const toFeed = (event) => {
+    const eventType = event.eventType || 'routine';
+    const isScore = Boolean(event.isScore);
+    const impactTag = EVENT_TYPE_TO_TAG[eventType]
+      || (event.isOvertime ? 'swing' : 'routine');
+    const scoreAfter = event.scoreAfter && Number.isFinite(Number(event.scoreAfter.home))
+      ? { home: Number(event.scoreAfter.home), away: Number(event.scoreAfter.away) }
+      : null;
+    return {
+      id: event.eventId,
+      gameId: event.gameId || context.gameId || 'game',
+      quarter: Number(event.quarter || 1),
+      clock: null,
+      sequence: event.sequence,
+      eventType,
+      headline: String(event.text || 'Drive').trim(),
+      possessionTeamId: event.possessionTeamId ?? null,
+      scoringTeamId: event.scoringTeamId ?? null,
+      // Canonical running score after this event — the ONLY score the scorebug
+      // and feed ever read. On non-scoring events it carries the unchanged
+      // running total so the scorebug can display live progress at any index.
+      scoreAfter,
+      // Score chip renders on scoring events and the final marker.
+      score: (isScore || eventType === 'game_end') ? scoreAfter : null,
+      fieldPosition: null,
+      plays: event.plays ?? 0,
+      yards: event.yards ?? 0,
+      isScore,
+      isOvertime: Boolean(event.isOvertime),
+      impactTag,
+      raw: event,
+    };
+  };
+
+  const feed = [];
+  for (let i = 0; i < list.length; i += 1) {
+    const event = list[i];
+    feed.push(toFeed(event));
+    const next = list[i + 1];
+    if (next && Number(next.quarter) !== Number(event.quarter) && event.eventType !== 'game_end') {
+      const q = Number(event.quarter);
+      feed.push({
+        ...toFeed(event),
+        id: `${event.eventId}-q-end`,
+        eventType: q === 2 ? 'halftime' : 'quarter_end',
+        headline: q === 2 ? 'Halftime.' : `End of Q${q}`,
+        impactTag: q === 2 ? 'swing' : 'routine',
+        score: null,
+        isScore: false,
+      });
+    }
+  }
+  return feed;
+}
+
 export function getNextImportantEvent(events = [], startIndex = 0, filter = 'score') {
   const important = {
     score: (event) => event.eventType === 'touchdown' || event.eventType === 'field_goal',

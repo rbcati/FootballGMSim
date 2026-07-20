@@ -4974,6 +4974,10 @@ function applyGameResultToCache(result, week, seasonId) {
     drives: result.driveSummary ?? result.drives ?? driveSummary ?? null,
     quarterScores: result.quarterScores ?? result.linescore ?? null,
     scoringSummary,
+    // Canonical drive-level event ledger (#1700). Persisted so the Game Book
+    // replays the same scoreAfter progression the live viewer showed — never
+    // regenerated from narration on reload.
+    canonicalEvents: Array.isArray(result.canonicalEvents) ? result.canonicalEvents : [],
     driveSummary,
     playLog: playLogs,
     summary: {
@@ -14530,6 +14534,12 @@ async function handleWatchGame(payload, id) {
       // than the play-by-play's randomized QB rotation.
       playerStats: res.boxScore ? { home: res.boxScore.home ?? {}, away: res.boxScore.away ?? {} } : null,
       teamStats: res.teamStats ?? null,
+      // Canonical drive-level event ledger (#1700) — the live scorebug steps
+      // through its scoreAfter progression and the feed renders its drive cards.
+      // This is the same ledger the archive/Game Book persists.
+      canonicalEvents: Array.isArray(res.canonicalEvents) ? res.canonicalEvents : [],
+      scoringSummary: Array.isArray(res.scoringSummary) ? res.scoringSummary : [],
+      quarterScores: res.quarterScores ?? null,
       gameReasoningFlags: Array.isArray(res.gameReasoningFlags) ? res.gameReasoningFlags : [],
     }, id);
 
