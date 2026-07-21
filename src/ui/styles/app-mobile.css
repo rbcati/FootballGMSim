@@ -1293,14 +1293,9 @@
   transition: all var(--dur) var(--ease);
 }
 
-.btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
 
-.btn:active:not(:disabled) {
-  transform: translateY(0);
-}
+
+
 
 /* Card hover effects */
 .card {

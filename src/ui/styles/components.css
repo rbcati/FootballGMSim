@@ -171,10 +171,10 @@
 
 @media (hover: hover) and (pointer: fine) {
   .btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  filter: brightness(1.05);
-}
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    filter: brightness(1.05);
+  }
 
   .btn:hover::before {
     opacity: 1;
@@ -463,13 +463,13 @@ label {
 }
 
 .trade-block-btn.active {
-  border-color: #ef4444;
-  color: #ef4444;
+  border-color: var(--danger);
+  color: var(--danger);
   background: rgba(239, 68, 68, 0.1);
 }
 
 .trade-block-badge {
-  color: #ef4444;
+  color: var(--danger);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -488,7 +488,7 @@ label {
 }
 
 .advisor-header h2 {
-  color: #f59e0b;
+  color: var(--warning);
   margin: 0 0 4px;
 }
 
@@ -502,7 +502,7 @@ label {
 .owner-message-card {
   background: linear-gradient(145deg, rgba(2, 6, 23, 0.86), rgba(15, 23, 42, 0.95));
   border: 1px solid #334155;
-  border-left: 4px solid #f59e0b;
+  border-left: 4px solid var(--warning);
   border-radius: 10px;
   padding: 14px;
   margin-bottom: 16px;
@@ -599,15 +599,15 @@ label {
 }
 
 .topic-btn:hover {
-  border-color: #f59e0b;
-  color: #f59e0b;
+  border-color: var(--warning);
+  color: var(--warning);
 }
 
 .topic-btn.active {
-  background: #f59e0b;
+  background: var(--warning);
   color: #0f172a;
   font-weight: 700;
-  border-color: #f59e0b;
+  border-color: var(--warning);
 }
 
 .topic-btn:disabled {
@@ -623,12 +623,12 @@ label {
 }
 
 .advisor-loading .pulse {
-  color: #f59e0b;
+  color: var(--warning);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
 .advisor-error {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .advisor-prompt {
@@ -637,7 +637,7 @@ label {
 }
 
 .advice-topic {
-  color: #f59e0b;
+  color: var(--warning);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;

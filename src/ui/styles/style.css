@@ -22,11 +22,11 @@
   --text: #E6EDF3;
   --text-muted: #9FB0C2;
   --text-subtle: #7C8E9B;
-  --accent: #0A84FF;
+  --accent: var(--accent);
   --accent-hover: #409CFF;
   --accent-muted: rgba(10, 132, 255, 0.1);
-  --danger: #FF453A;
-  --success: #34C759;
+  --danger: var(--danger);
+  --success: var(--success);
   --warning: #FF9F0A;
 
   /* Glass Effects */
@@ -64,9 +64,9 @@
   --success-bg: rgba(34, 197, 94, 0.1);
   --success-text: #22c55e;
   --error-bg: rgba(239, 68, 68, 0.1);
-  --error-text: #ef4444;
+  --error-text: var(--danger);
   --warning-bg: rgba(245, 158, 11, 0.1);
-  --warning-text: #f59e0b;
+  --warning-text: var(--warning);
   --accent-rgb: 59, 130, 246;
   --success-rgb: 34, 197, 94;
   --error-rgb: 239, 68, 68;
@@ -492,19 +492,11 @@ html, body {
   transition: opacity var(--dur) var(--ease);
 }
 
-.btn:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--hairline-strong);
-}
 
-.btn:hover::before {
-  opacity: 1;
-}
 
-.btn:active {
-  transform: translateY(0);
-}
+
+
+
 
 .btn.primary { 
   background: linear-gradient(135deg, var(--accent), var(--accent-hover));
@@ -2176,7 +2168,7 @@ select:disabled {
 }
 
 .rating-good {
-  color: #34C759; /* Green */
+  color: var(--success); /* Green */
 }
 
 .rating-average {
@@ -2188,7 +2180,7 @@ select:disabled {
 }
 
 .rating-poor {
-  color: #FF453A; /* Red */
+  color: var(--danger); /* Red */
 }
 
 .rating-details {
@@ -2441,7 +2433,7 @@ select:disabled {
 }
 
 .rating-high {
-  color: #34C759;
+  color: var(--success);
 }
 
 .rating-medium {
@@ -2449,7 +2441,7 @@ select:disabled {
 }
 
 .rating-low {
-  color: #FF453A;
+  color: var(--danger);
 }
 
 /* Trade Team Ratings Styles */
@@ -5492,7 +5484,7 @@ select:disabled {
 
 .assessment-level.none,
 .assessment-level.low {
-  color: var(--success, #34C759);
+  color: var(--success, var(--success));
 }
 
 .assessment-level.moderate {
@@ -5574,7 +5566,7 @@ select:disabled {
 }
 
 .season-history-list .positive {
-  color: var(--success, #34C759);
+  color: var(--success, var(--success));
   font-weight: 600;
 }
 
@@ -5602,13 +5594,12 @@ select:disabled {
   transition: all 0.2s ease;
 }
 
-.btn:hover, button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+button:hover {
+  /* btn removed to avoid override */
 }
 
-.btn:active, button:active {
-  transform: translateY(0);
+button:active {
+  /* btn removed to avoid override */
 }
 
 /* Card hover effects */
@@ -5825,7 +5816,7 @@ input:focus, select:focus, textarea:focus {
 
 .message.success {
   background: var(--success-light, rgba(52, 199, 89, 0.1));
-  border-left: 3px solid var(--success, #34C759);
+  border-left: 3px solid var(--success, var(--success));
   color: var(--success);
 }
 
@@ -7006,8 +6997,8 @@ input:focus, select:focus, textarea:focus {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #34C759;
-  box-shadow: 0 0 4px #34C759;
+  background-color: var(--success);
+  box-shadow: 0 0 4px var(--success);
   z-index: 2;
 }
 
@@ -7082,8 +7073,8 @@ input:focus, select:focus, textarea:focus {
   text-shadow: 0 2px 4px rgba(0,0,0,0.5);
 }
 
-.dark-player-card .ovr-badge.elite { color: #34C759; }
-.dark-player-card .ovr-badge.good { color: #0A84FF; }
+.dark-player-card .ovr-badge.elite { color: var(--success); }
+.dark-player-card .ovr-badge.good { color: var(--accent); }
 .dark-player-card .ovr-badge.avg { color: #FF9F0A; }
 
 .dark-player-card .tags-container {
@@ -7115,8 +7106,8 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid rgba(255,255,255,0.1);
 }
 
-.dark-player-card .grade-badge.A { color: #34C759; border-color: rgba(52, 199, 89, 0.3); }
-.dark-player-card .grade-badge.B { color: #0A84FF; border-color: rgba(10, 132, 255, 0.3); }
+.dark-player-card .grade-badge.A { color: var(--success); border-color: rgba(52, 199, 89, 0.3); }
+.dark-player-card .grade-badge.B { color: var(--accent); border-color: rgba(10, 132, 255, 0.3); }
 .dark-player-card .grade-badge.C { color: #FF9F0A; border-color: rgba(255, 159, 10, 0.3); }
 
 .dark-player-card .bars-container {
@@ -7150,13 +7141,13 @@ input:focus, select:focus, textarea:focus {
 
 .dark-player-card .progress-fill {
   height: 100%;
-  background: #34C759;
+  background: var(--success);
   border-radius: 2px;
   width: 0%;
   transition: width 0.5s ease-out;
 }
 
-.dark-player-card .progress-fill.physical { background: #0A84FF; }
+.dark-player-card .progress-fill.physical { background: var(--accent); }
 .dark-player-card .progress-fill.mental { background: #BF5AF2; }
 
 /* Game Simulation Styles */
@@ -7790,7 +7781,7 @@ details[open] .nav-summary::after {
 .bs-score-item { border-left: 3px solid var(--hairline); }
 .bs-score-td { border-left-color: #16a34a; }
 .bs-score-fg { border-left-color: #2563eb; }
-.bs-score-safety { border-left-color: #f59e0b; }
+.bs-score-safety { border-left-color: var(--warning); }
 .bs-drive-badge { font-style: normal; font-size: var(--text-xs); border: 1px solid var(--hairline); border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
 .bs-play-item, .bs-drive-item { grid-template-columns: minmax(78px, auto) minmax(70px, auto) 1fr; align-items: start; }
 .bs-final-col { font-weight: 700; }
@@ -8086,7 +8077,7 @@ details[open] .nav-summary::after {
 .bs-sheet-dismiss:focus-visible {
   background: rgba(255, 255, 255, 0.14);
   color: var(--text, #fff);
-  outline: 2px solid var(--accent, #0A84FF);
+  outline: 2px solid var(--accent, var(--accent));
   outline-offset: 2px;
 }
 
@@ -8145,19 +8136,19 @@ details[open] .nav-summary::after {
 
 .bs-sheet-wl--ok {
   background: rgba(52, 199, 89, 0.22);
-  color: #34C759;
+  color: var(--success);
   border: 1px solid rgba(52, 199, 89, 0.5);
 }
 
 .bs-sheet-wl--danger {
   background: rgba(255, 69, 58, 0.22);
-  color: #FF453A;
+  color: var(--danger);
   border: 1px solid rgba(255, 69, 58, 0.5);
 }
 
 .bs-sheet-wl--info {
   background: rgba(10, 132, 255, 0.18);
-  color: #0A84FF;
+  color: var(--accent);
   border: 1px solid rgba(10, 132, 255, 0.4);
 }
 
@@ -8226,8 +8217,8 @@ details[open] .nav-summary::after {
 }
 
 .bs-sheet-tab.is-active {
-  background: var(--accent, #0A84FF);
-  border-color: var(--accent, #0A84FF);
+  background: var(--accent, var(--accent));
+  border-color: var(--accent, var(--accent));
   color: #fff;
 }
 
@@ -8238,7 +8229,7 @@ details[open] .nav-summary::after {
 }
 
 .bs-sheet-tab:focus-visible {
-  outline: 2px solid var(--accent, #0A84FF);
+  outline: 2px solid var(--accent, var(--accent));
   outline-offset: 2px;
 }
 
