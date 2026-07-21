@@ -3161,38 +3161,22 @@ async function handleAdvanceWeek(payload, id) {
 
     // INTERACTIVE user cuts down manually. Block a doomed Start Season BEFORE any
     // AI mutation runs, so a failed attempt never releases/restructures AI players
-    // or writes transactions while the season does not advance. HEADLESS/batch
-    // lifecycles have no interactive user, so the user team is cut with the AI
-    // teams below (includeUserTeam) instead.
-    if (payload?.skipUserGame) {
-      await AiLogic.executeAICutdowns({ includeUserTeam: true });
-      // "Sim to phase" is an INTERACTIVE feature that also advances with
-      // skipUserGame (batchSim is false there — only an explicit headless
-      // durability lifecycle sets it). If the auto-cut user team is still over
-      // the cap, block before AI CAP MANAGEMENT restructures/releases AI players
-      // — the interactive user must resolve their own cap first. An explicit
-      // headless lifecycle (batchSim) auto-manages the user team instead and
-      // never blocks here.
-      if (!batchSim) {
-        const userCapIssues = runLegalityValidation({ stage: 'pre-advance', teamIds: [meta.userTeamId] })
-          .issues.filter((issue) => issue.severity === 'error' && issue.code === 'cap_limit');
-        if (userCapIssues.length > 0) {
-          post(toUI.ERROR, { message: userCapIssues[0].message }, id);
-          return;
-        }
-      }
-    } else {
+    // or writes transactions while the season does not advance. `skipUserGame` is
+    // only a prompt/game-simulation skip used by UI flows such as SIM_TO_PHASE; it
+    // is not a headless roster-management capability. Only the explicit durability
+    // batch flag opts the user team into automated cutdowns/cap management.
+    if (!batchSim) {
       const userRoster = cache.getPlayersByTeam(meta.userTeamId);
       if (userRoster.length > rosterLimit) {
         post(toUI.ERROR, { message: `Roster limit exceeded! You have ${userRoster.length} players. Cut down to ${rosterLimit} to advance.` }, id);
         return;
       }
-      // Also confirm the user team is cap-legal BEFORE mutating AI teams, so a
-      // doomed Start Season (user at 53 but over the cap) never releases or
-      // restructures AI players or writes transactions. The full gate below
-      // re-checks every team once the AI teams have been made legal. Scope to
-      // cap only — depth-chart issues are auto-repaired by the pass below and
-      // must not falsely block here.
+      // Confirm the user team is cap-legal BEFORE mutating AI teams, so a doomed
+      // interactive Start Season/SIM_TO_PHASE/skipUserGame advance never releases
+      // or restructures AI players or writes transactions. The full gate below
+      // re-checks every team once the AI teams have been made legal. Scope to cap
+      // only — depth-chart issues are auto-repaired by the pass below and must
+      // not falsely block here.
       const userCapIssues = runLegalityValidation({ stage: 'pre-advance', teamIds: [meta.userTeamId] })
         .issues.filter((issue) => issue.severity === 'error' && issue.code === 'cap_limit');
       if (userCapIssues.length > 0) {
@@ -3201,8 +3185,10 @@ async function handleAdvanceWeek(payload, id) {
       }
     }
 
-    // AI roster cutdowns (53-man limit) for all AI teams.
-    await AiLogic.executeAICutdowns();
+    // AI roster cutdowns (53-man limit) for all AI teams. Explicit headless
+    // durability/batch mode also opts the user team into the same deterministic
+    // cutdown pass; interactive skipUserGame/SIM_TO_PHASE does not.
+    await AiLogic.executeAICutdowns({ includeUserTeam: batchSim });
 
     // AI cap management: bring every AI team legally under the LIVE cap using the
     // least-destructive plan. The interactive user team is NEVER auto-managed;
