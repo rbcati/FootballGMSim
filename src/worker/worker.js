@@ -3166,6 +3166,21 @@ async function handleAdvanceWeek(payload, id) {
     // teams below (includeUserTeam) instead.
     if (payload?.skipUserGame) {
       await AiLogic.executeAICutdowns({ includeUserTeam: true });
+      // "Sim to phase" is an INTERACTIVE feature that also advances with
+      // skipUserGame (batchSim is false there — only an explicit headless
+      // durability lifecycle sets it). If the auto-cut user team is still over
+      // the cap, block before AI CAP MANAGEMENT restructures/releases AI players
+      // — the interactive user must resolve their own cap first. An explicit
+      // headless lifecycle (batchSim) auto-manages the user team instead and
+      // never blocks here.
+      if (!batchSim) {
+        const userCapIssues = runLegalityValidation({ stage: 'pre-advance', teamIds: [meta.userTeamId] })
+          .issues.filter((issue) => issue.severity === 'error' && issue.code === 'cap_limit');
+        if (userCapIssues.length > 0) {
+          post(toUI.ERROR, { message: userCapIssues[0].message }, id);
+          return;
+        }
+      }
     } else {
       const userRoster = cache.getPlayersByTeam(meta.userTeamId);
       if (userRoster.length > rosterLimit) {
