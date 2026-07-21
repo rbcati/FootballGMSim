@@ -156,6 +156,31 @@ describe('AiLogic.buildAiCapCompliancePlan — releases by net relief', () => {
     expect(plan.projected.isLegallyCompliant).toBe(true);
   });
 
+  it('rolls back a restructure and releases the player when he is the only cap-legal relief', () => {
+    // Star is restructured in phase 1 but the team is still over the legal cap,
+    // and every other player has zero net release relief (all-bonus contracts),
+    // so phase 2a cannot help. Phase 2b must roll back the star's restructure and
+    // release him from his ORIGINAL contract rather than falsely report no plan.
+    const star = player({ id: 'STAR', pos: 'QB', ovr: 95, age: 28, base: 50, sb: 0, yearsTotal: 4, years: 4 });
+    const fillers = [];
+    // Two extra QBs so releasing the star stays at/above the QB floor (2).
+    for (let i = 0; i < 2; i++) fillers.push(player({ id: `QBf${i}`, pos: 'QB', base: 0, sb: 6, yearsTotal: 4, years: 4 }));
+    for (const pos of ['RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K', 'P']) {
+      for (let i = 0; i < 4; i++) fillers.push(player({ id: `${pos}${i}`, pos, base: 0, sb: 6, yearsTotal: 4, years: 4 }));
+    }
+    const roster = [star, ...fillers]; // all-bonus fillers → net release relief 0
+    const team = { id: 9, abbr: 'IND', deadCap: 0 };
+    const plan = AiLogic.buildAiCapCompliancePlan(team, roster, { legalCap: 90, targetBuffer: 0, season: 2029 });
+
+    const starRelease = plan.actions.find((a) => a.type === 'RELEASE' && a.playerId === 'STAR');
+    const starRestructure = plan.actions.find((a) => a.type === 'RESTRUCTURE' && a.playerId === 'STAR');
+    expect(starRelease).toBeDefined();
+    expect(starRelease.rolledBackRestructure).toBe(true);
+    expect(starRestructure).toBeUndefined();          // restructure rolled back / removed
+    expect(plan.projected.isLegallyCompliant).toBe(true);
+    expect(plan.failure).toBeNull();
+  });
+
   it('never chooses a zero/negative-net-relief release for cap compliance', () => {
     // Player with all-bonus contract → net relief 0.
     const zero = player({ id: 'Z', pos: 'WR', ovr: 70, age: 30, base: 0, sb: 20, yearsTotal: 4, years: 4 }); // hit 5, dead 5, net 0

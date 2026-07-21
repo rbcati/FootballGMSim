@@ -285,6 +285,9 @@ class AiLogic {
         const actions = [];
         let workRoster = roster.map((p) => ({ ...p, contract: { ...(p?.contract ?? {}) } }));
         let deadCap = Math.max(0, Number(team?.deadCap ?? 0));
+        // Original (pre-restructure) contracts, kept so a restructure can be rolled
+        // back if the player later turns out to be the only cap-legal release.
+        const originalContracts = new Map();
         const snap = () => buildTeamCapSnapshot({ team: { deadCap }, roster: workRoster, salaryCap: legalCap, targetBuffer });
 
         // ── Phase 1: restructures toward the planning target ──────────────────
@@ -315,6 +318,7 @@ class AiLogic {
                 touched.add(p.id);
                 if (relief <= 0) continue; // no genuine current-year relief → skip
                 const idx = workRoster.findIndex((r) => r.id === p.id);
+                if (!originalContracts.has(p.id)) originalContracts.set(p.id, { ...workRoster[idx].contract });
                 workRoster[idx] = { ...updatedPlayer, contract: { ...updatedPlayer.contract, lastRestructuredSeason: Number(season) } };
                 const newDeadCapItem = Array.isArray(updatedTeam?.deadCapItems)
                     ? updatedTeam.deadCapItems[updatedTeam.deadCapItems.length - 1]
@@ -333,13 +337,12 @@ class AiLogic {
             if (!applied) break;
         }
 
-        // ── Phase 2: releases — only while still over the LEGAL cap ────────────
-        // Exclude players already restructured in phase 1 from the release pool.
-        // Restructuring converts base to prorated bonus, so a just-restructured
-        // player has HIGHER dead cap and LOWER net release relief than he did
-        // originally — restructuring and then releasing the same player is
-        // strictly worse than a direct release would have been. Keep the players
-        // we chose to restructure; cut from the rest.
+        // ── Phase 2a: releases from the NON-restructured pool ──────────────────
+        // Prefer cutting players we did NOT restructure. Restructuring converts
+        // base to prorated bonus, so a just-restructured player has HIGHER dead
+        // cap and LOWER net release relief — restructuring then releasing the same
+        // player is wasteful. Keep the players we chose to restructure and cut the
+        // rest first.
         const restructuredIds = new Set(
             actions.filter((a) => a.type === 'RESTRUCTURE').map((a) => a.playerId),
         );
@@ -372,6 +375,49 @@ class AiLogic {
                 currentYearDead: choice.currentYearDead,
                 futureYearsDead: choice.futureYearsDead,
                 netRelief: choice.netRelief,
+            });
+        }
+
+        // ── Phase 2b: rollback releases — LAST resort, only if still over legal ──
+        // If cutting the non-restructured pool cannot reach the legal cap, a
+        // restructured player may be the only remaining cap-legal release. Rather
+        // than restructure AND release him (wasteful) or falsely report no legal
+        // plan, ROLL BACK his restructure and release him from his ORIGINAL
+        // contract — this both removes the now-pointless restructure and realizes
+        // the full original release relief.
+        guard = 0;
+        while (snap().totalCommitted > legalCap && guard++ < 500) {
+            const candidates = workRoster
+                .filter((p) => restructuredIds.has(p.id) && originalContracts.has(p.id))
+                .map((p) => {
+                    const origPlayer = { ...p, contract: originalContracts.get(p.id) };
+                    const { currentYearDead, futureYearsDead } = AiLogic._releaseDeadCapSplit(origPlayer);
+                    const netRelief = Math.round((getActiveCapHit(origPlayer) - currentYearDead) * 100) / 100;
+                    return { p, netRelief, currentYearDead, futureYearsDead };
+                })
+                .filter((c) => c.netRelief > 0)
+                .filter((c) => (posCount[c.p.pos] ?? 0) > (AiLogic.POSITION_FLOOR[c.p.pos] ?? 1))
+                .sort((a, b) => (b.netRelief - a.netRelief)
+                    || ((a.p.ovr ?? 0) - (b.p.ovr ?? 0))
+                    || String(a.p.id).localeCompare(String(b.p.id)));
+            if (!candidates.length) break;
+
+            const choice = candidates[0];
+            // Roll back the restructure: drop its action (and its void-year dead
+            // money) so the committed contract stays original, then release.
+            const rIdx = actions.findIndex((a) => a.type === 'RESTRUCTURE' && a.playerId === choice.p.id);
+            if (rIdx >= 0) actions.splice(rIdx, 1);
+            restructuredIds.delete(choice.p.id);
+            workRoster = workRoster.filter((r) => r.id !== choice.p.id);
+            posCount[choice.p.pos] = (posCount[choice.p.pos] ?? 1) - 1;
+            deadCap = Math.round((deadCap + choice.currentYearDead) * 100) / 100;
+            actions.push({
+                type: 'RELEASE',
+                playerId: choice.p.id,
+                currentYearDead: choice.currentYearDead,
+                futureYearsDead: choice.futureYearsDead,
+                netRelief: choice.netRelief,
+                rolledBackRestructure: true,
             });
         }
 
