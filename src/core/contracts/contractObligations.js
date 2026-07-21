@@ -161,6 +161,77 @@ export function calculateTeamCapObligations(team = {}, players = [], leagueSetti
 }
 
 /**
+ * Canonical salary-cap snapshot for legal-compliance decisions.
+ *
+ * This is the SINGLE source of truth shared by AI cap planning and the
+ * pre-advance legality gate. It intentionally mirrors the legality gate's
+ * equation exactly (see teamValidation.validateLeagueTeamLegality):
+ *
+ *   rosterCap      = Σ getActiveCapHit(rosterPlayer)     (active contracts only)
+ *   deadCap        = team.deadCap                          (current-year dead money)
+ *   totalCommitted = rosterCap + deadCap + pendingCommitments
+ *   capRoom        = salaryCap - totalCommitted
+ *
+ * Staff payroll is deliberately EXCLUDED — the legality gate does not count it
+ * toward cap compliance, so neither may the planner (otherwise the AI would
+ * over-cut chasing a stricter ceiling than the gate enforces).
+ *
+ * The legal ceiling is the live economy cap; the planning target subtracts an
+ * optional difficulty buffer. The buffer is advisory only — it must never be
+ * used as the legal ceiling.
+ *
+ * @param {object}  args
+ * @param {object}  args.team               team record (reads team.deadCap)
+ * @param {Array}   args.roster             active roster players
+ * @param {number}  args.salaryCap          live legal salary cap ($M)
+ * @param {number} [args.targetBuffer=0]    planning buffer below the legal cap
+ * @param {number} [args.pendingCommitments=0] cap that legally counts now but is
+ *                                          not yet on the roster (e.g. reserved
+ *                                          offers). Included in totalCommitted.
+ * @returns {{
+ *   salaryCap:number, rosterCap:number, deadCap:number, pendingCommitments:number,
+ *   totalCommitted:number, capRoom:number, legalLimit:number, targetBuffer:number,
+ *   targetCommitted:number, targetRoom:number,
+ *   isLegallyCompliant:boolean, isWithinPlanningTarget:boolean,
+ *   overageVsLegal:number, overageVsTarget:number
+ * }}
+ */
+export function buildTeamCapSnapshot({
+  team = {},
+  roster = [],
+  salaryCap,
+  targetBuffer = 0,
+  pendingCommitments = 0,
+} = {}) {
+  const legalLimit = n(salaryCap, 301.2);
+  const rosterCap = round2((roster ?? []).reduce((sum, p) => sum + getActiveCapHit(p), 0));
+  const deadCap = Math.max(0, n(team?.deadCap, 0));
+  const pending = Math.max(0, n(pendingCommitments, 0));
+  const totalCommitted = round2(rosterCap + deadCap + pending);
+  const capRoom = round2(legalLimit - totalCommitted);
+  const buffer = Math.max(0, n(targetBuffer, 0));
+  const targetCommitted = round2(legalLimit - buffer);
+  const targetRoom = round2(targetCommitted - totalCommitted);
+
+  return {
+    salaryCap: legalLimit,
+    rosterCap,
+    deadCap,
+    pendingCommitments: pending,
+    totalCommitted,
+    capRoom,
+    legalLimit,
+    targetBuffer: buffer,
+    targetCommitted,
+    targetRoom,
+    isLegallyCompliant: totalCommitted <= legalLimit,
+    isWithinPlanningTarget: totalCommitted <= targetCommitted,
+    overageVsLegal: round2(Math.max(0, totalCommitted - legalLimit)),
+    overageVsTarget: round2(Math.max(0, totalCommitted - targetCommitted)),
+  };
+}
+
+/**
  * Pure cap-affordability check for a proposed new contract.
  * Does NOT mutate state.
  *

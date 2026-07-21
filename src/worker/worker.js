@@ -3145,6 +3145,62 @@ async function handleAdvanceWeek(payload, id) {
       post(toUI.ERROR, { message: `Cannot advance week in phase "${meta.phase}". Use the correct action.` }, id);
       return;
   }
+
+  // ── Preseason AI cutdown + cap management MUST precede the legality gate ────
+  // The pre-advance legality gate below evaluates every team's cap against the
+  // live salary cap. During preseason a team still carries its full offseason
+  // roster (well over 53), so its aggregate cap hit is meaningless until the
+  // cutdown + AI cap-management pass has produced the legal 53-man roster.
+  // Running that pass here — before the gate — is what lets AI teams (and, in an
+  // explicit headless lifecycle, the auto-managed user team) enter the regular
+  // season legally instead of deadlocking the franchise at the first AI team
+  // whose pre-cutdown payroll happens to exceed that season's grown cap.
+  if (meta.phase === 'preseason') {
+    const batchSim = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
+    const rosterLimit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
+
+    // INTERACTIVE user cuts down manually. Block a doomed Start Season BEFORE any
+    // AI mutation runs, so a failed attempt never releases/restructures AI players
+    // or writes transactions while the season does not advance. `skipUserGame` is
+    // only a prompt/game-simulation skip used by UI flows such as SIM_TO_PHASE; it
+    // is not a headless roster-management capability. Only the explicit durability
+    // batch flag opts the user team into automated cutdowns/cap management.
+    if (!batchSim) {
+      const userRoster = cache.getPlayersByTeam(meta.userTeamId);
+      if (userRoster.length > rosterLimit) {
+        post(toUI.ERROR, { message: `Roster limit exceeded! You have ${userRoster.length} players. Cut down to ${rosterLimit} to advance.` }, id);
+        return;
+      }
+      // Confirm the user team is cap-legal BEFORE mutating AI teams, so a doomed
+      // interactive Start Season/SIM_TO_PHASE/skipUserGame advance never releases
+      // or restructures AI players or writes transactions. The full gate below
+      // re-checks every team once the AI teams have been made legal. Scope to cap
+      // only — depth-chart issues are auto-repaired by the pass below and must
+      // not falsely block here.
+      const userCapIssues = runLegalityValidation({ stage: 'pre-advance', teamIds: [meta.userTeamId] })
+        .issues.filter((issue) => issue.severity === 'error' && issue.code === 'cap_limit');
+      if (userCapIssues.length > 0) {
+        post(toUI.ERROR, { message: userCapIssues[0].message }, id);
+        return;
+      }
+    }
+
+    // AI roster cutdowns (53-man limit) for all AI teams. Explicit headless
+    // durability/batch mode also opts the user team into the same deterministic
+    // cutdown pass; interactive skipUserGame/SIM_TO_PHASE does not.
+    await AiLogic.executeAICutdowns({ includeUserTeam: batchSim });
+
+    // AI cap management: bring every AI team legally under the LIVE cap using the
+    // least-destructive plan. The interactive user team is NEVER auto-managed;
+    // only an explicit headless lifecycle (durability batch-sim) opts it in.
+    await AiLogic.executeAICapManagement({ autoManageUserCap: batchSim });
+
+    // Cutdowns/releases above release players directly (teamId -> null) without
+    // touching team.depthChart, leaving dangling starter/backup references.
+    // Repair them before the legality gate validates depth-chart integrity.
+    validateAndRepairAllTeamDepthCharts('post-ai-cutdown');
+  }
+
   const legality = runLegalityValidation({ stage: 'pre-advance' }).issues.filter((issue) => issue.severity === 'error');
   if (legality.length > 0) {
     post(toUI.ERROR, { message: legality[0].message }, id);
@@ -3161,38 +3217,11 @@ async function handleAdvanceWeek(payload, id) {
     }
   }
 
-  // ── Preseason Cutdown Check ──────────────────────────────────────────────
+  // ── Preseason → Regular transition ────────────────────────────────────────
   if (meta.phase === 'preseason') {
-    const limit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
-
-    // Headless/batch simulation (skipUserGame) has no interactive user to make
-    // the preseason 53-man cutdown, so the user team is cut down by the same AI
-    // logic as every other team — otherwise the new season can never start and
-    // the franchise cannot survive into subsequent years. Interactive play is
-    // unchanged: skipUserGame is only set by the batch orchestrator, so the
-    // manual-cutdown gate below still applies to real players.
-    if (payload?.skipUserGame) {
-      await AiLogic.executeAICutdowns({ includeUserTeam: true });
-    }
-
-    const userRoster = cache.getPlayersByTeam(meta.userTeamId);
-    if (userRoster.length > limit) {
-      post(toUI.ERROR, { message: `Roster limit exceeded! You have ${userRoster.length} players. Cut down to ${limit} to advance.` }, id);
-      return;
-    }
-
-    // Execute AI Cutdowns (53-man roster limit)
-    await AiLogic.executeAICutdowns();
-
-    // Execute AI Cap Management — restructure stars or cut cap-inefficient
-    // veterans so all AI teams are under the $301.2M hard cap at season start.
-    await AiLogic.executeAICapManagement();
-
-    // Both cutdown passes above release players directly (teamId -> null)
-    // without touching team.depthChart, so cut players would otherwise linger
-    // as dangling starter/backup references until the next pre-sim rebuild.
-    // Repair immediately using the same canonical utility as a manual release.
-    validateAndRepairAllTeamDepthCharts('post-ai-cutdown');
+    // Roster cutdowns, AI cap management, depth repair, and the interactive-user
+    // 53-man gate all ran above (before the legality gate). Nothing to block on
+    // here — proceed to season-stat initialization and the phase transition.
 
     // Priority 4: Initialize zeroed-out season stat entries for EVERY active player
     // on EVERY team before the first game is simulated. This guarantees that:
