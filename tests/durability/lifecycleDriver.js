@@ -177,6 +177,7 @@ export class LifecycleDriver {
       }
     };
     await tryGet(toWorker.GET_ALL_SEASONS, {}, 'allSeasons', (p) => p);
+    await tryGet(toWorker.GET_TRANSACTIONS, { limit: 5000, mode: 'recent' }, 'transactions', (p) => p?.transactions ?? p);
     await tryGet(toWorker.GET_DRAFT_CLASSES, {}, 'draftClasses', (p) => p);
     await tryGet(toWorker.GET_RECORDS, {}, 'records', (p) => p);
     return probes;

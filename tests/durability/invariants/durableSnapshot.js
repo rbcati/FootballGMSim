@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { canonicalIdKey, stableIdCompare } from '../../../src/core/referenceIntegrity.js';
+import { canonicalIdKey, resolveTeamRefId, stableIdCompare } from '../../../src/core/referenceIntegrity.js';
 import { getActiveCapHit, normalizeContract } from '../../../src/core/contracts/contractObligations.js';
 import { activePlayersFromPool, draftPicks, freeAgentsFromPool, leagueHistory, playerPool, viewTeams } from './derive.js';
 
@@ -12,8 +12,12 @@ export function buildDurableSnapshot(state = {}) {
   const view = state.view ?? {};
   const ctx = { ...state, view };
   const teams = authoritativeTeams(ctx);
-  const { players } = playerPool(ctx);
-  const retired = players.filter((p) => p?.status === 'retired' || p?.retired === true || p?.retirementYear != null);
+  const { players, source: playerSource } = playerPool(ctx);
+  const retired = mergeRetiredPlayers(
+    players.filter((p) => p?.status === 'retired' || p?.retired === true || p?.retirementYear != null),
+    view.retiredPlayers,
+    state.db?.meta?.retiredPlayers,
+  );
   const active = players.filter((p) => p && p.status !== 'retired' && p.retired !== true);
   const picks = draftPicks(ctx).picks;
   const history = leagueHistory(ctx);
@@ -42,8 +46,8 @@ export function buildDurableSnapshot(state = {}) {
     retiredPlayers: retired.map((p) => ({ id: idKey(p.id), retirementYear: p.retirementYear ?? p.retiredYear ?? null })).sort(byId),
     draftPicks: picks.map((pk) => ({ id: idKey(pk.id), season: pk.season ?? pk.year ?? null, round: pk.round ?? null, originalOwner: idKey(pk.originalOwner ?? pk.originalTeamId), currentOwner: idKey(pk.currentOwner ?? pk.teamId ?? pk.owner) })).sort(byId),
     schedule: normalizeSchedule(view.schedule ?? state.db?.schedule),
-    history: history.map((h) => ({ season: h.season ?? h.year ?? null, year: h.year ?? null, champion: idKey(h.championTeamId ?? h.champion), runnerUp: idKey(h.runnerUpTeamId ?? h.runnerUp) })).sort((a,b) => (a.season ?? 0) - (b.season ?? 0)),
-    pools: { active: active.length, rostered: activePlayersFromPool(players).length, freeAgent: freeAgentsFromPool(players).length, retired: retired.length },
+    history: history.map((h) => ({ season: h.season ?? h.year ?? null, year: h.year ?? null, champion: resolveTeamRefId(h.championTeamId ?? h.championId ?? h.champion), runnerUp: resolveTeamRefId(h.runnerUpTeamId ?? h.runnerUpId ?? h.runnerUp) })).sort((a,b) => (a.season ?? 0) - (b.season ?? 0)),
+    pools: { source: playerSource, active: active.length, rostered: activePlayersFromPool(players).length, freeAgent: freeAgentsFromPool(players).length, retired: retired.length },
   });
 }
 
@@ -61,10 +65,15 @@ function walk(a, b, path, out, limit) {
   if (out.length >= limit) return;
   if (JSON.stringify(a) === JSON.stringify(b)) return;
   if (Array.isArray(a) && Array.isArray(b) && (a.some(hasStableEntityId) || b.some(hasStableEntityId))) {
-    const keys = [...new Set([...a.map(entityKey), ...b.map(entityKey)])].filter(Boolean).sort(stableIdCompare);
-    const aMap = new Map(a.filter(hasStableEntityId).map((v) => [entityKey(v), v]));
-    const bMap = new Map(b.filter(hasStableEntityId).map((v) => [entityKey(v), v]));
-    for (const key of keys) walk(aMap.get(key), bMap.get(key), `${path}{${key}}`, out, limit);
+    const aGroups = groupEntityOccurrences(a);
+    const bGroups = groupEntityOccurrences(b);
+    const keys = [...new Set([...aGroups.keys(), ...bGroups.keys()])].sort(stableIdCompare);
+    for (const key of keys) {
+      const left = aGroups.get(key) || [];
+      const right = bGroups.get(key) || [];
+      const count = Math.max(left.length, right.length);
+      for (let i = 0; i < count; i += 1) walk(left[i], right[i], `${path}{${key}}[${i}]`, out, limit);
+    }
     return;
   }
   if (!a || !b || typeof a !== 'object' || typeof b !== 'object') { out.push(toDiff(path, a, b)); return; }
@@ -78,6 +87,18 @@ function toDiff(path, a, b) {
 function hasStableEntityId(v) { return v && typeof v === 'object' && (v.id != null || v.playerId != null || v.gameId != null); }
 function entityKey(v) { return canonicalIdKey(v?.id ?? v?.playerId ?? v?.gameId); }
 function entityFromPath(path) { const m = String(path).match(/\{([^}]+)}/); return m ? m[1] : null; }
+function groupEntityOccurrences(list) {
+  const groups = new Map();
+  for (const v of list || []) {
+    if (!hasStableEntityId(v)) continue;
+    const key = entityKey(v);
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(v);
+  }
+  for (const values of groups.values()) values.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return groups;
+}
 function normalizeInjury(p) { const i = p.injury ?? {}; return { status: p.injuryStatus ?? i.status ?? null, weeks: i.weeks ?? p.injuryWeeks ?? null, available: p.available ?? p.isAvailable ?? null }; }
 function normalizeSchedule(schedule) {
   const games = Array.isArray(schedule?.games) ? schedule.games : (Array.isArray(schedule?.weeks) ? schedule.weeks.flatMap((w) => (w.games || []).map((g) => ({ ...g, week: g.week ?? w.week }))) : []);
@@ -95,4 +116,16 @@ function authoritativeTeams(ctx = {}) {
   if (!dbTeams) return viewTeams(ctx);
   const viewById = new Map(viewTeams(ctx).map((t) => [canonicalIdKey(t.id), t]));
   return dbTeams.map((team) => ({ ...(viewById.get(canonicalIdKey(team.id)) || {}), ...team }));
+}
+function mergeRetiredPlayers(...lists) {
+  const byId = new Map();
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const p of list) {
+      const id = idKey(p?.id ?? p?.playerId);
+      if (!id) continue;
+      if (!byId.has(id)) byId.set(id, { ...p, id });
+    }
+  }
+  return [...byId.values()];
 }

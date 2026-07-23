@@ -43,14 +43,15 @@ export function check(ctx) {
     : pass(ctx, 'continuity.schedule-game-id-season-unique', 'Schedule game ids are not reused across seasons in checkpoint'));
 
   const transition = `${prev.league?.phase ?? 'unknown'} -> ${cur.league?.phase ?? 'unknown'}`;
-  if (prev.league?.phase === 'offseason_resign' && cur.league?.phase === 'preseason') {
-    out.push(skip(ctx, 'continuity.players-do-not-disappear', `Player-disposition evidence unavailable during offseason roster/draft/free-agency reconciliation (${transition})`));
+  if (cur.pools?.source && cur.pools.source !== 'db') {
+    out.push(skip(ctx, 'continuity.players-do-not-disappear', `Full DB player pool unavailable at current checkpoint; roster-only view cannot prove dispositions (${transition})`, { source: cur.pools.source }));
   } else {
     const curAllIds = new Set([...(cur.players || []).map((p) => p.id), ...(cur.retiredPlayers || []).map((p) => p.id)]);
-    const disappeared = (prev.players || []).filter((p) => p?.status !== 'draft_eligible' && !curAllIds.has(p.id));
+    const curRetiredIds = new Set((cur.retiredPlayers || []).map((p) => p.id));
+    const disappeared = (prev.players || []).filter((p) => !curAllIds.has(p.id) && !hasLegitimateDisposition(ctx, p, curRetiredIds));
     out.push(disappeared.length
-      ? fail(ctx, 'continuity.players-do-not-disappear', { entityType: 'player', entityId: disappeared[0].id, message: 'Active/free-agent player disappeared without retirement or disposition evidence', details: { disappeared: disappeared.slice(0, 20).map((p) => p.id), transition } })
-      : pass(ctx, 'continuity.players-do-not-disappear', 'No active/free-agent players disappeared without retirement or disposition evidence'));
+      ? fail(ctx, 'continuity.players-do-not-disappear', { entityType: 'player', entityId: disappeared[0].id, message: 'Established player disappeared without retirement, draft-pool, free-agency, release, or removal disposition evidence', details: { disappeared: disappeared.slice(0, 20).map((p) => ({ id: p.id, status: p.status })), transition } })
+      : pass(ctx, 'continuity.players-do-not-disappear', 'No established players disappeared without disposition evidence'));
   }
 
   const curById = new Map((cur.players || []).map((p) => [p.id, p]));
@@ -59,8 +60,7 @@ export function check(ctx) {
     const next = curById.get(p.id);
     if (!next) continue;
     if (Number(next.yearsRemaining ?? 0) > Number(p.yearsRemaining ?? 0)) {
-      const contractChanged = next.yearsTotal !== p.yearsTotal || next.baseAnnual !== p.baseAnnual || next.signingBonus !== p.signingBonus || next.activeCapHit !== p.activeCapHit;
-      if (!contractChanged) yearsIncreased.push({ id: p.id, before: p.yearsRemaining, after: next.yearsRemaining });
+      if (!hasLegitimateContractTransition(ctx, p, next)) yearsIncreased.push({ id: p.id, before: p.yearsRemaining, after: next.yearsRemaining, beforeTotal: p.yearsTotal, afterTotal: next.yearsTotal });
     }
   }
   out.push(yearsIncreased.length
@@ -68,4 +68,35 @@ export function check(ctx) {
     : pass(ctx, 'continuity.contract-years-do-not-increase-without-contract-write', 'No contract years increased without a contract-write shape'));
 
   return out;
+}
+
+function hasLegitimateDisposition(ctx, player, curRetiredIds) {
+  if (!player?.id) return true;
+  if (player.status === 'draft_eligible') return true;
+  if (curRetiredIds.has(player.id)) return true;
+  return hasPlayerEvent(ctx, player.id, ['retire', 'retirement', 'retired', 'release', 'released', 'waive', 'waived', 'free_agent', 'free agency', 'removed', 'delete', 'disposition']);
+}
+
+function hasLegitimateContractTransition(ctx, prev, cur) {
+  if (hasPlayerEvent(ctx, prev.id, ['sign', 'signed', 'extension', 'extend', 'extended', 'restructure', 'restructured', 'contract'])) return true;
+  const wasUnsigned = Number(prev.yearsRemaining ?? 0) <= 0 || prev.teamId == null || prev.status === 'free_agent';
+  const isRostered = cur.teamId != null && cur.status !== 'free_agent' && cur.status !== 'retired';
+  if (wasUnsigned && isRostered && Number(cur.yearsRemaining ?? 0) > 0) return true;
+  const totalIncreased = Number(cur.yearsTotal ?? 0) > Number(prev.yearsTotal ?? 0);
+  const economicsChanged = cur.baseAnnual !== prev.baseAnnual || cur.signingBonus !== prev.signingBonus;
+  return totalIncreased && economicsChanged;
+}
+
+function hasPlayerEvent(ctx, playerId, words) {
+  const txs = [
+    ...(Array.isArray(ctx?.probes?.transactions) ? ctx.probes.transactions : []),
+    ...(Array.isArray(ctx?.transactions) ? ctx.transactions : []),
+    ...(Array.isArray(ctx?.durableSnapshot?.transactions) ? ctx.durableSnapshot.transactions : []),
+  ];
+  const id = String(playerId);
+  return txs.some((tx) => {
+    const text = JSON.stringify(tx).toLowerCase();
+    if (!text.includes(id.toLowerCase())) return false;
+    return words.some((w) => text.includes(w));
+  });
 }

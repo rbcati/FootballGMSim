@@ -190,7 +190,17 @@ describe('continuity invariant V2', () => {
     const cur = { ...baseSnap(), players: [{ ...prev.players[0], yearsRemaining: 2 }] };
     expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write').status).toBe('fail');
     cur.players[0].baseAnnual = 7;
+    expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write').status).toBe('fail');
+    cur.players[0].yearsTotal = 4;
     expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write').status).toBe('pass');
+  });
+
+  it('passes a contract-year increase with production transaction evidence', () => {
+    const prev = baseSnap();
+    const cur = { ...baseSnap(), players: [{ ...prev.players[0], yearsRemaining: 3, yearsTotal: 3 }] };
+    const ctx = ctxFor(prev, cur, 'afterRegularSeason');
+    ctx.probes = { transactions: [{ type: 'CONTRACT_EXTENSION', playerId: 'p10' }] };
+    expect(continuity.check(ctx).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write').status).toBe('pass');
   });
 
   it('fails disappearing active players but passes recorded retirement and draft-pool disposition', () => {
@@ -202,6 +212,15 @@ describe('continuity invariant V2', () => {
     const draftPrev = { ...baseSnap(), players: [{ id: 'draft1', status: 'draft_eligible' }] };
     cur = { ...baseSnap(), players: [] };
     expect(continuity.check(ctxFor(draftPrev, cur)).find((r) => r.id === 'continuity.players-do-not-disappear').status).toBe('pass');
+  });
+
+  it('does not blanket-skip offseason resign to preseason disappearances and accepts release evidence', () => {
+    const prev = baseSnap();
+    const cur = { ...baseSnap(), league: { phase: 'preseason' }, players: [], retiredPlayers: [] };
+    expect(continuity.check(ctxFor(prev, cur)).find((r) => r.id === 'continuity.players-do-not-disappear').status).toBe('fail');
+    const ctx = ctxFor(prev, cur);
+    ctx.probes = { transactions: [{ type: 'PLAYER_RELEASED', playerId: 'p10' }] };
+    expect(continuity.check(ctx).find((r) => r.id === 'continuity.players-do-not-disappear').status).toBe('pass');
   });
 });
 
@@ -400,6 +419,28 @@ describe('durable snapshot V2', () => {
     b.view.teams[0].roster.push(healthyPlayer(2, '0'));
     b.db.players.push(healthyPlayer(2, '0'));
     expect(compareDurableSnapshots(buildDurableSnapshot(a), buildDurableSnapshot(b)).ok).toBe(false);
+  });
+
+  it('preserves duplicate occurrences when a later same-id entity matches', async () => {
+    const { compareDurableSnapshots } = await import('./invariants/durableSnapshot.js');
+    const a = { players: [{ id: 'p1', ovr: 70 }, { id: 'p1', ovr: 80 }] };
+    const b = { players: [{ id: 'p1', ovr: 75 }, { id: 'p1', ovr: 80 }] };
+    const cmp = compareDurableSnapshots(a, b);
+    expect(cmp.ok).toBe(false);
+    expect(cmp.firstDivergence).toMatchObject({ domain: 'players', entityId: 'p1', field: 'ovr' });
+  });
+
+  it('normalizes legacy object-shaped champion and runner-up team references', async () => {
+    const { buildDurableSnapshot, compareDurableSnapshots } = await import('./invariants/durableSnapshot.js');
+    const base = { season: 1, view: { teams: [healthyTeam(0, []), healthyTeam(1, [])], leagueHistory: [{ season: 2026, champion: { id: 0 }, runnerUp: { teamId: 1 } }] }, db: { teams: [{ id: 0 }, { id: 1 }], players: [], picks: [] } };
+    const alias = structuredClone(base);
+    alias.view.leagueHistory[0] = { season: 2026, championTeamId: '0', runnerUpTeamId: '1' };
+    expect(compareDurableSnapshots(buildDurableSnapshot(base), buildDurableSnapshot(alias)).ok).toBe(true);
+    const changed = structuredClone(base);
+    changed.view.leagueHistory[0].champion = { id: 1 };
+    const cmp = compareDurableSnapshots(buildDurableSnapshot(base), buildDurableSnapshot(changed));
+    expect(cmp.ok).toBe(false);
+    expect(cmp.firstDivergence).toMatchObject({ domain: 'history', field: 'champion' });
   });
 
   it('save/reload detects contract, dead-cap, injury, ratings, schedule, and history mutations', () => {

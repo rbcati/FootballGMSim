@@ -44,6 +44,11 @@ export function buildSortedFreeAgentsMapForOffers(allPlayers = []) {
     return freeAgentsMap;
 }
 
+function positionRank(pos, order) {
+    const idx = order.indexOf(pos);
+    return idx >= 0 ? idx : order.length;
+}
+
 class AiLogic {
     static NEED_GROUP_TO_POS = Object.freeze({
         QB: ['QB'],
@@ -158,7 +163,7 @@ class AiLogic {
     static async executeAICutdowns({ includeUserTeam = false } = {}) {
         const meta = cache.getMeta();
         const userTeamId = meta.userTeamId;
-        const allTeams = cache.getAllTeams();
+        const allTeams = cache.getAllTeams().slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
         const limit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
 
         for (const team of allTeams) {
@@ -167,7 +172,7 @@ class AiLogic {
             // user team in via includeUserTeam so the season can still start.
             if (!includeUserTeam && team.id === userTeamId) continue;
 
-            const roster = cache.getPlayersByTeam(team.id);
+            const roster = cache.getPlayersByTeam(team.id).slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
             if (roster.length <= limit) continue;
 
             // Score = OVR * 2 + Potential + (Age < 25 ? 10 : 0)
@@ -245,6 +250,62 @@ class AiLogic {
 
             // Re-calc active cap (roster changed)
             this.updateTeamCap(team.id);
+        }
+    }
+
+    /**
+     * Deterministic minimum-roster reconciliation for AI/headless rollover.
+     * This is a last-mile safety pass after offseason churn: it only fills
+     * under-minimum rosters from the existing free-agent pool and never cuts or
+     * restructures players.
+     */
+    static async ensureMinimumRosters({ includeUserTeam = false, minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON } = {}) {
+        const meta = cache.getMeta();
+        const userTeamId = meta?.userTeamId;
+        const allTeams = cache.getAllTeams().slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
+
+        for (const team of allTeams) {
+            if (!includeUserTeam && Number(team.id) === Number(userTeamId)) continue;
+
+            let roster = cache.getPlayersByTeam(team.id);
+            if (roster.length >= minimum) continue;
+
+            const needs = AiLogic.calculateTeamNeeds(team.id);
+            const neededPositions = Object.keys(needs)
+                .filter((pos) => Number(needs[pos] ?? 0) > 1)
+                .sort((a, b) => (Number(needs[b] ?? 0) - Number(needs[a] ?? 0)) || a.localeCompare(b));
+            const positionOrder = [...neededPositions, ...Constants.POSITIONS.filter((pos) => !neededPositions.includes(pos))];
+
+            while (roster.length < minimum) {
+                const freshTeam = cache.getTeam(team.id);
+                const freeAgents = cache.getAllPlayers()
+                    .filter((p) => isFreeAgent(p))
+                    .sort((a, b) => {
+                        const posDelta = positionRank(a?.pos, positionOrder) - positionRank(b?.pos, positionOrder);
+                        if (posDelta !== 0) return posDelta;
+                        return (Number(b?.ovr ?? 0) - Number(a?.ovr ?? 0)) || stableIdCompare(a?.id, b?.id);
+                    });
+                const capSnapshot = buildTeamCapSnapshot({
+                    team: freshTeam,
+                    roster,
+                    salaryCap: freshTeam?.capTotal ?? meta?.economy?.currentSalaryCap,
+                });
+                const room = Number(capSnapshot?.capRoom ?? freshTeam?.capRoom ?? 0);
+                const candidate = freeAgents.find((p) => Number(getActiveCapHit(p) ?? 0) <= room + 0.01);
+                if (!candidate) break;
+
+                cache.updatePlayer(candidate.id, { teamId: team.id, status: 'active', offers: [] });
+                await Transactions.add({
+                    type: 'SIGN',
+                    seasonId: meta.currentSeasonId,
+                    week: meta.currentWeek,
+                    teamId: team.id,
+                    playerId: candidate.id,
+                    details: { playerId: candidate.id, source: 'minimum_roster_reconciliation' },
+                });
+                AiLogic.updateTeamCap(team.id);
+                roster = cache.getPlayersByTeam(team.id);
+            }
         }
     }
 
@@ -585,7 +646,7 @@ class AiLogic {
     static async executeOffseasonRosterCuts() {
         const meta = cache.getMeta();
         const userTeamId = meta?.userTeamId;
-        const allTeams = cache.getAllTeams();
+        const allTeams = cache.getAllTeams().slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
         const year = Number(meta?.year ?? 2025);
 
         for (const team of allTeams) {

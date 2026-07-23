@@ -152,6 +152,32 @@ describe('executeAICapManagement — legality & structure', () => {
   });
 });
 
+describe('ensureMinimumRosters — stable rollover legality', () => {
+  it('fills under-minimum AI rosters from existing free agents without touching interactive user teams', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's5', currentWeek: 1, year: 2030 },
+      teams: new Map([
+        [0, { id: 0, abbr: 'USR', capTotal: LIVE_CAP, deadCap: 0, capRoom: 80 }],
+        [31, { id: 31, abbr: 'AI31', capTotal: LIVE_CAP, deadCap: 0, capRoom: 80 }],
+      ]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 52; i++) {
+      h.state.store.players.set(`ai-${i}`, { id: `ai-${i}`, teamId: 31, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+      h.state.store.players.set(`usr-${i}`, { id: `usr-${i}`, teamId: 0, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+    }
+    h.state.store.players.set('fa-b', { id: 'fa-b', teamId: null, pos: 'CB', ovr: 65, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) });
+    h.state.store.players.set('fa-a', { id: 'fa-a', teamId: null, pos: 'CB', ovr: 66, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) });
+
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: false });
+
+    expect(h.mockCache.getPlayersByTeam(31)).toHaveLength(53);
+    expect(h.mockCache.getPlayersByTeam(0)).toHaveLength(52);
+    expect(h.state.store.players.get('fa-a').teamId).toBe(31);
+    expect(h.state.txLog.some((tx) => tx.details?.source === 'minimum_roster_reconciliation')).toBe(true);
+  });
+});
+
 describe('executeAICapManagement — determinism', () => {
   it('produces identical transactions across two identical runs', async () => {
     await AiLogic.executeAICapManagement({ autoManageUserCap: true });
