@@ -18,6 +18,7 @@
  */
 import { pass, fail, skip } from './helpers.js';
 import { canonicalIdKey, stableIdCompare } from '../../../src/core/referenceIntegrity.js';
+import { buildDurableSnapshot, compareDurableSnapshots, durableDigest } from './durableSnapshot.js';
 
 export const id = 'saveReload';
 
@@ -26,6 +27,8 @@ export const id = 'saveReload';
  * ({ view, db }). Pure — safe to call before save and after reload.
  */
 export function canonicalSummary(state) {
+  const durableSnapshot = buildDurableSnapshot(state);
+  const durableSnapshotDigest = durableDigest(durableSnapshot);
   const view = state?.view ?? {};
   const db = state?.db ?? null;
   const teams = Array.isArray(view.teams) ? view.teams : [];
@@ -69,6 +72,9 @@ export function canonicalSummary(state) {
     capFingerprint,
     rosterFingerprint,
     pickOwnership,
+    durableSnapshotVersion: durableSnapshot.version,
+    durableSnapshotDigest,
+    durableSnapshot,
   };
 }
 
@@ -76,6 +82,7 @@ const EXACT_FIELDS = [
   'year', 'week', 'phase', 'teamCount', 'playerPoolSize', 'freeAgentCount',
   'completedSeasonCount', 'championTeamId', 'userTeamId',
   'capFingerprint', 'rosterFingerprint', 'pickOwnership',
+  'durableSnapshotDigest',
 ];
 
 /**
@@ -94,6 +101,10 @@ export function compareCanonical(before, after) {
       const m = { field: f, before: truncate(a), after: truncate(b) };
       if (f === 'rosterFingerprint') {
         m.diagnostic = classifyRosterFingerprintDiff(String(a), String(b));
+      }
+      if (f === 'durableSnapshotDigest') {
+        const diff = compareDurableSnapshots(before?.durableSnapshot, after?.durableSnapshot);
+        m.diagnostic = { classification: 'durable-state', firstDivergence: diff.firstDivergence, diffs: diff.diffs.slice(0, 8) };
       }
       mismatches.push(m);
     }

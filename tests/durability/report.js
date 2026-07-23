@@ -6,7 +6,7 @@
  * `toSummaryJSON()` returns a compact form safe to commit for long runs (drops
  * per-result pass/skip noise, keeps failures + per-checkpoint counts).
  */
-export const HARNESS_VERSION = '1.0.0';
+export const HARNESS_VERSION = '2.0.0';
 
 export class DurabilityReport {
   constructor({ seed, mode, failureMode, requestedSeasons, gitSha = null, perSeasonStopPhase = 'rollover' }) {
@@ -27,6 +27,9 @@ export class DurabilityReport {
       runtimeMs: 0,
       peakMemoryMb: 0,
       deterministic: null,
+      lifecycleDeterministic: null,
+      stateDeterministic: null,
+      firstDivergence: null,
       determinismDetail: null,
       firstFailure: null,
       lifecycleException: null,
@@ -40,7 +43,7 @@ export class DurabilityReport {
   }
 
   /** Record a completed checkpoint with its structured invariant results. */
-  addCheckpoint({ season, phase, week, results }) {
+  addCheckpoint({ season, phase, week, results, durable = null, metrics = null }) {
     const counts = { pass: 0, fail: 0, skip: 0 };
     for (const r of results) counts[r.status] = (counts[r.status] || 0) + 1;
     this.report.summary.passed += counts.pass;
@@ -58,7 +61,7 @@ export class DurabilityReport {
         message: firstFail.message,
       };
     }
-    this.report.checkpoints.push({ season, phase, week, summary: counts, results });
+    this.report.checkpoints.push({ season, phase, week, summary: counts, results, durable, metrics });
     return counts;
   }
 
@@ -80,8 +83,11 @@ export class DurabilityReport {
     }
   }
 
-  setDeterminism(deterministic, detail) {
+  setDeterminism(deterministic, detail, extra = {}) {
     this.report.deterministic = deterministic;
+    this.report.lifecycleDeterministic = extra.lifecycleDeterministic ?? deterministic;
+    this.report.stateDeterministic = extra.stateDeterministic ?? deterministic;
+    this.report.firstDivergence = extra.firstDivergence ?? null;
     this.report.determinismDetail = detail;
   }
 
@@ -114,10 +120,13 @@ export class DurabilityReport {
   }
 
   get passed() {
-    return this.report.summary.failed === 0 && !this.report.lifecycleException;
+    const detOk = this.report.deterministic == null || (this.report.lifecycleDeterministic !== false && this.report.stateDeterministic !== false);
+    return this.report.summary.failed === 0 && !this.report.lifecycleException && detOk;
   }
 
-  toJSON() { return this.report; }
+  toRuntimeJSON() { return this.report; }
+
+  toJSON() { return stripRuntimeSnapshots(this.report); }
 
   /** Compact, commit-safe report: strips pass/skip result bodies. */
   toSummaryJSON() {
@@ -128,6 +137,8 @@ export class DurabilityReport {
         phase: c.phase,
         week: c.week,
         summary: c.summary,
+        durable: c.durable ? { digest: c.durable.digest, summary: c.durable.summary } : null,
+        metrics: c.metrics ?? null,
         failures: c.results.filter((r) => r.status === 'fail'),
         skipped: c.results.filter((r) => r.status === 'skip').map((r) => ({ id: r.id, reason: r.message })),
       })),
@@ -173,7 +184,8 @@ export function formatConsole(report) {
   if (r.boundedRun) lines.push(`boundedRun=true completedThrough=${r.completedThrough ?? 'unknown'} unexercised=${(r.unexercisedLifecycleStages || []).join(',')}`);
   lines.push(`runtime=${(r.runtimeMs / 1000).toFixed(1)}s peakMem=${r.peakMemoryMb}MB`);
   lines.push(`invariants: pass=${r.summary.passed} fail=${r.summary.failed} skip=${r.summary.skipped}`);
-  if (r.deterministic != null) lines.push(`deterministic=${r.deterministic} (${r.determinismDetail ?? ''})`);
+  if (r.deterministic != null) lines.push(`deterministic=${r.deterministic} lifecycle=${r.lifecycleDeterministic} state=${r.stateDeterministic} (${r.determinismDetail ?? ''})`);
+  if (r.firstDivergence) lines.push(`FIRST DIVERGENCE: ${r.firstDivergence.checkpoint ?? ''} ${r.firstDivergence.domain}:${r.firstDivergence.entityId}.${r.firstDivergence.field}`);
   if (r.lifecycleException) lines.push(`LIFECYCLE CRASH: ${r.lifecycleException.message} @ ${r.lifecycleException.checkpoint} season ${r.lifecycleException.season}`);
   if (r.firstFailure) {
     lines.push(`FIRST FAILURE: ${r.firstFailure.invariantId} @ season ${r.firstFailure.season} phase ${r.firstFailure.phase}`);
@@ -187,4 +199,14 @@ export function formatConsole(report) {
   if (r.recommendedNextRepairPR) lines.push(`NEXT REPAIR PR: ${r.recommendedNextRepairPR}`);
   lines.push(`─────────────────────────────────────────────────────────────`);
   return lines.join('\n');
+}
+
+function stripRuntimeSnapshots(report) {
+  return {
+    ...report,
+    checkpoints: (report.checkpoints || []).map((c) => ({
+      ...c,
+      durable: c.durable ? { digest: c.durable.digest, summary: c.durable.summary } : null,
+    })),
+  };
 }

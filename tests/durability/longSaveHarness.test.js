@@ -26,6 +26,7 @@ import * as references from './invariants/references.js';
 import * as numericSafety from './invariants/numericSafety.js';
 import * as retirement from './invariants/retirement.js';
 import * as history from './invariants/history.js';
+import * as continuity from './invariants/continuity.js';
 import { canonicalSummary, compareCanonical } from './invariants/saveReload.js';
 import { runInvariants } from './invariants/index.js';
 import { scanNumericCorruption, findDuplicateIds } from './invariants/helpers.js';
@@ -38,7 +39,7 @@ function healthyTeam(id, roster = []) {
   return { id, name: `T${id}`, abbr: `T${id}`, wins: 8, losses: 8, ties: 0, ptsFor: 300, ptsAgainst: 300, capUsed: 200, capRoom: 100, capTotal: 301.2, roster, picks: [] };
 }
 function healthyPlayer(id, teamId) {
-  return { id, name: `P${id}`, pos: 'QB', age: 25, ovr: 75, teamId, status: 'active', contract: { years: 3, salary: 10 }, ratings: { throwPower: 80 } };
+  return { id, name: `P${id}`, pos: 'QB', age: 25, ovr: 75, teamId, status: 'active', capHit: 3, contract: { years: 3, salary: 3 }, ratings: { throwPower: 80 } };
 }
 function healthyViewCtx(overrides = {}) {
   const teams = [];
@@ -154,6 +155,80 @@ describe('invariant checkers — happy path', () => {
     const ctx2 = healthyViewCtx({ phase: 'afterSeasonRollover', season: 3 });
     ctx2.view.leagueHistory = []; // no history despite season 3 → fail
     expect(history.check(ctx2).find((r) => r.id === 'history.season-archive-exists').status).toBe('fail');
+  });
+});
+
+
+
+describe('continuity invariant V2', () => {
+  const baseSnap = () => ({
+    league: { phase: 'offseason_resign' },
+    teams: [{ id: '0' }],
+    players: [{ id: 'p10', teamId: '0', status: 'active', yearsRemaining: 1, yearsTotal: 2, baseAnnual: 5, signingBonus: 0, activeCapHit: 5 }],
+    retiredPlayers: [],
+    history: [{ season: 2026 }],
+    schedule: [{ id: 'g1', season: 2026 }],
+  });
+  const ctxFor = (prev, cur, phase = 'afterSeasonRollover') => ({ ...healthyViewCtx({ phase }), durableSnapshot: cur, previousDurableSnapshot: prev });
+
+  it('fails when completed rollover does not add exactly one history row', () => {
+    const prev = baseSnap();
+    const cur = { ...baseSnap(), league: { phase: 'preseason' }, history: prev.history };
+    expect(continuity.check(ctxFor(prev, cur)).find((r) => r.id === 'continuity.history-grows-once').status).toBe('fail');
+    cur.history = [...prev.history, { season: 2027 }];
+    expect(continuity.check(ctxFor(prev, cur)).find((r) => r.id === 'continuity.history-grows-once').status).toBe('pass');
+  });
+
+  it('fails when a production-shaped slim schedule game id is reused across prior and current seasons', () => {
+    const prev = baseSnap();
+    const cur = { ...baseSnap(), schedule: [{ id: 'g1', season: 2027, week: 1, home: '0', away: '1' }] };
+    expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.schedule-game-id-season-unique').status).toBe('fail');
+  });
+
+  it('fails when contract years increase without exact player transaction evidence, even when economics also change', () => {
+    const prev = baseSnap();
+    const cur = { ...baseSnap(), players: [{ ...prev.players[0], yearsRemaining: 2, yearsTotal: 4, baseAnnual: 7, signingBonus: 3 }] };
+    const result = continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write');
+    expect(result.status).toBe('fail');
+  });
+
+  it('rejects substring or wrong-player transaction matches for contract-year increases', () => {
+    const prev = baseSnap();
+    const cur = { ...baseSnap(), players: [{ ...prev.players[0], yearsRemaining: 2, yearsTotal: 4 }] };
+    const ctx = ctxFor(prev, cur, 'afterRegularSeason');
+    ctx.probes = { transactions: [
+      { type: 'NOTE', details: { playerId: 'p10', text: 'contract extension wording only' } },
+      { type: 'CONTRACT_EXTENSION', playerId: 'xx-p10-xx' },
+    ] };
+    expect(continuity.check(ctx).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write').status).toBe('fail');
+  });
+
+  it('passes a contract-year increase with production transaction evidence', () => {
+    const prev = baseSnap();
+    const cur = { ...baseSnap(), players: [{ ...prev.players[0], yearsRemaining: 3, yearsTotal: 3 }] };
+    const ctx = ctxFor(prev, cur, 'afterRegularSeason');
+    ctx.probes = { transactions: [{ type: 'CONTRACT_EXTENSION', playerId: 'p10' }] };
+    expect(continuity.check(ctx).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write').status).toBe('pass');
+  });
+
+  it('fails disappearing active players but passes recorded retirement and draft-pool disposition', () => {
+    const prev = baseSnap();
+    let cur = { ...baseSnap(), players: [], retiredPlayers: [] };
+    expect(continuity.check(ctxFor(prev, cur)).find((r) => r.id === 'continuity.players-do-not-disappear').status).toBe('fail');
+    cur = { ...baseSnap(), players: [], retiredPlayers: [{ id: 'p10' }] };
+    expect(continuity.check(ctxFor(prev, cur)).find((r) => r.id === 'continuity.players-do-not-disappear').status).toBe('pass');
+    const draftPrev = { ...baseSnap(), players: [{ id: 'draft1', status: 'draft_eligible' }] };
+    cur = { ...baseSnap(), players: [] };
+    expect(continuity.check(ctxFor(draftPrev, cur)).find((r) => r.id === 'continuity.players-do-not-disappear').status).toBe('pass');
+  });
+
+  it('does not blanket-skip offseason resign to preseason disappearances and accepts release evidence', () => {
+    const prev = baseSnap();
+    const cur = { ...baseSnap(), league: { phase: 'preseason' }, players: [], retiredPlayers: [] };
+    expect(continuity.check(ctxFor(prev, cur)).find((r) => r.id === 'continuity.players-do-not-disappear').status).toBe('fail');
+    const ctx = ctxFor(prev, cur);
+    ctx.probes = { transactions: [{ type: 'PLAYER_RELEASED', playerId: 'p10' }] };
+    expect(continuity.check(ctx).find((r) => r.id === 'continuity.players-do-not-disappear').status).toBe('pass');
   });
 });
 
@@ -325,4 +400,131 @@ describe('LifecycleDriver.simToPhase target enforcement', () => {
     await expect(driver.simToPhase('playoffs', { checkpoint: 'afterRegularSeason', maxCalls: 2 }))
       .rejects.toMatchObject({ isLifecycleCrash: true, checkpoint: 'afterRegularSeason' });
   });
+});
+
+describe('durable snapshot V2', () => {
+  it('detects identical lifecycle metadata with different roster state as non-deterministic', async () => {
+    const { runDeterminismCheck } = await import('./longSaveHarness.js');
+    let run = 0;
+    const dispatch = async (type) => {
+      if (type === 'INIT') return { type: 'OK', payload: { ok: true } };
+      const v = healthyViewCtx().view;
+      v.teams[0].roster[0] = healthyPlayer(run < 2 ? 1 : 2, 0);
+      if (type === 'USE_SAFE_STARTER_LEAGUE') { run += 1; return { type: 'OK', payload: v }; }
+      return { type: 'OK', payload: { ...v, phase: 'playoffs' } };
+    };
+    const det = await runDeterminismCheck({ mode: '1-season', perSeasonStopPhase: 'playoffs', failureMode: 'collect-all', driverOverrides: { loadWorker: async () => {}, dispatch, readDbPool: async () => { const v = healthyViewCtx().view; v.teams[0].roster[0] = healthyPlayer(run < 2 ? 1 : 2, 0); return { players: v.teams.flatMap((t) => t.roster), teams: v.teams, meta: null, seasons: [], picks: [] }; } } });
+    expect(det.lifecycleDeterministic).toBe(true);
+    expect(det.stateDeterministic).toBe(false);
+    expect(det.firstDivergence).toMatchObject({ domain: expect.any(String), field: expect.any(String) });
+  });
+
+  it('canonicalizes collection ordering and mixed id aliases but preserves duplicates', async () => {
+    const { buildDurableSnapshot, compareDurableSnapshots } = await import('./invariants/durableSnapshot.js');
+    const a = { season: 1, view: { teams: [healthyTeam(0, [healthyPlayer(2, 0), healthyPlayer('1', 0)])], leagueHistory: [] }, db: { players: [healthyPlayer('1', 0), healthyPlayer(2, 0)], picks: [] } };
+    const b = { season: 1, view: { teams: [healthyTeam('0', [healthyPlayer(1, '0'), healthyPlayer('2', '0')])], leagueHistory: [] }, db: { players: [healthyPlayer(2, '0'), healthyPlayer(1, '0')], picks: [] } };
+    expect(compareDurableSnapshots(buildDurableSnapshot(a), buildDurableSnapshot(b)).ok).toBe(true);
+    b.view.teams[0].roster.push(healthyPlayer(2, '0'));
+    b.db.players.push(healthyPlayer(2, '0'));
+    expect(compareDurableSnapshots(buildDurableSnapshot(a), buildDurableSnapshot(b)).ok).toBe(false);
+  });
+
+  it('preserves duplicate occurrences when a later same-id entity matches', async () => {
+    const { compareDurableSnapshots } = await import('./invariants/durableSnapshot.js');
+    const a = { players: [{ id: 'p1', ovr: 70 }, { id: 'p1', ovr: 80 }] };
+    const b = { players: [{ id: 'p1', ovr: 75 }, { id: 'p1', ovr: 80 }] };
+    const cmp = compareDurableSnapshots(a, b);
+    expect(cmp.ok).toBe(false);
+    expect(cmp.firstDivergence).toMatchObject({ domain: 'players', entityId: 'p1', field: 'ovr' });
+  });
+
+  it('normalizes legacy object-shaped champion and runner-up team references', async () => {
+    const { buildDurableSnapshot, compareDurableSnapshots } = await import('./invariants/durableSnapshot.js');
+    const base = { season: 1, view: { teams: [healthyTeam(0, []), healthyTeam(1, [])], leagueHistory: [{ season: 2026, champion: { id: 0 }, runnerUp: { teamId: 1 } }] }, db: { teams: [{ id: 0 }, { id: 1 }], players: [], picks: [] } };
+    const alias = structuredClone(base);
+    alias.view.leagueHistory[0] = { season: 2026, championTeamId: '0', runnerUpTeamId: '1' };
+    expect(compareDurableSnapshots(buildDurableSnapshot(base), buildDurableSnapshot(alias)).ok).toBe(true);
+    const changed = structuredClone(base);
+    changed.view.leagueHistory[0].champion = { id: 1 };
+    const cmp = compareDurableSnapshots(buildDurableSnapshot(base), buildDurableSnapshot(changed));
+    expect(cmp.ok).toBe(false);
+    expect(cmp.firstDivergence).toMatchObject({ domain: 'history', field: 'champion' });
+  });
+
+
+  it('uses schedule seasonId before legacy season/year in durable state', async () => {
+    const { buildDurableSnapshot, compareDurableSnapshots } = await import('./invariants/durableSnapshot.js');
+    const a = { season: 1, view: { teams: [healthyTeam(0, []), healthyTeam(1, [])], leagueHistory: [], schedule: { games: [{ id: 'g-season', seasonId: 'season-a', season: 2027, year: 2027, week: 1, homeTeamId: 0, awayTeamId: 1 }] } }, db: { teams: [{ id: 0 }, { id: 1 }], players: [], picks: [] } };
+    const b = structuredClone(a);
+    b.view.schedule.games[0].seasonId = 'season-b';
+    const cmp = compareDurableSnapshots(buildDurableSnapshot(a), buildDurableSnapshot(b));
+    expect(cmp.ok).toBe(false);
+    expect(cmp.firstDivergence).toMatchObject({ domain: 'schedule', entityId: 'g-season', field: 'season' });
+  });
+
+  it('save/reload detects contract, dead-cap, injury, ratings, schedule, and history mutations', () => {
+    const base = { season: 1, view: { year: 2027, phase: 'preseason', teams: [healthyTeam(0, [{ ...healthyPlayer(1, 0), capHit: 10, injury: { status: 'out' } }])], schedule: { games: [{ id: 'g1', week: 1, home: 0, away: 1, played: true, homeScore: 3, awayScore: 0 }] }, leagueHistory: [{ season: 2026, championTeamId: 0 }] }, db: { players: [{ ...healthyPlayer(1, 0), capHit: 10, injury: { status: 'out' } }], picks: [] } };
+    for (const mutate of [
+      (s) => { s.db.players[0].contract.years = 9; }, (s) => { s.view.teams[0].deadCap = 99; },
+      (s) => { s.db.players[0].injury.status = 'healthy'; }, (s) => { s.db.players[0].ovr = 12; },
+      (s) => { s.view.schedule.games[0].homeScore = 99; }, (s) => { s.view.leagueHistory[0].championTeamId = 1; },
+    ]) { const changed = structuredClone(base); mutate(changed); expect(compareCanonical(canonicalSummary(base), canonicalSummary(changed)).ok).toBe(false); }
+  });
+
+  it('stable cap uses live cap, dead cap, team id 0, excludes staff, exact/fractional boundaries, and skips offseason', () => {
+    const ctx = healthyViewCtx();
+    ctx.view.economy = { currentSalaryCap: 200 };
+    ctx.view.teams = [healthyTeam(0, [{ ...healthyPlayer(1, 0), contract: { baseAnnual: 150, signingBonus: 0, yearsTotal: 1, yearsRemaining: 1 } }])];
+    ctx.view.teams[0].deadCap = 50; ctx.view.teams[0].staffPayroll = 999;
+    expect(cap.check(ctx).find((r) => r.id === 'cap.stable-phase-legal').status).toBe('pass');
+    ctx.view.teams[0].deadCap = 50.01;
+    expect(cap.check(ctx).find((r) => r.id === 'cap.stable-phase-legal').status).toBe('fail');
+    ctx.view.phase = 'offseason';
+    expect(cap.check(ctx).find((r) => r.id === 'cap.stable-phase-legal').status).toBe('skip');
+  });
+
+  it('CLI parses multi-seed runs', () => {
+    const { raw, errors } = parseArgv(['node', 's', '5-season', '--seeds=1684,1702,1703']);
+    expect(errors).toEqual([]); expect(raw.seeds).toEqual([1684, 1702, 1703]);
+  });
+
+  it('CLI accepts one seed in --seeds, rejects invalid lists, and rejects determinism combination', () => {
+    expect(parseArgv(['node', 's', '5-season', '--seeds=1702']).raw.seeds).toEqual([1702]);
+    expect(parseArgv(['node', 's', '--seeds=1684,nope']).errors).toContain('Invalid --seeds');
+    expect(parseArgv(['node', 's', '--seeds=1684,', '--determinism']).errors.some((e) => e.includes('--seeds cannot be combined'))).toBe(true);
+  });
+  it('production-shaped cap uses DB dead cap and canonical contract fields', () => {
+    const ctx = healthyViewCtx();
+    ctx.view.economy = { currentSalaryCap: 100 };
+    ctx.view.teams = [healthyTeam(0, [])];
+    ctx.db = {
+      meta: { economy: { currentSalaryCap: 100 } },
+      teams: [{ id: 0, deadCap: 21, staffPayroll: 500 }],
+      players: [
+        { id: 'p100', teamId: 0, status: 'active', contract: { baseAnnual: 70, signingBonus: 30, yearsTotal: 3, yearsRemaining: 2 } },
+      ],
+      picks: [],
+    };
+    const res = cap.check(ctx);
+    const legal = res.find((r) => r.id === 'cap.stable-phase-legal');
+    expect(legal.status).toBe('fail');
+    expect(legal.details).toMatchObject({ teamId: '0', rosterCap: 80, deadCap: 21, totalCommitted: 101, salaryCap: 100, overageVsLegal: 1 });
+  });
+
+  it('structured durable diffs report canonical entity id rather than array index', async () => {
+    const { buildDurableSnapshot, compareDurableSnapshots } = await import('./invariants/durableSnapshot.js');
+    const a = { season: 1, view: { teams: [healthyTeam(0, [])], leagueHistory: [] }, db: { teams: [{ id: 0 }], players: [{ ...healthyPlayer(9001, 0), ovr: 70 }], picks: [] } };
+    const b = structuredClone(a);
+    b.db.players[0].ovr = 71;
+    const cmp = compareDurableSnapshots(buildDurableSnapshot(a), buildDurableSnapshot(b));
+    expect(cmp.firstDivergence).toMatchObject({ domain: 'players', entityId: '9001', field: 'ovr' });
+  });
+
+  it('report passed is false when state determinism fails with zero invariant failures', () => {
+    const rep = new DurabilityReport({ seed: 1, mode: '1-season', failureMode: 'collect-all', requestedSeasons: 1 });
+    rep.addCheckpoint({ season: 0, phase: 'afterInit', week: 0, results: [{ id: 'x.ok', status: 'pass', message: 'ok' }] });
+    rep.setDeterminism(false, 'state differs', { lifecycleDeterministic: true, stateDeterministic: false, firstDivergence: { domain: 'players', entityId: '9', field: 'ovr' } });
+    expect(rep.passed).toBe(false);
+  });
+
 });

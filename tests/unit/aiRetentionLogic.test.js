@@ -223,3 +223,20 @@ describe('AI_RETENTION_CONFIG', () => {
     expect(Object.isFrozen(AI_RETENTION_CONFIG.POSITIONAL_VALUE)).toBe(true);
   });
 });
+
+describe('executeAIOffseasonExtensions — deterministic tie ordering', () => {
+  it('produces identical accepted contract order and terms for tied players regardless of roster order', () => {
+    const makeTied = (id) => makePlayer({ id, pos: 'WR', ovr: 80, potential: 80, age: 26, years: 1, baseAnnual: 2, morale: 70, schemeFit: 65 });
+    const a = makeTied('p-tie-10');
+    const b = makeTied('p-tie-2');
+    const teamA = makeTeam({ capRoom: 40, wins: 8, losses: 9 });
+    const teamB = makeTeam({ capRoom: 40, wins: 8, losses: 9 });
+
+    const first = executeAIOffseasonExtensions(teamA, [a, b], { freeAgents: [] })
+      .map((e) => ({ id: e.player.id, contract: e.contract }));
+    const second = executeAIOffseasonExtensions(teamB, [structuredClone(b), structuredClone(a)], { freeAgents: [] })
+      .map((e) => ({ id: e.player.id, contract: e.contract }));
+
+    expect(second).toEqual(first);
+  });
+});

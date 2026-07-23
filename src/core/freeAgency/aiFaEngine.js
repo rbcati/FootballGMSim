@@ -12,6 +12,7 @@
  *  - Fully deterministic: same inputs → same outputs.
  */
 
+import { stableIdCompare } from '../referenceIntegrity.js';
 import { classifyDeadlinePosture, DEADLINE_POSTURE } from '../trades/tradeDeadlinePressure.js';
 
 // ── Bid factor constants per posture ──────────────────────────────────────────
@@ -234,8 +235,9 @@ export function resolvePlayerChoice(player, offers, context = {}) {
     return { winningOffer: null, reason: 'All offers below market — player re-enters market' };
   }
 
-  // Sort by score descending
-  acceptable.sort((a, b) => b.score - a.score);
+  // Sort by score descending with deterministic tie order so the seeded
+  // tiebreaker indexes the same team set in every process.
+  acceptable.sort((a, b) => (b.score - a.score) || stableIdCompare(a?.teamId, b?.teamId));
 
   // Tiebreaker: seeded hash of playerId + season + week (fully deterministic)
   const topScore = acceptable[0].score;
@@ -274,8 +276,8 @@ export function getAIFaTargets(allTeams, availablePlayers, meta, season = 1, wee
   const userTeamId = Number(meta?.userTeamId ?? -1);
   const result = new Map();
 
-  const safeTeams = Array.isArray(allTeams) ? allTeams : [];
-  const safeFA    = Array.isArray(availablePlayers) ? availablePlayers : [];
+  const safeTeams = (Array.isArray(allTeams) ? allTeams : []).slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
+  const safeFA    = (Array.isArray(availablePlayers) ? availablePlayers : []).slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
 
   for (const team of safeTeams) {
     if (!team?.id || Number(team.id) === userTeamId) continue;
@@ -300,7 +302,7 @@ export function getAIFaTargets(allTeams, availablePlayers, meta, season = 1, wee
       // Rebuilder: skip veterans
       if (posture === DEADLINE_POSTURE.REBUILD && safeNum(player.age, 30) > 27) return false;
       return true;
-    });
+    }).sort((a, b) => (safeNum(b?.ovr, 0) - safeNum(a?.ovr, 0)) || stableIdCompare(a?.id, b?.id));
 
     if (targets.length > 0) {
       result.set(Number(team.id), targets);

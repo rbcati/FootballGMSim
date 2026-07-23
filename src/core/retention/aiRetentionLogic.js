@@ -9,6 +9,7 @@
  * live in AiLogic.processExtensions() in ai-logic.js.
  */
 
+import { stableIdCompare } from '../referenceIntegrity.js';
 import {
   buildContractProfile,
   buildDemandFromProfile,
@@ -250,7 +251,7 @@ export function executeAIOffseasonExtensions(teamState, roster = [], marketConst
   // Step 2 ── Build Priority Retention Board (highest score first) ──────────
   const board = eligible
     .map((player) => ({ player, priorityScore: computePriorityScore(player, config) }))
-    .sort((a, b) => b.priorityScore - a.priorityScore);
+    .sort((a, b) => (b.priorityScore - a.priorityScore) || stableIdCompare(a.player?.id, b.player?.id));
 
   // Step 3 ── Iterate and offer extensions ──────────────────────────────────
   const extensions = [];

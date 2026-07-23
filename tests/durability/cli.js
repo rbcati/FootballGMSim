@@ -20,6 +20,7 @@ Modes (default: 1-season):
 Flags:
   --mode=<mode>        Explicit mode (overrides positional)
   --seed=<n>           Deterministic seed (default 1684)
+  --seeds=<a,b,c>      Run multiple clean seeds and aggregate reports
   --stop-phase=<p>     Bound each season to playoffs|offseason|rollover (default rollover).
                        Use offseason to skip the expensive draft/FA rollover.
   --phase-timeout-ms=<n>  Per-SIM_TO_PHASE timeout. On timeout the run records a
@@ -30,6 +31,7 @@ Flags:
   --summary            Also write the compact summary report
   --out=<path>         Explicit output file for the full report
   --report-name=<name> Stable base filename (e.g. long-save-1-season)
+  --child-run          Internal: execute one isolated run for the parent CLI
   -h, --help           Show this help
 `;
 
@@ -37,10 +39,11 @@ const KNOWN_MODES = ['1-season', '5-season', '10-season', '20-season'];
 
 export function parseArgv(argv) {
   const args = argv.slice(2);
-  const raw = { mode: null, seed: 1684, failureMode: 'fail-fast', determinism: false, writeReport: false, summary: false, out: null, reportName: null, stopPhase: 'rollover', phaseTimeoutMs: null, help: false };
+  const raw = { mode: null, seed: 1684, seeds: null, failureMode: 'fail-fast', determinism: false, writeReport: false, summary: false, out: null, reportName: null, stopPhase: 'rollover', phaseTimeoutMs: null, help: false, childRun: false };
   const errors = [];
   for (const a of args) {
     if (a === '-h' || a === '--help') raw.help = true;
+    else if (a === '--child-run') raw.childRun = true;
     else if (a === '--collect-all') raw.failureMode = 'collect-all';
     else if (a === '--determinism') raw.determinism = true;
     else if (a === '--write-report') raw.writeReport = true;
@@ -49,6 +52,7 @@ export function parseArgv(argv) {
     else if (a.startsWith('--stop-phase=')) raw.stopPhase = a.slice(13);
     else if (a.startsWith('--phase-timeout-ms=')) raw.phaseTimeoutMs = Number(a.slice(19));
     else if (a.startsWith('--seed=')) raw.seed = Number(a.slice(7));
+    else if (a.startsWith('--seeds=')) raw.seeds = a.slice(8).split(',').map((v) => v.trim());
     else if (a.startsWith('--out=')) { raw.out = a.slice(6); raw.writeReport = true; }
     else if (a.startsWith('--report-name=')) raw.reportName = a.slice(14);
     else if (KNOWN_MODES.includes(a)) raw.mode = a;
@@ -58,6 +62,11 @@ export function parseArgv(argv) {
   if (!KNOWN_MODES.includes(raw.mode)) errors.push(`Unknown mode: ${raw.mode}`);
   if (!['playoffs', 'offseason', 'rollover'].includes(raw.stopPhase)) errors.push(`Unknown --stop-phase: ${raw.stopPhase}`);
   if (!Number.isFinite(raw.seed)) errors.push('Invalid --seed');
+  if (raw.seeds) {
+    if (raw.seeds.length === 0 || raw.seeds.some((v) => !/^[-]?\d+$/.test(v))) errors.push('Invalid --seeds');
+    raw.seeds = raw.seeds.map((v) => Number(v));
+  }
+  if (raw.seeds && raw.determinism) errors.push('--seeds cannot be combined with --determinism; run determinism with --seed or run multi-seed without --determinism');
   return { raw, errors };
 }
 
