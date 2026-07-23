@@ -26,6 +26,7 @@ import * as references from './invariants/references.js';
 import * as numericSafety from './invariants/numericSafety.js';
 import * as retirement from './invariants/retirement.js';
 import * as history from './invariants/history.js';
+import * as continuity from './invariants/continuity.js';
 import { canonicalSummary, compareCanonical } from './invariants/saveReload.js';
 import { runInvariants } from './invariants/index.js';
 import { scanNumericCorruption, findDuplicateIds } from './invariants/helpers.js';
@@ -154,6 +155,53 @@ describe('invariant checkers — happy path', () => {
     const ctx2 = healthyViewCtx({ phase: 'afterSeasonRollover', season: 3 });
     ctx2.view.leagueHistory = []; // no history despite season 3 → fail
     expect(history.check(ctx2).find((r) => r.id === 'history.season-archive-exists').status).toBe('fail');
+  });
+});
+
+
+
+describe('continuity invariant V2', () => {
+  const baseSnap = () => ({
+    league: { phase: 'offseason_resign' },
+    teams: [{ id: '0' }],
+    players: [{ id: 'p10', status: 'active', yearsRemaining: 1, yearsTotal: 2, baseAnnual: 5, signingBonus: 0, activeCapHit: 5 }],
+    retiredPlayers: [],
+    history: [{ season: 2026 }],
+    schedule: [{ id: 'g1', season: 2026 }],
+  });
+  const ctxFor = (prev, cur, phase = 'afterSeasonRollover') => ({ ...healthyViewCtx({ phase }), durableSnapshot: cur, previousDurableSnapshot: prev });
+
+  it('fails when completed rollover does not add exactly one history row', () => {
+    const prev = baseSnap();
+    const cur = { ...baseSnap(), league: { phase: 'preseason' }, history: prev.history };
+    expect(continuity.check(ctxFor(prev, cur)).find((r) => r.id === 'continuity.history-grows-once').status).toBe('fail');
+    cur.history = [...prev.history, { season: 2027 }];
+    expect(continuity.check(ctxFor(prev, cur)).find((r) => r.id === 'continuity.history-grows-once').status).toBe('pass');
+  });
+
+  it('fails when a game id is reused across prior and current seasons', () => {
+    const prev = baseSnap();
+    const cur = { ...baseSnap(), schedule: [{ id: 'g1', season: 2027 }] };
+    expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.schedule-game-id-season-unique').status).toBe('fail');
+  });
+
+  it('fails when contract years increase without a contract-write shape and passes with an extension-shaped change', () => {
+    const prev = baseSnap();
+    const cur = { ...baseSnap(), players: [{ ...prev.players[0], yearsRemaining: 2 }] };
+    expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write').status).toBe('fail');
+    cur.players[0].baseAnnual = 7;
+    expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write').status).toBe('pass');
+  });
+
+  it('fails disappearing active players but passes recorded retirement and draft-pool disposition', () => {
+    const prev = baseSnap();
+    let cur = { ...baseSnap(), players: [], retiredPlayers: [] };
+    expect(continuity.check(ctxFor(prev, cur)).find((r) => r.id === 'continuity.players-do-not-disappear').status).toBe('fail');
+    cur = { ...baseSnap(), players: [], retiredPlayers: [{ id: 'p10' }] };
+    expect(continuity.check(ctxFor(prev, cur)).find((r) => r.id === 'continuity.players-do-not-disappear').status).toBe('pass');
+    const draftPrev = { ...baseSnap(), players: [{ id: 'draft1', status: 'draft_eligible' }] };
+    cur = { ...baseSnap(), players: [] };
+    expect(continuity.check(ctxFor(draftPrev, cur)).find((r) => r.id === 'continuity.players-do-not-disappear').status).toBe('pass');
   });
 });
 

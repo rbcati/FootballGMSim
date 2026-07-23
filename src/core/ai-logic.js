@@ -1,4 +1,5 @@
 import { cache } from '../db/cache.js';
+import { stableIdCompare } from './referenceIntegrity.js';
 import { Constants } from './constants.js';
 import { Transactions } from '../db/index.js';
 import { calculateExtensionDemand } from './player.js';
@@ -27,6 +28,21 @@ import { canRestructure, computeRestructure, applyRestructure } from './contract
 import { executeAIOffseasonExtensions } from './retention/aiRetentionLogic.js';
 import { calculateTeamDepthDeficiencies, getNeedLevelForPlayer, POSITION_NEED_LEVEL } from './trades/tradePositionalNeeds.js';
 import { buildFranchiseTagContract, buildRFATenderContract, TENDER_CONFIG } from './contracts/tenderLogic.js';
+
+
+export function buildSortedFreeAgentsMapForOffers(allPlayers = []) {
+    const freeAgentsMap = {};
+    for (const p of allPlayers) {
+        if (isFreeAgent(p)) {
+            if (!freeAgentsMap[p.pos]) freeAgentsMap[p.pos] = [];
+            freeAgentsMap[p.pos].push(p);
+        }
+    }
+    for (const pos in freeAgentsMap) {
+        freeAgentsMap[pos].sort((a, b) => ((b.ovr ?? 0) - (a.ovr ?? 0)) || stableIdCompare(a.id, b.id));
+    }
+    return freeAgentsMap;
+}
 
 class AiLogic {
     static NEED_GROUP_TO_POS = Object.freeze({
@@ -658,7 +674,7 @@ class AiLogic {
 
         const roster = cache.getPlayersByTeam(teamId);
         const meta   = cache.getMeta();
-        const allPlayers = cache.getAllPlayers();
+        const allPlayers = cache.getAllPlayers().slice().sort((a, b) => stableIdCompare(a.id, b.id));
         const freeAgents = allPlayers.filter((p) => isFreeAgent(p));
 
         const extensions = executeAIOffseasonExtensions(
@@ -1133,20 +1149,11 @@ class AiLogic {
         const userTeamId = meta.userTeamId;
 
         // OPTIMIZATION: Build freeAgentsMap once for all AI teams
-        const allPlayers = cache.getAllPlayers();
-        const freeAgentsMap = {};
-        for (const p of allPlayers) {
-            if (isFreeAgent(p)) {
-                if (!freeAgentsMap[p.pos]) freeAgentsMap[p.pos] = [];
-                freeAgentsMap[p.pos].push(p);
-            }
-        }
-        for (const pos in freeAgentsMap) {
-            freeAgentsMap[pos].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
-        }
+        const allPlayers = cache.getAllPlayers().slice().sort((a, b) => stableIdCompare(a.id, b.id));
+        const freeAgentsMap = buildSortedFreeAgentsMapForOffers(allPlayers);
 
         // 1. AI Teams Make Offers
-        const allTeams = cache.getAllTeams();
+        const allTeams = cache.getAllTeams().slice().sort((a, b) => stableIdCompare(a.id, b.id));
         for (const team of allTeams) {
             if (team.id !== userTeamId) {
                 await this.makeFreeAgencyOffers(team.id, freeAgentsMap);

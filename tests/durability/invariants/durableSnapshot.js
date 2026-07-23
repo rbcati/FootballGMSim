@@ -35,7 +35,7 @@ export function buildDurableSnapshot(state = {}) {
       capUsed: money(t.capUsed), capRoom: money(t.capRoom), capTotal: money(t.capTotal),
     })).sort(byId),
     players: active.map((p) => ({
-      id: idKey(p.id), teamId: p.teamId == null ? null : idKey(p.teamId), age: p.age ?? null,
+      id: idKey(p.id), teamId: p.teamId == null ? null : idKey(p.teamId), status: p.status ?? null, age: p.age ?? null,
       ovr: p.ovr ?? p.overall ?? null, pot: p.pot ?? p.potential ?? null,
       injury: normalizeInjury(p), ...normalizeContractFields(p),
     })).sort(byId),

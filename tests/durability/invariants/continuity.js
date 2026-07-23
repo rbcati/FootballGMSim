@@ -25,13 +25,15 @@ export function check(ctx) {
   const prevHistory = prev.history?.length ?? 0;
   const curHistory = cur.history?.length ?? 0;
   const historyDelta = curHistory - prevHistory;
-  out.push(historyDelta < 0 || historyDelta > 1
-    ? fail(ctx, 'continuity.history-grows-once', { entityType: 'history', entityId: 'league', message: `Completed history changed by ${historyDelta}`, details: { prevHistory, curHistory } })
-    : pass(ctx, 'continuity.history-grows-once', `History growth bounded (${historyDelta})`));
+  const completedRollover = ctx?.phase === 'afterSeasonRollover' && prev.league?.phase && prev.league.phase !== cur.league?.phase;
+  const badHistory = completedRollover ? historyDelta !== 1 : (historyDelta < 0 || historyDelta > 1);
+  out.push(badHistory
+    ? fail(ctx, 'continuity.history-grows-once', { entityType: 'history', entityId: 'league', message: completedRollover ? `Completed rollover history changed by ${historyDelta}; expected exactly 1` : `Completed history changed by ${historyDelta}`, details: { prevHistory, curHistory, completedRollover } })
+    : pass(ctx, 'continuity.history-grows-once', completedRollover ? 'Completed rollover added exactly one history row' : `History growth bounded (${historyDelta})`));
 
   const gameSeason = new Map();
   const reused = [];
-  for (const g of cur.schedule || []) {
+  for (const g of [...(prev.schedule || []), ...(cur.schedule || [])]) {
     if (!g.id || g.season == null) continue;
     if (gameSeason.has(g.id) && gameSeason.get(g.id) !== g.season) reused.push(g.id);
     gameSeason.set(g.id, g.season);
@@ -40,16 +42,30 @@ export function check(ctx) {
     ? fail(ctx, 'continuity.schedule-game-id-season-unique', { entityType: 'game', entityId: reused[0], message: 'Schedule game id reused across seasons', details: { reused: reused.slice(0, 20) } })
     : pass(ctx, 'continuity.schedule-game-id-season-unique', 'Schedule game ids are not reused across seasons in checkpoint'));
 
-  if (prev.league?.phase !== cur.league?.phase) {
-    out.push(skip(ctx, 'continuity.players-do-not-disappear', `Player-disposition continuity skipped across lifecycle phase transition ${prev.league?.phase ?? 'unknown'} -> ${cur.league?.phase ?? 'unknown'}`));
+  const transition = `${prev.league?.phase ?? 'unknown'} -> ${cur.league?.phase ?? 'unknown'}`;
+  if (prev.league?.phase === 'offseason_resign' && cur.league?.phase === 'preseason') {
+    out.push(skip(ctx, 'continuity.players-do-not-disappear', `Player-disposition evidence unavailable during offseason roster/draft/free-agency reconciliation (${transition})`));
   } else {
-    const prevPlayerIds = new Set((prev.players || []).map((p) => p.id));
     const curAllIds = new Set([...(cur.players || []).map((p) => p.id), ...(cur.retiredPlayers || []).map((p) => p.id)]);
-    const disappeared = [...prevPlayerIds].filter((pid) => !curAllIds.has(pid));
+    const disappeared = (prev.players || []).filter((p) => p?.status !== 'draft_eligible' && !curAllIds.has(p.id));
     out.push(disappeared.length
-      ? fail(ctx, 'continuity.players-do-not-disappear', { entityType: 'player', entityId: disappeared[0], message: 'Active player disappeared without retirement record in adjacent same-phase checkpoint', details: { disappeared: disappeared.slice(0, 20) } })
-      : pass(ctx, 'continuity.players-do-not-disappear', 'No active players disappeared without retirement record'));
+      ? fail(ctx, 'continuity.players-do-not-disappear', { entityType: 'player', entityId: disappeared[0].id, message: 'Active/free-agent player disappeared without retirement or disposition evidence', details: { disappeared: disappeared.slice(0, 20).map((p) => p.id), transition } })
+      : pass(ctx, 'continuity.players-do-not-disappear', 'No active/free-agent players disappeared without retirement or disposition evidence'));
   }
+
+  const curById = new Map((cur.players || []).map((p) => [p.id, p]));
+  const yearsIncreased = [];
+  for (const p of prev.players || []) {
+    const next = curById.get(p.id);
+    if (!next) continue;
+    if (Number(next.yearsRemaining ?? 0) > Number(p.yearsRemaining ?? 0)) {
+      const contractChanged = next.yearsTotal !== p.yearsTotal || next.baseAnnual !== p.baseAnnual || next.signingBonus !== p.signingBonus || next.activeCapHit !== p.activeCapHit;
+      if (!contractChanged) yearsIncreased.push({ id: p.id, before: p.yearsRemaining, after: next.yearsRemaining });
+    }
+  }
+  out.push(yearsIncreased.length
+    ? fail(ctx, 'continuity.contract-years-do-not-increase-without-contract-write', { entityType: 'player', entityId: yearsIncreased[0].id, message: 'Contract years increased without a signing/extension/restructure-shaped contract write', details: { yearsIncreased: yearsIncreased.slice(0, 20) } })
+    : pass(ctx, 'continuity.contract-years-do-not-increase-without-contract-write', 'No contract years increased without a contract-write shape'));
 
   return out;
 }

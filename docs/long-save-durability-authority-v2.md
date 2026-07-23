@@ -38,25 +38,25 @@ CLI determinism legs and `--seeds` runs execute in clean child processes. This a
 Commands run on this branch:
 
 - `node --check ...` across changed JS harness files — passed.
-- `npm run durability:test` — passed, 5 files / 71 tests.
-- `npm run durability:smoke` — passed one full season, save/reload OK, peak RSS 450 MB after V2 continuity/cap updates.
+- `npm run durability:test` — passed, 5 files / 75 tests.
+- `npm run durability:smoke` — passed one full season, save/reload OK, peak RSS 470 MB after V2 continuity/cap updates.
 - `npm run durability:smoke -- --determinism` — passed; two isolated one-season child runs were state deterministic.
 - `npm run durability:smoke -- --seeds=1702` — passed and proved `--seeds=1702` runs seed 1702 through the child-process path.
 - `npm run check:sim-types` — passed.
 - `npm run build` — passed with the expected Vite chunk-size warning.
-- `npm run test:unit` — passed, 461 files / 5649 tests.
-- `npm run durability:5 -- --seed=1684 --determinism --collect-all --write-report --summary` — completed both five-season child-process legs with zero invariant failures and save/reload OK, but state determinism still failed.
+- `npm run test:unit` — passed, 462 files / 5651 tests.
+- `npm run durability:5 -- --seed=1684 --determinism --collect-all --write-report --summary` — rerun after the first ordering repair still did not pass; first leg had zero invariant failures, second leg surfaced a season-5 roster-size failure, and state determinism remained false.
 
 Latest five-season determinism result:
 
 - Seed: 1684
 - Completed: 5/5 seasons in each isolated child leg
-- First leg runtime/peak RSS: 387.0 seconds / 2236 MB
-- Second leg runtime/peak RSS: 384.6 seconds / 2281 MB
-- Invariants: 0 failures in both legs
-- Save/reload: OK at seasons 1 and 5 in both legs
-- First durable divergence: checkpoint `2:afterSeasonRollover`, domain `players`, entity `kg6rmf9l1dip`, field `activeCapHit`
+- First leg runtime/peak RSS: 396.7 seconds / 2236 MB
+- Second leg runtime/peak RSS: 399.8 seconds / 2165 MB
+- First incorrect write cluster identified so far: AI offseason/free-agency offer ordering consumed same-OVR free agents and extension ties without canonical ID tie-breaks, causing different players to receive different generated contracts before the later `activeCapHit` diff.
+- Narrow repair applied: canonical ID tie-breaks for AI extension priority ties and AI free-agent offer pools/team/player iteration.
+- Remaining result: still not green; second leg produced `roster.size-within-legal-range` at season 5 for team 30 (52 players), and the determinism comparator then reported first durable divergence at checkpoint `3:afterSeasonRollover`, domain `players`, entity `it5p5hz6olpp`, field `activeCapHit`.
 
 ## Remaining unproven areas
 
-The V2 harness no longer has false-green cap behavior and no longer treats lifecycle-only equality as determinism. However, the required five-season seed-1684 determinism proof is still not green: a generated player's calculated active cap hit diverges after the season-2 rollover even in isolated child processes. Because that state-level divergence remains, this branch must not claim five-season deterministic, ten-season-safe, or multi-seed durable authority yet. The next repair must trace that generated player's contract write/RNG boundary and fix it narrowly before running the full requested matrix and ten-season proof.
+The V2 harness no longer has false-green cap behavior and no longer treats lifecycle-only equality as determinism. The first contract-ordering boundary has been narrowed and repaired, but the required five-season seed-1684 determinism proof is still not green: the latest run exposes a later roster-size failure plus a later generated-player active-cap-hit divergence. Because that state-level divergence remains, this branch must not claim five-season deterministic, ten-season-safe, or multi-seed durable authority yet. The next repair must trace the remaining generated-player contract write/RNG/order boundary and the team-30 roster shortfall before running the full requested matrix and ten-season proof.
