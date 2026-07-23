@@ -22,7 +22,8 @@
  * real DB layer (src/db/index.js) after SAVE_NOW.
  */
 import { toWorker, toUI } from '../../src/worker/protocol.js';
-import { Players, Teams, DraftPicks, Meta, Seasons } from '../../src/db/index.js';
+import { Players, Teams, DraftPicks, Meta, Seasons, clearAllData, deleteLeagueDB } from '../../src/db/index.js';
+import { Utils } from '../../src/core/utils.js';
 import { dispatchWorker as defaultDispatch, loadWorkerModule as defaultLoad } from '../../src/testSupport/dynastySoakRunner.js';
 
 export const DEFAULT_SEED = 1684;
@@ -76,6 +77,8 @@ export class LifecycleDriver {
     globalThis.__DYNASTY_SOAK_PROFILE__ = true;
     globalThis.__DYNASTY_SOAK_AUDIT_CHECKPOINT_ENABLED__ = false;
 
+    await resetDurabilityStorage(SLOT_KEY);
+    Utils.setSeed(this.seed);
     await this.loadWorker();
     const t = Date.now();
     await this.dispatch(toWorker.INIT, {}, { timeoutMs: Math.min(120_000, this.phaseTimeoutMs) });
@@ -217,4 +220,9 @@ export function crashError(checkpoint, message, msg) {
   e.checkpoint = checkpoint;
   e.workerPayload = msg?.payload ?? null;
   return e;
+}
+
+export async function resetDurabilityStorage(slotKey = SLOT_KEY) {
+  try { await clearAllData(); } catch {}
+  try { await deleteLeagueDB(slotKey); } catch {}
 }

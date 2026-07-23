@@ -6,9 +6,10 @@
  * calculator already produces, and structural sanity on contracts. Momentary
  * over-cap states (dead money, pending restructures) are explicitly allowed.
  */
-import { pass, fail, skip, isFiniteNumber, isUnsafeNumber } from './helpers.js';
+import { pass, fail, skip, gamePhase, isRosterStablePhase, isUnsafeNumber } from './helpers.js';
 import { CAP } from './bounds.js';
 import { viewTeams, rosteredPlayersFromView } from './derive.js';
+import { resolveLiveSalaryCap } from './durableSnapshot.js';
 
 export const id = 'cap';
 
@@ -45,6 +46,19 @@ export function check(ctx) {
     }
   } else {
     out.push(pass(ctx, 'cap.aggregates-finite', `All team cap aggregates finite across ${teams.length} teams`));
+  }
+
+  // ── stable-phase legal cap equation ─────────────────────────────────────
+  if (!isRosterStablePhase(gamePhase(ctx))) {
+    out.push(skip(ctx, 'cap.stable-phase-legal', `Cap legality skipped in transitional phase ${gamePhase(ctx) ?? 'unknown'}`));
+  } else {
+    const snaps = teams.map((team) => buildTeamCapSnapshot(team, ctx));
+    const illegal = snaps.filter((s) => s.totalCommitted > s.liveLimit + 0.0005);
+    if (illegal.length) {
+      for (const snap of illegal.slice(0, 12)) out.push(fail(ctx, 'cap.stable-phase-legal', { entityType: 'team', entityId: snap.teamId, message: `Team ${snap.teamId} exceeds live cap by ${snap.overage.toFixed(3)}`, details: snap }));
+    } else {
+      out.push(pass(ctx, 'cap.stable-phase-legal', `All ${teams.length} teams legal against live cap`, { snapshots: snaps.slice(0, 2) }));
+    }
   }
 
   // ── contract numeric safety on rostered players ──────────────────────────
@@ -89,3 +103,17 @@ export function check(ctx) {
 
   return out;
 }
+
+export function buildTeamCapSnapshot(team, ctx = {}) {
+  const roster = Array.isArray(team?.roster) ? team.roster : [];
+  const rosterCap = roster.reduce((sum, p) => sum + capHitFor(p), 0);
+  const deadCap = num(team?.deadCap ?? team?.deadMoney ?? team?.currentDeadCap);
+  const pendingCommitments = pendingCountedCommitments(team, ctx);
+  const liveLimit = num(resolveLiveSalaryCap({ view: ctx.view, db: ctx.db })) || num(team?.capTotal);
+  const totalCommitted = round(rosterCap + deadCap + pendingCommitments);
+  return { teamId: team?.id, rosterCap: round(rosterCap), deadCap: round(deadCap), pendingCommitments: round(pendingCommitments), totalCommitted, liveLimit: round(liveLimit), overage: round(totalCommitted - liveLimit) };
+}
+function capHitFor(p) { return num(p?.capHit ?? p?.contract?.capHit ?? p?.contract?.salary ?? p?.salary); }
+function pendingCountedCommitments(team) { return num(team?.pendingCommitments ?? team?.pendingCapCommitments ?? 0); }
+function num(v) { return typeof v === 'number' && Number.isFinite(v) ? v : 0; }
+function round(v) { return Math.round(v * 1000) / 1000; }

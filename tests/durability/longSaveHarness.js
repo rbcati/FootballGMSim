@@ -15,6 +15,7 @@
 import { LifecycleDriver, CHECKPOINTS, EXPECTED_TEAM_COUNT } from './lifecycleDriver.js';
 import { runInvariants } from './invariants/index.js';
 import { canonicalSummary, compareCanonical } from './invariants/saveReload.js';
+import { compareDurableSnapshots } from './invariants/durableSnapshot.js';
 import { DurabilityReport } from './report.js';
 
 export const MODES = Object.freeze({
@@ -79,8 +80,11 @@ export async function runDurabilityHarness(config = {}) {
 
   const evaluate = (ctx) => {
     sampleMem();
+    const snap = canonicalSummary({ view: ctx.view, db: ctx.db, season: ctx.season });
+    ctx.durableSnapshot = snap.durableSnapshot;
+    ctx.durableSnapshotDigest = snap.durableSnapshotDigest;
     const results = runInvariants(ctx);
-    const counts = report.addCheckpoint({ season: ctx.season, phase: ctx.phase, week: ctx.week, results });
+    const counts = report.addCheckpoint({ season: ctx.season, phase: ctx.phase, week: ctx.week, results, durable: { digest: ctx.durableSnapshotDigest, summary: summarizeSnapshot(ctx.durableSnapshot), snapshot: ctx.durableSnapshot } });
     onEvent({ type: 'checkpoint', season: ctx.season, phase: ctx.phase, counts });
     if (failureMode === 'fail-fast' && counts.fail > 0) {
       throw new StopHarness(`fail-fast: ${counts.fail} invariant failure(s) at season ${ctx.season} ${ctx.phase}`);
@@ -214,13 +218,18 @@ export async function runDeterminismCheck(config = {}) {
   for (const k of Object.keys(na)) {
     if (JSON.stringify(na[k]) !== JSON.stringify(nb[k])) diffs.push({ field: k, a: na[k], b: nb[k] });
   }
-  const deterministic = diffs.length === 0;
+  const state = compareReportSnapshots(a.report, b.report);
+  const lifecycleDeterministic = diffs.length === 0;
+  const stateDeterministic = state.ok;
   return {
-    deterministic,
-    detail: deterministic
-      ? 'Normalized outcome identical across two clean runs'
-      : `Normalized outcome differs in: ${diffs.map((d) => d.field).join(', ')}`,
-    diffs,
+    deterministic: lifecycleDeterministic && stateDeterministic,
+    lifecycleDeterministic,
+    stateDeterministic,
+    firstDivergence: state.firstDivergence,
+    detail: lifecycleDeterministic && stateDeterministic
+      ? 'Lifecycle outcome and canonical durable state identical across two clean runs'
+      : `Lifecycle deterministic=${lifecycleDeterministic}; state deterministic=${stateDeterministic}`,
+    diffs: [...diffs, ...state.diffs],
     reports: [a, b],
   };
 }
@@ -246,4 +255,24 @@ function unexercisedStages(perSeasonStopPhase) {
     return ['draft', 'freeAgency', 'progression', 'retirement', 'historyRollover', 'nextSeasonGeneration'];
   }
   return ['playoffs', 'draft', 'freeAgency', 'progression', 'retirement', 'historyRollover', 'nextSeasonGeneration'];
+}
+
+function summarizeSnapshot(s) {
+  return { league: s?.league, pools: s?.pools, teamCount: s?.teams?.length ?? 0, playerCount: s?.players?.length ?? 0, retiredCount: s?.retiredPlayers?.length ?? 0, pickCount: s?.draftPicks?.length ?? 0, scheduleCount: s?.schedule?.length ?? 0, historyCount: s?.history?.length ?? 0 };
+}
+function compareReportSnapshots(a, b) {
+  const diffs = [];
+  const bByKey = new Map((b.checkpoints || []).map((c) => [`${c.season}:${c.phase}`, c]));
+  for (const ac of a.checkpoints || []) {
+    const key = `${ac.season}:${ac.phase}`;
+    const bc = bByKey.get(key);
+    if (!bc) { diffs.push({ domain: 'checkpoint', entityId: key, field: 'missing', runA: true, runB: false }); break; }
+    if (ac.durable?.digest !== bc.durable?.digest) {
+      const cmp = compareDurableSnapshots(ac.durable?.snapshot, bc.durable?.snapshot);
+      const first = cmp.firstDivergence || { domain: 'checkpoint', entityId: key, field: 'digest', runA: ac.durable?.digest, runB: bc.durable?.digest };
+      first.checkpoint = key;
+      return { ok: false, firstDivergence: first, diffs: cmp.diffs.map((d) => ({ ...d, checkpoint: key })).slice(0, 20) };
+    }
+  }
+  return { ok: diffs.length === 0, firstDivergence: diffs[0] || null, diffs };
 }

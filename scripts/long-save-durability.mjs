@@ -37,21 +37,36 @@ async function main() {
     else if (ev.type === 'stopped') console.log(`[durability]   stopped: ${ev.reason}`);
   };
 
-  console.log(`[durability] mode=${raw.mode} seed=${raw.seed} failureMode=${raw.failureMode} stopPhase=${raw.stopPhase} determinism=${raw.determinism}`);
+  console.log(`[durability] mode=${raw.mode} seed=${raw.seeds ? raw.seeds.join(',') : raw.seed} failureMode=${raw.failureMode} stopPhase=${raw.stopPhase} determinism=${raw.determinism}`);
 
   const base = { mode: raw.mode, seed: raw.seed, failureMode: raw.failureMode, perSeasonStopPhase: raw.stopPhase, gitSha, onEvent };
   if (Number.isFinite(raw.phaseTimeoutMs)) base.phaseTimeoutMs = raw.phaseTimeoutMs;
   let report;
-  if (raw.determinism) {
+  if (raw.seeds && raw.seeds.length > 1) {
+    const reports = [];
+    for (const seed of raw.seeds) {
+      console.log(`[durability] === seed ${seed} clean run ===`);
+      reports.push(await runDurabilityHarness({ ...base, seed }));
+    }
+    report = { passed: reports.every((r) => r.passed), toJSON: () => ({ harnessVersion: '2.0.0', mode: raw.mode, seeds: raw.seeds, overallPassed: reports.every((r) => r.passed), reports: reports.map((r) => r.toJSON()) }), toSummaryJSON: () => ({ harnessVersion: '2.0.0', mode: raw.mode, seeds: raw.seeds, overallPassed: reports.every((r) => r.passed), reports: reports.map((r) => r.toSummaryJSON()) }) };
+  } else if (raw.determinism) {
     const det = await runDeterminismCheck(base);
     report = det.reports[0];
-    report.setDeterminism(det.deterministic, det.detail);
+    report.setDeterminism(det.deterministic, det.detail, { lifecycleDeterministic: det.lifecycleDeterministic, stateDeterministic: det.stateDeterministic, firstDivergence: det.firstDivergence });
     console.log(`[durability] deterministic=${det.deterministic} — ${det.detail}`);
   } else {
     report = await runDurabilityHarness(base);
   }
 
-  console.log('\n' + formatConsole(report));
+  if (raw.seeds && raw.seeds.length > 1) {
+    const agg = report.toJSON();
+    console.log(`\n── Long-Save Durability Multi-Seed Report ───────────────────`);
+    console.log(`mode=${agg.mode} seeds=${agg.seeds.join(',')} overallPassed=${agg.overallPassed}`);
+    for (const r of agg.reports) console.log(`seed=${r.seed} passed=${r.summary.failed === 0 && !r.lifecycleException} completed=${r.seasonsCompleted}/${r.requestedSeasons} fail=${r.summary.failed}`);
+    console.log(`─────────────────────────────────────────────────────────────`);
+  } else {
+    console.log('\n' + formatConsole(report));
+  }
 
   if (raw.writeReport) {
     const written = writeReports(report, {

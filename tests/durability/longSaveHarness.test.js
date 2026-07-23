@@ -38,7 +38,7 @@ function healthyTeam(id, roster = []) {
   return { id, name: `T${id}`, abbr: `T${id}`, wins: 8, losses: 8, ties: 0, ptsFor: 300, ptsAgainst: 300, capUsed: 200, capRoom: 100, capTotal: 301.2, roster, picks: [] };
 }
 function healthyPlayer(id, teamId) {
-  return { id, name: `P${id}`, pos: 'QB', age: 25, ovr: 75, teamId, status: 'active', contract: { years: 3, salary: 10 }, ratings: { throwPower: 80 } };
+  return { id, name: `P${id}`, pos: 'QB', age: 25, ovr: 75, teamId, status: 'active', capHit: 3, contract: { years: 3, salary: 3 }, ratings: { throwPower: 80 } };
 }
 function healthyViewCtx(overrides = {}) {
   const teams = [];
@@ -324,5 +324,59 @@ describe('LifecycleDriver.simToPhase target enforcement', () => {
     const driver = new LifecycleDriver({ loadWorker: async () => {}, dispatch: async () => ({ type: 'OK', payload: { phase: 'regular', year: 2026, dynastySoakSimBatch: { reachedTarget: false } } }) });
     await expect(driver.simToPhase('playoffs', { checkpoint: 'afterRegularSeason', maxCalls: 2 }))
       .rejects.toMatchObject({ isLifecycleCrash: true, checkpoint: 'afterRegularSeason' });
+  });
+});
+
+describe('durable snapshot V2', () => {
+  it('detects identical lifecycle metadata with different roster state as non-deterministic', async () => {
+    const { runDeterminismCheck } = await import('./longSaveHarness.js');
+    let run = 0;
+    const dispatch = async (type) => {
+      if (type === 'INIT') return { type: 'OK', payload: { ok: true } };
+      const v = healthyViewCtx().view;
+      v.teams[0].roster[0] = healthyPlayer(run < 2 ? 1 : 2, 0);
+      if (type === 'USE_SAFE_STARTER_LEAGUE') { run += 1; return { type: 'OK', payload: v }; }
+      return { type: 'OK', payload: { ...v, phase: 'playoffs' } };
+    };
+    const det = await runDeterminismCheck({ mode: '1-season', perSeasonStopPhase: 'playoffs', failureMode: 'collect-all', driverOverrides: { loadWorker: async () => {}, dispatch, readDbPool: async () => { const v = healthyViewCtx().view; v.teams[0].roster[0] = healthyPlayer(run < 2 ? 1 : 2, 0); return { players: v.teams.flatMap((t) => t.roster), teams: v.teams, meta: null, seasons: [], picks: [] }; } } });
+    expect(det.lifecycleDeterministic).toBe(true);
+    expect(det.stateDeterministic).toBe(false);
+    expect(det.firstDivergence).toMatchObject({ domain: expect.any(String), field: expect.any(String) });
+  });
+
+  it('canonicalizes collection ordering and mixed id aliases but preserves duplicates', async () => {
+    const { buildDurableSnapshot, compareDurableSnapshots } = await import('./invariants/durableSnapshot.js');
+    const a = { season: 1, view: { teams: [healthyTeam(0, [healthyPlayer(2, 0), healthyPlayer('1', 0)])], leagueHistory: [] }, db: { players: [healthyPlayer('1', 0), healthyPlayer(2, 0)], picks: [] } };
+    const b = { season: 1, view: { teams: [healthyTeam('0', [healthyPlayer(1, '0'), healthyPlayer('2', '0')])], leagueHistory: [] }, db: { players: [healthyPlayer(2, '0'), healthyPlayer(1, '0')], picks: [] } };
+    expect(compareDurableSnapshots(buildDurableSnapshot(a), buildDurableSnapshot(b)).ok).toBe(true);
+    b.view.teams[0].roster.push(healthyPlayer(2, '0'));
+    b.db.players.push(healthyPlayer(2, '0'));
+    expect(compareDurableSnapshots(buildDurableSnapshot(a), buildDurableSnapshot(b)).ok).toBe(false);
+  });
+
+  it('save/reload detects contract, dead-cap, injury, ratings, schedule, and history mutations', () => {
+    const base = { season: 1, view: { year: 2027, phase: 'preseason', teams: [healthyTeam(0, [{ ...healthyPlayer(1, 0), capHit: 10, injury: { status: 'out' } }])], schedule: { games: [{ id: 'g1', week: 1, home: 0, away: 1, played: true, homeScore: 3, awayScore: 0 }] }, leagueHistory: [{ season: 2026, championTeamId: 0 }] }, db: { players: [{ ...healthyPlayer(1, 0), capHit: 10, injury: { status: 'out' } }], picks: [] } };
+    for (const mutate of [
+      (s) => { s.db.players[0].contract.years = 9; }, (s) => { s.view.teams[0].deadCap = 99; },
+      (s) => { s.db.players[0].injury.status = 'healthy'; }, (s) => { s.db.players[0].ovr = 12; },
+      (s) => { s.view.schedule.games[0].homeScore = 99; }, (s) => { s.view.leagueHistory[0].championTeamId = 1; },
+    ]) { const changed = structuredClone(base); mutate(changed); expect(compareCanonical(canonicalSummary(base), canonicalSummary(changed)).ok).toBe(false); }
+  });
+
+  it('stable cap uses live cap, dead cap, team id 0, excludes staff, exact/fractional boundaries, and skips offseason', () => {
+    const ctx = healthyViewCtx();
+    ctx.view.meta = { economy: { currentSalaryCap: 200 } };
+    ctx.view.teams = [healthyTeam(0, [{ ...healthyPlayer(1, 0), capHit: 150 }])];
+    ctx.view.teams[0].deadCap = 50; ctx.view.teams[0].staffPayroll = 999;
+    expect(cap.check(ctx).find((r) => r.id === 'cap.stable-phase-legal').status).toBe('pass');
+    ctx.view.teams[0].deadCap = 50.001;
+    expect(cap.check(ctx).find((r) => r.id === 'cap.stable-phase-legal').status).toBe('fail');
+    ctx.view.phase = 'offseason';
+    expect(cap.check(ctx).find((r) => r.id === 'cap.stable-phase-legal').status).toBe('skip');
+  });
+
+  it('CLI parses multi-seed runs', () => {
+    const { raw, errors } = parseArgv(['node', 's', '5-season', '--seeds=1684,1702,1703']);
+    expect(errors).toEqual([]); expect(raw.seeds).toEqual([1684, 1702, 1703]);
   });
 });
