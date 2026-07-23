@@ -1,6 +1,7 @@
 import { buildContractProfile, buildDemandFromProfile, computeMarketHeat, inferTeamDirection } from '../contract-market.js';
 import { evaluateContractOffer } from '../contracts/negotiation.js';
 import { getTeamContextForNegotiation } from '../teamContext/negotiationContext.js';
+import { stableIdCompare } from '../referenceIntegrity.js';
 
 function safeNum(v, d = 0) {
   const n = Number(v);
@@ -217,7 +218,7 @@ export function buildRetentionBoard(team = {}, league = {}) {
     };
   });
 
-  board.sort((a, b) => (b.priority.score - a.priority.score) || ((b.player?.ovr ?? 0) - (a.player?.ovr ?? 0)));
+  board.sort((a, b) => (b.priority.score - a.priority.score) || ((b.player?.ovr ?? 0) - (a.player?.ovr ?? 0)) || stableIdCompare(a.player?.id, b.player?.id));
   const capOutlook = getCapOutlookForRetention(team, board);
 
   return { board, capOutlook };

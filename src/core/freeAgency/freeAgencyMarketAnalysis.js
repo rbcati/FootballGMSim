@@ -1,3 +1,4 @@
+import { stableIdCompare } from '../referenceIntegrity.js';
 import { buildRosterBuildingAnalysis } from '../rosterBuildingAnalysis.js';
 
 const num = (v, fb = null) => (Number.isFinite(Number(v)) ? Number(v) : fb);
@@ -162,7 +163,7 @@ export function buildFreeAgencyMarketAnalysis({ team = {}, roster = [], freeAgen
       reason,
       _player: p,
     };
-  }).sort((a, b) => b.fitScore - a.fitScore);
+  }).sort((a, b) => (b.fitScore - a.fitScore) || stableIdCompare(a?._player?.id, b?._player?.id));
 
   const topFits = marketRows.slice(0, 5);
   const bargainOptions = marketRows.filter((r) => (r.capFit === 'affordable' || (r.baseAnnual != null && r.baseAnnual <= 3)) && r.recommendation !== 'avoid').slice(0, 5);

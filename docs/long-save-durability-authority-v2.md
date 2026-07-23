@@ -41,26 +41,29 @@ CLI determinism legs and `--seeds` runs execute in clean child processes. This a
 
 ## Current evidence
 
-Commands run on this branch. The broad unit/build/smoke checks were rerun after the final sort changes; the expensive five-season determinism run below was the latest completed full gate before the final staff/offseason ordering pass and remains the honest long-run blocker until rerun:
+Commands run on this branch after the schedule, continuity, minimum-roster, and additional ordering repairs:
 
-- `node --check src/core/freeAgency/aiFaEngine.js src/core/roster/aiRosterCuts.js src/core/ai-logic.js src/worker/worker.js tests/durability/invariants/continuity.js tests/durability/invariants/durableSnapshot.js` — passed in targeted invocations.
-- `npx vitest run tests/unit/aiFaEngine.unit.test.js tests/unit/aiCapManagementExecution.test.js --config vitest.config.ts` — passed, 2 files / 46 tests.
-- `npm run durability:test` — passed, 5 files / 79 tests.
-- `npm run durability:smoke` — passed one full season, save/reload OK, peak RSS 470 MB.
-- `npm run durability:5 -- --seed=1684 --determinism --collect-all --write-report --summary` — completed both isolated five-season legs with zero invariant failures and save/reload OK in both legs, but exited nonzero because state determinism remained false. This run was not repeated after the final staff/offseason iteration-order patch due execution budget.
+- `node --check src/core/ai-logic.js src/core/freeAgency/freeAgencyMarketAnalysis.js src/core/retention/reSigning.js tests/durability/invariants/continuity.js tests/durability/invariants/durableSnapshot.js` — passed.
+- `npx vitest run tests/unit/aiCapManagementExecution.test.js tests/unit/aiFaEngine.unit.test.js tests/unit/aiRetentionLogic.test.js --config vitest.config.ts` — passed, 3 files / 67 tests.
+- `npm run durability:test` — passed, 5 files / 81 tests.
+- `npm run durability:smoke` — passed one full season with save/reload OK.
+- `npm run check:sim-types` — passed.
+- `npm run build` — passed with the expected Vite chunk-size warning.
+- `npm run test:unit` — passed, 462 files / 5659 tests.
+- `npm run durability:5 -- --seed=1684 --determinism --collect-all --write-report --summary` — completed both isolated five-season legs with zero invariant failures and save/reload OK, but exited nonzero because state determinism remains false.
 
 Latest five-season determinism result:
 
 - Seed: 1684
 - Completed: 5/5 seasons in each isolated child leg
-- First leg runtime/peak RSS: 587.9 seconds / 2183 MB
-- Second leg runtime/peak RSS: 575.7 seconds / 2248 MB
+- First leg runtime/peak RSS: 398.0 seconds / 2174 MB
+- Second leg runtime/peak RSS: 401.9 seconds / 2221 MB
 - Invariants: 750 pass / 0 fail / 132 skip in both legs
 - Save/reload: OK at season 1 and season 5 in both legs
 - Lifecycle deterministic: true
 - State deterministic: false
-- First remaining durable divergence: checkpoint `4:afterSeasonRollover`, domain `players`, entity `0r6cmohdkrvo`, field `activeCapHit`
+- First remaining durable divergence: checkpoint `2:afterSeasonRollover`, domain `players`, entity `1005`, field `activeCapHit`
 
 ## Remaining limitations / not yet proven
 
-This branch must still not claim five-season state determinism, ten-season safety, or multi-seed durable authority. The season-5 roster-size failure is gone and save/reload is stable in the latest five-season run, but a later generated-player contract divergence remains. Because that principal determinism gate is still red, the three-seed five-season matrix, ten-season seed-1684 proof, and optional twenty-season run were not honestly claimable from this head.
+This branch must still not claim five-season state determinism, ten-season safety, or multi-seed durable authority. The season-5 roster-size failure is gone, schedule season identity is stronger, continuity no longer accepts substring transaction evidence, and minimum-roster reconciliation now produces valid cap-checked contracts or rolls back. However, the defining state-determinism gate remains red because generated-player/player-1005 contract state still diverges by season 2. Because that principal determinism gate is still red, the three-seed five-season matrix, ten-season seed-1684 proof, and optional twenty-season run were not run as proof artifacts from this head.

@@ -153,21 +153,25 @@ describe('executeAICapManagement — legality & structure', () => {
 });
 
 describe('ensureMinimumRosters — stable rollover legality', () => {
-  it('fills under-minimum AI rosters from existing free agents without touching interactive user teams', async () => {
+  function buildUnderMinimumStore({ liveCap = LIVE_CAP, staleTeamCap = LIVE_CAP, userRoster = 52, aiRoster = 52, freeAgents = [] } = {}) {
     h.state.store = {
-      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's5', currentWeek: 1, year: 2030 },
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: liveCap }, currentSeasonId: 's5', currentWeek: 1, year: 2030 },
       teams: new Map([
-        [0, { id: 0, abbr: 'USR', capTotal: LIVE_CAP, deadCap: 0, capRoom: 80 }],
-        [31, { id: 31, abbr: 'AI31', capTotal: LIVE_CAP, deadCap: 0, capRoom: 80 }],
+        [0, { id: 0, abbr: 'USR', capTotal: staleTeamCap, deadCap: 0, capRoom: liveCap }],
+        [31, { id: 31, abbr: 'AI31', capTotal: staleTeamCap, deadCap: 0, capRoom: liveCap }],
       ]),
       players: new Map(),
     };
-    for (let i = 0; i < 52; i++) {
-      h.state.store.players.set(`ai-${i}`, { id: `ai-${i}`, teamId: 31, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
-      h.state.store.players.set(`usr-${i}`, { id: `usr-${i}`, teamId: 0, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
-    }
-    h.state.store.players.set('fa-b', { id: 'fa-b', teamId: null, pos: 'CB', ovr: 65, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) });
-    h.state.store.players.set('fa-a', { id: 'fa-a', teamId: null, pos: 'CB', ovr: 66, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) });
+    for (let i = 0; i < aiRoster; i++) h.state.store.players.set(`ai-${i}`, { id: `ai-${i}`, teamId: 31, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+    for (let i = 0; i < userRoster; i++) h.state.store.players.set(`usr-${i}`, { id: `usr-${i}`, teamId: 0, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+    for (const fa of freeAgents) h.state.store.players.set(fa.id, fa);
+  }
+
+  it('fills under-minimum AI rosters from signable free agents without touching interactive user teams', async () => {
+    buildUnderMinimumStore({ freeAgents: [
+      { id: 'fa-b', teamId: null, pos: 'CB', ovr: 65, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) },
+      { id: 'fa-a', teamId: null, pos: 'CB', ovr: 66, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) },
+    ] });
 
     await AiLogic.ensureMinimumRosters({ includeUserTeam: false });
 
@@ -175,6 +179,60 @@ describe('ensureMinimumRosters — stable rollover legality', () => {
     expect(h.mockCache.getPlayersByTeam(0)).toHaveLength(52);
     expect(h.state.store.players.get('fa-a').teamId).toBe(31);
     expect(h.state.txLog.some((tx) => tx.details?.source === 'minimum_roster_reconciliation')).toBe(true);
+  });
+
+  it('never selects retired, draft-eligible, deleted, or non-signable null-team players', async () => {
+    buildUnderMinimumStore({ freeAgents: [
+      { id: 'retired-fa', teamId: null, pos: 'CB', ovr: 99, age: 35, status: 'retired', contract: contract(1, 0, 1, 1) },
+      { id: 'draft-fa', teamId: null, pos: 'CB', ovr: 98, age: 21, status: 'draft_eligible', contract: contract(1, 0, 1, 1) },
+      { id: 'deleted-fa', teamId: null, pos: 'CB', ovr: 97, age: 25, status: 'free_agent', deleted: true, contract: contract(1, 0, 1, 1) },
+      { id: 'active-null', teamId: null, pos: 'CB', ovr: 96, age: 25, status: 'active', contract: contract(1, 0, 1, 1) },
+      { id: 'signable', teamId: null, pos: 'CB', ovr: 60, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) },
+    ] });
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: false });
+    expect(h.state.store.players.get('signable').teamId).toBe(31);
+    expect(h.state.store.players.get('retired-fa').teamId).toBeNull();
+    expect(h.state.store.players.get('draft-fa').teamId).toBeNull();
+    expect(h.state.store.players.get('deleted-fa').teamId).toBeNull();
+    expect(h.state.store.players.get('active-null').teamId).toBeNull();
+  });
+
+  it('gives an expired free agent a valid production-shaped contract', async () => {
+    buildUnderMinimumStore({ freeAgents: [{ id: 'expired-fa', teamId: null, pos: 'CB', ovr: 68, age: 25, status: 'free_agent', contract: contract(0, 0, 0, 0) }] });
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: false });
+    const signed = h.state.store.players.get('expired-fa');
+    expect(signed.teamId).toBe(31);
+    expect(signed.contract).toMatchObject({ yearsRemaining: expect.any(Number), yearsTotal: expect.any(Number), baseAnnual: expect.any(Number), signingBonus: expect.any(Number) });
+    expect(signed.contract.yearsRemaining).toBeGreaterThan(0);
+    expect(signed.contract.baseAnnual).toBeGreaterThan(0);
+  });
+
+  it('uses live economy cap instead of stale team cap for reconciliation legality', async () => {
+    buildUnderMinimumStore({ liveCap: 100, staleTeamCap: 52, freeAgents: [{ id: 'live-cap-fa', teamId: null, pos: 'CB', ovr: 68, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) }] });
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: false });
+    expect(h.state.store.players.get('live-cap-fa').teamId).toBe(31);
+    expect(h.state.store.teams.get(31).capTotal).toBe(100);
+  });
+
+  it('rolls back and does not record SIGN when signing would exceed the live cap', async () => {
+    buildUnderMinimumStore({ liveCap: 52.5, staleTeamCap: 52.5, freeAgents: [{ id: 'pricey-fa', teamId: null, pos: 'CB', ovr: 90, age: 25, status: 'free_agent', contract: contract(5, 0, 1, 1) }] });
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: false });
+    expect(h.state.store.players.get('pricey-fa').teamId).toBeNull();
+    expect(h.state.txLog.some((tx) => tx.type === 'SIGN')).toBe(false);
+  });
+
+  it('deterministically selects the same candidate independent of cache insertion order', async () => {
+    const candidates = [
+      { id: 'fa-z', teamId: null, pos: 'CB', ovr: 70, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) },
+      { id: 'fa-a', teamId: null, pos: 'CB', ovr: 70, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) },
+    ];
+    buildUnderMinimumStore({ freeAgents: structuredClone(candidates) });
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: false });
+    const first = h.state.txLog.find((tx) => tx.type === 'SIGN')?.playerId;
+    h.state.txLog.length = 0;
+    buildUnderMinimumStore({ freeAgents: structuredClone([...candidates].reverse()) });
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: false });
+    expect(h.state.txLog.find((tx) => tx.type === 'SIGN')?.playerId).toBe(first);
   });
 });
 

@@ -164,7 +164,7 @@ describe('continuity invariant V2', () => {
   const baseSnap = () => ({
     league: { phase: 'offseason_resign' },
     teams: [{ id: '0' }],
-    players: [{ id: 'p10', status: 'active', yearsRemaining: 1, yearsTotal: 2, baseAnnual: 5, signingBonus: 0, activeCapHit: 5 }],
+    players: [{ id: 'p10', teamId: '0', status: 'active', yearsRemaining: 1, yearsTotal: 2, baseAnnual: 5, signingBonus: 0, activeCapHit: 5 }],
     retiredPlayers: [],
     history: [{ season: 2026 }],
     schedule: [{ id: 'g1', season: 2026 }],
@@ -179,20 +179,28 @@ describe('continuity invariant V2', () => {
     expect(continuity.check(ctxFor(prev, cur)).find((r) => r.id === 'continuity.history-grows-once').status).toBe('pass');
   });
 
-  it('fails when a game id is reused across prior and current seasons', () => {
+  it('fails when a production-shaped slim schedule game id is reused across prior and current seasons', () => {
     const prev = baseSnap();
-    const cur = { ...baseSnap(), schedule: [{ id: 'g1', season: 2027 }] };
+    const cur = { ...baseSnap(), schedule: [{ id: 'g1', season: 2027, week: 1, home: '0', away: '1' }] };
     expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.schedule-game-id-season-unique').status).toBe('fail');
   });
 
-  it('fails when contract years increase without a contract-write shape and passes with an extension-shaped change', () => {
+  it('fails when contract years increase without exact player transaction evidence, even when economics also change', () => {
     const prev = baseSnap();
-    const cur = { ...baseSnap(), players: [{ ...prev.players[0], yearsRemaining: 2 }] };
-    expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write').status).toBe('fail');
-    cur.players[0].baseAnnual = 7;
-    expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write').status).toBe('fail');
-    cur.players[0].yearsTotal = 4;
-    expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write').status).toBe('pass');
+    const cur = { ...baseSnap(), players: [{ ...prev.players[0], yearsRemaining: 2, yearsTotal: 4, baseAnnual: 7, signingBonus: 3 }] };
+    const result = continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write');
+    expect(result.status).toBe('fail');
+  });
+
+  it('rejects substring or wrong-player transaction matches for contract-year increases', () => {
+    const prev = baseSnap();
+    const cur = { ...baseSnap(), players: [{ ...prev.players[0], yearsRemaining: 2, yearsTotal: 4 }] };
+    const ctx = ctxFor(prev, cur, 'afterRegularSeason');
+    ctx.probes = { transactions: [
+      { type: 'NOTE', details: { playerId: 'p10', text: 'contract extension wording only' } },
+      { type: 'CONTRACT_EXTENSION', playerId: 'xx-p10-xx' },
+    ] };
+    expect(continuity.check(ctx).find((r) => r.id === 'continuity.contract-years-do-not-increase-without-contract-write').status).toBe('fail');
   });
 
   it('passes a contract-year increase with production transaction evidence', () => {
@@ -441,6 +449,17 @@ describe('durable snapshot V2', () => {
     const cmp = compareDurableSnapshots(buildDurableSnapshot(base), buildDurableSnapshot(changed));
     expect(cmp.ok).toBe(false);
     expect(cmp.firstDivergence).toMatchObject({ domain: 'history', field: 'champion' });
+  });
+
+
+  it('uses schedule seasonId before legacy season/year in durable state', async () => {
+    const { buildDurableSnapshot, compareDurableSnapshots } = await import('./invariants/durableSnapshot.js');
+    const a = { season: 1, view: { teams: [healthyTeam(0, []), healthyTeam(1, [])], leagueHistory: [], schedule: { games: [{ id: 'g-season', seasonId: 'season-a', season: 2027, year: 2027, week: 1, homeTeamId: 0, awayTeamId: 1 }] } }, db: { teams: [{ id: 0 }, { id: 1 }], players: [], picks: [] } };
+    const b = structuredClone(a);
+    b.view.schedule.games[0].seasonId = 'season-b';
+    const cmp = compareDurableSnapshots(buildDurableSnapshot(a), buildDurableSnapshot(b));
+    expect(cmp.ok).toBe(false);
+    expect(cmp.firstDivergence).toMatchObject({ domain: 'schedule', entityId: 'g-season', field: 'season' });
   });
 
   it('save/reload detects contract, dead-cap, injury, ratings, schedule, and history mutations', () => {

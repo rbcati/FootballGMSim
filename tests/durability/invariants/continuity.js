@@ -1,3 +1,4 @@
+import { canonicalIdKey } from '../../../src/core/referenceIntegrity.js';
 import { fail, pass, skip } from './helpers.js';
 
 export const id = 'continuity';
@@ -70,33 +71,39 @@ export function check(ctx) {
   return out;
 }
 
+const CONTRACT_TRANSACTION_TYPES = new Set(['SIGN', 'SIGNED', 'SIGNING', 'CONTRACT_SIGNING', 'CONTRACT_EXTENSION', 'EXTENSION', 'RESTRUCTURE', 'CONTRACT_RESTRUCTURE', 'FRANCHISE_TAG', 'RFA_TENDER']);
+const DISPOSITION_TRANSACTION_TYPES = new Set(['RETIRE', 'RETIREMENT', 'RETIRED', 'RELEASE', 'RELEASED', 'PLAYER_RELEASED', 'WAIVE', 'WAIVED', 'FREE_AGENCY', 'FREE_AGENT', 'ROSTER_REMOVAL', 'REMOVED', 'DELETE', 'DELETED', 'DISPOSITION']);
+
 function hasLegitimateDisposition(ctx, player, curRetiredIds) {
   if (!player?.id) return true;
   if (player.status === 'draft_eligible') return true;
   if (curRetiredIds.has(player.id)) return true;
-  return hasPlayerEvent(ctx, player.id, ['retire', 'retirement', 'retired', 'release', 'released', 'waive', 'waived', 'free_agent', 'free agency', 'removed', 'delete', 'disposition']);
+  return hasPlayerEvent(ctx, player.id, DISPOSITION_TRANSACTION_TYPES);
 }
 
 function hasLegitimateContractTransition(ctx, prev, cur) {
-  if (hasPlayerEvent(ctx, prev.id, ['sign', 'signed', 'extension', 'extend', 'extended', 'restructure', 'restructured', 'contract'])) return true;
-  const wasUnsigned = Number(prev.yearsRemaining ?? 0) <= 0 || prev.teamId == null || prev.status === 'free_agent';
-  const isRostered = cur.teamId != null && cur.status !== 'free_agent' && cur.status !== 'retired';
-  if (wasUnsigned && isRostered && Number(cur.yearsRemaining ?? 0) > 0) return true;
-  const totalIncreased = Number(cur.yearsTotal ?? 0) > Number(prev.yearsTotal ?? 0);
-  const economicsChanged = cur.baseAnnual !== prev.baseAnnual || cur.signingBonus !== prev.signingBonus;
-  return totalIncreased && economicsChanged;
+  if (hasPlayerEvent(ctx, prev.id, CONTRACT_TRANSACTION_TYPES)) return true;
+  const wasEstablishedRostered = prev.teamId != null && prev.status !== 'free_agent' && prev.status !== 'draft_eligible' && prev.status !== 'retired' && Number(prev.yearsRemaining ?? 0) > 0;
+  if (wasEstablishedRostered) return false;
+  const becomesRostered = cur.teamId != null && cur.status !== 'free_agent' && cur.status !== 'retired' && cur.status !== 'draft_eligible';
+  return becomesRostered && Number(cur.yearsRemaining ?? 0) > 0;
 }
 
-function hasPlayerEvent(ctx, playerId, words) {
+function hasPlayerEvent(ctx, playerId, allowedTypes) {
   const txs = [
     ...(Array.isArray(ctx?.probes?.transactions) ? ctx.probes.transactions : []),
     ...(Array.isArray(ctx?.transactions) ? ctx.transactions : []),
     ...(Array.isArray(ctx?.durableSnapshot?.transactions) ? ctx.durableSnapshot.transactions : []),
   ];
-  const id = String(playerId);
-  return txs.some((tx) => {
-    const text = JSON.stringify(tx).toLowerCase();
-    if (!text.includes(id.toLowerCase())) return false;
-    return words.some((w) => text.includes(w));
-  });
+  const id = canonicalIdKey(playerId);
+  if (!id) return false;
+  return txs.some((tx) => canonicalIdKey(transactionPlayerId(tx)) === id && allowedTypes.has(normalizeTransactionType(tx)));
+}
+
+function transactionPlayerId(tx) {
+  return tx?.playerId ?? tx?.details?.playerId ?? tx?.details?.player?.id ?? tx?.targetPlayerId ?? tx?.subjectId ?? null;
+}
+
+function normalizeTransactionType(tx) {
+  return String(tx?.type ?? tx?.legacyType ?? tx?.action ?? '').trim().toUpperCase().replace(/[-\s]+/g, '_');
 }
