@@ -365,11 +365,11 @@ describe('durable snapshot V2', () => {
 
   it('stable cap uses live cap, dead cap, team id 0, excludes staff, exact/fractional boundaries, and skips offseason', () => {
     const ctx = healthyViewCtx();
-    ctx.view.meta = { economy: { currentSalaryCap: 200 } };
-    ctx.view.teams = [healthyTeam(0, [{ ...healthyPlayer(1, 0), capHit: 150 }])];
+    ctx.view.economy = { currentSalaryCap: 200 };
+    ctx.view.teams = [healthyTeam(0, [{ ...healthyPlayer(1, 0), contract: { baseAnnual: 150, signingBonus: 0, yearsTotal: 1, yearsRemaining: 1 } }])];
     ctx.view.teams[0].deadCap = 50; ctx.view.teams[0].staffPayroll = 999;
     expect(cap.check(ctx).find((r) => r.id === 'cap.stable-phase-legal').status).toBe('pass');
-    ctx.view.teams[0].deadCap = 50.001;
+    ctx.view.teams[0].deadCap = 50.01;
     expect(cap.check(ctx).find((r) => r.id === 'cap.stable-phase-legal').status).toBe('fail');
     ctx.view.phase = 'offseason';
     expect(cap.check(ctx).find((r) => r.id === 'cap.stable-phase-legal').status).toBe('skip');
@@ -379,4 +379,44 @@ describe('durable snapshot V2', () => {
     const { raw, errors } = parseArgv(['node', 's', '5-season', '--seeds=1684,1702,1703']);
     expect(errors).toEqual([]); expect(raw.seeds).toEqual([1684, 1702, 1703]);
   });
+
+  it('CLI accepts one seed in --seeds, rejects invalid lists, and rejects determinism combination', () => {
+    expect(parseArgv(['node', 's', '5-season', '--seeds=1702']).raw.seeds).toEqual([1702]);
+    expect(parseArgv(['node', 's', '--seeds=1684,nope']).errors).toContain('Invalid --seeds');
+    expect(parseArgv(['node', 's', '--seeds=1684,', '--determinism']).errors.some((e) => e.includes('--seeds cannot be combined'))).toBe(true);
+  });
+  it('production-shaped cap uses DB dead cap and canonical contract fields', () => {
+    const ctx = healthyViewCtx();
+    ctx.view.economy = { currentSalaryCap: 100 };
+    ctx.view.teams = [healthyTeam(0, [])];
+    ctx.db = {
+      meta: { economy: { currentSalaryCap: 100 } },
+      teams: [{ id: 0, deadCap: 21, staffPayroll: 500 }],
+      players: [
+        { id: 'p100', teamId: 0, status: 'active', contract: { baseAnnual: 70, signingBonus: 30, yearsTotal: 3, yearsRemaining: 2 } },
+      ],
+      picks: [],
+    };
+    const res = cap.check(ctx);
+    const legal = res.find((r) => r.id === 'cap.stable-phase-legal');
+    expect(legal.status).toBe('fail');
+    expect(legal.details).toMatchObject({ teamId: '0', rosterCap: 80, deadCap: 21, totalCommitted: 101, salaryCap: 100, overageVsLegal: 1 });
+  });
+
+  it('structured durable diffs report canonical entity id rather than array index', async () => {
+    const { buildDurableSnapshot, compareDurableSnapshots } = await import('./invariants/durableSnapshot.js');
+    const a = { season: 1, view: { teams: [healthyTeam(0, [])], leagueHistory: [] }, db: { teams: [{ id: 0 }], players: [{ ...healthyPlayer(9001, 0), ovr: 70 }], picks: [] } };
+    const b = structuredClone(a);
+    b.db.players[0].ovr = 71;
+    const cmp = compareDurableSnapshots(buildDurableSnapshot(a), buildDurableSnapshot(b));
+    expect(cmp.firstDivergence).toMatchObject({ domain: 'players', entityId: '9001', field: 'ovr' });
+  });
+
+  it('report passed is false when state determinism fails with zero invariant failures', () => {
+    const rep = new DurabilityReport({ seed: 1, mode: '1-season', failureMode: 'collect-all', requestedSeasons: 1 });
+    rep.addCheckpoint({ season: 0, phase: 'afterInit', week: 0, results: [{ id: 'x.ok', status: 'pass', message: 'ok' }] });
+    rep.setDeterminism(false, 'state differs', { lifecycleDeterministic: true, stateDeterministic: false, firstDivergence: { domain: 'players', entityId: '9', field: 'ovr' } });
+    expect(rep.passed).toBe(false);
+  });
+
 });

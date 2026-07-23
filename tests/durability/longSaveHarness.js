@@ -78,13 +78,19 @@ export async function runDurabilityHarness(config = {}) {
   let competitiveSeasonsCompleted = 0;
   let completedThrough = CHECKPOINTS.AFTER_INIT;
 
+  let previousDurableSnapshot = null;
+  let lastCheckpointAt = Date.now();
   const evaluate = (ctx) => {
     sampleMem();
     const snap = canonicalSummary({ view: ctx.view, db: ctx.db, season: ctx.season });
     ctx.durableSnapshot = snap.durableSnapshot;
     ctx.durableSnapshotDigest = snap.durableSnapshotDigest;
+    ctx.previousDurableSnapshot = previousDurableSnapshot;
     const results = runInvariants(ctx);
-    const counts = report.addCheckpoint({ season: ctx.season, phase: ctx.phase, week: ctx.week, results, durable: { digest: ctx.durableSnapshotDigest, summary: summarizeSnapshot(ctx.durableSnapshot), snapshot: ctx.durableSnapshot } });
+    const now = Date.now();
+    const counts = report.addCheckpoint({ season: ctx.season, phase: ctx.phase, week: ctx.week, results, durable: { digest: ctx.durableSnapshotDigest, summary: summarizeSnapshot(ctx.durableSnapshot), snapshot: ctx.durableSnapshot }, metrics: { elapsedSincePreviousMs: now - lastCheckpointAt, rssMb: currentRssMb() } });
+    lastCheckpointAt = now;
+    previousDurableSnapshot = ctx.durableSnapshot;
     onEvent({ type: 'checkpoint', season: ctx.season, phase: ctx.phase, counts });
     if (failureMode === 'fail-fast' && counts.fail > 0) {
       throw new StopHarness(`fail-fast: ${counts.fail} invariant failure(s) at season ${ctx.season} ${ctx.phase}`);
@@ -212,27 +218,20 @@ export async function runDurabilityHarness(config = {}) {
 export async function runDeterminismCheck(config = {}) {
   const a = await runDurabilityHarness({ ...config, _determinismRun: 'A' });
   const b = await runDurabilityHarness({ ...config, _determinismRun: 'B' });
-  const na = normalizeOutcome(a.toJSON());
-  const nb = normalizeOutcome(b.toJSON());
+  return { ...compareReportDeterminism(a.report, b.report), reports: [a, b] };
+}
+
+export function compareReportDeterminism(reportA, reportB) {
+  const na = normalizeOutcome(stripSnapshotsForOutcome(reportA));
+  const nb = normalizeOutcome(stripSnapshotsForOutcome(reportB));
   const diffs = [];
-  for (const k of Object.keys(na)) {
-    if (JSON.stringify(na[k]) !== JSON.stringify(nb[k])) diffs.push({ field: k, a: na[k], b: nb[k] });
-  }
-  const state = compareReportSnapshots(a.report, b.report);
+  for (const k of Object.keys(na)) if (JSON.stringify(na[k]) !== JSON.stringify(nb[k])) diffs.push({ field: k, a: na[k], b: nb[k] });
+  const state = compareReportSnapshots(reportA, reportB);
   const lifecycleDeterministic = diffs.length === 0;
   const stateDeterministic = state.ok;
-  return {
-    deterministic: lifecycleDeterministic && stateDeterministic,
-    lifecycleDeterministic,
-    stateDeterministic,
-    firstDivergence: state.firstDivergence,
-    detail: lifecycleDeterministic && stateDeterministic
-      ? 'Lifecycle outcome and canonical durable state identical across two clean runs'
-      : `Lifecycle deterministic=${lifecycleDeterministic}; state deterministic=${stateDeterministic}`,
-    diffs: [...diffs, ...state.diffs],
-    reports: [a, b],
-  };
+  return { deterministic: lifecycleDeterministic && stateDeterministic, lifecycleDeterministic, stateDeterministic, firstDivergence: state.firstDivergence, detail: lifecycleDeterministic && stateDeterministic ? 'Lifecycle outcome and canonical durable state identical across two clean runs' : `Lifecycle deterministic=${lifecycleDeterministic}; state deterministic=${stateDeterministic}`, diffs: [...diffs, ...state.diffs] };
 }
+function stripSnapshotsForOutcome(r) { return { ...r, checkpoints: (r.checkpoints || []).map((c) => ({ ...c, durable: c.durable ? { digest: c.durable.digest } : null })) }; }
 
 function normalizeOutcome(r) {
   return {
@@ -257,6 +256,7 @@ function unexercisedStages(perSeasonStopPhase) {
   return ['playoffs', 'draft', 'freeAgency', 'progression', 'retirement', 'historyRollover', 'nextSeasonGeneration'];
 }
 
+function currentRssMb() { return typeof process !== 'undefined' && process.memoryUsage ? Math.round(process.memoryUsage().rss / (1024 * 1024)) : null; }
 function summarizeSnapshot(s) {
   return { league: s?.league, pools: s?.pools, teamCount: s?.teams?.length ?? 0, playerCount: s?.players?.length ?? 0, retiredCount: s?.retiredPlayers?.length ?? 0, pickCount: s?.draftPicks?.length ?? 0, scheduleCount: s?.schedule?.length ?? 0, historyCount: s?.history?.length ?? 0 };
 }

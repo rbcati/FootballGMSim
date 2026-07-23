@@ -120,8 +120,11 @@ export class DurabilityReport {
   }
 
   get passed() {
-    return this.report.summary.failed === 0 && !this.report.lifecycleException;
+    const detOk = this.report.deterministic == null || (this.report.lifecycleDeterministic !== false && this.report.stateDeterministic !== false);
+    return this.report.summary.failed === 0 && !this.report.lifecycleException && detOk;
   }
+
+  toRuntimeJSON() { return this.report; }
 
   toJSON() { return stripRuntimeSnapshots(this.report); }
 
