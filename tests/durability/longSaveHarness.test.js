@@ -185,6 +185,12 @@ describe('continuity invariant V2', () => {
     expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.schedule-game-id-season-unique').status).toBe('fail');
   });
 
+  it('fails when a production game id is reused across different seasonId values', () => {
+    const prev = canonicalSummary({ view: { ...healthyViewCtx().view, schedule: { weeks: [{ week: 1, games: [{ gameId: 'same-game', seasonId: 's1', week: 1, home: 0, away: 1 }] }] } } }).durableSnapshot;
+    const cur = canonicalSummary({ view: { ...healthyViewCtx().view, schedule: { weeks: [{ week: 1, games: [{ gameId: 'same-game', seasonId: 's2', week: 1, home: 0, away: 1 }] }] } } }).durableSnapshot;
+    expect(continuity.check(ctxFor(prev, cur, 'afterRegularSeason')).find((r) => r.id === 'continuity.schedule-game-id-season-unique').status).toBe('fail');
+  });
+
   it('fails when contract years increase without in-window contract-write evidence even if salary also changes', () => {
     const prev = baseSnap();
     const cur = { ...baseSnap(), players: [{ ...prev.players[0], yearsRemaining: 2 }] };
@@ -474,6 +480,16 @@ describe('durable snapshot V2', () => {
       (s) => { s.db.players[0].injury.status = 'healthy'; }, (s) => { s.db.players[0].ovr = 12; },
       (s) => { s.view.schedule.games[0].homeScore = 99; }, (s) => { s.view.leagueHistory[0].championTeamId = 1; },
     ]) { const changed = structuredClone(base); mutate(changed); expect(compareCanonical(canonicalSummary(base), canonicalSummary(changed)).ok).toBe(false); }
+  });
+
+  it('normalizes production schedule seasonId and preserves legacy season/year fallbacks', () => {
+    const withSeasonId = canonicalSummary({ view: { ...healthyViewCtx().view, schedule: { weeks: [{ week: 1, games: [{ gameId: 'g-prod', seasonId: 's-2031', week: 1, home: 0, away: 1 }] }] } } });
+    const changedSeasonId = canonicalSummary({ view: { ...healthyViewCtx().view, schedule: { weeks: [{ week: 1, games: [{ gameId: 'g-prod', seasonId: 's-2032', week: 1, home: 0, away: 1 }] }] } } });
+    expect(compareCanonical(withSeasonId, changedSeasonId).ok).toBe(false);
+
+    const legacySeason = canonicalSummary({ view: { ...healthyViewCtx().view, schedule: { weeks: [{ week: 1, games: [{ gameId: 'g-legacy', season: 2031, week: 1, home: 0, away: 1 }] }] } } });
+    const legacyYear = canonicalSummary({ view: { ...healthyViewCtx().view, schedule: { weeks: [{ week: 1, games: [{ gameId: 'g-legacy', year: 2031, week: 1, home: 0, away: 1 }] }] } } });
+    expect(compareCanonical(legacySeason, legacyYear).ok).toBe(true);
   });
 
   it('stable cap uses live cap, dead cap, team id 0, excludes staff, exact/fractional boundaries, and skips offseason', () => {

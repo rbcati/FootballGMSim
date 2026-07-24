@@ -102,7 +102,7 @@ function groupEntityOccurrences(list) {
 function normalizeInjury(p) { const i = p.injury ?? {}; return { status: p.injuryStatus ?? i.status ?? null, weeks: i.weeks ?? p.injuryWeeks ?? null, available: p.available ?? p.isAvailable ?? null }; }
 function normalizeSchedule(schedule) {
   const games = Array.isArray(schedule?.games) ? schedule.games : (Array.isArray(schedule?.weeks) ? schedule.weeks.flatMap((w) => (w.games || []).map((g) => ({ ...g, week: g.week ?? w.week }))) : []);
-  return games.map((g) => ({ id: idKey(g.id ?? g.gameId), season: g.season ?? g.year ?? null, week: g.week ?? null, home: idKey(g.home ?? g.homeTeamId), away: idKey(g.away ?? g.awayTeamId), played: !!(g.played ?? g.final), final: !!(g.final ?? g.completed), homeScore: (g.played || g.final) ? (g.homeScore ?? null) : null, awayScore: (g.played || g.final) ? (g.awayScore ?? null) : null })).sort(byId);
+  return games.map((g) => ({ id: idKey(g.id ?? g.gameId), season: g.seasonId ?? g.season ?? g.year ?? null, week: g.week ?? null, home: idKey(g.home ?? g.homeTeamId), away: idKey(g.away ?? g.awayTeamId), played: !!(g.played ?? g.final), final: !!(g.final ?? g.completed), homeScore: (g.played || g.final) ? (g.homeScore ?? null) : null, awayScore: (g.played || g.final) ? (g.awayScore ?? null) : null })).sort(byId);
 }
 export function resolveLiveSalaryCap(state = {}) { return state.view?.economy?.currentSalaryCap ?? state.db?.meta?.economy?.currentSalaryCap ?? state.view?.salaryCap ?? state.db?.meta?.salaryCap ?? state.view?.teams?.[0]?.capTotal ?? null; }
 function sortObject(v) { if (Array.isArray(v)) return v.map(sortObject); if (!v || typeof v !== 'object') return v; return Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortObject(v[k])])); }

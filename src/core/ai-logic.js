@@ -16,7 +16,7 @@ import { buildAiTeamStrategy } from './aiTeamStrategy.js';
 import NewsEngine from './news-engine.js';
 import { getTeamContextForNegotiation } from './teamContext/negotiationContext.js';
 import { evaluateContractOffer } from './contracts/negotiation.js';
-import { isFreeAgent } from './freeAgency/membership.js';
+import { isFreeAgent, isSignableFreeAgent } from './freeAgency/membership.js';
 import { evaluateReSigningPriority } from './retention/reSigning.js';
 import { buildFreeAgencyMarketAnalysis } from './freeAgency/freeAgencyMarketAnalysis.js';
 import { buildContractFromMarket, evaluateContractMarket } from './contractModel.js';
@@ -102,6 +102,29 @@ function minimumRosterSigningPatch(contract) {
         restructureOriginalBonus: null,
         restructureYear: null,
     };
+}
+
+const MINIMUM_ROSTER_SIGNING_KEYS = Object.freeze([
+    'teamId', 'status', 'offers', 'contract', 'contractYearsLeft', 'tag',
+    'tender', 'franchiseTag', 'rfaTender', 'restructureCount',
+    'restructureHistory', 'restructured', 'restructureSavings',
+    'restructureOriginalBase', 'restructureOriginalBonus', 'restructureYear',
+]);
+
+function restoreMinimumRosterPlayerPatch(snapshot = {}) {
+    const patch = { ...snapshot };
+    for (const key of MINIMUM_ROSTER_SIGNING_KEYS) {
+        if (!(key in snapshot)) patch[key] = undefined;
+    }
+    return patch;
+}
+
+function resolveLiveCapForMinimumRoster(team = {}, meta = {}) {
+    const economyCap = Number(meta?.economy?.currentSalaryCap);
+    if (Number.isFinite(economyCap) && economyCap > 0) return economyCap;
+    const teamCap = Number(team?.capTotal);
+    if (Number.isFinite(teamCap) && teamCap > 0) return teamCap;
+    return Constants.SALARY_CAP.HARD_CAP;
 }
 
 class AiLogic {
@@ -333,8 +356,9 @@ class AiLogic {
 
             while (roster.length < minimum) {
                 const freshTeam = cache.getTeam(team.id);
+                const liveSalaryCap = resolveLiveCapForMinimumRoster(freshTeam, meta);
                 const freeAgents = cache.getAllPlayers()
-                    .filter((p) => isFreeAgent(p))
+                    .filter((p) => isSignableFreeAgent(p))
                     .sort((a, b) => {
                         const posDelta = positionRank(a?.pos, positionOrder) - positionRank(b?.pos, positionOrder);
                         if (posDelta !== 0) return posDelta;
@@ -343,7 +367,7 @@ class AiLogic {
                 const capSnapshot = buildTeamCapSnapshot({
                     team: freshTeam,
                     roster,
-                    salaryCap: freshTeam?.capTotal ?? meta?.economy?.currentSalaryCap,
+                    salaryCap: liveSalaryCap,
                 });
                 const room = Number(capSnapshot?.capRoom ?? freshTeam?.capRoom ?? 0);
                 let candidate = null;
@@ -367,7 +391,7 @@ class AiLogic {
                     const projection = buildTeamCapSnapshot({
                         team: freshTeam,
                         roster: [...roster, projectedPlayer],
-                        salaryCap: freshTeam?.capTotal ?? meta?.economy?.currentSalaryCap,
+                        salaryCap: liveSalaryCap,
                     });
                     if (Number(getActiveCapHit(projectedPlayer) ?? 0) <= room + 0.01 && projection?.isLegallyCompliant !== false) {
                         candidate = p;
@@ -381,6 +405,12 @@ class AiLogic {
                 const beforePlayer = JSON.parse(JSON.stringify(candidate));
                 const beforeTeam = JSON.parse(JSON.stringify(freshTeam));
                 cache.updatePlayer(candidate.id, { ...minimumRosterSigningPatch(contract), teamId: team.id });
+                const capResult = AiLogic.updateTeamCap(team.id);
+                if (capResult?.ok === false) {
+                    cache.updatePlayer(candidate.id, restoreMinimumRosterPlayerPatch(beforePlayer));
+                    cache.updateTeam(team.id, beforeTeam);
+                    break;
+                }
                 await Transactions.add({
                     type: 'SIGN',
                     seasonId: meta.currentSeasonId,
@@ -389,12 +419,6 @@ class AiLogic {
                     playerId: candidate.id,
                     details: { playerId: candidate.id, source: 'minimum_roster_reconciliation', contract, projectedCapRoom: projectedCap?.capRoom },
                 });
-                const capResult = AiLogic.updateTeamCap(team.id);
-                if (capResult?.ok === false) {
-                    cache.updatePlayer(candidate.id, beforePlayer);
-                    cache.updateTeam(team.id, beforeTeam);
-                    break;
-                }
                 roster = cache.getPlayersByTeam(team.id);
             }
         }

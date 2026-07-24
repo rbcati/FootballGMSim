@@ -223,6 +223,31 @@ describe('ensureMinimumRosters — stable rollover legality', () => {
     expect(signed.contract.startYear).toBe(2030);
   });
 
+  it('never signs invalid null-team categories even when they are the highest-rated players', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's5', currentWeek: 1, year: 2030, phase: 'preseason' },
+      teams: new Map([[31, { id: 31, abbr: 'AI31', capTotal: LIVE_CAP, deadCap: 0, capRoom: 80 }]]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 52; i++) h.state.store.players.set(`ai-${i}`, { id: `ai-${i}`, teamId: 31, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+    const prohibited = [
+      { id: 'retired-status', teamId: null, pos: 'CB', ovr: 99, age: 35, status: 'retired', contract: contract(1, 0, 1, 1) },
+      { id: 'retired-flag', teamId: null, pos: 'CB', ovr: 98, age: 35, status: 'free_agent', retired: true, contract: contract(1, 0, 1, 1) },
+      { id: 'draft-eligible', teamId: null, pos: 'CB', ovr: 97, age: 22, status: 'draft_eligible', contract: contract(1, 0, 1, 1) },
+      { id: 'draft-pool', teamId: null, pos: 'CB', ovr: 96, age: 22, status: 'draft_pool', contract: contract(1, 0, 1, 1) },
+      { id: 'deleted', teamId: null, pos: 'CB', ovr: 95, age: 26, status: 'deleted', contract: contract(1, 0, 1, 1) },
+      { id: 'removed', teamId: null, pos: 'CB', ovr: 94, age: 26, status: 'removed', contract: contract(1, 0, 1, 1) },
+      { id: 'inconsistent-active', teamId: null, pos: 'CB', ovr: 93, age: 26, status: 'active', contract: contract(1, 0, 1, 1) },
+    ];
+    for (const p of prohibited) h.state.store.players.set(p.id, p);
+    h.state.store.players.set('valid-fa', { id: 'valid-fa', teamId: null, pos: 'CB', ovr: 65, potential: 65, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) });
+
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: true });
+
+    expect(h.state.store.players.get('valid-fa').teamId).toBe(31);
+    for (const p of prohibited) expect(h.state.store.players.get(p.id).teamId).toBeNull();
+  });
+
   it('leaves player and team state unchanged when projected signing cannot fit under the live cap', async () => {
     h.state.store = {
       meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: 53 }, currentSeasonId: 's5', currentWeek: 1, year: 2030, phase: 'preseason' },
@@ -237,6 +262,40 @@ describe('ensureMinimumRosters — stable rollover legality', () => {
 
     expect(JSON.stringify([...h.state.store.teams, ...h.state.store.players])).toBe(before);
     expect(h.state.txLog).toHaveLength(0);
+  });
+
+  it('uses the live economy cap before stale team capTotal when validating projected minimum-roster signings', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: 53 }, currentSeasonId: 's5', currentWeek: 1, year: 2030, phase: 'preseason' },
+      teams: new Map([[31, { id: 31, abbr: 'AI31', capTotal: 100, deadCap: 0, capRoom: 48 }]]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 52; i++) h.state.store.players.set(`ai-${i}`, { id: `ai-${i}`, teamId: 31, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+    h.state.store.players.set('fits-stale-cap', { id: 'fits-stale-cap', teamId: null, pos: 'QB', ovr: 90, potential: 90, age: 27, status: 'free_agent', contract: contract(1, 0, 1, 0) });
+    const before = JSON.stringify([...h.state.store.teams, ...h.state.store.players]);
+
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: true });
+
+    expect(JSON.stringify([...h.state.store.teams, ...h.state.store.players])).toBe(before);
+    expect(h.state.txLog).toHaveLength(0);
+  });
+
+  it('does not record a SIGN and rolls back all durable state when final cap validation fails after mutation', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's5', currentWeek: 1, year: 2030, phase: 'preseason' },
+      teams: new Map([[31, { id: 31, abbr: 'AI31', capTotal: LIVE_CAP, deadCap: 0, capRoom: 80, capUsed: 52 }]]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 52; i++) h.state.store.players.set(`ai-${i}`, { id: `ai-${i}`, teamId: 31, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+    h.state.store.players.set('fa-rollback', { id: 'fa-rollback', teamId: null, pos: 'CB', ovr: 65, potential: 65, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) });
+    const before = JSON.stringify([...h.state.store.teams, ...h.state.store.players]);
+    const spy = vi.spyOn(AiLogic, 'updateTeamCap').mockReturnValueOnce({ ok: false, error: 'forced failure' });
+
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: true });
+
+    expect(JSON.stringify([...h.state.store.teams, ...h.state.store.players])).toBe(before);
+    expect(h.state.txLog).toHaveLength(0);
+    spy.mockRestore();
   });
 
   it('chooses the same minimum-roster signing and contract from differently ordered cache input', async () => {

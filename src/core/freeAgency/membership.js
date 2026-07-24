@@ -21,3 +21,20 @@ export function isFreeAgent(player) {
   const { teamId, status } = player;
   return teamId == null || teamId === 'FA' || status === 'free_agent';
 }
+
+/**
+ * Canonical signability predicate for production free-agent signing paths.
+ *
+ * `isFreeAgent` is intentionally broad because it answers membership and must
+ * tolerate old saves with odd combinations of team/status fields. Signing is a
+ * stricter authority: only explicitly signable free-agent rows with no live
+ * team assignment may be contracted by FA or roster-reconciliation code.
+ */
+export function isSignableFreeAgent(player) {
+  if (!player) return false;
+  const status = String(player?.status ?? '').toLowerCase();
+  if (player?.retired === true) return false;
+  if (['retired', 'draft_eligible', 'draft_pool', 'draft-pool', 'deleted', 'removed'].includes(status)) return false;
+  if (player?.teamId === 'FA') return true;
+  return player?.teamId == null && (status === 'free_agent' || status === 'unsigned' || status === '');
+}

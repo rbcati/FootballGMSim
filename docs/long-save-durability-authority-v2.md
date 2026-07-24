@@ -39,6 +39,8 @@ CLI determinism legs and `--seeds` runs execute in clean child processes. This a
 - Save/reload could observe stale pre-save cap aggregates because not every final rollover roster mutation recalculated team cap fields before flushing. The repair recalculates every team cap after final rollover roster reconciliation.
 - Several ordering boundaries that affect offers/releases/RNG draw order lacked canonical tie-breaks: AI FA target inputs, equal-score FA offer resolution, offseason roster-cut candidate ties, offseason extension/progression team/player iteration, staff-carousel team/market ties, free-agent offer arrays, and FA offer timestamps. These were narrowed to canonical id/name tie-breaks or deterministic phase/week stamps without changing balance formulas.
 - Retention market heat used a falsy team-id predicate, so rostered team `0` players could be counted as free agents. The repair uses `teamId == null` plus non-retired/non-draft status filtering for the market free-agent pool.
+- Minimum-roster reconciliation now uses the canonical signable-free-agent predicate, live economy cap before stale team cap totals, pre-commit cap projection, and post-mutation rollback without emitting a SIGN transaction on failure.
+- Durable schedule normalization now uses production season identity precedence (`seasonId ?? season ?? year ?? null`) so schedule reuse across different production season IDs is detectable.
 
 ## Current evidence
 
@@ -46,23 +48,28 @@ Commands run on this branch after the minimum-roster contract, bounded continuit
 
 - `node --check src/core/ai-logic.js && node --check src/core/retention/reSigning.js && node --check tests/durability/invariants/continuity.js` — passed.
 - `node --check src/worker/worker.js` — passed.
-- `npx vitest run tests/unit/aiCapManagementExecution.test.js src/core/__tests__/retention-board.test.js --config vitest.config.ts` — passed, 2 files / 17 tests.
-- `npm run durability:test` — passed, 5 files / 81 tests.
+- `npx vitest run tests/unit/aiCapManagementExecution.test.js --config vitest.config.ts` — passed, 1 file / 16 tests.
+- `npx vitest run src/core/__tests__/retention-board.test.js --config vitest.config.ts` — passed, 1 file / 4 tests.
+- `npm run durability:test` — passed, 5 files / 83 tests.
+- `npm run check:sim-types` — passed.
+- `npm run build` — passed with the existing Vite chunk-size warning.
+- `npm run durability:smoke` — passed one full season with save/reload OK (201 pass / 0 fail / 39 skip, peak RSS 455 MB).
+- `npm run test:unit` — passed, 462 files / 5663 tests.
 - `npm run durability:5 -- --seed=1684 --determinism --collect-all --write-report --summary` — completed both isolated five-season legs with zero invariant failures and save/reload OK in both legs, but exited nonzero because state determinism remained false.
 
 Latest five-season determinism result:
 
 - Seed: 1684
 - Completed: 5/5 seasons in each isolated child leg
-- First leg runtime/peak RSS: 416.1 seconds / 2194 MB
-- Second leg runtime/peak RSS: 417.3 seconds / 2216 MB
+- First leg runtime/peak RSS: 508.5 seconds / 2212 MB
+- Second leg runtime/peak RSS: 516.5 seconds / 2174 MB
 - Invariants: 750 pass / 0 fail / 132 skip in both legs
 - Save/reload: OK at season 1 and season 5 in both legs
 - Lifecycle deterministic: true
 - State deterministic: false
-- First remaining durable divergence: checkpoint `2:afterSeasonRollover`, domain `players`, entity `1005`, field `activeCapHit`
+- First remaining durable divergence: checkpoint `2:afterSeasonRollover`, domain `players`, entity `5013`, field `teamId`
 
-A separate pair of isolated child traces written to `/tmp/dur-a.json` and `/tmp/dur-b.json` showed player `1005` matching at the season-2 rollover in that pair (team `31`, yearsRemaining `2`, yearsTotal `2`, baseAnnual/activeCapHit `7.5`, signingBonus `0`), while the first divergence in that pair was player `5013.teamId` (`27` vs `28`). This confirms there is still at least one unrepaired FA/offseason ordering boundary upstream of the durable contract/team assignment differences, so the PR must remain red for Durability Authority V2.
+The current first reported divergence is now player `5013.teamId` (`27` vs `28`) at `2:afterSeasonRollover`. This confirms there is still at least one unrepaired FA/offseason ordering boundary upstream of durable team assignment and contract differences, so the PR must remain red for Durability Authority V2.
 
 ## Remaining limitations / not yet proven
 
