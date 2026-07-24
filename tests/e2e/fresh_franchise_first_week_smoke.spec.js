@@ -125,9 +125,14 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await advanceBtn.click();
   // In case a soft readiness gate dialog still shows, dismiss it.
   const gateAdvanceBtn = page.getByTestId('gate-advance-anyway-btn');
-  if (await gateAdvanceBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+  try {
+    await gateAdvanceBtn.waitFor({ state: 'visible', timeout: 2000 });
+    await expect(gateAdvanceBtn).toBeEnabled({ timeout: 5000 });
     await gateAdvanceBtn.click();
+  } catch (err) {
+    if (err.name !== 'TimeoutError') throw err;
   }
+
   // The Simulate (Skip) prompt is REQUIRED in this flow (fresh franchise, the
   // user always has a Week 1 game). Assert it appears and is clickable rather
   // than swallowing a missing button — a vanished prompt is a real defect.
