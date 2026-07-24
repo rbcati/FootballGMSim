@@ -49,7 +49,7 @@ export function getExtensionReadiness(player = {}, context = {}) {
 
 export function evaluateReSigningPriority(player = {}, team = {}, league = {}) {
   const roster = (league?.players ?? []).filter((p) => Number(p?.teamId) === Number(team?.id));
-  const freeAgents = (league?.players ?? []).filter((p) => !p?.teamId || p?.status === 'free_agent');
+  const freeAgents = (league?.players ?? []).filter((p) => p?.teamId == null && p?.status !== 'retired' && p?.status !== 'draft_eligible');
   const teamDirection = inferTeamDirection(team, Number(league?.week ?? 1));
   const profile = buildContractProfile(player, { tenureYears: safeNum(player?.tenureYears, 0) });
   const marketHeat = computeMarketHeat(player?.pos, freeAgents);

@@ -1,4 +1,5 @@
 import { cache } from '../db/cache.js';
+import { stableIdCompare } from './referenceIntegrity.js';
 import { Constants } from './constants.js';
 import { Transactions } from '../db/index.js';
 import { calculateExtensionDemand } from './player.js';
@@ -15,7 +16,7 @@ import { buildAiTeamStrategy } from './aiTeamStrategy.js';
 import NewsEngine from './news-engine.js';
 import { getTeamContextForNegotiation } from './teamContext/negotiationContext.js';
 import { evaluateContractOffer } from './contracts/negotiation.js';
-import { isFreeAgent } from './freeAgency/membership.js';
+import { isFreeAgent, isSignableFreeAgent } from './freeAgency/membership.js';
 import { evaluateReSigningPriority } from './retention/reSigning.js';
 import { buildFreeAgencyMarketAnalysis } from './freeAgency/freeAgencyMarketAnalysis.js';
 import { buildContractFromMarket, evaluateContractMarket } from './contractModel.js';
@@ -27,6 +28,104 @@ import { canRestructure, computeRestructure, applyRestructure } from './contract
 import { executeAIOffseasonExtensions } from './retention/aiRetentionLogic.js';
 import { calculateTeamDepthDeficiencies, getNeedLevelForPlayer, POSITION_NEED_LEVEL } from './trades/tradePositionalNeeds.js';
 import { buildFranchiseTagContract, buildRFATenderContract, TENDER_CONFIG } from './contracts/tenderLogic.js';
+
+
+export function buildSortedFreeAgentsMapForOffers(allPlayers = []) {
+    const freeAgentsMap = {};
+    for (const p of allPlayers) {
+        if (isFreeAgent(p)) {
+            if (!freeAgentsMap[p.pos]) freeAgentsMap[p.pos] = [];
+            freeAgentsMap[p.pos].push(p);
+        }
+    }
+    for (const pos in freeAgentsMap) {
+        freeAgentsMap[pos].sort((a, b) => ((b.ovr ?? 0) - (a.ovr ?? 0)) || stableIdCompare(a.id, b.id));
+    }
+    return freeAgentsMap;
+}
+
+function positionRank(pos, order) {
+    const idx = order.indexOf(pos);
+    return idx >= 0 ? idx : order.length;
+}
+
+const round1 = (v) => Math.round(Number(v || 0) * 10) / 10;
+
+export function buildMinimumRosterContract(player = {}, team = {}, context = {}) {
+    const year = Number(context.year ?? context.currentYear ?? context.seasonYear ?? 0);
+    const market = evaluateContractMarket(player, {
+        team,
+        strategy: context.strategy,
+        teamCapRoom: context.capRoom ?? team?.capRoom,
+        capRoom: context.capRoom ?? team?.capRoom,
+        positionalNeed: context.needMultiplier ?? 1,
+    });
+    const years = Math.max(1, Math.round(Number(market?.suggestedYears ?? market?.years ?? 1)));
+    const annual = round1(market?.suggestedAnnual ?? market?.annualSalary ?? Constants.SALARY_CAP.MIN_CONTRACT);
+    const signingBonus = round1(market?.signingBonus ?? 0);
+    return {
+        ...buildContractFromMarket(
+            { ...market, suggestedAnnual: annual, suggestedYears: years, signingBonus },
+            { startYear: year, signedYear: year },
+        ),
+        yearsRemaining: years,
+        restructureCount: 0,
+        restructureHistory: [],
+        restructured: false,
+        restructureSavings: 0,
+        restructureOriginalBase: null,
+        restructureOriginalBonus: null,
+        restructureYear: null,
+        tag: null,
+        tender: null,
+        franchiseTag: null,
+        rfaTender: null,
+    };
+}
+
+function minimumRosterSigningPatch(contract) {
+    return {
+        teamId: undefined,
+        status: 'active',
+        offers: [],
+        contract,
+        contractYearsLeft: contract.yearsRemaining ?? contract.years,
+        tag: null,
+        tender: null,
+        franchiseTag: null,
+        rfaTender: null,
+        restructureCount: 0,
+        restructureHistory: [],
+        restructured: false,
+        restructureSavings: 0,
+        restructureOriginalBase: null,
+        restructureOriginalBonus: null,
+        restructureYear: null,
+    };
+}
+
+const MINIMUM_ROSTER_SIGNING_KEYS = Object.freeze([
+    'teamId', 'status', 'offers', 'contract', 'contractYearsLeft', 'tag',
+    'tender', 'franchiseTag', 'rfaTender', 'restructureCount',
+    'restructureHistory', 'restructured', 'restructureSavings',
+    'restructureOriginalBase', 'restructureOriginalBonus', 'restructureYear',
+]);
+
+function restoreMinimumRosterPlayerPatch(snapshot = {}) {
+    const patch = { ...snapshot };
+    for (const key of MINIMUM_ROSTER_SIGNING_KEYS) {
+        if (!(key in snapshot)) patch[key] = undefined;
+    }
+    return patch;
+}
+
+function resolveLiveCapForMinimumRoster(team = {}, meta = {}) {
+    const economyCap = Number(meta?.economy?.currentSalaryCap);
+    if (Number.isFinite(economyCap) && economyCap > 0) return economyCap;
+    const teamCap = Number(team?.capTotal);
+    if (Number.isFinite(teamCap) && teamCap > 0) return teamCap;
+    return Constants.SALARY_CAP.HARD_CAP;
+}
 
 class AiLogic {
     static NEED_GROUP_TO_POS = Object.freeze({
@@ -142,7 +241,7 @@ class AiLogic {
     static async executeAICutdowns({ includeUserTeam = false } = {}) {
         const meta = cache.getMeta();
         const userTeamId = meta.userTeamId;
-        const allTeams = cache.getAllTeams();
+        const allTeams = cache.getAllTeams().slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
         const limit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
 
         for (const team of allTeams) {
@@ -151,7 +250,7 @@ class AiLogic {
             // user team in via includeUserTeam so the season can still start.
             if (!includeUserTeam && team.id === userTeamId) continue;
 
-            const roster = cache.getPlayersByTeam(team.id);
+            const roster = cache.getPlayersByTeam(team.id).slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
             if (roster.length <= limit) continue;
 
             // Score = OVR * 2 + Potential + (Age < 25 ? 10 : 0)
@@ -229,6 +328,99 @@ class AiLogic {
 
             // Re-calc active cap (roster changed)
             this.updateTeamCap(team.id);
+        }
+    }
+
+    /**
+     * Deterministic minimum-roster reconciliation for AI/headless rollover.
+     * This is a last-mile safety pass after offseason churn: it only fills
+     * under-minimum rosters from the existing free-agent pool and never cuts or
+     * restructures players.
+     */
+    static async ensureMinimumRosters({ includeUserTeam = false, minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON } = {}) {
+        const meta = cache.getMeta();
+        const userTeamId = meta?.userTeamId;
+        const allTeams = cache.getAllTeams().slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
+
+        for (const team of allTeams) {
+            if (!includeUserTeam && Number(team.id) === Number(userTeamId)) continue;
+
+            let roster = cache.getPlayersByTeam(team.id);
+            if (roster.length >= minimum) continue;
+
+            const needs = AiLogic.calculateTeamNeeds(team.id);
+            const neededPositions = Object.keys(needs)
+                .filter((pos) => Number(needs[pos] ?? 0) > 1)
+                .sort((a, b) => (Number(needs[b] ?? 0) - Number(needs[a] ?? 0)) || a.localeCompare(b));
+            const positionOrder = [...neededPositions, ...Constants.POSITIONS.filter((pos) => !neededPositions.includes(pos))];
+
+            while (roster.length < minimum) {
+                const freshTeam = cache.getTeam(team.id);
+                const liveSalaryCap = resolveLiveCapForMinimumRoster(freshTeam, meta);
+                const freeAgents = cache.getAllPlayers()
+                    .filter((p) => isSignableFreeAgent(p))
+                    .sort((a, b) => {
+                        const posDelta = positionRank(a?.pos, positionOrder) - positionRank(b?.pos, positionOrder);
+                        if (posDelta !== 0) return posDelta;
+                        return (Number(b?.ovr ?? 0) - Number(a?.ovr ?? 0)) || stableIdCompare(a?.id, b?.id);
+                    });
+                const capSnapshot = buildTeamCapSnapshot({
+                    team: freshTeam,
+                    roster,
+                    salaryCap: liveSalaryCap,
+                });
+                const room = Number(capSnapshot?.capRoom ?? freshTeam?.capRoom ?? 0);
+                let candidate = null;
+                let contract = null;
+                let projectedCap = null;
+                for (const p of freeAgents) {
+                    const strategy = buildAiTeamStrategy({
+                        team: freshTeam,
+                        roster,
+                        league: { year: meta?.year, phase: meta?.phase },
+                        phase: meta?.phase,
+                        year: meta?.year,
+                    });
+                    const proposedContract = buildMinimumRosterContract(p, freshTeam, {
+                        year: meta?.year,
+                        strategy,
+                        capRoom: room,
+                        needMultiplier: needs?.[p?.pos] ?? 1,
+                    });
+                    const projectedPlayer = { ...p, teamId: team.id, status: 'active', contract: proposedContract };
+                    const projection = buildTeamCapSnapshot({
+                        team: freshTeam,
+                        roster: [...roster, projectedPlayer],
+                        salaryCap: liveSalaryCap,
+                    });
+                    if (Number(getActiveCapHit(projectedPlayer) ?? 0) <= room + 0.01 && projection?.isLegallyCompliant !== false) {
+                        candidate = p;
+                        contract = proposedContract;
+                        projectedCap = projection;
+                        break;
+                    }
+                }
+                if (!candidate) break;
+
+                const beforePlayer = JSON.parse(JSON.stringify(candidate));
+                const beforeTeam = JSON.parse(JSON.stringify(freshTeam));
+                cache.updatePlayer(candidate.id, { ...minimumRosterSigningPatch(contract), teamId: team.id });
+                const capResult = AiLogic.updateTeamCap(team.id);
+                if (capResult?.ok === false) {
+                    cache.updatePlayer(candidate.id, restoreMinimumRosterPlayerPatch(beforePlayer));
+                    cache.updateTeam(team.id, beforeTeam);
+                    break;
+                }
+                await Transactions.add({
+                    type: 'SIGN',
+                    seasonId: meta.currentSeasonId,
+                    week: meta.currentWeek,
+                    teamId: team.id,
+                    playerId: candidate.id,
+                    details: { playerId: candidate.id, source: 'minimum_roster_reconciliation', contract, projectedCapRoom: projectedCap?.capRoom },
+                });
+                roster = cache.getPlayersByTeam(team.id);
+            }
         }
     }
 
@@ -569,7 +761,7 @@ class AiLogic {
     static async executeOffseasonRosterCuts() {
         const meta = cache.getMeta();
         const userTeamId = meta?.userTeamId;
-        const allTeams = cache.getAllTeams();
+        const allTeams = cache.getAllTeams().slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
         const year = Number(meta?.year ?? 2025);
 
         for (const team of allTeams) {
@@ -658,7 +850,7 @@ class AiLogic {
 
         const roster = cache.getPlayersByTeam(teamId);
         const meta   = cache.getMeta();
-        const allPlayers = cache.getAllPlayers();
+        const allPlayers = cache.getAllPlayers().slice().sort((a, b) => stableIdCompare(a.id, b.id));
         const freeAgents = allPlayers.filter((p) => isFreeAgent(p));
 
         const extensions = executeAIOffseasonExtensions(
@@ -925,7 +1117,7 @@ class AiLogic {
                 }, {}) || null;
                 if (marketByPos) {
                     for (const pos of Object.keys(marketByPos)) {
-                        marketByPos[pos].sort((a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0));
+                        marketByPos[pos].sort((a, b) => ((b.fitScore ?? 0) - (a.fitScore ?? 0)) || stableIdCompare(a?._player?.id ?? a?.playerId, b?._player?.id ?? b?.playerId));
                     }
                 }
             }
@@ -936,7 +1128,7 @@ class AiLogic {
             const allPlayers = cache.getAllPlayers();
             return allPlayers
                 .filter(p => isFreeAgent(p) && p.pos === pos)
-                .sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+                .sort((a, b) => ((b.ovr ?? 0) - (a.ovr ?? 0)) || stableIdCompare(a?.id, b?.id));
         };
 
         const getCandidatesForPos = (pos) => {
@@ -1105,12 +1297,13 @@ class AiLogic {
                                 flags: realism.flags,
                             },
                         },
-                        timestamp: Date.now()
+                        timestamp: Number(meta?.year ?? 0) * 100000 + Number(meta?.currentWeek ?? 0) * 1000 + Number(teamId ?? 0)
                     };
 
                     // Push to player's offer list (in cache)
                     if (!fa.offers) fa.offers = [];
                     fa.offers.push(offer);
+                    fa.offers.sort((a, b) => stableIdCompare(a?.teamId, b?.teamId));
 
                     // Persist the offer (mark player as dirty)
                     cache.updatePlayer(fa.id, { offers: fa.offers });
@@ -1133,20 +1326,11 @@ class AiLogic {
         const userTeamId = meta.userTeamId;
 
         // OPTIMIZATION: Build freeAgentsMap once for all AI teams
-        const allPlayers = cache.getAllPlayers();
-        const freeAgentsMap = {};
-        for (const p of allPlayers) {
-            if (isFreeAgent(p)) {
-                if (!freeAgentsMap[p.pos]) freeAgentsMap[p.pos] = [];
-                freeAgentsMap[p.pos].push(p);
-            }
-        }
-        for (const pos in freeAgentsMap) {
-            freeAgentsMap[pos].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
-        }
+        const allPlayers = cache.getAllPlayers().slice().sort((a, b) => stableIdCompare(a.id, b.id));
+        const freeAgentsMap = buildSortedFreeAgentsMapForOffers(allPlayers);
 
         // 1. AI Teams Make Offers
-        const allTeams = cache.getAllTeams();
+        const allTeams = cache.getAllTeams().slice().sort((a, b) => stableIdCompare(a.id, b.id));
         for (const team of allTeams) {
             if (team.id !== userTeamId) {
                 await this.makeFreeAgencyOffers(team.id, freeAgentsMap);
@@ -1324,7 +1508,7 @@ class AiLogic {
             }, offer, { profile, askTotalValue: askTotal, askAnnual: ask.baseAnnual, askYears: ask.yearsTotal });
             const score = legacyScore * 55 + (offerEval.score / 100) * 45;
 
-            if (score > bestScore) {
+            if (score > bestScore || (score === bestScore && (!bestOffer || stableIdCompare(offer?.teamId, bestOffer?.teamId) < 0))) {
                 bestScore = score;
                 bestOffer = offer;
             }

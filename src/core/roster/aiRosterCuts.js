@@ -13,6 +13,7 @@ import {
   getActiveCapHit,
   calculateReleaseDeadCap,
 } from '../contracts/contractObligations.js';
+import { stableIdCompare } from '../referenceIntegrity.js';
 
 export const ROSTER_CUT_CONFIG = Object.freeze({
   /** Only trigger the cut sweep when projected cap room is below this value ($M). */
@@ -121,7 +122,7 @@ export function executeAIOffseasonCuts(teamState, roster, _currentYear) {
       return { player: p, capSavings: ev.capSavings, reason: ev.reason, priority: ev.priority };
     })
     .filter(Boolean)
-    .sort((a, b) => b.capSavings - a.capSavings); // highest savings first
+    .sort((a, b) => (b.capSavings - a.capSavings) || stableIdCompare(a?.player?.id, b?.player?.id)); // highest savings first
 
   const toRelease = [];
   let simCapRoom = capRoom;

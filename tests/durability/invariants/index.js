@@ -19,6 +19,7 @@ import * as history from './history.js';
 import * as references from './references.js';
 import * as numericSafety from './numericSafety.js';
 import * as saveReload from './saveReload.js';
+import * as continuity from './continuity.js';
 
 export const INVARIANT_MODULES = [
   roster,
@@ -32,6 +33,7 @@ export const INVARIANT_MODULES = [
   references,
   numericSafety,
   saveReload,
+  continuity,
 ];
 
 /**
@@ -70,4 +72,4 @@ export function runInvariants(ctx) {
   return results;
 }
 
-export { roster, cap, draft, freeAgency, schedule, progression, retirement, history, references, numericSafety, saveReload };
+export { roster, cap, draft, freeAgency, schedule, progression, retirement, history, references, numericSafety, saveReload, continuity };
