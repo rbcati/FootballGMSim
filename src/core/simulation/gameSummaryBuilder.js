@@ -70,6 +70,7 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
   const scoreDiff = Math.abs(userScore - oppScore);
   const isBlowout = scoreDiff >= 21;
   const isClose = scoreDiff <= 7;
+  const isShutout = won ? oppScore === 0 : userScore === 0;
 
   const topPasser = getTopPlayer(userStats, isQB, 'passYd');
   const topRusher = getTopPlayer(userStats, isRB, 'rushYd');
@@ -224,7 +225,9 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
 
   if (stakes && stakes > 50) {
     if (won) {
-      if (isBlowout) {
+      if (isShutout) {
+        callbacks.push(`An absolute masterclass defensive performance. ${userAbbr} shut down their opponent entirely to secure a legendary ${userScore}-0 victory under immense pressure!`);
+      } else if (isBlowout) {
         callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An emphatic'} performance under immense pressure. ${userAbbr} completely dismantled their opponent in a statement ${userScore}-${oppScore} blowout with everything on the line!`);
       } else if (isClose) {
         callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense playoff-caliber pressure. ${userAbbr} survived an absolute thriller to secure a massive ${userScore}-${oppScore} victory!`);
@@ -232,7 +235,9 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
         callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} answered the bell and secured a critical ${userScore}-${oppScore} victory to keep their goals alive!`);
       }
     } else {
-      if (isBlowout) {
+      if (isShutout) {
+        callbacks.push(`An absolute nightmare. Under massive pressure, ${userAbbr} was completely embarrassed in a 0-${oppScore} shutout. The locker room is completely shell-shocked.`);
+      } else if (isBlowout) {
         callbacks.push(`A devastating, humiliating ${scoreDiff}-point blowout defeat in a massive game. The locker room is completely stunned, and the owner will demand answers.`);
       } else if (isClose) {
         callbacks.push(`An agonizing, heart-breaking ${scoreDiff}-point loss in a thriller in a high stakes matchup. The locker room is dead silent.`);
