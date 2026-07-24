@@ -32,4 +32,14 @@ describe('retention workflow helpers', () => {
     const state = getExtensionReadiness({ contract: { years: 2 } }, { profile: { moneyPriority: 0.8, loyalty: 0.4, securityPriority: 0.4 }, phase: 'regular' });
     expect(['prefers_to_wait', 'wants_market_reset', 'likely_to_test_free_agency']).toContain(state);
   });
+
+  it('does not count team-id-0 rostered players as free agents when computing market heat', () => {
+    const team = { id: 1, wins: 7, losses: 10, ties: 0, capRoom: 40 };
+    const player = { id: 'target', teamId: 1, status: 'active', pos: 'QB', ovr: 72, potential: 72, age: 27, contract: { years: 1, baseAnnual: 6 } };
+    const teamZeroQb = { id: 'team-zero-qb', teamId: 0, status: 'active', pos: 'QB', ovr: 85, potential: 85, age: 28, contract: { years: 3, baseAnnual: 20 } };
+    const withTeamZero = evaluateReSigningPriority(player, team, { players: [player, teamZeroQb], week: 5 });
+    const withoutTeamZero = evaluateReSigningPriority(player, team, { players: [player], week: 5 });
+    expect(withTeamZero.expectedMarketDifficulty).toBe(withoutTeamZero.expectedMarketDifficulty);
+    expect(withTeamZero.demand).toEqual(withoutTeamZero.demand);
+  });
 });

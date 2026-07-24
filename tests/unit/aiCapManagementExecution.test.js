@@ -152,6 +152,143 @@ describe('executeAICapManagement — legality & structure', () => {
   });
 });
 
+describe('ensureMinimumRosters — stable rollover legality', () => {
+  it('fills under-minimum AI rosters from existing free agents without touching interactive user teams', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's5', currentWeek: 1, year: 2030 },
+      teams: new Map([
+        [0, { id: 0, abbr: 'USR', capTotal: LIVE_CAP, deadCap: 0, capRoom: 80 }],
+        [31, { id: 31, abbr: 'AI31', capTotal: LIVE_CAP, deadCap: 0, capRoom: 80 }],
+      ]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 52; i++) {
+      h.state.store.players.set(`ai-${i}`, { id: `ai-${i}`, teamId: 31, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+      h.state.store.players.set(`usr-${i}`, { id: `usr-${i}`, teamId: 0, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+    }
+    h.state.store.players.set('fa-b', { id: 'fa-b', teamId: null, pos: 'CB', ovr: 65, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) });
+    h.state.store.players.set('fa-a', { id: 'fa-a', teamId: null, pos: 'CB', ovr: 66, age: 25, status: 'free_agent', contract: contract(1, 0, 1, 1) });
+
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: false });
+
+    expect(h.mockCache.getPlayersByTeam(31)).toHaveLength(53);
+    expect(h.mockCache.getPlayersByTeam(0)).toHaveLength(52);
+    expect(h.state.store.players.get('fa-a').teamId).toBe(31);
+    expect(h.state.txLog.some((tx) => tx.details?.source === 'minimum_roster_reconciliation')).toBe(true);
+  });
+
+  it('creates a fresh contract for a released free agent instead of inheriting former-club money or restructure metadata', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's5', currentWeek: 1, year: 2030, phase: 'preseason' },
+      teams: new Map([[31, { id: 31, abbr: 'AI31', capTotal: LIVE_CAP, deadCap: 0, capRoom: 80 }]]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 52; i++) h.state.store.players.set(`ai-${i}`, { id: `ai-${i}`, teamId: 31, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+    h.state.store.players.set('released', {
+      id: 'released', teamId: null, pos: 'CB', ovr: 70, potential: 70, age: 26, status: 'free_agent',
+      contract: { ...contract(22, 18, 5, 3), restructureCount: 2, restructureHistory: [{ year: 2029, savings: 5 }], tag: 'franchise' },
+      restructureCount: 2, restructureHistory: [{ year: 2029, savings: 5 }], franchiseTag: true,
+    });
+
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: true });
+
+    const signed = h.state.store.players.get('released');
+    expect(signed.teamId).toBe(31);
+    expect(signed.contract.startYear).toBe(2030);
+    expect(signed.contract.signingBonus).not.toBe(18);
+    expect(signed.contract.baseAnnual).not.toBe(22);
+    expect(signed.contract.yearsRemaining).toBeGreaterThan(0);
+    expect(signed.contract.restructureCount).toBe(0);
+    expect(signed.contract.restructureHistory).toEqual([]);
+    expect(signed.restructureCount).toBe(0);
+    expect(signed.restructureHistory).toEqual([]);
+    expect(signed.franchiseTag).toBeNull();
+  });
+
+  it('gives an expired free agent a valid production-shaped minimum-roster contract', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's5', currentWeek: 1, year: 2030, phase: 'preseason' },
+      teams: new Map([[31, { id: 31, abbr: 'AI31', capTotal: LIVE_CAP, deadCap: 0, capRoom: 80 }]]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 52; i++) h.state.store.players.set(`ai-${i}`, { id: `ai-${i}`, teamId: 31, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+    h.state.store.players.set('expired', { id: 'expired', teamId: null, pos: 'S', ovr: 62, potential: 62, age: 29, status: 'free_agent', contract: contract(0, 0, 1, 0) });
+
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: true });
+
+    const signed = h.state.store.players.get('expired');
+    expect(signed.contract.yearsRemaining).toBeGreaterThan(0);
+    expect(signed.contract.yearsTotal).toBeGreaterThan(0);
+    expect(signed.contract.baseAnnual).toBeGreaterThan(0);
+    expect(signed.contract.startYear).toBe(2030);
+  });
+
+  it('leaves player and team state unchanged when projected signing cannot fit under the live cap', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: 53 }, currentSeasonId: 's5', currentWeek: 1, year: 2030, phase: 'preseason' },
+      teams: new Map([[31, { id: 31, abbr: 'AI31', capTotal: 53, deadCap: 0, capRoom: 1 }]]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 52; i++) h.state.store.players.set(`ai-${i}`, { id: `ai-${i}`, teamId: 31, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+    h.state.store.players.set('fa-costly', { id: 'fa-costly', teamId: null, pos: 'QB', ovr: 90, potential: 90, age: 27, status: 'free_agent', contract: contract(30, 10, 4, 4) });
+    const before = JSON.stringify([...h.state.store.teams, ...h.state.store.players]);
+
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: true });
+
+    expect(JSON.stringify([...h.state.store.teams, ...h.state.store.players])).toBe(before);
+    expect(h.state.txLog).toHaveLength(0);
+  });
+
+  it('chooses the same minimum-roster signing and contract from differently ordered cache input', async () => {
+    const make = (reverse = false) => {
+      const players = new Map();
+      for (let i = 0; i < 52; i++) players.set(`ai-${i}`, { id: `ai-${i}`, teamId: 31, pos: 'WR', ovr: 60, age: 24, status: 'active', contract: contract(1, 0, 1, 1) });
+      const fas = [
+        ['fa-b', { id: 'fa-b', teamId: null, pos: 'CB', ovr: 66, potential: 66, age: 25, status: 'free_agent', contract: contract(5, 2, 2, 2) }],
+        ['fa-a', { id: 'fa-a', teamId: null, pos: 'CB', ovr: 66, potential: 66, age: 25, status: 'free_agent', contract: contract(20, 9, 3, 3) }],
+      ];
+      for (const [id, p] of (reverse ? fas.reverse() : fas)) players.set(id, p);
+      return {
+        meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's5', currentWeek: 1, year: 2030, phase: 'preseason' },
+        teams: new Map([[31, { id: 31, abbr: 'AI31', capTotal: LIVE_CAP, deadCap: 0, capRoom: 80 }]]),
+        players,
+      };
+    };
+    h.state.store = make(false);
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: true });
+    const first = { tx: h.state.txLog[0], contract: h.state.store.players.get(h.state.txLog[0].playerId).contract };
+    h.state.txLog.length = 0;
+    h.state.store = make(true);
+    await AiLogic.ensureMinimumRosters({ includeUserTeam: true });
+    const second = { tx: h.state.txLog[0], contract: h.state.store.players.get(h.state.txLog[0].playerId).contract };
+    expect(second).toEqual(first);
+  });
+});
+
+describe('free-agency offer evaluation — deterministic ties', () => {
+  it('uses canonical team id as the tie-break when offer scores are equal', () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's5', currentWeek: 1, year: 2030, phase: 'free_agency' },
+      teams: new Map([
+        [27, { id: 27, abbr: 'T27', wins: 8, losses: 9, capRoom: 50 }],
+        [28, { id: 28, abbr: 'T28', wins: 8, losses: 9, capRoom: 50 }],
+      ]),
+      players: new Map([
+        ['fa', {
+          id: 'fa', teamId: null, pos: 'CB', ovr: 74, potential: 74, age: 26, morale: 68, status: 'free_agent',
+          contract: contract(2, 0, 1, 0),
+          offers: [
+            { teamId: 28, contract: contract(5, 0, 1, 1) },
+            { teamId: 27, contract: contract(5, 0, 1, 1) },
+          ],
+        }],
+      ]),
+    };
+    const decision = AiLogic.evaluateOffers(h.state.store.players.get('fa'), 3);
+    expect(decision.offer.teamId).toBe(27);
+  });
+});
+
 describe('executeAICapManagement — determinism', () => {
   it('produces identical transactions across two identical runs', async () => {
     await AiLogic.executeAICapManagement({ autoManageUserCap: true });

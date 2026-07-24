@@ -6,9 +6,12 @@
  * calculator already produces, and structural sanity on contracts. Momentary
  * over-cap states (dead money, pending restructures) are explicitly allowed.
  */
-import { pass, fail, skip, isFiniteNumber, isUnsafeNumber } from './helpers.js';
+import { pass, fail, skip, gamePhase, PHASE_GROUPS, isUnsafeNumber } from './helpers.js';
 import { CAP } from './bounds.js';
-import { viewTeams, rosteredPlayersFromView } from './derive.js';
+import { playerPool, rosteredPlayersFromView, viewTeams } from './derive.js';
+import { buildTeamCapSnapshot as buildCanonicalTeamCapSnapshot } from '../../../src/core/contracts/contractObligations.js';
+import { canonicalIdKey, sameEntityId } from '../../../src/core/referenceIntegrity.js';
+import { resolveLiveSalaryCap } from './durableSnapshot.js';
 
 export const id = 'cap';
 
@@ -45,6 +48,19 @@ export function check(ctx) {
     }
   } else {
     out.push(pass(ctx, 'cap.aggregates-finite', `All team cap aggregates finite across ${teams.length} teams`));
+  }
+
+  // ── stable-phase legal cap equation ─────────────────────────────────────
+  if (!isCapLegalCheckpoint(ctx)) {
+    out.push(skip(ctx, 'cap.stable-phase-legal', `Cap legality skipped in transitional phase ${gamePhase(ctx) ?? 'unknown'}`));
+  } else {
+    const snaps = buildLeagueCapSnapshots(ctx);
+    const illegal = snaps.filter((s) => !s.isLegallyCompliant);
+    if (illegal.length) {
+      for (const snap of illegal.slice(0, 12)) out.push(fail(ctx, 'cap.stable-phase-legal', { entityType: 'team', entityId: snap.teamId, message: `Team ${snap.teamId} exceeds live cap by ${snap.overageVsLegal.toFixed(2)}`, details: snap }));
+    } else {
+      out.push(pass(ctx, 'cap.stable-phase-legal', `All ${teams.length} teams legal against live cap`, { snapshots: snaps.slice(0, 2) }));
+    }
   }
 
   // ── contract numeric safety on rostered players ──────────────────────────
@@ -88,4 +104,28 @@ export function check(ctx) {
   }
 
   return out;
+}
+
+export function buildLeagueCapSnapshots(ctx = {}) {
+  const salaryCap = resolveLiveSalaryCap(ctx);
+  const { players } = playerPool(ctx);
+  return authoritativeTeams(ctx).map((team) => {
+    const roster = players.filter((p) => p && p.teamId != null && sameEntityId(p.teamId, team.id) && p.status !== 'retired' && p.status !== 'free_agent');
+    const snap = buildCanonicalTeamCapSnapshot({
+      team, roster, salaryCap, pendingCommitments: pendingCountedCommitments(team, ctx),
+    });
+    return { ...snap, teamId: canonicalIdKey(team.id), liveLimit: snap.legalLimit };
+  });
+}
+export function buildTeamCapSnapshot(team, ctx = {}) {
+  return buildLeagueCapSnapshots({ ...ctx, db: { ...(ctx.db || {}), teams: [team] } })[0];
+}
+function authoritativeTeams(ctx = {}) {
+  return Array.isArray(ctx?.db?.teams) && ctx.db.teams.length ? ctx.db.teams : viewTeams(ctx);
+}
+function pendingCountedCommitments(team) { return typeof team?.pendingCommitments === 'number' ? team.pendingCommitments : (typeof team?.pendingCapCommitments === 'number' ? team.pendingCapCommitments : 0); }
+
+function isCapLegalCheckpoint(ctx) {
+  const phase = gamePhase(ctx);
+  return PHASE_GROUPS.REGULAR.has(phase) || PHASE_GROUPS.PLAYOFFS.has(phase);
 }
