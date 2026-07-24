@@ -235,21 +235,24 @@ export async function simulateSingleWeek(page, options = {}) {
   }
   // The advance flow can present two dialogs in order: an optional readiness
   // gate ("Advance anyway"), then the user-game prompt ("Simulate (Skip)").
-  // Each is handled with an explicit visibility probe — but once we commit to a
-  // branch, the button's enabled state is asserted and the click is NOT
-  // swallowed. A missing button that WAS visible then fails loudly; the final
-  // week-advance assertion below guarantees the transition actually happened.
+
   if (advanceAnyway) {
     const advanceAnywayBtn = page.getByRole('button', { name: /Advance anyway/i });
-    if (await advanceAnywayBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    try {
+      await advanceAnywayBtn.waitFor({ state: 'visible', timeout: 2000 });
       await expect(advanceAnywayBtn).toBeEnabled({ timeout: 5000 });
       await advanceAnywayBtn.click();
+    } catch (err) {
+      if (err.name !== 'TimeoutError') throw err;
     }
   }
   const skipPromptBtn = page.getByRole('button', { name: /Simulate \(Skip\)/i });
-  if (await skipPromptBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
+  try {
+    await skipPromptBtn.waitFor({ state: 'visible', timeout: 10000 });
     await expect(skipPromptBtn).toBeEnabled({ timeout: 5000 });
     await skipPromptBtn.click();
+  } catch (err) {
+    if (err.name !== 'TimeoutError') throw err;
   }
   await page.waitForFunction(
     (baseline) => {
