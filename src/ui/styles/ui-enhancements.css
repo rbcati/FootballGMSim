@@ -64,9 +64,9 @@
   --success-bg: rgba(34, 197, 94, 0.1);
   --success-text: #22c55e;
   --error-bg: rgba(239, 68, 68, 0.1);
-  --error-text: #ef4444;
+  --error-text: var(--danger);
   --warning-bg: rgba(245, 158, 11, 0.1);
-  --warning-text: #f59e0b;
+  --warning-text: var(--warning);
   --accent-rgb: 59, 130, 246;
   --success-rgb: 34, 197, 94;
   --error-rgb: 239, 68, 68;
@@ -1171,7 +1171,7 @@ select:disabled {
 /* Momentum Pulse */
 @keyframes pulse-glow {
     0% { box-shadow: 0 0 5px rgba(255, 69, 58, 0.5); }
-    50% { box-shadow: 0 0 20px rgba(255, 69, 58, 0.8); }
+    50% { box-shadow: 0 0 20px rgba(var(--danger-rgb), 0.8); }
     100% { box-shadow: 0 0 5px rgba(255, 69, 58, 0.5); }
 }
 
@@ -2323,13 +2323,7 @@ body {
    ============================================ */
 
 /* Generic Goal Style (Touchdown, Field Goal) */
-.game-event-overlay.goal .event-text {
-  color: var(--accent);
-  text-shadow: 0 0 25px var(--accent), 0 0 45px var(--success);
-  font-family: var(--font-sans); font-weight: 900;
-  letter-spacing: 2px;
-  animation: goal-celebration 1s ease-out;
-}
+
 
 .game-event-overlay.goal::before {
   content: '🙌'; /* Hands up */
@@ -2340,13 +2334,7 @@ body {
 }
 
 /* Specific Kick Style (Punt, Kickoff) */
-.game-event-overlay.kick .event-text {
-  color: var(--accent);
-  text-shadow: 0 0 20px var(--accent);
-  font-family: var(--font-sans); font-weight: 900;
-  letter-spacing: 1px;
-  animation: pulse-score-strong 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
+
 
 .game-event-overlay.kick::before {
   content: '🦶'; /* Foot */
@@ -2364,19 +2352,12 @@ body {
   padding: 15px 30px;
   transform: rotate(-5deg);
   border-radius: 12px;
-  box-shadow: 0 0 30px rgba(255, 69, 58, 0.8);
+  box-shadow: 0 0 30px rgba(var(--danger-rgb), 0.8);
   font-family: var(--font-mono);
   font-weight: 900;
 }
 
-.game-event-overlay.save::before {
-  content: '🛡️'; /* Shield */
-  display: block;
-  font-size: 5rem;
-  margin-bottom: 10px;
-  filter: drop-shadow(0 0 10px var(--danger));
-  animation: shield-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
+
 
 /* Enhancing Button States for tactile feel */
 /* Duplicate removed */
