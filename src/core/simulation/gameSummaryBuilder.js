@@ -236,9 +236,9 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
       }
     } else {
       if (isShutout) {
-        callbacks.push(`An absolute nightmare. Under massive pressure, ${userAbbr} was completely embarrassed in a 0-${oppScore} shutout. The locker room is completely shell-shocked.`);
+        callbacks.push(`An absolute nightmare. Under massive pressure, ${userAbbr} was completely embarrassed in a 0-${oppScore} shutout. The locker room is completely shell-shocked. Questions will be asked this week.`);
       } else if (isBlowout) {
-        callbacks.push(`A devastating, humiliating ${scoreDiff}-point blowout defeat in a massive game. The locker room is completely stunned, and the owner will demand answers.`);
+        callbacks.push(`A devastating, humiliating ${scoreDiff}-point blowout defeat in a massive game. The locker room is stunned, and the owner will demand answers.`);
       } else if (isClose) {
         callbacks.push(`An agonizing, heart-breaking ${scoreDiff}-point loss in a thriller in a high stakes matchup. The locker room is dead silent.`);
       } else {
