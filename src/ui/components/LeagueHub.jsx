@@ -7,6 +7,7 @@ import { buildLeagueSeasonPulse } from '../utils/leagueSeasonPulse.js';
 import { buildWeeklyLeagueRecap } from '../utils/weeklyLeagueRecap.js';
 import { CompactListRow, StatusChip, HeroCard, SectionCard, StatStrip, CompactInsightCard } from './ScreenSystem.jsx';
 import { openResolvedBoxScore } from '../utils/boxScoreAccess.js';
+import { buildTradeDeadlineContext } from '../../core/tradeDeadlineContext.js';
 
 const LEAGUE_SECTIONS = ['Overview', 'Results', 'Standings', 'News', 'Leaders', 'Coaching'];
 
@@ -23,6 +24,7 @@ export default function LeagueHub({
   onPlayerSelect,
   renderStandings,
   renderResults,
+  onNavigateTrade,
 }) {
   const [section, setSection] = useState(() => normalizeSection(initialSection));
 
@@ -48,6 +50,8 @@ export default function LeagueHub({
     });
   }, [newsDesk.transactions]);
   const spotlightRows = recap?.spotlights ?? [];
+  const userTeam = (league?.teams ?? []).find((team) => String(team?.id) === String(league?.userTeamId));
+  const tradeDeadline = useMemo(() => buildTradeDeadlineContext({ league, team: userTeam, roster: userTeam?.roster }), [league, userTeam]);
 
   return (
     <div className="app-screen-stack">
@@ -69,6 +73,7 @@ export default function LeagueHub({
 
       {section === 'Overview' && (
         <div className="app-screen-stack">
+          {tradeDeadline.deadline.deadlineActive && <TradeDeadlineSection context={tradeDeadline} onNavigateTrade={onNavigateTrade} />}
           {seasonPulse.availableData.headlines && <SectionCard title="Around the League" subtitle={`The most meaningful recorded results from Week ${seasonPulse.week}.`} variant="compact">
             <div className="app-row-stack">
               {seasonPulse.headlineStories.map((story) => (
@@ -147,6 +152,40 @@ export default function LeagueHub({
       )}
     </div>
   );
+}
+
+function ordinal(value) {
+  const mod100 = value % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${value}th`;
+  return `${value}${value % 10 === 1 ? 'st' : value % 10 === 2 ? 'nd' : value % 10 === 3 ? 'rd' : 'th'}`;
+}
+
+function TradeDeadlineSection({ context, onNavigateTrade }) {
+  const { deadline, teamContext, reviewCandidates } = context;
+  const record = teamContext?.record;
+  const teamSummary = [
+    record ? `${record.wins}-${record.losses}${record.ties ? `-${record.ties}` : ''}` : null,
+    teamContext?.divisionPosition ? `${ordinal(teamContext.divisionPosition)} in division` : null,
+    teamContext?.streak ? `${teamContext.streak.length}-game ${teamContext.streak.result === 'W' ? 'winning' : 'losing'} streak` : null,
+  ].filter(Boolean).join(' · ');
+  return <SectionCard
+    title="Trade Deadline"
+    subtitle={`Week ${deadline.currentWeek} · ${deadline.weeksUntilDeadline === 0 ? 'Deadline week' : `${deadline.weeksUntilDeadline} week${deadline.weeksUntilDeadline === 1 ? '' : 's'} remaining`}`}
+    variant="compact"
+  >
+    <div className="app-row-stack" data-testid="trade-deadline-context">
+      {teamSummary && <CompactInsightCard title="Your context" subtitle={teamSummary} tone="league" />}
+      {reviewCandidates.length ? reviewCandidates.map((candidate) => <CompactListRow
+        key={candidate.playerId}
+        title={candidate.name}
+        subtitle={[candidate.position, ...candidate.reasons].filter(Boolean).join(' · ')}
+        meta={<StatusChip label={`Value ${candidate.tradeValue}`} tone="info" />}
+      >
+        <button type="button" className="btn btn-sm" onClick={() => onNavigateTrade?.()}>Review Trade</button>
+      </CompactListRow>) : <CompactInsightCard title="No roster decisions currently require trade review." tone="info" />}
+      <button type="button" className="btn" onClick={() => onNavigateTrade?.()}>Open Trade Center</button>
+    </div>
+  </SectionCard>;
 }
 
 function CoachingCarouselPanel({ league }) {
