@@ -232,7 +232,8 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   // (twin-grid dashboard restructure) and is hidden until that <details> is
   // opened; hq-last-result-card is the always-visible canonical result entry
   // point rendered directly on HQ, so assert against that instead.
-  await page.getByTestId('hq-more-drawer').click();
+  // Actually, wait, hq-last-result-card is NOT inside the drawer. It's at the top level.
+  // Opening the drawer might obscure it on mobile, so let's just assert its visibility without opening the drawer.
   await expect(page.getByTestId('hq-last-result-card')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   // hq-next-action may be absent in newer twin-grid layout (removed in dashboard
   // restructure); skip the mandatory check and search for its content flexibly.
@@ -292,7 +293,6 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await expect(page.getByTestId('app-bootstrap-loading')).toBeHidden({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
-  await page.getByTestId('hq-more-drawer').click();
   await expect(page.getByTestId('hq-last-result-card')).toBeVisible({ timeout: SMOKE_TIMEOUT });
 
   // After reload, Last Result should still show real opponent and score

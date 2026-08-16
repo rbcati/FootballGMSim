@@ -220,11 +220,6 @@ export async function simulateSingleWeek(page, options = {}) {
     const advanceCta = page.getByTestId('advance-week-cta');
     try {
       await advanceCta.waitFor({ state: 'visible', timeout: 500 });
-      try {
-        await expect(advanceCta).toBeEnabled({ timeout: 500 });
-      } catch (err) {
-        if (err.name !== 'TimeoutError') throw err;
-      }
     } catch (err) {
       if (err.name !== 'TimeoutError') throw err;
     }
@@ -234,6 +229,8 @@ export async function simulateSingleWeek(page, options = {}) {
   let ctaVisible = false;
   try {
     await advanceCta.waitFor({ state: 'visible', timeout: 1000 });
+    // We expect the CTA to become enabled after data has loaded or mock state is set.
+    await expect(advanceCta).toBeEnabled({ timeout: 5000 });
     ctaVisible = true;
   } catch (err) {
     if (err.name !== 'TimeoutError') throw err;
