@@ -26,6 +26,7 @@ import ActivityToastStack from './ActivityToastStack.jsx';
 import GameResultSummaryCard from './GameResultSummaryCard.jsx';
 import GMDecisionCenter from './GMDecisionCenter.jsx';
 import { readStrictFinalScore, recoverArchivedGameFromSchedule } from '../../core/gameArchive.js';
+import { buildGameDayReadinessModel } from '../utils/gameDayReadinessModel.js';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -183,6 +184,7 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
   }
 
   const userTeam = (league?.teams ?? []).find((t) => Number(t?.id) === Number(league?.userTeamId));
+  const gameDayReadiness = buildGameDayReadinessModel({ roster: userTeam?.roster, teamId: userTeam?.id });
   const opponent = command.nextGame?.opp ?? null;
   const nextOpponentDisplay = useMemo(() => getNextOpponentDisplay(command.nextGame), [command.nextGame]);
   const matchupHistory = useMemo(() => {
@@ -689,15 +691,16 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
       )}
 
       {/* ── ALERTS ROW — single line, only if actions exist ─────────────── */}
-      {commandSummary.criticalCount > 0 ? (
+      {gameDayReadiness.status !== 'ready' || commandSummary.criticalCount > 0 ? (
         <button
           type="button"
-          className={`hq-alerts-row hq-alerts-row--${commandSummary.readinessTone}`}
+          className={`hq-alerts-row hq-alerts-row--${gameDayReadiness.blockingLineupIssue ? 'danger' : commandSummary.readinessTone}`}
           data-testid="hq-actions-required"
-          aria-label={`${commandSummary.criticalCount} action${commandSummary.criticalCount !== 1 ? 's' : ''} required. Tap to review.`}
-          onClick={() => setShowGate(true)}
+          aria-label={`${gameDayReadiness.unavailableCount} unavailable, ${gameDayReadiness.unavailableStarterCount} starters unavailable. Tap to review.`}
+          onClick={() => gameDayReadiness.blockingLineupIssue ? onNavigate?.(gameDayReadiness.actionDestination) : setShowGate(true)}
         >
-          <span>⚠ {commandSummary.criticalCount} action{commandSummary.criticalCount !== 1 ? 's' : ''} required</span>
+          <span><strong>Game-day readiness</strong> · {gameDayReadiness.availableCount} available · {gameDayReadiness.status === 'ready' ? 'roster legal' : `${gameDayReadiness.unavailableCount} unavailable${gameDayReadiness.unavailableStarterCount ? ` · ${gameDayReadiness.unavailableStarterCount} starter unavailable` : ''}`}</span>
+          {commandSummary.criticalCount > 0 && <span className="sr-only">{commandSummary.criticalCount} actions required</span>}
           <span className="hq-alerts-row__chevron" aria-hidden="true">›</span>
         </button>
       ) : (
@@ -705,10 +708,10 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           className="hq-ready-row"
           data-testid="hq-actions-required"
           data-ready="true"
-          aria-label="No actions required"
+          aria-label={`${gameDayReadiness.availableCount} players available. No actions required.`}
         >
           <StatusChip label="Ready" tone="ok" />
-          <span>No blockers — ready to advance</span>
+          <span>No blockers — <strong>Game-day readiness</strong> · {gameDayReadiness.availableCount} available · roster legal</span>
         </div>
       )}
 

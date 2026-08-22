@@ -9,6 +9,7 @@ import { deriveTeamCapSnapshot, formatMoneyM } from '../utils/numberFormatting.j
 import { summarizeRosterDevelopment } from '../utils/playerDevelopmentSignals.js';
 import { TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildStaffPhilosophySummary } from '../../core/staff/staffPhilosophy.js';
+import { buildGameDayReadinessModel } from '../utils/gameDayReadinessModel.js';
 
 const TEAM_SECTIONS = ['Overview', 'Roster / Depth', 'Contracts', 'Development', 'Injuries'];
 const CRITICAL_POSITION_MIN = { QB: 2, RB: 3, WR: 5, TE: 3, OL: 8, DL: 8, LB: 6, CB: 5, S: 4, K: 1, P: 1 };
@@ -68,6 +69,10 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
   const developmentSummary = useMemo(() => summarizeRosterDevelopment(roster, new Map()), [roster]);
   const pressureGroups = useMemo(() => getPositionGroupPressure(roster), [roster]);
   const staffPhilosophy = useMemo(() => buildStaffPhilosophySummary(team ?? {}), [team]);
+  const gameDayReadiness = useMemo(
+    () => buildGameDayReadinessModel({ roster, teamId: team?.id }),
+    [roster, team?.id],
+  );
 
   useEffect(() => {
     const next = normalizeSection(initialSection);
@@ -105,9 +110,6 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
     return flags.slice(0, 3);
   }, [capSnapshot.capRoom, expiringPlayers.length, injuredPlayers.length, pressureGroups.length, roster.length, league?.phase]);
   const blockingIssues = useMemo(() => pressureGroups.filter((group) => group.severity >= 2), [pressureGroups]);
-  const weeklyLineupFrame = blockingIssues.length
-    ? `${blockingIssues.length} lineup blockers before kickoff`
-    : 'No critical lineup blockers detected';
 
   return (
     <div className="app-screen-stack team-hub-mobile-surface pfgm-density-surface">
@@ -115,14 +117,21 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
         eyebrow={`${league?.year ?? 'Season'} · Week ${league?.week ?? '—'} · ${league?.phase ?? 'regular'}`}
         title="Lineup Check Before Kickoff"
         subtitle={`${team?.name ?? 'Team'} · ${team?.wins ?? 0}-${team?.losses ?? 0}${team?.ties ? `-${team.ties}` : ''}`}
-        rightMeta={<StatusChip label={`${injuredPlayers.length} injuries`} tone={injuredPlayers.length ? 'warning' : 'ok'} />}
+        rightMeta={<StatusChip label={gameDayReadiness.status === 'ready' ? 'Ready' : `${gameDayReadiness.unavailableCount} unavailable`} tone={gameDayReadiness.status === 'ready' ? 'ok' : 'warning'} />}
       >
-        <div className="team-hub-lineup-frame">
+        <div className="team-hub-lineup-frame" data-testid="team-hub-gameday-readiness">
           <TeamIdentityBadge team={team} size={44} emphasize />
           <div>
-            <strong>{weeklyLineupFrame}</strong>
-            <small>{upcomingGame ? `Next: ${makeMatchupLabel(upcomingGame, team)}` : 'No scheduled matchup found.'}</small>
+            <strong>{gameDayReadiness.blockingLineupIssue ? 'Lineup action required' : `${gameDayReadiness.availableCount} available · ${gameDayReadiness.unavailableCount} unavailable`}</strong>
+            <small>{gameDayReadiness.unavailableStarterCount
+              ? `${gameDayReadiness.unavailableStarterCount} starter${gameDayReadiness.unavailableStarterCount === 1 ? '' : 's'} unavailable: ${gameDayReadiness.unavailableStarters.map((player) => `${player.position} ${player.name}`).join(', ')}`
+              : 'No unavailable starters detected.'}</small>
           </div>
+          {gameDayReadiness.blockingLineupIssue && (
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setSubtab('Roster / Depth'); setRosterMode('depth'); }}>
+              Review lineup
+            </button>
+          )}
         </div>
         <div className="app-hero-summary-grid">
           <div><span>Last game</span><strong>{latestGame ? makeMatchupLabel(latestGame, team) : 'No completed game yet'}</strong></div>

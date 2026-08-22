@@ -293,7 +293,7 @@ export function getHoldoutDemandPremium(player) {
 export function isAvailableForGameDay(player, context = {}) {
   if (!player || typeof player !== 'object') return false;
 
-  if (context.teamId != null && String(player.teamId) !== String(context.teamId)) return false;
+  if (context.teamId != null && player.teamId != null && String(player.teamId) !== String(context.teamId)) return false;
   if (!canPlayerPlay(player)) return false;
   if (player.holdout?.active === true) return false;
   if (isOnPracticeSquad(player)) return false;

@@ -24,6 +24,10 @@ export interface AggregatedTeamUnits {
   selectedUnitPlayerIds: { offense: Array<number | string>; defense: Array<number | string> };
 }
 
+export function buildEligibleGameDayRoster(roster: Player[] = [], teamId?: number | string | null): Player[] {
+  return roster.filter((player) => isAvailableForGameDay(player, teamId == null ? {} : { teamId }));
+}
+
 interface UnitPlayerMetadata {
   rowKey: string | null;
   depthOrder: number;
@@ -116,9 +120,9 @@ function pickUnitPlayers(
   return picked.slice(0, targetSize);
 }
 
-export function aggregateTeamUnitsFromRoster(roster: Player[] = []): AggregatedTeamUnits {
+export function aggregateTeamUnitsFromRoster(roster: Player[] = [], teamId?: number | string | null): AggregatedTeamUnits {
   const migratedPlayers: Array<{ id: number | string; attributesV2: AttributesV2 }> = [];
-  const upgradedRoster = roster.filter((player) => isAvailableForGameDay(player)).map((player) => {
+  const upgradedRoster = buildEligibleGameDayRoster(roster, teamId).map((player) => {
     const upgraded = ensureAttributesV2(player);
     if (!player.attributesV2 && player.id != null) {
       migratedPlayers.push({ id: player.id, attributesV2: upgraded.attributesV2 });
