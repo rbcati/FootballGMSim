@@ -47,4 +47,24 @@ describe('cache.restoreDirty', () => {
     cache.restoreDirty({});
     expect(cache.isDirty()).toBe(false);
   });
+
+  it('restores START_NEW_SEASON hot state and its original dirty snapshot exactly', () => {
+    cache.updateTeam(0, { wins: 2 });
+    const expectedDirty = cache.drainDirty();
+    cache.restoreDirty(expectedDirty);
+    const snapshot = cache.snapshotStartNewSeasonState();
+
+    cache.setMeta({ currentSeasonId: 2, phase: 'preseason' });
+    cache.updateTeam(0, { wins: 0, deadCap: 12 });
+    cache.updatePlayer(10, { teamId: 1, status: 'active' });
+    cache.setDraftPick({ id: 'new-pick', currentOwner: 1 });
+
+    cache.restoreStartNewSeasonState(snapshot);
+
+    expect(cache.getMeta()).toEqual({ id: 'L1', currentSeasonId: 1 });
+    expect(cache.getTeam(0)).toEqual({ id: 0, wins: 2 });
+    expect(cache.getPlayer(10)).toEqual({ id: 10, teamId: 0 });
+    expect(cache.getAllDraftPicks()).toEqual([]);
+    expect(cache.drainDirty()).toEqual(expectedDirty);
+  });
 });

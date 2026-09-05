@@ -1944,7 +1944,7 @@ async function createUniqueLeagueId() {
  *   "Failed to store record in an IDBObjectStore: Evaluating the object store's
  *    key path did not yield a value."
  */
-async function flushDirty(forceFlush = false) {
+async function flushDirty(forceFlush = false, { transactions = [] } = {}) {
   const __profileToken = offseasonProfiler.start('persistence.flushDirty', { forceFlush });
   try {
   // PRIMARY iOS GUARD: Never flush until a save has been explicitly loaded or created.
@@ -1955,7 +1955,7 @@ async function flushDirty(forceFlush = false) {
   }
 
   const hasPendingBatchDirty = hasDirtySnapshot(pendingBatchDirty);
-  if (!cache.isDirty() && !hasPendingBatchDirty) return;
+  if (!cache.isDirty() && !hasPendingBatchDirty && transactions.length === 0) return;
 
   // SECONDARY SAFETY CHECK: Never flush if cache isn't fully loaded (prevent empty overwrite)
   if (!cache.isLoaded()) {
@@ -1979,7 +1979,7 @@ async function flushDirty(forceFlush = false) {
     ? mergeDirtySnapshots(pendingBatchDirty, currentDirty)
     : currentDirty;
 
-  if (!hasDirtySnapshot(dirty)) return;
+  if (!hasDirtySnapshot(dirty) && transactions.length === 0) return;
 
   // Resolve dirty IDs → full objects, dropping any that are null (already deleted).
   const teams   = dirty.teams.map(id => cache.getTeam(id)).filter(Boolean);
@@ -2021,33 +2021,35 @@ async function flushDirty(forceFlush = false) {
   // drainDirty() above already cleared the cache's dirty flags. If any write
   // below throws (e.g. a transient WebKit IDB error), restore the drained
   // snapshot so the mutations are retried on the next flush instead of being
-  // silently lost. The draft-pick and Saves writes use their own transactions,
-  // so they are part of the same all-or-restore guard as bulkWrite.
+  // silently lost. Draft picks and staged lifecycle transactions join the same
+  // league-database transaction as the hot state.
   try {
-    // Draft picks are handled separately (small volume, own store not in bulkWrite).
-    if (dirty.draftPicks.length > 0) {
-      const toSave = dirty.draftPicks
-        .map(id => cache.getDraftPick(id))
-        .filter(pk => pk && pk.id != null);
-      if (toSave.length) await DraftPicks.saveBulk(toSave);
-    }
+    const draftPicks = dirty.draftPicks
+      .map(id => cache.getDraftPick(id))
+      .filter(pk => pk && pk.id != null);
 
     // Update Global Save Metadata if league meta changed
-    if (dirty.meta) {
+    const saveManifest = dirty.meta ? (() => {
       const meta = ensureDynastyMeta(cache.getMeta());
       const leagueId = getActiveLeagueId();
       if (leagueId) {
         const userTeam = cache.getTeam(meta.userTeamId);
-        await Saves.save({
+        return {
           id: leagueId,
           name: meta.name || `League ${leagueId}`,
           year: meta.year,
           teamId: meta.userTeamId,
           teamAbbr: userTeam?.abbr || '???',
           lastPlayed: Date.now()
-        });
+        };
       }
-    }
+      return null;
+    })() : null;
+
+    // Preserve the established generic flush ordering. Lifecycle commits with
+    // staged transaction rows defer this cross-database manifest until after
+    // the authoritative league transaction reaches its commit point.
+    if (saveManifest && transactions.length === 0) await Saves.save(saveManifest);
 
     // bulkWrite itself also validates before each put — belt-and-suspenders.
     await bulkWrite({
@@ -2057,6 +2059,14 @@ async function flushDirty(forceFlush = false) {
       playerDeletes,
       games:         validGames,
       seasonStats,
+      draftPicks,
+      transactions,
+    });
+    // The save-list manifest lives in a separate database and cannot join the
+    // league transaction. Update it only after the authoritative league commit;
+    // it is an index/heartbeat, not league state.
+    if (saveManifest && transactions.length > 0) await Saves.save(saveManifest).catch((error) => {
+      console.warn('[Worker] save manifest update failed after league commit:', error);
     });
   } catch (writeErr) {
     // `dirty` is the exact set we attempted to write. On the forceFlush path it
@@ -3170,6 +3180,8 @@ async function handleAdvanceWeek(payload, id) {
   // explicit headless lifecycle, the auto-managed user team) enter the regular
   // season legally instead of deadlocking the franchise at the first AI team
   // whose pre-cutdown payroll happens to exceed that season's grown cap.
+  let preseasonSnapshot = null;
+  const preseasonTransactions = [];
   if (meta.phase === 'preseason') {
     const batchSim = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
     const rosterLimit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
@@ -3182,6 +3194,10 @@ async function handleAdvanceWeek(payload, id) {
     // batch flag opts the user team into automated cutdowns/cap management.
     if (!batchSim) {
       const userRoster = cache.getPlayersByTeam(meta.userTeamId);
+      if (userRoster.length < rosterLimit) {
+        post(toUI.ERROR, { message: `Roster minimum not met! You have ${userRoster.length}/${rosterLimit} players. Sign players before starting the regular season.` }, id);
+        return;
+      }
       if (userRoster.length > rosterLimit) {
         post(toUI.ERROR, { message: `Roster limit exceeded! You have ${userRoster.length} players. Cut down to ${rosterLimit} to advance.` }, id);
         return;
@@ -3203,12 +3219,50 @@ async function handleAdvanceWeek(payload, id) {
     // AI roster cutdowns (53-man limit) for all AI teams. Explicit headless
     // durability/batch mode also opts the user team into the same deterministic
     // cutdown pass; interactive skipUserGame/SIM_TO_PHASE does not.
-    await AiLogic.executeAICutdowns({ includeUserTeam: batchSim });
+    preseasonSnapshot = cache.snapshotStartNewSeasonState();
+    await AiLogic.executeAICutdowns({
+      includeUserTeam: batchSim,
+      transactionSink: preseasonTransactions,
+    });
 
     // AI cap management: bring every AI team legally under the LIVE cap using the
     // least-destructive plan. The interactive user team is NEVER auto-managed;
     // only an explicit headless lifecycle (durability batch-sim) opts it in.
-    await AiLogic.executeAICapManagement({ autoManageUserCap: batchSim });
+    await AiLogic.executeAICapManagement({
+      autoManageUserCap: batchSim,
+      transactionSink: preseasonTransactions,
+    });
+
+    // Cap management above reserves the exact room needed by an underfilled
+    // canonical roster. Complete those existing-FA, minimum-contract
+    // transactions before the stable-phase legality gate. The interactive user
+    // remains untouched; headless lifecycle runs explicitly opt it in.
+    let reconciliation = await AiLogic.ensureMinimumRosters({
+      includeUserTeam: batchSim,
+      transactionSink: preseasonTransactions,
+    });
+    if (reconciliation.failures.length > 0) {
+      await AiLogic.executeAICapManagement({
+        autoManageUserCap: batchSim,
+        teamIds: reconciliation.failures.map((failure) => failure.teamId),
+        rosterCompletionReserveByTeam: rosterCompletionReserveMap(reconciliation.failures),
+        rosterCompletionCandidateIdsByTeam: reconciliation.completionCandidateIdsByTeam,
+        transactionSink: preseasonTransactions,
+      });
+      reconciliation = await AiLogic.ensureMinimumRosters({
+        includeUserTeam: batchSim,
+        transactionSink: preseasonTransactions,
+      });
+    }
+    if (reconciliation.failures.length > 0) {
+      const failure = reconciliation.failures[0];
+      cache.restoreStartNewSeasonState(preseasonSnapshot);
+      post(toUI.ERROR, {
+        message: `Team ${failure.teamId} cannot reach the 53-player minimum (${failure.rosterCount}/53).`,
+        rosterLegalityFailure: failure,
+      }, id);
+      return;
+    }
 
     // Cutdowns/releases above release players directly (teamId -> null) without
     // touching team.depthChart, leaving dangling starter/backup references.
@@ -3218,6 +3272,7 @@ async function handleAdvanceWeek(payload, id) {
 
   const legality = runLegalityValidation({ stage: 'pre-advance' }).issues.filter((issue) => issue.severity === 'error');
   if (legality.length > 0) {
+    if (preseasonSnapshot) cache.restoreStartNewSeasonState(preseasonSnapshot);
     post(toUI.ERROR, { message: legality[0].message }, id);
     return;
   }
@@ -3256,7 +3311,13 @@ async function handleAdvanceWeek(payload, id) {
     // Set phase to Regular Season, keep Week 1.
     // V1 Coaching Carousel: clear the coaching market at end of preseason.
     cache.setMeta({ phase: 'regular', currentWeek: 1, coachingMarket: [] });
-    await flushDirty();
+    try {
+      await flushDirty(true, { transactions: preseasonTransactions });
+    } catch (error) {
+      cache.restoreStartNewSeasonState(preseasonSnapshot);
+      post(toUI.ERROR, { message: `Could not start the regular season: ${error?.message ?? error}` }, id);
+      return;
+    }
 
     // Return state update (no simulation)
     post(toUI.WEEK_COMPLETE, {
@@ -13288,6 +13349,68 @@ async function archiveSeason(seasonId) {
 
 // ── Handler: START_NEW_SEASON ─────────────────────────────────────────────────
 
+function rosterCompletionReserveMap(failures = []) {
+  return new Map(
+    failures
+      .filter((failure) => failure.cheapestActualCompletionCost !== null
+        && failure.cheapestActualCompletionCost !== undefined
+        && Number.isFinite(Number(failure.cheapestActualCompletionCost)))
+      .map((failure) => [failure.teamId, Number(failure.cheapestActualCompletionCost)]),
+  );
+}
+
+async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSeasonId, nextEconomy, includeUserTeam }) {
+  const snapshot = cache.snapshotStartNewSeasonState();
+  const stagedTransactions = [];
+  try {
+    for (const team of cache.getAllTeams()) {
+      cache.updateTeam(team.id, {
+        wins: 0, losses: 0, ties: 0, ptsFor: 0, ptsAgainst: 0,
+        deadCap: team.deadMoneyNextYear ?? 0,
+        deadMoneyNextYear: 0,
+        capTotal: nextEconomy.currentSalaryCap,
+        fanApproval: team?.fanApproval ?? 50,
+        fanApprovalWinBoostUsed: 0,
+        lossStreak: 0,
+      });
+      recalculateTeamCap(team.id);
+    }
+    cache.setMeta({
+      year: newYear,
+      season: newSeason,
+      currentSeasonId: newSeasonId,
+      currentWeek: 1,
+      phase: 'preseason',
+      economy: nextEconomy,
+      settings: normalizeLeagueSettings({
+        ...(meta?.settings ?? {}),
+        salaryCap: nextEconomy.currentSalaryCap,
+      }),
+    });
+
+    let reconciliation = await AiLogic.ensureMinimumRosters({
+      includeUserTeam,
+      transactionSink: stagedTransactions,
+    });
+    if (reconciliation.failures.length > 0) {
+      await AiLogic.executeAICapManagement({
+        autoManageUserCap: includeUserTeam,
+        teamIds: reconciliation.failures.map((failure) => failure.teamId),
+        rosterCompletionReserveByTeam: rosterCompletionReserveMap(reconciliation.failures),
+        rosterCompletionCandidateIdsByTeam: reconciliation.completionCandidateIdsByTeam,
+        transactionSink: stagedTransactions,
+      });
+      reconciliation = await AiLogic.ensureMinimumRosters({
+        includeUserTeam,
+        transactionSink: stagedTransactions,
+      });
+    }
+    return reconciliation;
+  } finally {
+    cache.restoreStartNewSeasonState(snapshot);
+  }
+}
+
 async function handleStartNewSeason(payload, id) {
   const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
@@ -13299,15 +13422,58 @@ async function handleStartNewSeason(payload, id) {
     return;
   }
 
-  // Archive the completed season (if any) before resetting
-  if (meta.currentSeasonId) {
-    await archiveSeason(meta.currentSeasonId);
-  }
-
   const newYear     = (meta.year   ?? 2025) + 1;
   const newSeason   = (meta.season ?? 1)    + 1;
   const newSeasonId = `s${newSeason}`;
   const nextEconomy = projectNextSeasonEconomy(meta?.economy ?? {}, newYear);
+  const rolloverBatchSim = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
+  const rolloverSnapshot = cache.snapshotStartNewSeasonState();
+  const preflight = await preflightStartNewSeasonRosters({
+    meta,
+    newYear,
+    newSeason,
+    newSeasonId,
+    nextEconomy,
+    includeUserTeam: rolloverBatchSim,
+  });
+  if (preflight.failures.length > 0) {
+    const detail = preflight.failures[0];
+    post(toUI.ERROR, {
+      message: `Team ${detail.teamId} cannot enter preseason below the 53-player minimum (${detail.rosterCount}/53).`,
+      rosterLegalityFailure: detail,
+    }, id);
+    return;
+  }
+
+  // Schedule construction is also a fatal gate, so complete it before archive,
+  // persona, owner, record, or cap state can be committed.
+  const makeScheduleFn = makeAccurateSchedule || (Scheduler && Scheduler.makeAccurateSchedule);
+  if (!makeScheduleFn) { post(toUI.ERROR, { message: 'Cannot generate schedule' }, id); return; }
+  const teamDefs = cache.getAllTeams();
+  const rawSchedule = makeScheduleFn(teamDefs);
+  let slimSchedule = slimifySchedule(rawSchedule, teamDefs, newSeasonId);
+  let scheduleValidation = validateSlimScheduleReferences(slimSchedule, teamDefs);
+  if (!scheduleValidation.valid) {
+    console.error('[Worker] New-season schedule failed reference validation:',
+      scheduleValidation.errors.slice(0, 8));
+    const fallbackRaw = Scheduler.createSimpleSchedule(teamDefs);
+    const fallbackSlim = slimifySchedule(fallbackRaw, teamDefs, newSeasonId);
+    const fallbackValidation = validateSlimScheduleReferences(fallbackSlim, teamDefs);
+    if (!fallbackValidation.valid) {
+      post(toUI.ERROR, {
+        message: `Cannot generate a valid ${newSeasonId} schedule: ${scheduleValidation.errors[0] ?? 'unknown'}`,
+      }, id);
+      return;
+    }
+    slimSchedule = fallbackSlim;
+    scheduleValidation = fallbackValidation;
+    console.warn('[Worker] Recovered new-season schedule via simple validated fallback.');
+  }
+
+  // Archive only after the roster/cap preflight has proved rollover can commit.
+  if (meta.currentSeasonId) {
+    await archiveSeason(meta.currentSeasonId);
+  }
 
   // ── Front office persona drift (offseason, deterministic) ───────────────────
   // Evaluate once per year before records reset. WIN_NOW + 2 missed postseasons
@@ -13409,37 +13575,6 @@ async function handleStartNewSeason(payload, id) {
     recalculateTeamCap(team.id);
   }
 
-  // Generate a fresh schedule
-  const makeScheduleFn = makeAccurateSchedule || (Scheduler && Scheduler.makeAccurateSchedule);
-  if (!makeScheduleFn) { post(toUI.ERROR, { message: 'Cannot generate schedule' }, id); return; }
-
-  const teamDefs = cache.getAllTeams();
-  const rawSchedule  = makeScheduleFn(teamDefs);
-  let slimSchedule   = slimifySchedule(rawSchedule, teamDefs, newSeasonId);
-
-  // Validate the new schedule's references against the canonical team-ID set
-  // BEFORE it is committed to live league state. A schedule that references an
-  // unknown team, pairs a team with itself, or double-books a team must never
-  // enter the save. On failure, fall back to the simple validated generator
-  // rather than persisting a corrupt schedule.
-  let scheduleValidation = validateSlimScheduleReferences(slimSchedule, teamDefs);
-  if (!scheduleValidation.valid) {
-    console.error('[Worker] New-season schedule failed reference validation:',
-      scheduleValidation.errors.slice(0, 8));
-    const fallbackRaw  = Scheduler.createSimpleSchedule(teamDefs);
-    const fallbackSlim = slimifySchedule(fallbackRaw, teamDefs, newSeasonId);
-    const fallbackValidation = validateSlimScheduleReferences(fallbackSlim, teamDefs);
-    if (!fallbackValidation.valid) {
-      post(toUI.ERROR, {
-        message: `Cannot generate a valid ${newSeasonId} schedule: ${scheduleValidation.errors[0] ?? 'unknown'}`,
-      }, id);
-      return;
-    }
-    slimSchedule = fallbackSlim;
-    scheduleValidation = fallbackValidation;
-    console.warn('[Worker] Recovered new-season schedule via simple validated fallback.');
-  }
-
   // V1 Coaching Carousel: generate coaching market at season start.
   // Collect coaches fired last season from all teams' coachHistory.
   const firedLastSeason = [];
@@ -13484,9 +13619,35 @@ async function handleStartNewSeason(payload, id) {
     }),
   });
 
-  await AiLogic.ensureMinimumRosters({
-    includeUserTeam: typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__,
+  const rolloverTransactions = [];
+  let rolloverReconciliation = await AiLogic.ensureMinimumRosters({
+    includeUserTeam: rolloverBatchSim,
+    transactionSink: rolloverTransactions,
   });
+  if (rolloverReconciliation.failures.length > 0) {
+    // Only underfilled teams enter this cap-planning retry. Oversized preseason
+    // rosters remain untouched until the later canonical cutdown pass.
+    await AiLogic.executeAICapManagement({
+      autoManageUserCap: rolloverBatchSim,
+      teamIds: rolloverReconciliation.failures.map((failure) => failure.teamId),
+      rosterCompletionReserveByTeam: rosterCompletionReserveMap(rolloverReconciliation.failures),
+      rosterCompletionCandidateIdsByTeam: rolloverReconciliation.completionCandidateIdsByTeam,
+      transactionSink: rolloverTransactions,
+    });
+    rolloverReconciliation = await AiLogic.ensureMinimumRosters({
+      includeUserTeam: rolloverBatchSim,
+      transactionSink: rolloverTransactions,
+    });
+  }
+  if (rolloverReconciliation.failures.length > 0) {
+    const detail = rolloverReconciliation.failures[0];
+    cache.restoreStartNewSeasonState(rolloverSnapshot);
+    post(toUI.ERROR, {
+      message: `Team ${detail.teamId} cannot enter preseason below the 53-player minimum (${detail.rosterCount}/53).`,
+      rosterLegalityFailure: detail,
+    }, id);
+    return;
+  }
   for (const team of cache.getAllTeams()) recalculateTeamCap(team.id);
 
   // ── Update franchise all-time leaders once per season rollover ──────────
@@ -13503,7 +13664,16 @@ async function handleStartNewSeason(payload, id) {
     console.error('[Worker] All-time leaders update failed (non-fatal):', leadersErr);
   }
 
-  await flushDirty(); // AUTO-SAVE: phase transition — new season initialized to preseason.
+  try {
+    // State and staged roster/cap transactions share one league-IDB transaction.
+    // A failed commit therefore leaves neither half-advanced state nor orphan
+    // transaction rows, and the in-memory snapshot remains safe to retry.
+    await flushDirty(true, { transactions: rolloverTransactions });
+  } catch (error) {
+    cache.restoreStartNewSeasonState(rolloverSnapshot);
+    post(toUI.ERROR, { message: `Could not persist the new season: ${error?.message ?? error}` }, id);
+    return;
+  }
 
   // Broadcast SEASON_START so the UI can force-switch to Standings/Dashboard.
   const updatedMeta = cache.getMeta();

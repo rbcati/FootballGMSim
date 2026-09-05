@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { toWorker, toUI } from '../../src/worker/protocol.js';
 import { cache } from '../../src/db/cache.js';
 import { Transactions } from '../../src/db/index.js';
+import { buildTeamCapSnapshot } from '../../src/core/contracts/contractObligations.js';
 
 const SLOT_KEY = 'save_slot_1';
 const USER_TEAM_ID = 0;
@@ -49,6 +50,10 @@ function send(type, payload = {}, { timeoutMs = 60_000 } = {}) {
 
 function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function contractForTest(baseAnnual) {
+  return { years: 1, yearsTotal: 1, yearsRemaining: 1, baseAnnual, signingBonus: 0, guaranteedPct: 0 };
 }
 
 function sortedRoster(teamId) {
@@ -181,6 +186,89 @@ afterAll(() => {
 });
 
 describe('ADVANCE_WEEK preseason user gating', () => {
+  it('rolls back every team and staged transaction when a later AI roster cannot be repaired', async () => {
+    normalizeUserRosterTo(53);
+    const aiTeams = cache.getAllTeams()
+      .filter((team) => Number(team.id) !== USER_TEAM_ID)
+      .sort((a, b) => Number(a.id) - Number(b.id));
+    for (const team of aiTeams) {
+      for (const player of sortedRoster(team.id).slice(53)) {
+        cache.updatePlayer(player.id, { teamId: null, status: 'retired' });
+      }
+    }
+
+    const [repairableTeam, impossibleTeam] = aiTeams;
+    const repairCandidate = sortedRoster(repairableTeam.id).at(-1);
+    const unavailableCandidate = sortedRoster(impossibleTeam.id).at(-1);
+    cache.updatePlayer(repairCandidate.id, {
+      teamId: null,
+      status: 'free_agent',
+      ovr: 50,
+      potential: 50,
+      contract: null,
+    });
+    cache.updatePlayer(unavailableCandidate.id, { teamId: null, status: 'retired' });
+    for (const player of cache.getAllPlayers()) {
+      if (player.teamId == null && player.id !== repairCandidate.id) {
+        cache.updatePlayer(player.id, { status: 'retired' });
+      }
+    }
+    expect(sortedRoster(repairableTeam.id)).toHaveLength(52);
+    expect(sortedRoster(impossibleTeam.id)).toHaveLength(52);
+
+    const before = cache.snapshotStartNewSeasonState();
+    const transactionCount = await transactionCountByTypes(['SIGN', 'RESTRUCTURE', 'RELEASE']);
+
+    const reply = await send(toWorker.ADVANCE_WEEK, {}, { timeoutMs: TEST_TIMEOUT_MS });
+
+    expect(reply.type).toBe(toUI.ERROR);
+    expect(payloadOf(reply)?.rosterLegalityFailure).toEqual(expect.objectContaining({
+      teamId: impossibleTeam.id,
+      rosterCount: 52,
+    }));
+    expect(cache.snapshotStartNewSeasonState()).toEqual(before);
+    expect(await transactionCountByTypes(['SIGN', 'RESTRUCTURE', 'RELEASE'])).toBe(transactionCount);
+    expect(cache.getMeta()?.phase).toBe('preseason');
+  }, TEST_TIMEOUT_MS);
+
+  it('repairs an AI release-created hole, enters regular season, and preserves membership through save/reload', async () => {
+    const aiTeam = cache.getAllTeams().find((team) => Number(team.id) !== USER_TEAM_ID);
+    const aiTeamId = Number(aiTeam.id);
+    const roster = sortedRoster(aiTeamId);
+    for (const player of roster.slice(53)) cache.updatePlayer(player.id, { teamId: null, status: 'free_agent' });
+    expect(sortedRoster(aiTeamId)).toHaveLength(53);
+    const legalCap = Number(cache.getMeta()?.economy?.currentSalaryCap ?? cache.getMeta()?.settings?.salaryCap);
+    const baseAnnual = (legalCap + 0.2) / 53;
+    const replacementPlayer = sortedRoster(aiTeamId).find((player) => player.pos === 'WR');
+    for (const player of sortedRoster(aiTeamId)) {
+      cache.updatePlayer(player.id, {
+        contract: contractForTest(baseAnnual),
+        ovr: player.id === replacementPlayer.id ? 60 : 70,
+        potential: player.id === replacementPlayer.id ? 60 : 70,
+        age: player.id === replacementPlayer.id ? 27 : player.age,
+      });
+    }
+    const replacementId = Number(replacementPlayer.id);
+    globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__ = true;
+
+    const reply = await send(toWorker.ADVANCE_WEEK, { skipUserGame: true }, { timeoutMs: TEST_TIMEOUT_MS });
+
+    expect(reply.type, JSON.stringify(payloadOf(reply))).not.toBe(toUI.ERROR);
+    expect(cache.getMeta()?.phase).toBe('regular');
+    const finalRoster = sortedRoster(aiTeamId);
+    expect(finalRoster).toHaveLength(53);
+    expect(finalRoster.some((player) => Number(player.id) === replacementId)).toBe(true);
+    const cap = buildTeamCapSnapshot({ team: cache.getTeam(aiTeamId), roster: finalRoster, salaryCap: legalCap });
+    expect(cap.isLegallyCompliant).toBe(true);
+    const idsBeforeSave = rosterIds(aiTeamId);
+
+    const saved = await send(toWorker.SAVE_NOW, {}, { timeoutMs: TEST_TIMEOUT_MS });
+    expect(saved.type).not.toBe(toUI.ERROR);
+    const loaded = await send(toWorker.LOAD_SAVE, { leagueId: SLOT_KEY }, { timeoutMs: TEST_TIMEOUT_MS });
+    expect(loaded.type).not.toBe(toUI.ERROR);
+    expect(rosterIds(aiTeamId)).toEqual(idsBeforeSave);
+  }, TEST_TIMEOUT_MS);
+
   it('blocks interactive SIM_TO_PHASE skip when the user roster is over 53 without mutating user or AI state', async () => {
     normalizeUserRosterTo(54);
     const userRosterBefore = rosterIds(USER_TEAM_ID);

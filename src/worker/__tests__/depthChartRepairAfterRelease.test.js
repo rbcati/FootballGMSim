@@ -59,7 +59,7 @@ describe('AI preseason cutdowns / cap management — depth chart repair', () => 
   const fn = extractFunction(workerSource, 'handleAdvanceWeek');
 
   it('calls the canonical depth-chart repair after AI cutdowns and cap management', () => {
-    const cutdownIdx = fn.indexOf('AiLogic.executeAICutdowns({ includeUserTeam: batchSim })');
+    const cutdownIdx = fn.indexOf('AiLogic.executeAICutdowns({');
     const capMgmtIdx = fn.indexOf('AiLogic.executeAICapManagement(');
     const repairIdx = fn.indexOf("validateAndRepairAllTeamDepthCharts('post-ai-cutdown')");
 
@@ -72,8 +72,8 @@ describe('AI preseason cutdowns / cap management — depth chart repair', () => 
     const batchGuardIdx = fn.indexOf('if (!batchSim) {');
     const rosterCheckIdx = fn.indexOf('userRoster.length > rosterLimit', batchGuardIdx);
     const capCheckIdx = fn.indexOf("runLegalityValidation({ stage: 'pre-advance', teamIds: [meta.userTeamId] })", rosterCheckIdx);
-    const cutdownIdx = fn.indexOf('AiLogic.executeAICutdowns({ includeUserTeam: batchSim })');
-    const capMgmtIdx = fn.indexOf('AiLogic.executeAICapManagement({ autoManageUserCap: batchSim })');
+    const cutdownIdx = fn.indexOf('AiLogic.executeAICutdowns({');
+    const capMgmtIdx = fn.indexOf('AiLogic.executeAICapManagement({', cutdownIdx);
 
     expect(batchGuardIdx).toBeGreaterThan(-1);
     expect(rosterCheckIdx).toBeGreaterThan(batchGuardIdx);
@@ -85,8 +85,8 @@ describe('AI preseason cutdowns / cap management — depth chart repair', () => 
   it('treats explicit durability batch mode as the only user auto-management capability', () => {
     expect(fn.includes('if (payload?.skipUserGame)')).toBe(false);
     expect(fn.includes('AiLogic.executeAICutdowns({ includeUserTeam: true })')).toBe(false);
-    expect(fn.includes('AiLogic.executeAICutdowns({ includeUserTeam: batchSim })')).toBe(true);
-    expect(fn.includes('AiLogic.executeAICapManagement({ autoManageUserCap: batchSim })')).toBe(true);
+    expect(fn).toMatch(/AiLogic\.executeAICutdowns\(\{[\s\S]*?includeUserTeam: batchSim/);
+    expect(fn).toMatch(/AiLogic\.executeAICapManagement\(\{[\s\S]*?autoManageUserCap: batchSim/);
   });
 
   it('repairs depth charts before the phase-transition flush so the cleanup persists', () => {

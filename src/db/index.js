@@ -686,6 +686,8 @@ export async function bulkWrite({
   playerDeletes = [],
   games         = [],
   seasonStats   = [],
+  draftPicks    = [],
+  transactions = [],
 } = {}) {
   // Validate records
   const validTeams = teams.map(serializeTeamForPersistence).filter(t => {
@@ -718,6 +720,8 @@ export async function bulkWrite({
   if (validPlayers.length || playerDeletes.length)    needed.add(STORES.PLAYERS);
   if (validGames.length)                              needed.add(STORES.GAMES);
   if (validSeasonStats.length)                        needed.add(STORES.PLAYER_STATS);
+  if (draftPicks.length)                              needed.add(STORES.DRAFT_PICKS);
+  if (transactions.length)                            needed.add(STORES.TRANSACTIONS);
 
   if (needed.size === 0) return;
 
@@ -729,26 +733,23 @@ export async function bulkWrite({
     tx.onerror    = () => reject(tx.error);
     tx.onabort    = () => reject(new Error('bulkWrite transaction aborted'));
 
-    if (meta) {
-      tx.objectStore(STORES.META).put({ ...meta, id: 'league' });
-    }
-    for (const t of validTeams) {
-      tx.objectStore(STORES.TEAMS).put(t);
-    }
-    for (const p of validPlayers) {
-      tx.objectStore(STORES.PLAYERS).put(p);
-    }
-    for (const id of playerDeletes) {
-      tx.objectStore(STORES.PLAYERS).delete(id);
-    }
-    for (const g of validGames) {
-      tx.objectStore(STORES.GAMES).put(g);
-    }
-    for (const s of validSeasonStats) {
-      tx.objectStore(STORES.PLAYER_STATS).put({
-        ...s,
-        id: `${s.seasonId}_${s.playerId}`,
-      });
+    try {
+      if (meta) tx.objectStore(STORES.META).put({ ...meta, id: 'league' });
+      for (const t of validTeams) tx.objectStore(STORES.TEAMS).put(t);
+      for (const p of validPlayers) tx.objectStore(STORES.PLAYERS).put(p);
+      for (const id of playerDeletes) tx.objectStore(STORES.PLAYERS).delete(id);
+      for (const g of validGames) tx.objectStore(STORES.GAMES).put(g);
+      for (const s of validSeasonStats) {
+        tx.objectStore(STORES.PLAYER_STATS).put({
+          ...s,
+          id: `${s.seasonId}_${s.playerId}`,
+        });
+      }
+      for (const pick of draftPicks) tx.objectStore(STORES.DRAFT_PICKS).put(pick);
+      for (const transaction of transactions) tx.objectStore(STORES.TRANSACTIONS).add(transaction);
+    } catch (error) {
+      tx.abort();
+      reject(error);
     }
   });
 }
