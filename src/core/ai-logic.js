@@ -692,13 +692,19 @@ class AiLogic {
         rosterCompletionReserve = null,
         rosterCompletionCandidates = null,
         rosterCompletionMeta = null,
+        priorRestructureProvenance = null,
     } = {}) {
         const actions = [];
         let workRoster = roster.map((p) => ({ ...p, contract: { ...(p?.contract ?? {}) } }));
         let deadCap = Math.max(0, Number(team?.deadCap ?? 0));
         // Original (pre-restructure) contracts, kept so a restructure can be rolled
         // back if the player later turns out to be the only cap-legal release.
-        const originalContracts = new Map();
+        const priorRestructures = priorRestructureProvenance instanceof Map
+            ? priorRestructureProvenance
+            : new Map();
+        const originalContracts = new Map(
+            [...priorRestructures.entries()].map(([playerId, entry]) => [playerId, { ...(entry?.originalContract ?? {}) }]),
+        );
         const reserveRosterCount = roster.length;
         const projectedReleasedPlayers = [];
         const snap = () => {
@@ -774,9 +780,10 @@ class AiLogic {
         // cap and LOWER net release relief — restructuring then releasing the same
         // player is wasteful. Keep the players we chose to restructure and cut the
         // rest first.
-        const restructuredIds = new Set(
-            actions.filter((a) => a.type === 'RESTRUCTURE').map((a) => a.playerId),
-        );
+        const restructuredIds = new Set([
+            ...priorRestructures.keys(),
+            ...actions.filter((a) => a.type === 'RESTRUCTURE').map((a) => a.playerId),
+        ]);
         const posCount = {};
         for (const p of workRoster) posCount[p.pos] = (posCount[p.pos] ?? 0) + 1;
 
@@ -857,6 +864,8 @@ class AiLogic {
                 futureYearsDead: choice.futureYearsDead,
                 netRelief: choice.netRelief,
                 rolledBackRestructure: true,
+                supersededPriorRestructure: priorRestructures.has(choice.p.id),
+                originalContract: { ...originalContracts.get(choice.p.id) },
             });
         }
 
@@ -898,7 +907,8 @@ class AiLogic {
      * @param {{autoManageUserCap?: boolean, teamIds?: Array<number|string>|null,
      *   rosterCompletionReserveByTeam?: Map<number|string, number>|Record<string, number>|null,
      *   rosterCompletionCandidateIdsByTeam?: Map<number|string, Array<number|string>>|null,
-     *   transactionSink?: object[]|null}} [opts]
+     *   transactionSink?: object[]|null,
+     *   restructureProvenanceByTeam?: Map<number|string, Map<number|string, object>>|null}} [opts]
      * @returns {Promise<{failures: object[], teamsManaged: number}>}
      */
     static async executeAICapManagement({
@@ -907,6 +917,7 @@ class AiLogic {
         rosterCompletionReserveByTeam = null,
         rosterCompletionCandidateIdsByTeam = null,
         transactionSink = null,
+        restructureProvenanceByTeam = null,
     } = {}) {
         const txsToCommit = [];
         const meta        = cache.getMeta();
@@ -944,6 +955,10 @@ class AiLogic {
             });
             if (snapshot.isRosterReadyWithinPlanningTarget) continue;
 
+            const priorRestructureProvenance = restructureProvenanceByTeam instanceof Map
+                ? ([...restructureProvenanceByTeam.entries()]
+                    .find(([teamId]) => Number(teamId) === Number(team.id))?.[1] ?? null)
+                : null;
             const plan = AiLogic.buildAiCapCompliancePlan(freshTeam, roster, {
                 legalCap,
                 targetBuffer,
@@ -951,6 +966,7 @@ class AiLogic {
                 rosterCompletionReserve,
                 rosterCompletionCandidates,
                 rosterCompletionMeta: meta,
+                priorRestructureProvenance,
             });
 
             // If no legal plan exists, do NOT commit partial destructive actions.
@@ -971,6 +987,7 @@ class AiLogic {
                 if (!player) continue;
 
                 if (action.type === 'RESTRUCTURE') {
+                    const originalContract = { ...(player.contract ?? {}) };
                     cache.updatePlayer(player.id, {
                         contract: { ...action.newContract, lastRestructuredSeason: season },
                     });
@@ -980,12 +997,60 @@ class AiLogic {
                         cache.updateTeam(team.id, { deadCapItems: [...existing, action.deadCapItem] });
                     }
                     this.updateTeamCap(team.id);
-                    txsToCommit.push({
+                    const restructureTransaction = {
                         type: 'RESTRUCTURE', seasonId, week, teamId: team.id,
                         details: { playerId: player.id, convertAmount: action.conversionAmount, relief: action.relief, aiInitiated: true },
-                    });
+                    };
+                    txsToCommit.push(restructureTransaction);
+                    // Provenance is meaningful only while transactions are staged:
+                    // an already-persisted restructure must never be retroactively removed.
+                    if (restructureProvenanceByTeam instanceof Map && Array.isArray(transactionSink)) {
+                        let teamProvenance = restructureProvenanceByTeam.get(team.id);
+                        if (!(teamProvenance instanceof Map)) {
+                            teamProvenance = new Map();
+                            restructureProvenanceByTeam.set(team.id, teamProvenance);
+                        }
+                        if (!teamProvenance.has(player.id)) {
+                            teamProvenance.set(player.id, {
+                                originalContract,
+                                deadCapItem: action.deadCapItem ?? null,
+                                transaction: restructureTransaction,
+                            });
+                        }
+                    }
                 } else if (action.type === 'RELEASE') {
-                    cache.updatePlayer(player.id, { teamId: null, status: 'free_agent' });
+                    const priorEntry = action.supersededPriorRestructure
+                        ? priorRestructureProvenance?.get(player.id)
+                        : null;
+                    cache.updatePlayer(player.id, {
+                        ...(priorEntry?.originalContract ? { contract: { ...priorEntry.originalContract } } : {}),
+                        teamId: null,
+                        status: 'free_agent',
+                    });
+                    if (priorEntry) {
+                        const currentTeam = cache.getTeam(team.id);
+                        const existingItems = Array.isArray(currentTeam?.deadCapItems) ? currentTeam.deadCapItems : [];
+                        const targetJson = priorEntry.deadCapItem ? JSON.stringify(priorEntry.deadCapItem) : null;
+                        let deadCapItemIndex = -1;
+                        if (targetJson !== null) {
+                            for (let index = existingItems.length - 1; index >= 0; index -= 1) {
+                                if (JSON.stringify(existingItems[index]) === targetJson) {
+                                    deadCapItemIndex = index;
+                                    break;
+                                }
+                            }
+                        }
+                        if (deadCapItemIndex >= 0) {
+                            const restoredItems = existingItems.slice();
+                            restoredItems.splice(deadCapItemIndex, 1);
+                            cache.updateTeam(team.id, { deadCapItems: restoredItems });
+                        }
+                        if (Array.isArray(transactionSink) && priorEntry.transaction) {
+                            const stagedIndex = transactionSink.indexOf(priorEntry.transaction);
+                            if (stagedIndex >= 0) transactionSink.splice(stagedIndex, 1);
+                        }
+                        priorRestructureProvenance.delete(player.id);
+                    }
                     const t = cache.getTeam(team.id);
                     if (action.currentYearDead > 0) {
                         cache.updateTeam(team.id, { deadCap: Math.round(((t.deadCap ?? 0) + action.currentYearDead) * 100) / 100 });

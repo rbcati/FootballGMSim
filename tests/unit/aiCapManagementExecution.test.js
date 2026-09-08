@@ -117,6 +117,93 @@ describe('executeAICapManagement — legality & structure', () => {
     };
   }
 
+  it('supersedes an earlier same-command restructure when a targeted retry releases that player', async () => {
+    const players = new Map();
+    players.set('x', {
+      id: 'x', teamId: 31, pos: 'QB', ovr: 90, age: 28, status: 'active',
+      contract: contract(40, 8, 4, 4),
+    });
+    const floors = { QB: 2, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1 };
+    let i = 0;
+    for (const [pos, count] of Object.entries(floors)) {
+      for (let n = 0; n < count; n += 1) {
+        const id = `floor-${i++}`;
+        players.set(id, { id, teamId: 31, pos, ovr: 60, status: 'active', contract: contract(0, 0, 1, 1) });
+      }
+    }
+    while ([...players.values()].filter((player) => player.teamId === 31).length < 52) {
+      const id = `depth-${i++}`;
+      players.set(id, { id, teamId: 31, pos: 'WR', ovr: 60, status: 'active', contract: contract(0, 0, 1, 1) });
+    }
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's7', currentWeek: 1, year: 2032, phase: 'preseason' },
+      teams: new Map([[31, { id: 31, abbr: 'AI31', capTotal: LIVE_CAP, deadCap: 0, deadCapItems: [] }]]),
+      players,
+    };
+    const originalContract = JSON.parse(JSON.stringify(players.get('x').contract));
+    const staged = [];
+    const provenance = new Map();
+
+    const first = await AiLogic.executeAICapManagement({
+      teamIds: [31],
+      rosterCompletionReserveByTeam: new Map([[31, 70]]),
+      transactionSink: staged,
+      restructureProvenanceByTeam: provenance,
+    });
+    expect(first.failures).toEqual([]);
+    expect(staged).toEqual([expect.objectContaining({ type: 'RESTRUCTURE', details: expect.objectContaining({ playerId: 'x' }) })]);
+    expect(players.get('x').contract).not.toEqual(originalContract);
+
+    const second = await AiLogic.executeAICapManagement({
+      teamIds: [31],
+      rosterCompletionReserveByTeam: new Map([[31, 90]]),
+      transactionSink: staged,
+      restructureProvenanceByTeam: provenance,
+    });
+
+    expect(second.failures).toEqual([]);
+    expect(players.get('x')).toMatchObject({ teamId: null, status: 'free_agent', contract: originalContract });
+    expect(staged).toEqual([expect.objectContaining({ type: 'RELEASE', details: expect.objectContaining({ playerId: 'x' }) })]);
+    expect(h.state.store.teams.get(31).deadCapItems).toEqual([]);
+    const directRelease = AiLogic._releaseDeadCapSplit({ contract: originalContract });
+    expect(h.state.store.teams.get(31).deadCap).toBe(directRelease.currentYearDead);
+    expect(h.state.store.teams.get(31).deadMoneyNextYear).toBe(directRelease.futureYearsDead);
+    expect(provenance.get(31)?.has('x')).toBe(false);
+  });
+
+  it('uses the current contract when releasing a historically restructured player without command provenance', () => {
+    const historicalContract = {
+      ...contract(20, 20, 4, 4),
+      restructured: true,
+      restructureCount: 1,
+      lastRestructuredSeason: 2031,
+      restructureHistory: [{ season: 2031, conversionAmount: 10 }],
+    };
+    const roster = [{ id: 'historical', teamId: 31, pos: 'QB', ovr: 90, contract: historicalContract }];
+    const floors = { QB: 2, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1 };
+    let index = 0;
+    for (const [pos, count] of Object.entries(floors)) {
+      for (let n = 0; n < count; n += 1) {
+        roster.push({ id: `historical-floor-${index++}`, teamId: 31, pos, ovr: 60, contract: contract(0) });
+      }
+    }
+    while (roster.length < 52) roster.push({ id: `historical-depth-${index++}`, teamId: 31, pos: 'WR', ovr: 60, contract: contract(0) });
+
+    const plan = AiLogic.buildAiCapCompliancePlan({ id: 31, deadCap: 0 }, roster, {
+      legalCap: LIVE_CAP,
+      season: 2032,
+      rosterCompletionReserve: 90,
+    });
+    const release = plan.actions.find((action) => action.type === 'RELEASE' && action.playerId === 'historical');
+    const expected = AiLogic._releaseDeadCapSplit({ contract: historicalContract });
+
+    expect(release).toMatchObject({
+      currentYearDead: expected.currentYearDead,
+      futureYearsDead: expected.futureYearsDead,
+    });
+    expect(release?.supersededPriorRestructure).not.toBe(true);
+  });
+
   it('uses reconciliation actual completion reserve during targeted cap management', async () => {
     h.state.store = underfilledRestructureStore();
     const first = await AiLogic.ensureMinimumRosters({ includeUserTeam: false });

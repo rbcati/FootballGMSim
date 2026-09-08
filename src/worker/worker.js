@@ -3202,6 +3202,7 @@ async function handleAdvanceWeek(payload, id) {
   // whose pre-cutdown payroll happens to exceed that season's grown cap.
   let preseasonSnapshot = null;
   const preseasonTransactions = [];
+  const preseasonRestructureProvenance = new Map();
   if (meta.phase === 'preseason') {
     const batchSim = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
     const rosterLimit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
@@ -3251,6 +3252,7 @@ async function handleAdvanceWeek(payload, id) {
     await AiLogic.executeAICapManagement({
       autoManageUserCap: batchSim,
       transactionSink: preseasonTransactions,
+      restructureProvenanceByTeam: preseasonRestructureProvenance,
     });
 
     // Cap management above reserves the exact room needed by an underfilled
@@ -3268,6 +3270,7 @@ async function handleAdvanceWeek(payload, id) {
         rosterCompletionReserveByTeam: rosterCompletionReserveMap(reconciliation.failures),
         rosterCompletionCandidateIdsByTeam: reconciliation.completionCandidateIdsByTeam,
         transactionSink: preseasonTransactions,
+        restructureProvenanceByTeam: preseasonRestructureProvenance,
       });
       reconciliation = await AiLogic.ensureMinimumRosters({
         includeUserTeam: batchSim,
@@ -13400,6 +13403,7 @@ function rosterCompletionReserveMap(failures = []) {
 async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSeasonId, nextEconomy, includeUserTeam }) {
   const snapshot = cache.snapshotStartNewSeasonState();
   const stagedTransactions = [];
+  const restructureProvenance = new Map();
   try {
     for (const team of cache.getAllTeams()) {
       cache.updateTeam(team.id, {
@@ -13437,6 +13441,7 @@ async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSea
         rosterCompletionReserveByTeam: rosterCompletionReserveMap(reconciliation.failures),
         rosterCompletionCandidateIdsByTeam: reconciliation.completionCandidateIdsByTeam,
         transactionSink: stagedTransactions,
+        restructureProvenanceByTeam: restructureProvenance,
       });
       reconciliation = await AiLogic.ensureMinimumRosters({
         includeUserTeam,
@@ -13666,6 +13671,7 @@ async function handleStartNewSeason(payload, id) {
   });
 
   const rolloverTransactions = [];
+  const rolloverRestructureProvenance = new Map();
   let rolloverReconciliation = await AiLogic.ensureMinimumRosters({
     includeUserTeam: rolloverBatchSim,
     transactionSink: rolloverTransactions,
@@ -13679,6 +13685,7 @@ async function handleStartNewSeason(payload, id) {
       rosterCompletionReserveByTeam: rosterCompletionReserveMap(rolloverReconciliation.failures),
       rosterCompletionCandidateIdsByTeam: rolloverReconciliation.completionCandidateIdsByTeam,
       transactionSink: rolloverTransactions,
+      restructureProvenanceByTeam: rolloverRestructureProvenance,
     });
     rolloverReconciliation = await AiLogic.ensureMinimumRosters({
       includeUserTeam: rolloverBatchSim,
