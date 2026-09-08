@@ -688,6 +688,8 @@ export async function bulkWrite({
   seasonStats   = [],
   draftPicks    = [],
   transactions = [],
+  seasons      = [],
+  news         = [],
 } = {}) {
   // Validate records
   const validTeams = teams.map(serializeTeamForPersistence).filter(t => {
@@ -722,6 +724,8 @@ export async function bulkWrite({
   if (validSeasonStats.length)                        needed.add(STORES.PLAYER_STATS);
   if (draftPicks.length)                              needed.add(STORES.DRAFT_PICKS);
   if (transactions.length)                            needed.add(STORES.TRANSACTIONS);
+  if (seasons.length)                                 needed.add(STORES.SEASONS);
+  if (news.length)                                    needed.add(STORES.NEWS);
 
   if (needed.size === 0) return;
 
@@ -747,6 +751,8 @@ export async function bulkWrite({
       }
       for (const pick of draftPicks) tx.objectStore(STORES.DRAFT_PICKS).put(pick);
       for (const transaction of transactions) tx.objectStore(STORES.TRANSACTIONS).add(transaction);
+      for (const season of seasons) tx.objectStore(STORES.SEASONS).put(season);
+      for (const item of news) tx.objectStore(STORES.NEWS).add(item);
     } catch (error) {
       tx.abort();
       reject(error);

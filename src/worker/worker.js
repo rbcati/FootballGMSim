@@ -1960,7 +1960,7 @@ async function createUniqueLeagueId() {
  *   "Failed to store record in an IDBObjectStore: Evaluating the object store's
  *    key path did not yield a value."
  */
-async function flushDirty(forceFlush = false, { transactions = [] } = {}) {
+async function flushDirty(forceFlush = false, { transactions = [], seasons = [], archivedPlayerStats = [], news = [] } = {}) {
   const __profileToken = offseasonProfiler.start('persistence.flushDirty', { forceFlush });
   try {
   // PRIMARY iOS GUARD: Never flush until a save has been explicitly loaded or created.
@@ -1971,7 +1971,8 @@ async function flushDirty(forceFlush = false, { transactions = [] } = {}) {
   }
 
   const hasPendingBatchDirty = hasDirtySnapshot(pendingBatchDirty);
-  if (!cache.isDirty() && !hasPendingBatchDirty && transactions.length === 0) return;
+  if (!cache.isDirty() && !hasPendingBatchDirty && transactions.length === 0
+      && seasons.length === 0 && archivedPlayerStats.length === 0 && news.length === 0) return;
 
   // SECONDARY SAFETY CHECK: Never flush if cache isn't fully loaded (prevent empty overwrite)
   if (!cache.isLoaded()) {
@@ -1995,7 +1996,8 @@ async function flushDirty(forceFlush = false, { transactions = [] } = {}) {
     ? mergeDirtySnapshots(pendingBatchDirty, currentDirty)
     : currentDirty;
 
-  if (!hasDirtySnapshot(dirty) && transactions.length === 0) return;
+  if (!hasDirtySnapshot(dirty) && transactions.length === 0
+      && seasons.length === 0 && archivedPlayerStats.length === 0 && news.length === 0) return;
 
   // Resolve dirty IDs → full objects, dropping any that are null (already deleted).
   const teams   = dirty.teams.map(id => cache.getTeam(id)).filter(Boolean);
@@ -2074,9 +2076,11 @@ async function flushDirty(forceFlush = false, { transactions = [] } = {}) {
       players,
       playerDeletes,
       games:         validGames,
-      seasonStats,
+      seasonStats: [...seasonStats, ...archivedPlayerStats],
       draftPicks,
       transactions,
+      seasons,
+      news,
     });
     // The save-list manifest lives in a separate database and cannot join the
     // league transaction. Update it only after the authoritative league commit;
@@ -12656,8 +12660,30 @@ function _initCombineWeek() {
  * - Writes accolades (MVP, OPOY, DPOY, SB Ring, SB MVP) to player objects.
  * - Clears in-memory season stats.
  */
-async function archiveSeason(seasonId) {
+async function archiveSeason(seasonId, { stagedArchive = null } = {}) {
   try {
+    const archiveFlush = stagedArchive ? async () => {} : flushDirty;
+    const archiveNews = stagedArchive
+      ? async (type, text, teamId = null, extraData = {}) => {
+          const currentMeta = cache.getMeta();
+          if (!currentMeta) return;
+          stagedArchive.news.push({
+            seasonId: currentMeta.currentSeasonId,
+            year: currentMeta.year,
+            week: currentMeta.currentWeek,
+            timestamp: Date.now(),
+            type,
+            text,
+            teamId,
+            ...extraData,
+          });
+        }
+      : (...args) => NewsEngine.logNews(...args);
+    const archiveAward = async (type, winner) => {
+      if (type !== 'MVP') return;
+      const awardTeam = cache.getTeam(winner.teamId);
+      await archiveNews('AWARD', `${winner.pos} ${winner.name} (${awardTeam ? awardTeam.abbr : 'FA'}) has been named League MVP.`, winner.teamId);
+    };
     let meta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
     const teams = cache.getAllTeams();
     const seasonGames = await Games.bySeason(seasonId).catch(() => []);
@@ -12669,7 +12695,7 @@ async function archiveSeason(seasonId) {
     }
 
     // 1. Ensure DB is up to date
-    await flushDirty();
+    await archiveFlush();
 
     // 2. Get all season stats and CLEAR them from cache
     const seasonStats = cache.archiveSeasonStats();
@@ -12680,7 +12706,8 @@ async function archiveSeason(seasonId) {
             ...s,
             id: `${s.seasonId}_${s.playerId}`
         }));
-        await PlayerStats.saveBulk(statsToSave);
+        if (stagedArchive) stagedArchive.playerStats.push(...statsToSave);
+        else await PlayerStats.saveBulk(statsToSave);
     }
 
     // Helper to resolve player info (active or retired/db)
@@ -12797,7 +12824,7 @@ async function archiveSeason(seasonId) {
     if (awards.mvp?.playerId != null) {
       await grantAccolade(awards.mvp.playerId, { type: 'MVP', year, seasonId });
       // Log MVP to News
-      await NewsEngine.logAward('MVP', { ...awards.mvp, teamId: awards.mvp.teamId });
+      await archiveAward('MVP', { ...awards.mvp, teamId: awards.mvp.teamId });
     }
     if (awards.opoy?.playerId != null) {
       await grantAccolade(awards.opoy.playerId, { type: 'OPOY', year, seasonId });
@@ -12823,7 +12850,7 @@ async function archiveSeason(seasonId) {
     }
     if (awards.coachOfTheYear?.teamId != null) {
       const coachTeam = cache.getTeam(awards.coachOfTheYear.teamId);
-      await NewsEngine.logNews(
+      await archiveNews(
         'AWARD',
         `${awards.coachOfTheYear.coachName} wins Coach of the Year after leading ${coachTeam?.abbr ?? 'their team'} to ${coachTeam?.wins ?? 0} wins.`,
         awards.coachOfTheYear.teamId,
@@ -12856,7 +12883,7 @@ async function archiveSeason(seasonId) {
     }
 
     // Flush accolade writes to DB
-    await flushDirty();
+    await archiveFlush();
 
     // Captured across the award + prestige blocks below to build the compact
     // meta.awardHistory ledger (Awards & Honors Expansion V2) once both run.
@@ -12894,7 +12921,7 @@ async function archiveSeason(seasonId) {
         const winner = awardResults.playerAwards.find(a => a.type === type);
         if (!winner) continue;
         const wTeam = cache.getTeam(winner.teamId);
-        await NewsEngine.logNews(
+        await archiveNews(
           'AWARD',
           `AWARD: ${winner.pos} ${winner.name} (${wTeam?.abbr ?? 'FA'}) wins the ${label}.`,
           winner.teamId,
@@ -12905,7 +12932,7 @@ async function archiveSeason(seasonId) {
       // Emit news item for All-Pro team
       if (awardResults.allProTeam.length > 0) {
         const names = awardResults.allProTeam.slice(0, 4).map(a => a.name).filter(Boolean).join(', ');
-        await NewsEngine.logNews(
+        await archiveNews(
           'AWARD',
           `First Team All-Pro announced: ${names}${awardResults.allProTeam.length > 4 ? ` and ${awardResults.allProTeam.length - 4} more` : ''}.`,
           null,
@@ -12917,7 +12944,7 @@ async function archiveSeason(seasonId) {
       const champFA = awardResults.franchiseAwards.find(a => a.type === ENGINE_AWARD_TYPES.LEAGUE_CHAMPION);
       if (champFA) {
         const champT = cache.getTeam(champFA.teamId);
-        await NewsEngine.logNews(
+        await archiveNews(
           'AWARD',
           `CHAMPIONS: The ${champT?.name ?? champFA.teamId} have won the championship!`,
           champFA.teamId,
@@ -12961,7 +12988,7 @@ async function archiveSeason(seasonId) {
       for (const p of playersPostAward) {
         const milestone = checkCareerMilestones(p, year);
         if (!milestone) continue;
-        await NewsEngine.logNews(
+        await archiveNews(
           'MILESTONE',
           milestone.type === '300_CAREER_TDs'
             ? `MILESTONE: ${p.pos} ${p.name} reached ${milestone.totalTDs} career touchdowns!`
@@ -12989,7 +13016,7 @@ async function archiveSeason(seasonId) {
         cache.setMeta({ franchiseChronicle: mergeLeaguePulseItems(existingPulse, newPulseItems) });
       }
 
-      await flushDirty();
+      await archiveFlush();
     } catch (awardEngineErr) {
       console.error('[Worker] Award engine V1 failed (non-fatal):', awardEngineErr);
     }
@@ -13026,7 +13053,7 @@ async function archiveSeason(seasonId) {
 
         // News: individual inductee items
         for (const entry of inducted) {
-          await NewsEngine.logNews(
+          await archiveNews(
             'HOF',
             `HALL OF FAME: ${entry.pos} ${entry.playerName} has been inducted into the Hall of Fame!`,
             null,
@@ -13037,7 +13064,7 @@ async function archiveSeason(seasonId) {
         // News: HOF class announcement
         if (inducted.length > 0) {
           const names = inducted.map(e => e.playerName).filter(Boolean).join(', ');
-          await NewsEngine.logNews(
+          await archiveNews(
             'HOF',
             `The ${year} Hall of Fame class has been announced: ${names}.`,
             null,
@@ -13058,7 +13085,7 @@ async function archiveSeason(seasonId) {
           cache.setMeta({ franchiseChronicle: mergeLeaguePulseItems(currentPulse, [hofPulseItem]) });
         }
 
-        await flushDirty();
+        await archiveFlush();
       }
     } catch (hofErr) {
       console.error('[Worker] HOF Engine V1 failed (non-fatal):', hofErr);
@@ -13104,7 +13131,7 @@ async function archiveSeason(seasonId) {
         });
         const currentAwardHistory = hydrateAwardHistory(cache.getMeta());
         cache.setMeta({ awardHistory: appendAwardHistory(currentAwardHistory, historyEntry) });
-        await flushDirty();
+        await archiveFlush();
       }
     } catch (awardHistoryErr) {
       console.error('[Worker] Award History V2 failed (non-fatal):', awardHistoryErr);
@@ -13121,7 +13148,7 @@ async function archiveSeason(seasonId) {
     // Log broken records as news
     for (const br of brokenRecords.slice(0, 5)) {
       const typeLabel = br.type === 'singleSeason' ? 'Single-Season' : 'All-Time Career';
-      await NewsEngine.logNews(
+      await archiveNews(
         'RECORD',
         `RECORD BROKEN: ${br.player} (${br.pos}, ${br.team}) set a new ${typeLabel} ${br.label} record with ${br.newValue.toLocaleString()}!`,
         null,
@@ -13129,7 +13156,7 @@ async function archiveSeason(seasonId) {
       );
     }
 
-    await flushDirty();
+    await archiveFlush();
 
     const championSummary = champion ? { id: champion.id, name: champion.name, abbr: champion.abbr, wins: champion.wins ?? null } : null;
     const runnerUpTeam = runnerUpTeamFromFinal ?? null;
@@ -13276,7 +13303,7 @@ async function archiveSeason(seasonId) {
         : [{ type: 'HOF', year, reasons: row.reasons, score: row.legacyScore }];
       cache.updatePlayer(row.playerId, { hof: true, hofScore: row.legacyScore, hofReasons: row.reasons, accolades: accoladeTrail });
       try {
-        await NewsEngine.logNews('HOF', `LEGEND CROWNED: ${row.pos} ${row.name} has been enshrined into the Hall of Fame, cementing an unforgettable legacy!`);
+        await archiveNews('HOF', `LEGEND CROWNED: ${row.pos} ${row.name} has been enshrined into the Hall of Fame, cementing an unforgettable legacy!`);
       } catch (err) {
         console.error('[Worker] HOF archive news log failed (non-fatal):', err);
       }
@@ -13350,16 +13377,11 @@ async function archiveSeason(seasonId) {
       hallOfFame: memoryMeta.hallOfFame,
     });
 
-    await Seasons.save(seasonSummary);
+    if (stagedArchive) stagedArchive.seasons.push(seasonSummary);
+    else await Seasons.save(seasonSummary);
   } catch (error) {
     console.error(`[Worker] Failed to archive season ${seasonId}:`, error);
-    // Don't rethrow, just log, so the season reset can theoretically proceed (though risking data loss)
-    // or maybe we should stop?
-    // If we stop, the user is stuck.
-    // Proceeding implies we might lose history but the game continues.
-    // The prompt says "prevent silent crashes". Logging is good.
-    // We should probably ensure `Seasons.save` is at least attempted or we notify user.
-    // But for now, catching effectively prevents the crash.
+    if (stagedArchive) throw error;
   }
 }
 
@@ -13486,9 +13508,17 @@ async function handleStartNewSeason(payload, id) {
     console.warn('[Worker] Recovered new-season schedule via simple validated fallback.');
   }
 
-  // Archive only after the roster/cap preflight has proved rollover can commit.
+  // Build archive rows and cache mutations now, but persist them only at the
+  // final league commit point with rollover state and transactions.
+  const stagedArchive = { seasons: [], playerStats: [], news: [] };
   if (meta.currentSeasonId) {
-    await archiveSeason(meta.currentSeasonId);
+    try {
+      await archiveSeason(meta.currentSeasonId, { stagedArchive });
+    } catch (error) {
+      restoreLifecyclePersistenceState(rolloverSnapshot);
+      post(toUI.ERROR, { message: `Could not prepare the completed-season archive: ${error?.message ?? error}` }, id);
+      return;
+    }
   }
 
   // ── Front office persona drift (offseason, deterministic) ───────────────────
@@ -13689,7 +13719,12 @@ async function handleStartNewSeason(payload, id) {
     // State and staged roster/cap transactions share one league-IDB transaction.
     // A failed commit therefore leaves neither half-advanced state nor orphan
     // transaction rows, and the in-memory snapshot remains safe to retry.
-    await flushDirty(true, { transactions: rolloverTransactions });
+    await flushDirty(true, {
+      transactions: rolloverTransactions,
+      seasons: stagedArchive.seasons,
+      archivedPlayerStats: stagedArchive.playerStats,
+      news: stagedArchive.news,
+    });
   } catch (error) {
     restoreLifecyclePersistenceState(rolloverSnapshot);
     post(toUI.ERROR, { message: `Could not persist the new season: ${error?.message ?? error}` }, id);
