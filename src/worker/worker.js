@@ -1960,7 +1960,10 @@ async function createUniqueLeagueId() {
  *   "Failed to store record in an IDBObjectStore: Evaluating the object store's
  *    key path did not yield a value."
  */
-async function flushDirty(forceFlush = false, { transactions = [], seasons = [], archivedPlayerStats = [], news = [] } = {}) {
+async function flushDirty(forceFlush = false, {
+  transactions = [], seasons = [], archivedPlayerStats = [], news = [],
+  deferManifestUntilAfterCommit = false,
+} = {}) {
   const __profileToken = offseasonProfiler.start('persistence.flushDirty', { forceFlush });
   try {
   // PRIMARY iOS GUARD: Never flush until a save has been explicitly loaded or created.
@@ -2067,7 +2070,7 @@ async function flushDirty(forceFlush = false, { transactions = [], seasons = [],
     // Preserve the established generic flush ordering. Lifecycle commits with
     // staged transaction rows defer this cross-database manifest until after
     // the authoritative league transaction reaches its commit point.
-    if (saveManifest && transactions.length === 0) await Saves.save(saveManifest);
+    if (saveManifest && !deferManifestUntilAfterCommit && transactions.length === 0) await Saves.save(saveManifest);
 
     // bulkWrite itself also validates before each put — belt-and-suspenders.
     await bulkWrite({
@@ -2085,7 +2088,7 @@ async function flushDirty(forceFlush = false, { transactions = [], seasons = [],
     // The save-list manifest lives in a separate database and cannot join the
     // league transaction. Update it only after the authoritative league commit;
     // it is an index/heartbeat, not league state.
-    if (saveManifest && transactions.length > 0) await Saves.save(saveManifest).catch((error) => {
+    if (saveManifest && (deferManifestUntilAfterCommit || transactions.length > 0)) await Saves.save(saveManifest).catch((error) => {
       console.warn('[Worker] save manifest update failed after league commit:', error);
     });
   } catch (writeErr) {
@@ -3267,8 +3270,8 @@ async function handleAdvanceWeek(payload, id) {
       await AiLogic.executeAICapManagement({
         autoManageUserCap: batchSim,
         teamIds: reconciliation.failures.map((failure) => failure.teamId),
-        rosterCompletionReserveByTeam: rosterCompletionReserveMap(reconciliation.failures),
-        rosterCompletionCandidateIdsByTeam: reconciliation.completionCandidateIdsByTeam,
+        rosterCompletionReserveByTeam: rosterCompletionReserveMap(reconciliation),
+        rosterCompletionCandidateIdsByTeam: rosterCompletionCandidateMap(reconciliation),
         transactionSink: preseasonTransactions,
         restructureProvenanceByTeam: preseasonRestructureProvenance,
       });
@@ -3335,7 +3338,7 @@ async function handleAdvanceWeek(payload, id) {
     // V1 Coaching Carousel: clear the coaching market at end of preseason.
     cache.setMeta({ phase: 'regular', currentWeek: 1, coachingMarket: [] });
     try {
-      await flushDirty(true, { transactions: preseasonTransactions });
+      await flushDirty(true, { transactions: preseasonTransactions, deferManifestUntilAfterCommit: true });
     } catch (error) {
       restoreLifecyclePersistenceState(preseasonSnapshot);
       post(toUI.ERROR, { message: `Could not start the regular season: ${error?.message ?? error}` }, id);
@@ -13390,7 +13393,9 @@ async function archiveSeason(seasonId, { stagedArchive = null } = {}) {
 
 // ── Handler: START_NEW_SEASON ─────────────────────────────────────────────────
 
-function rosterCompletionReserveMap(failures = []) {
+function rosterCompletionReserveMap(reconciliation = {}) {
+  if (reconciliation?.recoveryReserveByTeam?.size) return reconciliation.recoveryReserveByTeam;
+  const failures = Array.isArray(reconciliation) ? reconciliation : reconciliation?.failures ?? [];
   return new Map(
     failures
       .filter((failure) => failure.cheapestActualCompletionCost !== null
@@ -13398,6 +13403,12 @@ function rosterCompletionReserveMap(failures = []) {
         && Number.isFinite(Number(failure.cheapestActualCompletionCost)))
       .map((failure) => [failure.teamId, Number(failure.cheapestActualCompletionCost)]),
   );
+}
+
+function rosterCompletionCandidateMap(reconciliation = {}) {
+  return reconciliation?.recoveryCandidateIdsByTeam?.size
+    ? reconciliation.recoveryCandidateIdsByTeam
+    : reconciliation?.completionCandidateIdsByTeam;
 }
 
 async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSeasonId, nextEconomy, includeUserTeam }) {
@@ -13438,8 +13449,8 @@ async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSea
       await AiLogic.executeAICapManagement({
         autoManageUserCap: includeUserTeam,
         teamIds: reconciliation.failures.map((failure) => failure.teamId),
-        rosterCompletionReserveByTeam: rosterCompletionReserveMap(reconciliation.failures),
-        rosterCompletionCandidateIdsByTeam: reconciliation.completionCandidateIdsByTeam,
+        rosterCompletionReserveByTeam: rosterCompletionReserveMap(reconciliation),
+        rosterCompletionCandidateIdsByTeam: rosterCompletionCandidateMap(reconciliation),
         transactionSink: stagedTransactions,
         restructureProvenanceByTeam: restructureProvenance,
       });
@@ -13682,8 +13693,8 @@ async function handleStartNewSeason(payload, id) {
     await AiLogic.executeAICapManagement({
       autoManageUserCap: rolloverBatchSim,
       teamIds: rolloverReconciliation.failures.map((failure) => failure.teamId),
-      rosterCompletionReserveByTeam: rosterCompletionReserveMap(rolloverReconciliation.failures),
-      rosterCompletionCandidateIdsByTeam: rolloverReconciliation.completionCandidateIdsByTeam,
+      rosterCompletionReserveByTeam: rosterCompletionReserveMap(rolloverReconciliation),
+      rosterCompletionCandidateIdsByTeam: rosterCompletionCandidateMap(rolloverReconciliation),
       transactionSink: rolloverTransactions,
       restructureProvenanceByTeam: rolloverRestructureProvenance,
     });
@@ -13731,6 +13742,7 @@ async function handleStartNewSeason(payload, id) {
       seasons: stagedArchive.seasons,
       archivedPlayerStats: stagedArchive.playerStats,
       news: stagedArchive.news,
+      deferManifestUntilAfterCommit: true,
     });
   } catch (error) {
     restoreLifecyclePersistenceState(rolloverSnapshot);

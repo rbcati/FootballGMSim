@@ -480,6 +480,54 @@ describe('executeAICapManagement — legality & structure', () => {
 });
 
 describe('ensureMinimumRosters — stable rollover legality', () => {
+  it('prunes an insolvent 10-slot roster deficit before exploring the large FA pool', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: 50.5 }, currentSeasonId: 's8', currentWeek: 1, year: 2033, phase: 'preseason' },
+      teams: new Map([[1, { id: 1, abbr: 'SHORT', capTotal: 50.5, deadCap: 0 }]]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 43; i += 1) {
+      h.state.store.players.set(`owned-${i}`, { id: `owned-${i}`, teamId: 1, pos: 'WR', ovr: 60, status: 'active', contract: contract(1) });
+    }
+    for (let i = 0; i < 100; i += 1) {
+      h.state.store.players.set(`fa-${i}`, { id: `fa-${i}`, teamId: null, pos: i % 2 ? 'CB' : 'S', ovr: 59, status: 'free_agent' });
+    }
+
+    const result = await AiLogic.ensureMinimumRosters({ includeUserTeam: true });
+
+    expect(result.failures).toHaveLength(1);
+    expect(result.searchDiagnostics.lowerBoundPrunes).toBeGreaterThan(0);
+    expect(result.searchDiagnostics.exploredStates).toBeLessThan(20);
+    expect(result.searchDiagnostics.exhausted).toBe(false);
+    expect(h.mockCache.getPlayersByTeam(1)).toHaveLength(43);
+  });
+
+  it('builds one shared recovery assignment instead of reserving the same cheap FA twice', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: 52.8 }, currentSeasonId: 's8', currentWeek: 1, year: 2033, phase: 'preseason' },
+      teams: new Map([
+        [1, { id: 1, abbr: 'A', capTotal: 52.8, deadCap: 0 }],
+        [2, { id: 2, abbr: 'B', capTotal: 52.8, deadCap: 0 }],
+      ]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 52; i += 1) {
+      h.state.store.players.set(`a-${i}`, { id: `a-${i}`, teamId: 1, pos: 'WR', ovr: 60, status: 'active', contract: contract(1) });
+      h.state.store.players.set(`b-${i}`, { id: `b-${i}`, teamId: 2, pos: 'WR', ovr: 60, status: 'active', contract: contract(1) });
+    }
+    h.state.store.players.set('cheap', { id: 'cheap', teamId: null, pos: 'CB', ovr: 59, status: 'free_agent' });
+    h.state.store.players.set('market', { id: 'market', teamId: null, pos: 'CB', ovr: 68, potential: 68, age: 27, status: 'free_agent' });
+
+    const result = await AiLogic.ensureMinimumRosters({ includeUserTeam: true });
+    const plannedIds = [...result.recoveryCandidateIdsByTeam.values()].flat();
+
+    expect(result.failures).toHaveLength(2);
+    expect(new Set(plannedIds)).toEqual(new Set(['cheap', 'market']));
+    expect(plannedIds).toHaveLength(2);
+    expect([...result.recoveryReserveByTeam.values()].some((room) => room > 0.8)).toBe(true);
+    expect(h.state.txLog).toEqual([]);
+  });
+
   it('preserves a scarce affordable replacement for the more constrained team', async () => {
     h.state.store = {
       meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's8', currentWeek: 1, year: 2033, phase: 'preseason' },

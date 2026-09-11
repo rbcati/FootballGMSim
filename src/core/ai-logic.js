@@ -529,32 +529,84 @@ class AiLogic {
         // recomputing team-specific needs and canonical offers after each
         // projected signing. Most-constrained-first ordering prunes shared-pool
         // conflicts without changing a team's preference order.
-        const findCompletion = (rosters, available, plan) => {
+        const searchDiagnostics = { exploredStates: 0, memoHits: 0, lowerBoundPrunes: 0, exhausted: false };
+        const findCompletion = (rosters, available, plan, {
+            affordableOnly = true,
+            failedStates = new Set(),
+            maxStates = 20000,
+        } = {}) => {
+            searchDiagnostics.exploredStates += 1;
+            if (searchDiagnostics.exploredStates > maxStates) {
+                searchDiagnostics.exhausted = true;
+                return null;
+            }
             const remainingSlots = underfilled.reduce(
                 (sum, team) => sum + Math.max(0, minimum - (rosters.get(team.id)?.length ?? 0)), 0,
             );
             if (remainingSlots === 0) return plan;
             if (available.length < remainingSlots) return null;
 
+            // Every canonical emergency offer costs at least the league minimum.
+            // This cheap necessary-condition check prevents large, obviously
+            // insolvent rosters from entering the combinatorial search at all.
+            if (affordableOnly && underfilled.some((team) => {
+                const roster = rosters.get(team.id) ?? [];
+                const deficit = Math.max(0, minimum - roster.length);
+                if (deficit === 0) return false;
+                const freshTeam = cache.getTeam(team.id) ?? team;
+                const cap = buildTeamCapSnapshot({
+                    team: freshTeam,
+                    roster,
+                    salaryCap: resolveLiveCapForMinimumRoster(freshTeam, meta),
+                });
+                return Number(cap.capRoom ?? 0) + 0.01 < deficit * minimumRosterCapHit();
+            })) {
+                searchDiagnostics.lowerBoundPrunes += 1;
+                return null;
+            }
+
+            const stateKey = underfilled.map((team) => {
+                const originalIds = new Set((projectedRosters.get(team.id) ?? []).map((player) => String(player.id)));
+                const additions = (rosters.get(team.id) ?? [])
+                    .filter((player) => !originalIds.has(String(player.id)))
+                    .map((player) => `${player.id}:${Number(getActiveCapHit(player) ?? 0).toFixed(2)}`)
+                    .sort();
+                return `${team.id}=${additions.join(',')}`;
+            }).join('|');
+            if (failedStates.has(stateKey)) {
+                searchDiagnostics.memoHits += 1;
+                return null;
+            }
+
             const demands = underfilled.map((team) => {
                 const roster = rosters.get(team.id) ?? [];
-                return { team, roster, deficit: Math.max(0, minimum - roster.length), rows: candidateRows(team, roster, available) };
+                return { team, roster, deficit: Math.max(0, minimum - roster.length), rows: candidateRows(team, roster, available, affordableOnly) };
             }).filter((row) => row.deficit > 0)
               .sort((a, b) => (a.rows.length - b.rows.length)
                   || (b.deficit - a.deficit)
                   || stableIdCompare(a.team?.id, b.team?.id));
             const demand = demands[0];
-            if (!demand || demand.rows.length === 0) return null;
-            for (const row of demand.rows) {
+            if (!demand || demand.rows.length < demand?.deficit) {
+                failedStates.add(stateKey);
+                return null;
+            }
+            const rows = affordableOnly ? demand.rows : [...demand.rows].sort((a, b) => {
+                const aHit = Number(getActiveCapHit(a.projectedPlayer) ?? 0);
+                const bHit = Number(getActiveCapHit(b.projectedPlayer) ?? 0);
+                return (aHit - bHit) || stableIdCompare(a.player?.id, b.player?.id);
+            });
+            for (const row of rows) {
                 const nextRosters = new Map(rosters);
                 nextRosters.set(demand.team.id, [...demand.roster, row.projectedPlayer]);
                 const nextAvailable = available.filter((player) => String(player.id) !== String(row.player.id));
                 const result = findCompletion(nextRosters, nextAvailable, [
                     ...plan,
                     { teamId: demand.team.id, playerId: row.player.id, contract: row.contract, projectedCapRoom: row.projectedCap?.capRoom },
-                ]);
+                ], { affordableOnly, failedStates, maxStates });
                 if (result) return result;
+                if (searchDiagnostics.exhausted) return null;
             }
+            failedStates.add(stateKey);
             return null;
         };
 
@@ -562,7 +614,25 @@ class AiLogic {
         const failures = [];
         const signedByTeam = [];
         const completionCandidateIdsByTeam = new Map();
+        const recoveryReserveByTeam = new Map();
+        const recoveryCandidateIdsByTeam = new Map();
         if (!plan) {
+            // Current cap can be insufficient even though a shared-pool assignment
+            // exists after targeted cap work. Build that assignment once here so
+            // retries never reserve the same scarce player for multiple teams.
+            const recoveryPlan = findCompletion(projectedRosters, availablePlayers, [], {
+                affordableOnly: false,
+                failedStates: new Set(),
+            });
+            if (recoveryPlan) {
+                for (const step of recoveryPlan) {
+                    const hit = Number(getActiveCapHit({ contract: step.contract }) ?? 0);
+                    recoveryReserveByTeam.set(step.teamId, Math.round(((recoveryReserveByTeam.get(step.teamId) ?? 0) + hit) * 100) / 100);
+                    const ids = recoveryCandidateIdsByTeam.get(step.teamId) ?? [];
+                    ids.push(step.playerId);
+                    recoveryCandidateIdsByTeam.set(step.teamId, ids);
+                }
+            }
             for (const team of underfilled) {
                 const roster = cache.getPlayersByTeam(team.id);
                 const rows = candidateRows(team, roster, availablePlayers, false);
@@ -582,7 +652,7 @@ class AiLogic {
                     remainingSlots,
                     cheapestActualCompletionCost: completion.feasible ? completion.cost : null,
                     availableEligibleMinimumCandidates: completion.candidateCount,
-                    reason: 'no_feasible_completion',
+                    reason: searchDiagnostics.exhausted ? 'completion_search_exhausted' : 'no_feasible_completion',
                 });
             }
             failures.sort((a, b) => {
@@ -594,7 +664,7 @@ class AiLogic {
                     || (a.availableEligibleMinimumCandidates - b.availableEligibleMinimumCandidates)
                     || stableIdCompare(b.teamId, a.teamId);
             });
-            return { failures, signedByTeam, completionCandidateIdsByTeam };
+            return { failures, signedByTeam, completionCandidateIdsByTeam, recoveryReserveByTeam, recoveryCandidateIdsByTeam, searchDiagnostics };
         }
 
         const signedCounts = new Map();
@@ -631,7 +701,7 @@ class AiLogic {
         for (const [teamId, signed] of signedCounts) {
             signedByTeam.push({ teamId, signed, rosterCount: cache.getPlayersByTeam(teamId).length });
         }
-        return { failures, signedByTeam, completionCandidateIdsByTeam };
+        return { failures, signedByTeam, completionCandidateIdsByTeam, recoveryReserveByTeam, recoveryCandidateIdsByTeam, searchDiagnostics };
     }
 
     /**
