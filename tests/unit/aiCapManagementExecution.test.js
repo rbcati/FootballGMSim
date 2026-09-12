@@ -101,6 +101,23 @@ describe('executeAICapManagement — user-team isolation', () => {
 });
 
 describe('executeAICapManagement — legality & structure', () => {
+  it('does not make a projected cap cut its releasing team own replacement', () => {
+    const team = { id: 9, abbr: 'OWN', capTotal: 52.8, deadCap: 0 };
+    const roster = Array.from({ length: 53 }, (_, i) => ({
+      id: `own-${i}`, teamId: 9, pos: 'WR', ovr: 60, status: 'active', contract: contract(1),
+    }));
+
+    const plan = AiLogic.buildAiCapCompliancePlan(team, roster, {
+      legalCap: 52.8,
+      season: 2033,
+      rosterCompletionCandidates: [],
+      rosterCompletionMeta: { year: 2033, phase: 'preseason' },
+    });
+
+    expect(plan.failure).toEqual(expect.objectContaining({ reason: 'no_legal_plan' }));
+    expect(plan.projected.isRosterReadyCompliant).toBe(false);
+  });
+
   function underfilledRestructureStore({ teams = [{ id: 31, reserve: 1.4, candidateOvr: 64, candidatePos: 'RB' }] } = {}) {
     const teamRows = new Map();
     const players = new Map();
@@ -336,7 +353,7 @@ describe('executeAICapManagement — legality & structure', () => {
     expect(plan.failure).toBeNull();
   });
 
-  it('prices every release-created hole from fresh canonical offers', () => {
+  it('prices release-created holes without treating own cuts as fresh offers', () => {
     const roster = releaseReserveRoster({ overage: 0, releasableBase: 10 }).slice(0, 52);
     for (const player of roster) player.ovr = 66;
     const current = roster.reduce((sum, player) => sum + player.contract.baseAnnual, 0);
@@ -361,9 +378,9 @@ describe('executeAICapManagement — legality & structure', () => {
     expect(plan.projected.missingRosterSlots).toBe(1 + releases.length);
     expect(plan.projected.requiredRosterCompletionRoom)
       .toBeGreaterThan(plan.projected.missingRosterSlots * 0.8);
-    expect(plan.projected.actualCompletionOfferCount).toBe(freeAgents.length + releases.length);
-    expect(plan.projected.rosterReadyCommitted).toBeLessThanOrEqual(LIVE_CAP);
-    expect(plan.failure).toBeNull();
+    expect(plan.projected.actualCompletionOfferCount).toBe(freeAgents.length);
+    expect(plan.projected.isRosterReadyCompliant).toBe(false);
+    expect(plan.failure).toEqual(expect.objectContaining({ reason: 'no_legal_plan' }));
   });
 
   it('recomputes completion needs from each projected roster after releases', () => {
@@ -480,6 +497,31 @@ describe('executeAICapManagement — legality & structure', () => {
 });
 
 describe('ensureMinimumRosters — stable rollover legality', () => {
+  it('excludes a same-command cut only from its releasing team emergency pool', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's8', currentWeek: 1, year: 2033, phase: 'preseason' },
+      teams: new Map([
+        [1, { id: 1, abbr: 'CUT', capTotal: LIVE_CAP, deadCap: 0 }],
+        [2, { id: 2, abbr: 'OTHER', capTotal: LIVE_CAP, deadCap: 0 }],
+      ]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 52; i += 1) {
+      h.state.store.players.set(`cut-${i}`, { id: `cut-${i}`, teamId: 1, pos: 'WR', ovr: 60, status: 'active', contract: contract(1) });
+      h.state.store.players.set(`other-${i}`, { id: `other-${i}`, teamId: 2, pos: 'WR', ovr: 60, status: 'active', contract: contract(1) });
+    }
+    h.state.store.players.set('same-command-cut', { id: 'same-command-cut', teamId: null, pos: 'CB', ovr: 61, status: 'free_agent' });
+    h.state.store.players.set('genuine-replacement', { id: 'genuine-replacement', teamId: null, pos: 'CB', ovr: 60, status: 'free_agent' });
+    const releasedPlayerIdsByTeam = new Map([[1, new Set(['same-command-cut'])]]);
+
+    const result = await AiLogic.ensureMinimumRosters({ includeUserTeam: true, releasedPlayerIdsByTeam });
+
+    expect(result.failures).toEqual([]);
+    expect(h.state.store.players.get('same-command-cut').teamId).toBe(2);
+    expect(h.state.store.players.get('genuine-replacement').teamId).toBe(1);
+    expect(h.state.txLog.some((tx) => tx.teamId === 1 && tx.playerId === 'same-command-cut')).toBe(false);
+  });
+
   it('prunes an insolvent 10-slot roster deficit before exploring the large FA pool', async () => {
     h.state.store = {
       meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: 50.5 }, currentSeasonId: 's8', currentWeek: 1, year: 2033, phase: 'preseason' },
@@ -512,13 +554,18 @@ describe('ensureMinimumRosters — stable rollover legality', () => {
       players: new Map(),
     };
     for (let i = 0; i < 52; i += 1) {
-      h.state.store.players.set(`a-${i}`, { id: `a-${i}`, teamId: 1, pos: 'WR', ovr: 60, status: 'active', contract: contract(1) });
-      h.state.store.players.set(`b-${i}`, { id: `b-${i}`, teamId: 2, pos: 'WR', ovr: 60, status: 'active', contract: contract(1) });
+      const ownedContract = i === 0 ? contract(4, 0, 4, 4) : contract(48 / 51);
+      h.state.store.players.set(`a-${i}`, { id: `a-${i}`, teamId: 1, pos: 'WR', ovr: i === 0 ? 90 : 60, status: 'active', contract: ownedContract });
+      h.state.store.players.set(`b-${i}`, { id: `b-${i}`, teamId: 2, pos: 'WR', ovr: i === 0 ? 90 : 60, status: 'active', contract: { ...ownedContract } });
     }
     h.state.store.players.set('cheap', { id: 'cheap', teamId: null, pos: 'CB', ovr: 59, status: 'free_agent' });
     h.state.store.players.set('market', { id: 'market', teamId: null, pos: 'CB', ovr: 68, potential: 68, age: 27, status: 'free_agent' });
 
+    const plannerSpy = vi.spyOn(AiLogic, 'buildAiCapCompliancePlan').mockReturnValue({
+      actions: [], projected: { isRosterReadyCompliant: true }, failure: null,
+    });
     const result = await AiLogic.ensureMinimumRosters({ includeUserTeam: true });
+    plannerSpy.mockRestore();
     const plannedIds = [...result.recoveryCandidateIdsByTeam.values()].flat();
 
     expect(result.failures).toHaveLength(2);

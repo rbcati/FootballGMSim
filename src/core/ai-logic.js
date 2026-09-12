@@ -155,7 +155,7 @@ function cheapestActualCompletion(sortedOffers, slots, excludedPlayerId = null) 
     };
 }
 
-function buildActualCompletionProjection({ players, team, roster, meta, slots }) {
+function buildActualCompletionProjection({ players, team, roster, meta, slots, excludedPlayerIds = null }) {
     const strategy = buildAiTeamStrategy({
         team,
         roster,
@@ -165,6 +165,9 @@ function buildActualCompletionProjection({ players, team, roster, meta, slots })
     });
     const needs = AiLogic.calculateTeamNeedsFromRoster(team, roster, meta);
     const offers = players
+        .filter((player) => !(excludedPlayerIds instanceof Set
+            && [...excludedPlayerIds].some((id) => stableIdCompare(id, player?.id) === 0)))
+        .filter((player) => Number(player?.__projectedReleaseFromTeamId) !== Number(team?.id))
         .filter((player) => isSignableFreeAgent(player) || player.__projectedRelease)
         .map((player) => ({
             player,
@@ -467,6 +470,7 @@ class AiLogic {
         minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON,
         transactionSink = null,
         searchMaxStates = null,
+        releasedPlayerIdsByTeam = null,
     } = {}) {
         const meta = cache.getMeta();
         const userTeamId = meta?.userTeamId;
@@ -478,6 +482,20 @@ class AiLogic {
         const availablePlayers = cache.getAllPlayers()
             .filter((player) => isSignableFreeAgent(player))
             .sort((a, b) => stableIdCompare(a?.id, b?.id));
+        const initialMissingSlots = underfilled.reduce(
+            (sum, team) => sum + Math.max(0, minimum - cache.getPlayersByTeam(team.id).length), 0,
+        );
+        const equivalentCandidateRank = new Map();
+        const candidateEquivalenceKey = new Map();
+        const equivalentCounts = new Map();
+        for (const player of availablePlayers) {
+            const { id, teamId, status, contract, offers, ...traits } = player ?? {};
+            const signature = JSON.stringify(traits);
+            const rank = equivalentCounts.get(signature) ?? 0;
+            equivalentCandidateRank.set(player.id, rank);
+            candidateEquivalenceKey.set(player.id, signature);
+            equivalentCounts.set(signature, rank + 1);
+        }
 
         const candidateRows = (team, roster, available, affordableOnly = true) => {
             const freshTeam = cache.getTeam(team.id) ?? team;
@@ -500,7 +518,11 @@ class AiLogic {
                 phase: meta?.phase,
                 year: meta?.year,
             });
-            return available.map((player) => {
+            const excludedIds = releasedPlayerIdsByTeam instanceof Map
+                ? releasedPlayerIdsByTeam.get(team.id)
+                : null;
+            return available.filter((player) => !(excludedIds instanceof Set
+                && [...excludedIds].some((id) => stableIdCompare(id, player.id) === 0))).map((player) => {
                 const contract = buildMinimumRosterContract(player, freshTeam, {
                     year: meta?.year,
                     strategy,
@@ -533,16 +555,39 @@ class AiLogic {
         const runCompletionSearch = ({ affordableOnly, acceptPlan = null, maxStates = 20000 }) => {
           const diagnostics = { exploredStates: 0, memoHits: 0, lowerBoundPrunes: 0, exhausted: false };
           const failedStates = new Set();
+          const stateSignature = (rosters) => underfilled.map((team) => {
+            const originalIds = new Set((projectedRosters.get(team.id) ?? []).map((player) => String(player.id)));
+            const additions = (rosters.get(team.id) ?? [])
+                .filter((player) => !originalIds.has(String(player.id)))
+                .map((player) => {
+                    const equivalenceKey = candidateEquivalenceKey.get(player.id);
+                    const identity = equivalenceKey && (equivalentCounts.get(equivalenceKey) ?? 0) > 1
+                        ? equivalenceKey
+                        : String(player.id);
+                    return `${identity}:${Number(getActiveCapHit(player) ?? 0).toFixed(2)}`;
+                })
+                .sort();
+            return `${team.id}=${additions.join(',')}`;
+          }).join('|');
           const findCompletion = (rosters, available, plan) => {
             diagnostics.exploredStates += 1;
             if (diagnostics.exploredStates > maxStates) {
                 diagnostics.exhausted = true;
                 return null;
             }
+            const stateKey = stateSignature(rosters);
+            if (failedStates.has(stateKey)) {
+                diagnostics.memoHits += 1;
+                return null;
+            }
             const remainingSlots = underfilled.reduce(
                 (sum, team) => sum + Math.max(0, minimum - (rosters.get(team.id)?.length ?? 0)), 0,
             );
-            if (remainingSlots === 0) return !acceptPlan || acceptPlan(plan) ? plan : null;
+            if (remainingSlots === 0) {
+                if (!acceptPlan || acceptPlan(plan)) return plan;
+                failedStates.add(stateKey);
+                return null;
+            }
             if (available.length < remainingSlots) return null;
 
             // Every canonical emergency offer costs at least the league minimum.
@@ -564,19 +609,6 @@ class AiLogic {
                 return null;
             }
 
-            const stateKey = underfilled.map((team) => {
-                const originalIds = new Set((projectedRosters.get(team.id) ?? []).map((player) => String(player.id)));
-                const additions = (rosters.get(team.id) ?? [])
-                    .filter((player) => !originalIds.has(String(player.id)))
-                    .map((player) => `${player.id}:${Number(getActiveCapHit(player) ?? 0).toFixed(2)}`)
-                    .sort();
-                return `${team.id}=${additions.join(',')}`;
-            }).join('|');
-            if (failedStates.has(stateKey)) {
-                diagnostics.memoHits += 1;
-                return null;
-            }
-
             const demands = underfilled.map((team) => {
                 const roster = rosters.get(team.id) ?? [];
                 return { team, roster, deficit: Math.max(0, minimum - roster.length), rows: candidateRows(team, roster, available, affordableOnly) };
@@ -589,11 +621,11 @@ class AiLogic {
                 failedStates.add(stateKey);
                 return null;
             }
-            const rows = affordableOnly ? demand.rows : [...demand.rows].sort((a, b) => {
+            const rows = (affordableOnly ? demand.rows : [...demand.rows].sort((a, b) => {
                 const aHit = Number(getActiveCapHit(a.projectedPlayer) ?? 0);
                 const bHit = Number(getActiveCapHit(b.projectedPlayer) ?? 0);
                 return (aHit - bHit) || stableIdCompare(a.player?.id, b.player?.id);
-            });
+            })).filter((row) => (equivalentCandidateRank.get(row.player?.id) ?? 0) < initialMissingSlots);
             for (const row of rows) {
                 const nextRosters = new Map(rosters);
                 nextRosters.set(demand.team.id, [...demand.roster, row.projectedPlayer]);
@@ -649,6 +681,9 @@ class AiLogic {
                             rosterCompletionReserve: reserve,
                             rosterCompletionCandidates: candidates,
                             rosterCompletionMeta: meta,
+                            excludedCompletionCandidateIds: releasedPlayerIdsByTeam instanceof Map
+                                ? releasedPlayerIdsByTeam.get(teamId)
+                                : null,
                         });
                         return !capPlan.failure && capPlan.projected?.isRosterReadyCompliant !== false;
                     });
@@ -808,6 +843,7 @@ class AiLogic {
         rosterCompletionCandidates = null,
         rosterCompletionMeta = null,
         priorRestructureProvenance = null,
+        excludedCompletionCandidateIds = null,
     } = {}) {
         const actions = [];
         let workRoster = roster.map((p) => ({ ...p, contract: { ...(p?.contract ?? {}) } }));
@@ -831,6 +867,7 @@ class AiLogic {
                     roster: workRoster,
                     meta: rosterCompletionMeta,
                     slots: Math.max(0, Constants.ROSTER_LIMITS.REGULAR_SEASON - workRoster.length),
+                    excludedPlayerIds: excludedCompletionCandidateIds,
                 })
                 : null;
             return buildRosterReadySnapshot({ ...team, deadCap }, workRoster, {
@@ -920,7 +957,10 @@ class AiLogic {
 
             const choice = candidates[0];
             workRoster = workRoster.filter((r) => r.id !== choice.p.id);
-            projectedReleasedPlayers.push({ ...choice.p, teamId: null, status: 'free_agent', __projectedRelease: true });
+            projectedReleasedPlayers.push({
+                ...choice.p, teamId: null, status: 'free_agent', __projectedRelease: true,
+                __projectedReleaseFromTeamId: team?.id,
+            });
             posCount[choice.p.pos] = (posCount[choice.p.pos] ?? 1) - 1;
             deadCap = Math.round((deadCap + choice.currentYearDead) * 100) / 100;
             actions.push({
@@ -969,6 +1009,7 @@ class AiLogic {
                 teamId: null,
                 status: 'free_agent',
                 __projectedRelease: true,
+                __projectedReleaseFromTeamId: team?.id,
             });
             posCount[choice.p.pos] = (posCount[choice.p.pos] ?? 1) - 1;
             deadCap = Math.round((deadCap + choice.currentYearDead) * 100) / 100;
@@ -1033,6 +1074,7 @@ class AiLogic {
         rosterCompletionCandidateIdsByTeam = null,
         transactionSink = null,
         restructureProvenanceByTeam = null,
+        releasedPlayerIdsByTeam = null,
     } = {}) {
         const txsToCommit = [];
         const meta        = cache.getMeta();
@@ -1074,6 +1116,9 @@ class AiLogic {
                 ? ([...restructureProvenanceByTeam.entries()]
                     .find(([teamId]) => Number(teamId) === Number(team.id))?.[1] ?? null)
                 : null;
+            const releasedPlayerIds = releasedPlayerIdsByTeam instanceof Map
+                ? releasedPlayerIdsByTeam.get(team.id)
+                : null;
             const plan = AiLogic.buildAiCapCompliancePlan(freshTeam, roster, {
                 legalCap,
                 targetBuffer,
@@ -1082,6 +1127,7 @@ class AiLogic {
                 rosterCompletionCandidates,
                 rosterCompletionMeta: meta,
                 priorRestructureProvenance,
+                excludedCompletionCandidateIds: releasedPlayerIds,
             });
 
             // If no legal plan exists, do NOT commit partial destructive actions.
@@ -1179,6 +1225,14 @@ class AiLogic {
                         type: 'RELEASE', seasonId, week, teamId: team.id,
                         details: { playerId: player.id, deadCap: action.currentYearDead, aiCapCut: true },
                     });
+                    if (releasedPlayerIdsByTeam instanceof Map) {
+                        let releasedIds = releasedPlayerIdsByTeam.get(team.id);
+                        if (!(releasedIds instanceof Set)) {
+                            releasedIds = new Set();
+                            releasedPlayerIdsByTeam.set(team.id, releasedIds);
+                        }
+                        releasedIds.add(player.id);
+                    }
                 }
             }
 

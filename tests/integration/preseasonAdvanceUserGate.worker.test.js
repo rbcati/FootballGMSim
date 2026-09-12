@@ -235,7 +235,17 @@ describe('ADVANCE_WEEK preseason user gating', () => {
     const aiTeam = cache.getAllTeams().find((team) => Number(team.id) !== USER_TEAM_ID);
     const aiTeamId = Number(aiTeam.id);
     const roster = sortedRoster(aiTeamId);
-    for (const player of roster.slice(53)) cache.updatePlayer(player.id, { teamId: null, status: 'free_agent' });
+    const genuineReplacement = { ...cloneJson(roster[0]), id: 'genuine-preseason-replacement' };
+    for (const player of roster.slice(53)) cache.updatePlayer(player.id, { teamId: null, status: 'retired', retired: true });
+    cache.setPlayer({
+      ...genuineReplacement,
+      teamId: null,
+      status: 'free_agent',
+      retired: false,
+      pos: 'WR',
+      ovr: 59,
+      potential: 59,
+    });
     expect(sortedRoster(aiTeamId)).toHaveLength(53);
     const legalCap = Number(cache.getMeta()?.economy?.currentSalaryCap ?? cache.getMeta()?.settings?.salaryCap);
     const baseAnnual = (legalCap + 0.2) / 53;
@@ -257,7 +267,8 @@ describe('ADVANCE_WEEK preseason user gating', () => {
     expect(cache.getMeta()?.phase).toBe('regular');
     const finalRoster = sortedRoster(aiTeamId);
     expect(finalRoster).toHaveLength(53);
-    expect(finalRoster.some((player) => Number(player.id) === replacementId)).toBe(true);
+    expect(finalRoster.some((player) => Number(player.id) === replacementId)).toBe(false);
+    expect(finalRoster.some((player) => String(player.id) === String(genuineReplacement.id))).toBe(true);
     const cap = buildTeamCapSnapshot({ team: cache.getTeam(aiTeamId), roster: finalRoster, salaryCap: legalCap });
     expect(cap.isLegallyCompliant).toBe(true);
     const idsBeforeSave = rosterIds(aiTeamId);

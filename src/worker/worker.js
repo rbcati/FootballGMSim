@@ -3206,6 +3206,7 @@ async function handleAdvanceWeek(payload, id) {
   let preseasonSnapshot = null;
   const preseasonTransactions = [];
   const preseasonRestructureProvenance = new Map();
+  const preseasonReleasedPlayerIds = new Map();
   if (meta.phase === 'preseason') {
     const batchSim = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
     const rosterLimit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
@@ -3256,6 +3257,7 @@ async function handleAdvanceWeek(payload, id) {
       autoManageUserCap: batchSim,
       transactionSink: preseasonTransactions,
       restructureProvenanceByTeam: preseasonRestructureProvenance,
+      releasedPlayerIdsByTeam: preseasonReleasedPlayerIds,
     });
 
     // Cap management above reserves the exact room needed by an underfilled
@@ -3265,6 +3267,7 @@ async function handleAdvanceWeek(payload, id) {
     let reconciliation = await AiLogic.ensureMinimumRosters({
       includeUserTeam: batchSim,
       transactionSink: preseasonTransactions,
+      releasedPlayerIdsByTeam: preseasonReleasedPlayerIds,
     });
     if (reconciliation.failures.length > 0) {
       await AiLogic.executeAICapManagement({
@@ -3274,10 +3277,12 @@ async function handleAdvanceWeek(payload, id) {
         rosterCompletionCandidateIdsByTeam: rosterCompletionCandidateMap(reconciliation),
         transactionSink: preseasonTransactions,
         restructureProvenanceByTeam: preseasonRestructureProvenance,
+        releasedPlayerIdsByTeam: preseasonReleasedPlayerIds,
       });
       reconciliation = await AiLogic.ensureMinimumRosters({
         includeUserTeam: batchSim,
         transactionSink: preseasonTransactions,
+        releasedPlayerIdsByTeam: preseasonReleasedPlayerIds,
       });
     }
     if (reconciliation.failures.length > 0) {
@@ -13415,6 +13420,7 @@ async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSea
   const snapshot = cache.snapshotStartNewSeasonState();
   const stagedTransactions = [];
   const restructureProvenance = new Map();
+  const releasedPlayerIdsByTeam = new Map();
   try {
     for (const team of cache.getAllTeams()) {
       cache.updateTeam(team.id, {
@@ -13444,6 +13450,7 @@ async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSea
     let reconciliation = await AiLogic.ensureMinimumRosters({
       includeUserTeam,
       transactionSink: stagedTransactions,
+      releasedPlayerIdsByTeam,
     });
     if (reconciliation.failures.length > 0) {
       await AiLogic.executeAICapManagement({
@@ -13453,10 +13460,12 @@ async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSea
         rosterCompletionCandidateIdsByTeam: rosterCompletionCandidateMap(reconciliation),
         transactionSink: stagedTransactions,
         restructureProvenanceByTeam: restructureProvenance,
+        releasedPlayerIdsByTeam,
       });
       reconciliation = await AiLogic.ensureMinimumRosters({
         includeUserTeam,
         transactionSink: stagedTransactions,
+        releasedPlayerIdsByTeam,
       });
     }
     return reconciliation;
@@ -13683,9 +13692,11 @@ async function handleStartNewSeason(payload, id) {
 
   const rolloverTransactions = [];
   const rolloverRestructureProvenance = new Map();
+  const rolloverReleasedPlayerIds = new Map();
   let rolloverReconciliation = await AiLogic.ensureMinimumRosters({
     includeUserTeam: rolloverBatchSim,
     transactionSink: rolloverTransactions,
+    releasedPlayerIdsByTeam: rolloverReleasedPlayerIds,
   });
   if (rolloverReconciliation.failures.length > 0) {
     // Only underfilled teams enter this cap-planning retry. Oversized preseason
@@ -13697,10 +13708,12 @@ async function handleStartNewSeason(payload, id) {
       rosterCompletionCandidateIdsByTeam: rosterCompletionCandidateMap(rolloverReconciliation),
       transactionSink: rolloverTransactions,
       restructureProvenanceByTeam: rolloverRestructureProvenance,
+      releasedPlayerIdsByTeam: rolloverReleasedPlayerIds,
     });
     rolloverReconciliation = await AiLogic.ensureMinimumRosters({
       includeUserTeam: rolloverBatchSim,
       transactionSink: rolloverTransactions,
+      releasedPlayerIdsByTeam: rolloverReleasedPlayerIds,
     });
   }
   if (rolloverReconciliation.failures.length > 0) {
