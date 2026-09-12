@@ -466,6 +466,7 @@ class AiLogic {
         includeUserTeam = false,
         minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON,
         transactionSink = null,
+        searchMaxStates = null,
     } = {}) {
         const meta = cache.getMeta();
         const userTeamId = meta?.userTeamId;
@@ -529,21 +530,19 @@ class AiLogic {
         // recomputing team-specific needs and canonical offers after each
         // projected signing. Most-constrained-first ordering prunes shared-pool
         // conflicts without changing a team's preference order.
-        const searchDiagnostics = { exploredStates: 0, memoHits: 0, lowerBoundPrunes: 0, exhausted: false };
-        const findCompletion = (rosters, available, plan, {
-            affordableOnly = true,
-            failedStates = new Set(),
-            maxStates = 20000,
-        } = {}) => {
-            searchDiagnostics.exploredStates += 1;
-            if (searchDiagnostics.exploredStates > maxStates) {
-                searchDiagnostics.exhausted = true;
+        const runCompletionSearch = ({ affordableOnly, acceptPlan = null, maxStates = 20000 }) => {
+          const diagnostics = { exploredStates: 0, memoHits: 0, lowerBoundPrunes: 0, exhausted: false };
+          const failedStates = new Set();
+          const findCompletion = (rosters, available, plan) => {
+            diagnostics.exploredStates += 1;
+            if (diagnostics.exploredStates > maxStates) {
+                diagnostics.exhausted = true;
                 return null;
             }
             const remainingSlots = underfilled.reduce(
                 (sum, team) => sum + Math.max(0, minimum - (rosters.get(team.id)?.length ?? 0)), 0,
             );
-            if (remainingSlots === 0) return plan;
+            if (remainingSlots === 0) return !acceptPlan || acceptPlan(plan) ? plan : null;
             if (available.length < remainingSlots) return null;
 
             // Every canonical emergency offer costs at least the league minimum.
@@ -561,7 +560,7 @@ class AiLogic {
                 });
                 return Number(cap.capRoom ?? 0) + 0.01 < deficit * minimumRosterCapHit();
             })) {
-                searchDiagnostics.lowerBoundPrunes += 1;
+                diagnostics.lowerBoundPrunes += 1;
                 return null;
             }
 
@@ -574,7 +573,7 @@ class AiLogic {
                 return `${team.id}=${additions.join(',')}`;
             }).join('|');
             if (failedStates.has(stateKey)) {
-                searchDiagnostics.memoHits += 1;
+                diagnostics.memoHits += 1;
                 return null;
             }
 
@@ -602,15 +601,21 @@ class AiLogic {
                 const result = findCompletion(nextRosters, nextAvailable, [
                     ...plan,
                     { teamId: demand.team.id, playerId: row.player.id, contract: row.contract, projectedCapRoom: row.projectedCap?.capRoom },
-                ], { affordableOnly, failedStates, maxStates });
+                ]);
                 if (result) return result;
-                if (searchDiagnostics.exhausted) return null;
+                if (diagnostics.exhausted) return null;
             }
             failedStates.add(stateKey);
             return null;
+          };
+          return { plan: findCompletion(projectedRosters, availablePlayers, []), diagnostics };
         };
 
-        const plan = findCompletion(projectedRosters, availablePlayers, []);
+        const affordableSearch = runCompletionSearch({
+            affordableOnly: true,
+            maxStates: Number(searchMaxStates?.affordable ?? 20000),
+        });
+        const plan = affordableSearch.plan;
         const failures = [];
         const signedByTeam = [];
         const completionCandidateIdsByTeam = new Map();
@@ -620,10 +625,36 @@ class AiLogic {
             // Current cap can be insufficient even though a shared-pool assignment
             // exists after targeted cap work. Build that assignment once here so
             // retries never reserve the same scarce player for multiple teams.
-            const recoveryPlan = findCompletion(projectedRosters, availablePlayers, [], {
+            const recoverySearch = runCompletionSearch({
                 affordableOnly: false,
-                failedStates: new Set(),
+                maxStates: Number(searchMaxStates?.recovery ?? 20000),
+                acceptPlan: (candidatePlan) => {
+                    const stepsByTeam = new Map();
+                    for (const step of candidatePlan) {
+                        const rows = stepsByTeam.get(step.teamId) ?? [];
+                        rows.push(step);
+                        stepsByTeam.set(step.teamId, rows);
+                    }
+                    return [...stepsByTeam.entries()].every(([teamId, steps]) => {
+                        const team = cache.getTeam(teamId);
+                        const roster = cache.getPlayersByTeam(teamId);
+                        const reserve = Math.round(steps.reduce(
+                            (sum, step) => sum + Number(getActiveCapHit({ contract: step.contract }) ?? 0), 0,
+                        ) * 100) / 100;
+                        const candidates = steps.map((step) => cache.getPlayer(step.playerId)).filter(Boolean);
+                        const capPlan = AiLogic.buildAiCapCompliancePlan(team, roster, {
+                            legalCap: resolveLiveCapForMinimumRoster(team, meta),
+                            targetBuffer: AiLogic._capPlanningBuffer(meta?.difficulty),
+                            season: Number(meta?.year ?? 0),
+                            rosterCompletionReserve: reserve,
+                            rosterCompletionCandidates: candidates,
+                            rosterCompletionMeta: meta,
+                        });
+                        return !capPlan.failure && capPlan.projected?.isRosterReadyCompliant !== false;
+                    });
+                },
             });
+            const recoveryPlan = recoverySearch.plan;
             if (recoveryPlan) {
                 for (const step of recoveryPlan) {
                     const hit = Number(getActiveCapHit({ contract: step.contract }) ?? 0);
@@ -652,7 +683,11 @@ class AiLogic {
                     remainingSlots,
                     cheapestActualCompletionCost: completion.feasible ? completion.cost : null,
                     availableEligibleMinimumCandidates: completion.candidateCount,
-                    reason: searchDiagnostics.exhausted ? 'completion_search_exhausted' : 'no_feasible_completion',
+                    reason: recoverySearch.diagnostics.exhausted
+                        ? 'recovery_search_exhausted'
+                        : affordableSearch.diagnostics.exhausted
+                            ? 'affordable_search_exhausted'
+                            : 'no_feasible_completion',
                 });
             }
             failures.sort((a, b) => {
@@ -664,7 +699,14 @@ class AiLogic {
                     || (a.availableEligibleMinimumCandidates - b.availableEligibleMinimumCandidates)
                     || stableIdCompare(b.teamId, a.teamId);
             });
-            return { failures, signedByTeam, completionCandidateIdsByTeam, recoveryReserveByTeam, recoveryCandidateIdsByTeam, searchDiagnostics };
+            return {
+                failures, signedByTeam, completionCandidateIdsByTeam, recoveryReserveByTeam, recoveryCandidateIdsByTeam,
+                searchDiagnostics: {
+                    affordable: affordableSearch.diagnostics,
+                    recovery: recoverySearch.diagnostics,
+                    totalExploredStates: affordableSearch.diagnostics.exploredStates + recoverySearch.diagnostics.exploredStates,
+                },
+            };
         }
 
         const signedCounts = new Map();
@@ -701,7 +743,10 @@ class AiLogic {
         for (const [teamId, signed] of signedCounts) {
             signedByTeam.push({ teamId, signed, rosterCount: cache.getPlayersByTeam(teamId).length });
         }
-        return { failures, signedByTeam, completionCandidateIdsByTeam, recoveryReserveByTeam, recoveryCandidateIdsByTeam, searchDiagnostics };
+        return {
+            failures, signedByTeam, completionCandidateIdsByTeam, recoveryReserveByTeam, recoveryCandidateIdsByTeam,
+            searchDiagnostics: { affordable: affordableSearch.diagnostics, recovery: null, totalExploredStates: affordableSearch.diagnostics.exploredStates },
+        };
     }
 
     /**

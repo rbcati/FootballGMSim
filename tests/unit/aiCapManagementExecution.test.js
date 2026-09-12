@@ -496,9 +496,9 @@ describe('ensureMinimumRosters — stable rollover legality', () => {
     const result = await AiLogic.ensureMinimumRosters({ includeUserTeam: true });
 
     expect(result.failures).toHaveLength(1);
-    expect(result.searchDiagnostics.lowerBoundPrunes).toBeGreaterThan(0);
-    expect(result.searchDiagnostics.exploredStates).toBeLessThan(20);
-    expect(result.searchDiagnostics.exhausted).toBe(false);
+    expect(result.searchDiagnostics.affordable.lowerBoundPrunes).toBeGreaterThan(0);
+    expect(result.searchDiagnostics.affordable.exploredStates).toBeLessThan(20);
+    expect(result.searchDiagnostics.affordable.exhausted).toBe(false);
     expect(h.mockCache.getPlayersByTeam(1)).toHaveLength(43);
   });
 
@@ -526,6 +526,47 @@ describe('ensureMinimumRosters — stable rollover legality', () => {
     expect(plannedIds).toHaveLength(2);
     expect([...result.recoveryReserveByTeam.values()].some((room) => room > 0.8)).toBe(true);
     expect(h.state.txLog).toEqual([]);
+  });
+
+  it('gives recovery a fresh budget and rejects assignments a team cannot cap-repair', async () => {
+    const salaryCap = 104.8;
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: salaryCap }, currentSeasonId: 's8', currentWeek: 1, year: 2033, phase: 'preseason' },
+      teams: new Map([
+        [1, { id: 1, abbr: 'REPAIR', capTotal: salaryCap, deadCap: 0 }],
+        [2, { id: 2, abbr: 'FIXED', capTotal: salaryCap, deadCap: 0 }],
+      ]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 52; i += 1) {
+      h.state.store.players.set(`fixed-${i}`, { id: `fixed-${i}`, teamId: 2, pos: 'WR', ovr: 60, status: 'active', contract: contract(1) });
+      h.state.store.players.set(`repair-${i}`, {
+        id: `repair-${i}`, teamId: 1, pos: 'WR', ovr: i === 0 ? 90 : 60, status: 'active',
+        contract: contract(1),
+      });
+    }
+    h.state.store.players.set('cheap', { id: 'cheap', teamId: null, pos: 'CB', ovr: 59, status: 'free_agent' });
+    h.state.store.players.set('market', { id: 'market', teamId: null, pos: 'CB', ovr: 68, potential: 68, age: 27, status: 'free_agent' });
+
+    const canonicalPlanner = AiLogic.buildAiCapCompliancePlan.bind(AiLogic);
+    const plannerSpy = vi.spyOn(AiLogic, 'buildAiCapCompliancePlan').mockImplementation((team, roster, options) => {
+      if (team.id === 2 && Number(options.rosterCompletionReserve) > 0.8) {
+        return { actions: [], projected: { isRosterReadyCompliant: false }, failure: { reason: 'no_legal_cap_plan' } };
+      }
+      return canonicalPlanner(team, roster, options);
+    });
+    const result = await AiLogic.ensureMinimumRosters({
+      includeUserTeam: true,
+      searchMaxStates: { affordable: 1, recovery: 100 },
+    });
+    plannerSpy.mockRestore();
+
+    expect(result.searchDiagnostics.affordable.exhausted).toBe(true);
+    expect(result.searchDiagnostics.recovery.exhausted).toBe(false);
+    expect(result.searchDiagnostics.recovery.exploredStates).toBeGreaterThan(1);
+    expect(result.recoveryCandidateIdsByTeam.get(2)).toEqual(['cheap']);
+    expect(result.recoveryCandidateIdsByTeam.get(1)).toEqual(['market']);
+    expect(result.recoveryReserveByTeam.get(1)).toBeGreaterThan(0.8);
   });
 
   it('preserves a scarce affordable replacement for the more constrained team', async () => {
