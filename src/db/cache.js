@@ -125,6 +125,15 @@ const cloneRollbackValue = (value) => {
   return JSON.parse(JSON.stringify(value));
 };
 
+const rollbackReferences = Symbol('rollbackReferences');
+
+const restoreObjectReference = (reference, value) => {
+  if (!reference || typeof reference !== 'object' || Array.isArray(reference)) return value;
+  for (const key of Object.keys(reference)) delete reference[key];
+  Object.assign(reference, value);
+  return reference;
+};
+
 // ── Read accessors ────────────────────────────────────────────────────────────
 
 export const cache = {
@@ -138,7 +147,7 @@ export const cache = {
    * later SAVE_NOW/flush.
    */
   snapshotStartNewSeasonState() {
-    return cloneRollbackValue({
+    const snapshot = cloneRollbackValue({
       meta: _meta,
       teams: [..._teams.entries()],
       players: [..._players.entries()],
@@ -154,20 +163,44 @@ export const cache = {
         draftPicks: [..._dirty.draftPicks],
       },
     });
+    snapshot[rollbackReferences] = {
+      meta: _meta,
+      teams: new Map(_teams),
+      players: new Map(_players),
+      weekGames: _weekGames,
+      seasonStats: new Map(_seasonStats),
+      draftPicks: new Map(_draftPicks),
+    };
+    return snapshot;
   },
 
   restoreStartNewSeasonState(snapshot) {
     if (!snapshot) return;
-    _meta = snapshot.meta;
+    const references = snapshot[rollbackReferences];
+    _meta = restoreObjectReference(references?.meta, snapshot.meta);
     _teams.clear();
-    snapshot.teams.forEach(([key, value]) => _teams.set(key, value));
+    snapshot.teams.forEach(([key, value]) => {
+      _teams.set(key, restoreObjectReference(references?.teams.get(key), value));
+    });
     _players.clear();
-    snapshot.players.forEach(([key, value]) => _players.set(key, value));
-    _weekGames = snapshot.weekGames;
+    snapshot.players.forEach(([key, value]) => {
+      _players.set(key, restoreObjectReference(references?.players.get(key), value));
+    });
+    if (Array.isArray(references?.weekGames)) {
+      references.weekGames.length = 0;
+      references.weekGames.push(...snapshot.weekGames);
+      _weekGames = references.weekGames;
+    } else {
+      _weekGames = snapshot.weekGames;
+    }
     _seasonStats.clear();
-    snapshot.seasonStats.forEach(([key, value]) => _seasonStats.set(key, value));
+    snapshot.seasonStats.forEach(([key, value]) => {
+      _seasonStats.set(key, restoreObjectReference(references?.seasonStats.get(key), value));
+    });
     _draftPicks.clear();
-    snapshot.draftPicks.forEach(([key, value]) => _draftPicks.set(key, value));
+    snapshot.draftPicks.forEach(([key, value]) => {
+      _draftPicks.set(key, restoreObjectReference(references?.draftPicks.get(key), value));
+    });
     _dirty.meta = snapshot.dirty.meta;
     _dirty.teams.clear();
     snapshot.dirty.teams.forEach((key) => _dirty.teams.add(key));

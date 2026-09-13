@@ -3245,6 +3245,7 @@ async function handleAdvanceWeek(payload, id) {
     // durability/batch mode also opts the user team into the same deterministic
     // cutdown pass; interactive skipUserGame/SIM_TO_PHASE does not.
     preseasonSnapshot = snapshotLifecyclePersistenceState();
+    try {
     await AiLogic.executeAICutdowns({
       includeUserTeam: batchSim,
       transactionSink: preseasonTransactions,
@@ -3300,6 +3301,11 @@ async function handleAdvanceWeek(payload, id) {
     // touching team.depthChart, leaving dangling starter/backup references.
     // Repair them before the legality gate validates depth-chart integrity.
     validateAndRepairAllTeamDepthCharts('post-ai-cutdown');
+    } catch (error) {
+      restoreLifecyclePersistenceState(preseasonSnapshot);
+      post(toUI.ERROR, { message: `Could not prepare preseason rosters: ${error?.message ?? error}` }, id);
+      return;
+    }
   }
 
   const legality = runLegalityValidation({ stage: 'pre-advance' }).issues.filter((issue) => issue.severity === 'error');
@@ -13492,6 +13498,7 @@ async function handleStartNewSeason(payload, id) {
   const nextEconomy = projectNextSeasonEconomy(meta?.economy ?? {}, newYear);
   const rolloverBatchSim = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
   const rolloverSnapshot = snapshotLifecyclePersistenceState();
+  try {
   const preflight = await preflightStartNewSeasonRosters({
     meta,
     newYear,
@@ -13773,6 +13780,10 @@ async function handleStartNewSeason(payload, id) {
     week:    updatedMeta.currentWeek,
   });
   post(toUI.FULL_STATE, buildViewState(), id);
+  } catch (error) {
+    restoreLifecyclePersistenceState(rolloverSnapshot);
+    post(toUI.ERROR, { message: `Could not start the new season: ${error?.message ?? error}` }, id);
+  }
 }
 
 // ── Handler: GET_TEAM_PROFILE ─────────────────────────────────────────────────
