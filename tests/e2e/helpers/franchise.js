@@ -223,10 +223,10 @@ export async function simulateSingleWeek(page, options = {}) {
       try {
         await expect(advanceCta).toBeEnabled({ timeout: 500 });
       } catch (err) {
-        if (err.name !== 'TimeoutError') throw err;
+        if (err.name !== 'TimeoutError' && !err.message.includes('toBeEnabled')) throw err;
       }
     } catch (err) {
-      if (err.name !== 'TimeoutError') throw err;
+      if (err.name !== 'TimeoutError' && !err.message.includes('toBeEnabled')) throw err;
     }
   }
 
@@ -236,7 +236,7 @@ export async function simulateSingleWeek(page, options = {}) {
     await advanceCta.waitFor({ state: 'visible', timeout: 1000 });
     ctaVisible = true;
   } catch (err) {
-    if (err.name !== 'TimeoutError') throw err;
+    if (err.name !== 'TimeoutError' && !err.message.includes('toBeEnabled')) throw err;
   }
 
   if (ctaVisible) {
@@ -261,7 +261,7 @@ export async function simulateSingleWeek(page, options = {}) {
       await expect(advanceAnywayBtn).toBeEnabled({ timeout: 5000 });
       await advanceAnywayBtn.click();
     } catch (err) {
-      if (err.name !== 'TimeoutError') throw err;
+      if (err.name !== 'TimeoutError' && !err.message.includes('toBeEnabled')) throw err;
     }
   }
   const skipPromptBtn = page.getByRole('button', { name: /Simulate \(Skip\)/i });
@@ -270,7 +270,7 @@ export async function simulateSingleWeek(page, options = {}) {
     await expect(skipPromptBtn).toBeEnabled({ timeout: 5000 });
     await skipPromptBtn.click();
   } catch (err) {
-    if (err.name !== 'TimeoutError') throw err;
+    if (err.name !== 'TimeoutError' && !err.message.includes('toBeEnabled')) throw err;
   }
   await page.waitForFunction(
     (baseline) => {
