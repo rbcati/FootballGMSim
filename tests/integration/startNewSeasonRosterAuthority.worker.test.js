@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cache } from '../../src/db/cache.js';
-import { DraftPicks, Meta, Players, Seasons, Teams, Transactions } from '../../src/db/index.js';
+import { DraftPicks, Meta, Players, Saves, Seasons, Teams, Transactions } from '../../src/db/index.js';
 import { toUI, toWorker } from '../../src/worker/protocol.js';
 import AiLogic from '../../src/core/ai-logic.js';
 
@@ -11,11 +11,16 @@ const TIMEOUT_MS = 180_000;
 
 const waiters = new Map();
 let messageSequence = 0;
+let failNextPostType = null;
 
 function installSelfBridge() {
   globalThis.self = {
     onmessage: null,
     postMessage(message) {
+      if (message?.type === failNextPostType) {
+        failNextPostType = null;
+        throw new Error(`injected post-commit ${message.type} failure`);
+      }
       if (message?.id == null || !waiters.has(message.id)) return;
       const resolve = waiters.get(message.id);
       waiters.delete(message.id);
@@ -105,6 +110,7 @@ beforeAll(async () => {
 }, TIMEOUT_MS);
 
 beforeEach(async () => {
+  failNextPostType = null;
   await bootDraftLeague();
 }, TIMEOUT_MS);
 
@@ -301,6 +307,104 @@ describe('START_NEW_SEASON roster-management authority', () => {
     const savedAfterFailure = await send(toWorker.SAVE_NOW);
     expect(savedAfterFailure.type).toBe(toUI.SAVED);
     expect(await Transactions.loadRecent(4000)).toEqual(transactionsBefore);
+  }, TIMEOUT_MS);
+
+  it('keeps the committed new season authoritative when success delivery throws', async () => {
+    const aiTeamId = Number(cache.getAllTeams().find((team) => Number(team.id) !== USER_TEAM_ID).id);
+    trimRoster(aiTeamId, 52);
+    const signedPlayerId = cache.getAllPlayers().find((player) => player.teamId == null && player.status === 'free_agent').id;
+    cache.setMeta({ championTeamId: 1, runnerUpTeamId: 2 });
+    const savedBaseline = await send(toWorker.SAVE_NOW);
+    expect(savedBaseline.type).toBe(toUI.SAVED);
+    const oldMeta = clone(cache.getMeta());
+    const transactionsBefore = await Transactions.loadRecent(4000);
+    const seasonsBefore = await Seasons.loadAll();
+    failNextPostType = toUI.SEASON_START;
+
+    const failedDelivery = await send(toWorker.START_NEW_SEASON);
+
+    expect(failedDelivery.type).toBe(toUI.ERROR);
+    expect(payloadOf(failedDelivery)?.message).toContain('injected post-commit SEASON_START failure');
+    expect(cache.getMeta()).toMatchObject({
+      year: Number(oldMeta.year) + 1,
+      season: Number(oldMeta.season) + 1,
+      currentSeasonId: `s${Number(oldMeta.season) + 1}`,
+      phase: 'preseason',
+    });
+    expect((await Meta.load()).currentSeasonId).toBe(`s${Number(oldMeta.season) + 1}`);
+    expect(cache.getPlayersByTeam(aiTeamId)).toHaveLength(53);
+    expect((await Players.load(signedPlayerId)).teamId).toBe(aiTeamId);
+    const matchingSigns = (await Transactions.loadRecent(4000)).filter((tx) => tx.type === 'SIGN'
+      && Number(tx.teamId) === aiTeamId
+      && String(tx.playerId ?? tx.details?.playerId) === String(signedPlayerId));
+    expect(matchingSigns).toHaveLength(1);
+    expect(await Seasons.loadAll()).toHaveLength(seasonsBefore.length + 1);
+
+    const duplicateAttempt = await send(toWorker.START_NEW_SEASON);
+    expect(duplicateAttempt.type).toBe(toUI.ERROR);
+    expect(payloadOf(duplicateAttempt)?.message).toContain('Cannot start new season from phase "preseason"');
+    expect((await Transactions.loadRecent(4000)).filter((tx) => tx.type === 'SIGN'
+      && String(tx.playerId ?? tx.details?.playerId) === String(signedPlayerId))).toHaveLength(1);
+
+    cache.reset();
+    const reloaded = await send(toWorker.LOAD_SAVE, { leagueId: SLOT_KEY });
+    expect(reloaded.type).toBe(toUI.FULL_STATE);
+    expect(cache.getMeta()).toMatchObject({
+      year: Number(oldMeta.year) + 1,
+      currentSeasonId: `s${Number(oldMeta.season) + 1}`,
+      phase: 'preseason',
+    });
+    expect(cache.getPlayersByTeam(aiTeamId)).toHaveLength(53);
+    expect(await Seasons.loadAll()).toHaveLength(seasonsBefore.length + 1);
+    expect((await Transactions.loadRecent(4000)).filter((tx) => tx.type === 'SIGN'
+      && String(tx.playerId ?? tx.details?.playerId) === String(signedPlayerId))).toHaveLength(1);
+    expect((await Transactions.loadRecent(4000)).length).toBe(transactionsBefore.length + 1);
+  }, TIMEOUT_MS);
+
+  it('rolls back when the final authoritative rollover transaction aborts', async () => {
+    const aiTeamId = Number(cache.getAllTeams().find((team) => Number(team.id) !== USER_TEAM_ID).id);
+    trimRoster(aiTeamId, 52);
+    cache.setMeta({ championTeamId: 1, runnerUpTeamId: 2 });
+    const savedBaseline = await send(toWorker.SAVE_NOW);
+    expect(savedBaseline.type).toBe(toUI.SAVED);
+    const before = await authoritativeSnapshot();
+    const persistedBefore = await persistedSnapshot();
+    const originalTeamReference = cache.getTeam(aiTeamId);
+    const teamBefore = clone(originalTeamReference);
+    const realEnsureMinimumRosters = AiLogic.ensureMinimumRosters;
+    const abortingTransaction = vi.spyOn(AiLogic, 'ensureMinimumRosters')
+      .mockImplementationOnce((options) => realEnsureMinimumRosters.call(AiLogic, options))
+      .mockImplementationOnce(async (options) => {
+        const result = await realEnsureMinimumRosters.call(AiLogic, options);
+        options.transactionSink.push({ type: 'SIGN', uncloneable: () => true });
+        return result;
+      });
+
+    const aborted = await send(toWorker.START_NEW_SEASON);
+    abortingTransaction.mockRestore();
+
+    expect(aborted.type).toBe(toUI.ERROR);
+    expect(await authoritativeSnapshot()).toEqual(before);
+    expect(await persistedSnapshot()).toEqual(persistedBefore);
+    expect(cache.getTeam(aiTeamId)).toBe(originalTeamReference);
+    expect(originalTeamReference).toEqual(teamBefore);
+
+    const retried = await send(toWorker.START_NEW_SEASON);
+    expect(retried.type, JSON.stringify(payloadOf(retried))).toBe(toUI.FULL_STATE);
+    expect(cache.getMeta()?.phase).toBe('preseason');
+    expect(cache.getPlayersByTeam(aiTeamId)).toHaveLength(53);
+  }, TIMEOUT_MS);
+
+  it('treats a deferred save-manifest failure as post-commit best effort', async () => {
+    const oldSeason = Number(cache.getMeta()?.season);
+    const manifestFailure = vi.spyOn(Saves, 'save').mockRejectedValueOnce(new Error('injected manifest failure'));
+
+    const reply = await send(toWorker.START_NEW_SEASON);
+    manifestFailure.mockRestore();
+
+    expect(reply.type, JSON.stringify(payloadOf(reply))).toBe(toUI.FULL_STATE);
+    expect(cache.getMeta()).toMatchObject({ season: oldSeason + 1, phase: 'preseason' });
+    expect((await Meta.load()).season).toBe(oldSeason + 1);
   }, TIMEOUT_MS);
 
   it('retains the interactive 53-player gate before regular-season entry', async () => {

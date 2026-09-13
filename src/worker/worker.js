@@ -2128,12 +2128,16 @@ async function flushDirty(forceFlush = false, {
     }
   }
   } finally {
-    offseasonProfiler.end(__profileToken, {
-      phase: cache.getMeta()?.phase ?? null,
-      teams: cache.getAllTeams?.().length ?? 0,
-      players: cache.getAllPlayers?.().length ?? 0,
-      writes: forceFlush ? 1 : 0,
-    });
+    try {
+      offseasonProfiler.end(__profileToken, {
+        phase: cache.getMeta()?.phase ?? null,
+        teams: cache.getAllTeams?.().length ?? 0,
+        players: cache.getAllPlayers?.().length ?? 0,
+        writes: forceFlush ? 1 : 0,
+      });
+    } catch (profileError) {
+      console.warn('[Worker] flushDirty profiler finalization failed (non-fatal):', profileError);
+    }
   }
 }
 
@@ -13754,23 +13758,24 @@ async function handleStartNewSeason(payload, id) {
     console.error('[Worker] All-time leaders update failed (non-fatal):', leadersErr);
   }
 
-  try {
-    // State and staged roster/cap transactions share one league-IDB transaction.
-    // A failed commit therefore leaves neither half-advanced state nor orphan
-    // transaction rows, and the in-memory snapshot remains safe to retry.
-    await flushDirty(true, {
-      transactions: rolloverTransactions,
-      seasons: stagedArchive.seasons,
-      archivedPlayerStats: stagedArchive.playerStats,
-      news: stagedArchive.news,
-      deferManifestUntilAfterCommit: true,
-    });
+  // State and staged roster/cap transactions share one league-IDB transaction.
+  // A failed commit therefore leaves neither half-advanced state nor orphan
+  // transaction rows, and the in-memory snapshot remains safe to retry.
+  await flushDirty(true, {
+    transactions: rolloverTransactions,
+    seasons: stagedArchive.seasons,
+    archivedPlayerStats: stagedArchive.playerStats,
+    news: stagedArchive.news,
+    deferManifestUntilAfterCommit: true,
+  });
   } catch (error) {
     restoreLifecyclePersistenceState(rolloverSnapshot);
-    post(toUI.ERROR, { message: `Could not persist the new season: ${error?.message ?? error}` }, id);
+    post(toUI.ERROR, { message: `Could not start the new season: ${error?.message ?? error}` }, id);
     return;
   }
 
+  // The authoritative league transaction has completed. Presentation failures
+  // below must never restore the pre-rollover snapshot over committed state.
   // Broadcast SEASON_START so the UI can force-switch to Standings/Dashboard.
   const updatedMeta = cache.getMeta();
   post(toUI.SEASON_START, {
@@ -13780,10 +13785,6 @@ async function handleStartNewSeason(payload, id) {
     week:    updatedMeta.currentWeek,
   });
   post(toUI.FULL_STATE, buildViewState(), id);
-  } catch (error) {
-    restoreLifecyclePersistenceState(rolloverSnapshot);
-    post(toUI.ERROR, { message: `Could not start the new season: ${error?.message ?? error}` }, id);
-  }
 }
 
 // ── Handler: GET_TEAM_PROFILE ─────────────────────────────────────────────────
