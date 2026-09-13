@@ -364,7 +364,11 @@ class AiLogic {
      * Execute AI Roster Cutdowns for Preseason.
      * Forces all AI teams to cut down to 53 players.
      */
-    static async executeAICutdowns({ includeUserTeam = false, transactionSink = null } = {}) {
+    static async executeAICutdowns({
+        includeUserTeam = false,
+        transactionSink = null,
+        releasedPlayerIdsByTeam = null,
+    } = {}) {
         const meta = cache.getMeta();
         const userTeamId = meta.userTeamId;
         const allTeams = cache.getAllTeams().slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
@@ -432,6 +436,14 @@ class AiLogic {
 
                 // Update Cache (Release)
                 cache.updatePlayer(p.id, { teamId: null, status: 'free_agent' });
+                if (releasedPlayerIdsByTeam instanceof Map) {
+                    let releasedIds = releasedPlayerIdsByTeam.get(team.id);
+                    if (!(releasedIds instanceof Set)) {
+                        releasedIds = new Set();
+                        releasedPlayerIdsByTeam.set(team.id, releasedIds);
+                    }
+                    releasedIds.add(p.id);
+                }
 
                 // Update Team Dead Cap (Preseason cutdowns are post-June 1)
                 const freshTeam = cache.getTeam(team.id);
@@ -485,18 +497,23 @@ class AiLogic {
         const initialMissingSlots = underfilled.reduce(
             (sum, team) => sum + Math.max(0, minimum - cache.getPlayersByTeam(team.id).length), 0,
         );
-        const equivalentCandidateRank = new Map();
         const candidateEquivalenceKey = new Map();
         const equivalentCounts = new Map();
         for (const player of availablePlayers) {
             const { id, teamId, status, contract, offers, ...traits } = player ?? {};
-            const signature = JSON.stringify(traits);
-            const rank = equivalentCounts.get(signature) ?? 0;
-            equivalentCandidateRank.set(player.id, rank);
-            candidateEquivalenceKey.set(player.id, signature);
-            equivalentCounts.set(signature, rank + 1);
+            const eligibleTeamIds = underfilled
+                .filter((team) => {
+                    const excludedIds = releasedPlayerIdsByTeam instanceof Map
+                        ? releasedPlayerIdsByTeam.get(team.id)
+                        : null;
+                    return !(excludedIds instanceof Set
+                        && [...excludedIds].some((excludedId) => stableIdCompare(excludedId, id) === 0));
+                })
+                .map((team) => String(team.id));
+            const signature = JSON.stringify({ traits, eligibleTeamIds });
+            candidateEquivalenceKey.set(id, signature);
+            equivalentCounts.set(signature, (equivalentCounts.get(signature) ?? 0) + 1);
         }
-
         const candidateRows = (team, roster, available, affordableOnly = true) => {
             const freshTeam = cache.getTeam(team.id) ?? team;
             const legalCap = resolveLiveCapForMinimumRoster(freshTeam, meta);
@@ -521,7 +538,7 @@ class AiLogic {
             const excludedIds = releasedPlayerIdsByTeam instanceof Map
                 ? releasedPlayerIdsByTeam.get(team.id)
                 : null;
-            return available.filter((player) => !(excludedIds instanceof Set
+            const rows = available.filter((player) => !(excludedIds instanceof Set
                 && [...excludedIds].some((id) => stableIdCompare(id, player.id) === 0))).map((player) => {
                 const contract = buildMinimumRosterContract(player, freshTeam, {
                     year: meta?.year,
@@ -545,6 +562,22 @@ class AiLogic {
                   return (Number(b.player?.ovr ?? 0) - Number(a.player?.ovr ?? 0))
                       || stableIdCompare(a.player?.id, b.player?.id);
               });
+            // Equivalent rows are limited only after this team's command-local
+            // exclusions and canonical offer generation. An ineligible own cut
+            // therefore cannot consume the slot of an otherwise identical FA.
+            // Include the generated contract so market-distinct players are
+            // never collapsed merely because their visible traits match.
+            const equivalentRowsKept = new Map();
+            return rows.filter((row) => {
+                const signature = JSON.stringify({
+                    candidate: candidateEquivalenceKey.get(row.player?.id),
+                    contract: row.contract,
+                });
+                const kept = equivalentRowsKept.get(signature) ?? 0;
+                if (kept >= initialMissingSlots) return false;
+                equivalentRowsKept.set(signature, kept + 1);
+                return true;
+            });
         };
 
         // Emergency roster deficits are normally tiny. This deterministic DFS
@@ -621,11 +654,11 @@ class AiLogic {
                 failedStates.add(stateKey);
                 return null;
             }
-            const rows = (affordableOnly ? demand.rows : [...demand.rows].sort((a, b) => {
+            const rows = affordableOnly ? demand.rows : [...demand.rows].sort((a, b) => {
                 const aHit = Number(getActiveCapHit(a.projectedPlayer) ?? 0);
                 const bHit = Number(getActiveCapHit(b.projectedPlayer) ?? 0);
                 return (aHit - bHit) || stableIdCompare(a.player?.id, b.player?.id);
-            })).filter((row) => (equivalentCandidateRank.get(row.player?.id) ?? 0) < initialMissingSlots);
+            });
             for (const row of rows) {
                 const nextRosters = new Map(rosters);
                 nextRosters.set(demand.team.id, [...demand.roster, row.projectedPlayer]);

@@ -3248,6 +3248,7 @@ async function handleAdvanceWeek(payload, id) {
     await AiLogic.executeAICutdowns({
       includeUserTeam: batchSim,
       transactionSink: preseasonTransactions,
+      releasedPlayerIdsByTeam: preseasonReleasedPlayerIds,
     });
 
     // AI cap management: bring every AI team legally under the LIVE cap using the

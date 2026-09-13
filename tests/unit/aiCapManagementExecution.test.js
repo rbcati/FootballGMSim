@@ -497,6 +497,38 @@ describe('executeAICapManagement — legality & structure', () => {
 });
 
 describe('ensureMinimumRosters — stable rollover legality', () => {
+  it('records preseason cutdowns in team-scoped lifecycle provenance and allows another team to sign the cut', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: 200 }, currentSeasonId: 's8', currentWeek: 1, year: 2033, phase: 'preseason' },
+      teams: new Map([
+        [1, { id: 1, abbr: 'CUT', capTotal: 200, deadCap: 0 }],
+        [2, { id: 2, abbr: 'OTHER', capTotal: 200, deadCap: 0 }],
+      ]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 54; i += 1) {
+      h.state.store.players.set(`cut-${i}`, {
+        id: `cut-${i}`, teamId: 1, pos: 'WR', ovr: i === 0 ? 40 : 60,
+        potential: i === 0 ? 40 : 60, age: 25, status: 'active', contract: contract(1),
+      });
+    }
+    for (let i = 0; i < 52; i += 1) {
+      h.state.store.players.set(`other-${i}`, { id: `other-${i}`, teamId: 2, pos: 'WR', ovr: 60, potential: 60, age: 25, status: 'active', contract: contract(1) });
+    }
+    const releasedPlayerIdsByTeam = new Map();
+
+    await AiLogic.executeAICutdowns({ includeUserTeam: true, releasedPlayerIdsByTeam });
+    const result = await AiLogic.ensureMinimumRosters({ includeUserTeam: true, releasedPlayerIdsByTeam });
+
+    expect(releasedPlayerIdsByTeam.get(1)).toEqual(new Set(['cut-0']));
+    expect(result.failures).toEqual([]);
+    expect(h.state.store.players.get('cut-0').teamId).toBe(2);
+    expect(h.state.txLog).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'RELEASE', teamId: 1, details: expect.objectContaining({ playerId: 'cut-0' }) }),
+      expect.objectContaining({ type: 'SIGN', teamId: 2, details: expect.objectContaining({ playerId: 'cut-0' }) }),
+    ]));
+  });
+
   it('excludes a same-command cut only from its releasing team emergency pool', async () => {
     h.state.store = {
       meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's8', currentWeek: 1, year: 2033, phase: 'preseason' },
@@ -510,8 +542,8 @@ describe('ensureMinimumRosters — stable rollover legality', () => {
       h.state.store.players.set(`cut-${i}`, { id: `cut-${i}`, teamId: 1, pos: 'WR', ovr: 60, status: 'active', contract: contract(1) });
       h.state.store.players.set(`other-${i}`, { id: `other-${i}`, teamId: 2, pos: 'WR', ovr: 60, status: 'active', contract: contract(1) });
     }
-    h.state.store.players.set('same-command-cut', { id: 'same-command-cut', teamId: null, pos: 'CB', ovr: 61, status: 'free_agent' });
-    h.state.store.players.set('genuine-replacement', { id: 'genuine-replacement', teamId: null, pos: 'CB', ovr: 60, status: 'free_agent' });
+    h.state.store.players.set('same-command-cut', { id: 'same-command-cut', teamId: null, pos: 'CB', ovr: 60, potential: 60, age: 25, status: 'free_agent' });
+    h.state.store.players.set('genuine-replacement', { id: 'genuine-replacement', teamId: null, pos: 'CB', ovr: 60, potential: 60, age: 25, status: 'free_agent' });
     const releasedPlayerIdsByTeam = new Map([[1, new Set(['same-command-cut'])]]);
 
     const result = await AiLogic.ensureMinimumRosters({ includeUserTeam: true, releasedPlayerIdsByTeam });
@@ -520,6 +552,28 @@ describe('ensureMinimumRosters — stable rollover legality', () => {
     expect(h.state.store.players.get('same-command-cut').teamId).toBe(2);
     expect(h.state.store.players.get('genuine-replacement').teamId).toBe(1);
     expect(h.state.txLog.some((tx) => tx.teamId === 1 && tx.playerId === 'same-command-cut')).toBe(false);
+  });
+
+  it('keeps enough team-eligible equivalents when the first global equivalent is excluded', async () => {
+    h.state.store = {
+      meta: { userTeamId: 0, difficulty: 'Normal', economy: { currentSalaryCap: LIVE_CAP }, currentSeasonId: 's8', currentWeek: 1, year: 2033, phase: 'preseason' },
+      teams: new Map([[1, { id: 1, abbr: 'EQ', capTotal: LIVE_CAP, deadCap: 0 }]]),
+      players: new Map(),
+    };
+    for (let i = 0; i < 51; i += 1) {
+      h.state.store.players.set(`owned-${i}`, { id: `owned-${i}`, teamId: 1, pos: 'WR', ovr: 60, status: 'active', contract: contract(1) });
+    }
+    for (const id of ['eq-0', 'eq-1', 'eq-2']) {
+      h.state.store.players.set(id, { id, teamId: null, pos: 'CB', ovr: 59, potential: 59, age: 25, status: 'free_agent' });
+    }
+    const releasedPlayerIdsByTeam = new Map([[1, new Set(['eq-0'])]]);
+
+    const result = await AiLogic.ensureMinimumRosters({ includeUserTeam: true, releasedPlayerIdsByTeam });
+
+    expect(result.failures).toEqual([]);
+    expect(h.mockCache.getPlayersByTeam(1)).toHaveLength(53);
+    expect(h.state.store.players.get('eq-0').teamId).toBeNull();
+    expect([h.state.store.players.get('eq-1').teamId, h.state.store.players.get('eq-2').teamId]).toEqual([1, 1]);
   });
 
   it('prunes an insolvent 10-slot roster deficit before exploring the large FA pool', async () => {
