@@ -120,9 +120,66 @@ const _dirty = {
   draftPicks:  new Set(),
 };
 
+const cloneRollbackValue = (value) => {
+  if (typeof structuredClone === 'function') return structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+};
+
 // ── Read accessors ────────────────────────────────────────────────────────────
 
 export const cache = {
+
+  // --- START_NEW_SEASON preflight rollback ---
+
+  /**
+   * Capture the mutable hot state used by the bounded START_NEW_SEASON roster
+   * preflight. The preflight never writes IndexedDB; restoring this snapshot
+   * also restores dirty tracking so an aborted projection cannot leak into a
+   * later SAVE_NOW/flush.
+   */
+  snapshotStartNewSeasonState() {
+    return cloneRollbackValue({
+      meta: _meta,
+      teams: [..._teams.entries()],
+      players: [..._players.entries()],
+      weekGames: _weekGames,
+      seasonStats: [..._seasonStats.entries()],
+      draftPicks: [..._draftPicks.entries()],
+      dirty: {
+        meta: _dirty.meta,
+        teams: [..._dirty.teams],
+        players: [..._dirty.players],
+        games: _dirty.games,
+        seasonStats: [..._dirty.seasonStats],
+        draftPicks: [..._dirty.draftPicks],
+      },
+    });
+  },
+
+  restoreStartNewSeasonState(snapshot) {
+    if (!snapshot) return;
+    _meta = snapshot.meta;
+    _teams.clear();
+    snapshot.teams.forEach(([key, value]) => _teams.set(key, value));
+    _players.clear();
+    snapshot.players.forEach(([key, value]) => _players.set(key, value));
+    _weekGames = snapshot.weekGames;
+    _seasonStats.clear();
+    snapshot.seasonStats.forEach(([key, value]) => _seasonStats.set(key, value));
+    _draftPicks.clear();
+    snapshot.draftPicks.forEach(([key, value]) => _draftPicks.set(key, value));
+    _dirty.meta = snapshot.dirty.meta;
+    _dirty.teams.clear();
+    snapshot.dirty.teams.forEach((key) => _dirty.teams.add(key));
+    _dirty.players.clear();
+    snapshot.dirty.players.forEach((key) => _dirty.players.add(key));
+    _dirty.games.length = 0;
+    _dirty.games.push(...snapshot.dirty.games);
+    _dirty.seasonStats.clear();
+    snapshot.dirty.seasonStats.forEach((key) => _dirty.seasonStats.add(key));
+    _dirty.draftPicks.clear();
+    snapshot.dirty.draftPicks.forEach((key) => _dirty.draftPicks.add(key));
+  },
 
   // --- Meta ---
 

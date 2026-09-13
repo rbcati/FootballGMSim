@@ -49,8 +49,6 @@ function positionRank(pos, order) {
     return idx >= 0 ? idx : order.length;
 }
 
-const round1 = (v) => Math.round(Number(v || 0) * 10) / 10;
-
 export function buildMinimumRosterContract(player = {}, team = {}, context = {}) {
     const year = Number(context.year ?? context.currentYear ?? context.seasonYear ?? 0);
     const market = evaluateContractMarket(player, {
@@ -60,9 +58,13 @@ export function buildMinimumRosterContract(player = {}, team = {}, context = {})
         capRoom: context.capRoom ?? team?.capRoom,
         positionalNeed: context.needMultiplier ?? 1,
     });
-    const years = Math.max(1, Math.round(Number(market?.suggestedYears ?? market?.years ?? 1)));
-    const annual = round1(market?.suggestedAnnual ?? market?.annualSalary ?? Constants.SALARY_CAP.MIN_CONTRACT);
-    const signingBonus = round1(market?.signingBonus ?? 0);
+    // Replacement-level players may take the league minimum. Every higher tier
+    // retains the canonical market model's term, salary and bonus; roster need
+    // never reprices an elite player as minimum-cost depth.
+    const replacementLevel = market.marketTier === 'replacement level';
+    const years = replacementLevel ? 1 : Math.max(1, Number(market.suggestedYears ?? 1));
+    const annual = replacementLevel ? Number(Constants.SALARY_CAP.MIN_CONTRACT) : Number(market.suggestedAnnual);
+    const signingBonus = replacementLevel ? 0 : Number(market.signingBonus ?? 0);
     return {
         ...buildContractFromMarket(
             { ...market, suggestedAnnual: annual, suggestedYears: years, signingBonus },
@@ -81,6 +83,102 @@ export function buildMinimumRosterContract(player = {}, team = {}, context = {})
         franchiseTag: null,
         rfaTender: null,
     };
+}
+
+function minimumRosterCapHit() {
+    return Number(buildContractFromMarket({
+        suggestedAnnual: Constants.SALARY_CAP.MIN_CONTRACT,
+        suggestedYears: 1,
+        signingBonus: 0,
+    }).baseAnnual);
+}
+
+function buildRosterReadySnapshot(team, roster, {
+    legalCap,
+    targetBuffer = 0,
+    rosterCompletionReserve = null,
+    reserveRosterCount = roster.length,
+    actualCompletionProjection = null,
+} = {}) {
+    const cap = buildTeamCapSnapshot({ team, roster, salaryCap: legalCap, targetBuffer });
+    const missingRosterSlots = Math.max(0, Constants.ROSTER_LIMITS.REGULAR_SEASON - roster.length);
+    const requiredMinimumRoom = Math.round(missingRosterSlots * minimumRosterCapHit() * 100) / 100;
+    const hasActualReserve = rosterCompletionReserve !== null
+        && rosterCompletionReserve !== undefined
+        && Number.isFinite(Number(rosterCompletionReserve))
+        && Number(rosterCompletionReserve) >= 0;
+    const initialMissingSlots = Math.max(0, Constants.ROSTER_LIMITS.REGULAR_SEASON - Number(reserveRosterCount));
+    const releaseCreatedSlots = Math.max(0, missingRosterSlots - initialMissingSlots);
+    const hasActualProjection = actualCompletionProjection !== null;
+    const requiredRosterCompletionRoom = hasActualProjection
+        ? (actualCompletionProjection.feasible ? actualCompletionProjection.cost : Number.POSITIVE_INFINITY)
+        : hasActualReserve
+        ? Math.round((Number(rosterCompletionReserve) + releaseCreatedSlots * minimumRosterCapHit()) * 100) / 100
+        : requiredMinimumRoom;
+    const rosterReadyCommitted = Math.round((cap.totalCommitted + requiredRosterCompletionRoom) * 100) / 100;
+    return {
+        ...cap,
+        projectedRosterCount: roster.length,
+        missingRosterSlots,
+        requiredMinimumRoom,
+        requiredRosterCompletionRoom,
+        rosterCompletionReserveSource: hasActualProjection ? 'actual_projection'
+            : hasActualReserve ? 'actual_completion' : 'minimum_fallback',
+        actualCompletionOfferCount: hasActualProjection ? actualCompletionProjection.candidateCount : null,
+        rosterReadyCommitted,
+        isRosterReadyCompliant: rosterReadyCommitted <= Number(legalCap) + 0.001,
+        isRosterReadyWithinPlanningTarget: rosterReadyCommitted <= Number(cap.targetCommitted) + 0.001,
+    };
+}
+
+function actualCompletionOffers(offers) {
+    return offers
+        .map(({ player, contract }) => ({
+            playerId: player?.id,
+            capHit: Number(getActiveCapHit({ ...player, contract }) ?? 0),
+        }))
+        .filter(({ capHit }) => Number.isFinite(capHit) && capHit >= 0)
+        .sort((a, b) => (a.capHit - b.capHit) || stableIdCompare(a.playerId, b.playerId));
+}
+
+function cheapestActualCompletion(sortedOffers, slots, excludedPlayerId = null) {
+    const required = Math.max(0, Number(slots) || 0);
+    if (required === 0) return { feasible: true, cost: 0, candidateCount: 0 };
+
+    const remaining = sortedOffers.filter(({ playerId }) => stableIdCompare(playerId, excludedPlayerId) !== 0);
+    const completion = remaining.slice(0, required);
+    const cost = Math.round(completion.reduce((sum, row) => sum + row.capHit, 0) * 100) / 100;
+    return {
+        feasible: completion.length === required,
+        cost,
+        candidateCount: remaining.length,
+    };
+}
+
+function buildActualCompletionProjection({ players, team, roster, meta, slots, excludedPlayerIds = null }) {
+    const strategy = buildAiTeamStrategy({
+        team,
+        roster,
+        league: { year: meta?.year, phase: meta?.phase },
+        phase: meta?.phase,
+        year: meta?.year,
+    });
+    const needs = AiLogic.calculateTeamNeedsFromRoster(team, roster, meta);
+    const offers = players
+        .filter((player) => !(excludedPlayerIds instanceof Set
+            && [...excludedPlayerIds].some((id) => stableIdCompare(id, player?.id) === 0)))
+        .filter((player) => Number(player?.__projectedReleaseFromTeamId) !== Number(team?.id))
+        .filter((player) => isSignableFreeAgent(player) || player.__projectedRelease)
+        .map((player) => ({
+            player,
+            contract: buildMinimumRosterContract(player, team, {
+                year: meta?.year,
+                strategy,
+                capRoom: team?.capRoom,
+                needMultiplier: needs?.[player?.pos] ?? 1,
+            }),
+        }));
+    return cheapestActualCompletion(actualCompletionOffers(offers), slots);
 }
 
 function minimumRosterSigningPatch(contract) {
@@ -125,6 +223,34 @@ function resolveLiveCapForMinimumRoster(team = {}, meta = {}) {
     const teamCap = Number(team?.capTotal);
     if (Number.isFinite(teamCap) && teamCap > 0) return teamCap;
     return Constants.SALARY_CAP.HARD_CAP;
+}
+
+function minimumRosterCandidateCount(team, roster, meta) {
+    const legalCap = resolveLiveCapForMinimumRoster(team, meta);
+    const cap = buildTeamCapSnapshot({ team, roster, salaryCap: legalCap });
+    const needs = AiLogic.calculateTeamNeedsFromRoster(team, roster, meta);
+    const strategy = buildAiTeamStrategy({
+        team,
+        roster,
+        league: { year: meta?.year, phase: meta?.phase },
+        phase: meta?.phase,
+        year: meta?.year,
+    });
+    return cache.getAllPlayers().filter((player) => {
+        if (!isSignableFreeAgent(player)) return false;
+        const contract = buildMinimumRosterContract(player, team, {
+            year: meta?.year,
+            strategy,
+            capRoom: cap.capRoom,
+            needMultiplier: needs?.[player?.pos] ?? 1,
+        });
+        const projected = buildTeamCapSnapshot({
+            team,
+            roster: [...roster, { ...player, teamId: team.id, status: 'active', contract }],
+            salaryCap: legalCap,
+        });
+        return projected.isLegallyCompliant !== false;
+    }).length;
 }
 
 class AiLogic {
@@ -238,7 +364,11 @@ class AiLogic {
      * Execute AI Roster Cutdowns for Preseason.
      * Forces all AI teams to cut down to 53 players.
      */
-    static async executeAICutdowns({ includeUserTeam = false } = {}) {
+    static async executeAICutdowns({
+        includeUserTeam = false,
+        transactionSink = null,
+        releasedPlayerIdsByTeam = null,
+    } = {}) {
         const meta = cache.getMeta();
         const userTeamId = meta.userTeamId;
         const allTeams = cache.getAllTeams().slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
@@ -306,6 +436,14 @@ class AiLogic {
 
                 // Update Cache (Release)
                 cache.updatePlayer(p.id, { teamId: null, status: 'free_agent' });
+                if (releasedPlayerIdsByTeam instanceof Map) {
+                    let releasedIds = releasedPlayerIdsByTeam.get(team.id);
+                    if (!(releasedIds instanceof Set)) {
+                        releasedIds = new Set();
+                        releasedPlayerIdsByTeam.set(team.id, releasedIds);
+                    }
+                    releasedIds.add(p.id);
+                }
 
                 // Update Team Dead Cap (Preseason cutdowns are post-June 1)
                 const freshTeam = cache.getTeam(team.id);
@@ -317,13 +455,15 @@ class AiLogic {
                 }
 
                 // Log Transaction
-                await Transactions.add({
+                const releaseTransaction = {
                     type: 'RELEASE',
                     seasonId: meta.currentSeasonId,
                     week: meta.currentWeek,
                     teamId: team.id,
                     details: { playerId: p.id, deadCap: currentYearDead }
-                });
+                };
+                if (Array.isArray(transactionSink)) transactionSink.push(releaseTransaction);
+                else await Transactions.add(releaseTransaction);
             }
 
             // Re-calc active cap (roster changed)
@@ -337,91 +477,344 @@ class AiLogic {
      * under-minimum rosters from the existing free-agent pool and never cuts or
      * restructures players.
      */
-    static async ensureMinimumRosters({ includeUserTeam = false, minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON } = {}) {
+    static async ensureMinimumRosters({
+        includeUserTeam = false,
+        minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON,
+        transactionSink = null,
+        searchMaxStates = null,
+        releasedPlayerIdsByTeam = null,
+    } = {}) {
         const meta = cache.getMeta();
         const userTeamId = meta?.userTeamId;
-        const allTeams = cache.getAllTeams().slice().sort((a, b) => stableIdCompare(a?.id, b?.id));
+        const teams = cache.getAllTeams()
+            .filter((team) => includeUserTeam || Number(team.id) !== Number(userTeamId))
+            .sort((a, b) => stableIdCompare(a?.id, b?.id));
+        const underfilled = teams.filter((team) => cache.getPlayersByTeam(team.id).length < minimum);
+        const projectedRosters = new Map(underfilled.map((team) => [team.id, cache.getPlayersByTeam(team.id)]));
+        const availablePlayers = cache.getAllPlayers()
+            .filter((player) => isSignableFreeAgent(player))
+            .sort((a, b) => stableIdCompare(a?.id, b?.id));
+        const initialMissingSlots = underfilled.reduce(
+            (sum, team) => sum + Math.max(0, minimum - cache.getPlayersByTeam(team.id).length), 0,
+        );
+        const candidateEquivalenceKey = new Map();
+        const equivalentCounts = new Map();
+        for (const player of availablePlayers) {
+            const { id, teamId, status, contract, offers, ...traits } = player ?? {};
+            const eligibleTeamIds = underfilled
+                .filter((team) => {
+                    const excludedIds = releasedPlayerIdsByTeam instanceof Map
+                        ? releasedPlayerIdsByTeam.get(team.id)
+                        : null;
+                    return !(excludedIds instanceof Set
+                        && [...excludedIds].some((excludedId) => stableIdCompare(excludedId, id) === 0));
+                })
+                .map((team) => String(team.id));
+            const signature = JSON.stringify({ traits, eligibleTeamIds });
+            candidateEquivalenceKey.set(id, signature);
+            equivalentCounts.set(signature, (equivalentCounts.get(signature) ?? 0) + 1);
+        }
+        const candidateRows = (team, roster, available, affordableOnly = true) => {
+            const freshTeam = cache.getTeam(team.id) ?? team;
+            const legalCap = resolveLiveCapForMinimumRoster(freshTeam, meta);
+            const cap = buildTeamCapSnapshot({ team: freshTeam, roster, salaryCap: legalCap });
+            const liveRoster = cache.getPlayersByTeam(team.id);
+            const sameAsLiveRoster = liveRoster.length === roster.length
+                && liveRoster.every((player, index) => String(player?.id) === String(roster[index]?.id));
+            const needs = sameAsLiveRoster
+                ? AiLogic.calculateTeamNeeds(team.id)
+                : AiLogic.calculateTeamNeedsFromRoster(freshTeam, roster, meta);
+            const neededPositions = Object.keys(needs)
+                .filter((pos) => Number(needs[pos] ?? 0) > 1)
+                .sort((a, b) => (Number(needs[b] ?? 0) - Number(needs[a] ?? 0)) || a.localeCompare(b));
+            const positionOrder = [...neededPositions, ...Constants.POSITIONS.filter((pos) => !neededPositions.includes(pos))];
+            const strategy = buildAiTeamStrategy({
+                team: freshTeam,
+                roster,
+                league: { year: meta?.year, phase: meta?.phase },
+                phase: meta?.phase,
+                year: meta?.year,
+            });
+            const excludedIds = releasedPlayerIdsByTeam instanceof Map
+                ? releasedPlayerIdsByTeam.get(team.id)
+                : null;
+            const rows = available.filter((player) => !(excludedIds instanceof Set
+                && [...excludedIds].some((id) => stableIdCompare(id, player.id) === 0))).map((player) => {
+                const contract = buildMinimumRosterContract(player, freshTeam, {
+                    year: meta?.year,
+                    strategy,
+                    capRoom: cap.capRoom,
+                    needMultiplier: needs?.[player?.pos] ?? 1,
+                });
+                const projectedPlayer = { ...player, teamId: team.id, status: 'active', contract };
+                const projectedCap = buildTeamCapSnapshot({
+                    team: freshTeam,
+                    roster: [...roster, projectedPlayer],
+                    salaryCap: legalCap,
+                });
+                return { player, contract, projectedPlayer, projectedCap };
+            }).filter((row) => row.contract && (!affordableOnly
+                || (Number(getActiveCapHit(row.projectedPlayer) ?? 0) <= Number(cap.capRoom ?? 0) + 0.01
+                    && row.projectedCap?.isLegallyCompliant !== false)))
+              .sort((a, b) => {
+                  const posDelta = positionRank(a.player?.pos, positionOrder) - positionRank(b.player?.pos, positionOrder);
+                  if (posDelta !== 0) return posDelta;
+                  return (Number(b.player?.ovr ?? 0) - Number(a.player?.ovr ?? 0))
+                      || stableIdCompare(a.player?.id, b.player?.id);
+              });
+            // Equivalent rows are limited only after this team's command-local
+            // exclusions and canonical offer generation. An ineligible own cut
+            // therefore cannot consume the slot of an otherwise identical FA.
+            // Include the generated contract so market-distinct players are
+            // never collapsed merely because their visible traits match.
+            const equivalentRowsKept = new Map();
+            return rows.filter((row) => {
+                const signature = JSON.stringify({
+                    candidate: candidateEquivalenceKey.get(row.player?.id),
+                    contract: row.contract,
+                });
+                const kept = equivalentRowsKept.get(signature) ?? 0;
+                if (kept >= initialMissingSlots) return false;
+                equivalentRowsKept.set(signature, kept + 1);
+                return true;
+            });
+        };
 
-        for (const team of allTeams) {
-            if (!includeUserTeam && Number(team.id) === Number(userTeamId)) continue;
+        // Emergency roster deficits are normally tiny. This deterministic DFS
+        // searches only the current deficit and existing signable pool, while
+        // recomputing team-specific needs and canonical offers after each
+        // projected signing. Most-constrained-first ordering prunes shared-pool
+        // conflicts without changing a team's preference order.
+        const runCompletionSearch = ({ affordableOnly, acceptPlan = null, maxStates = 20000 }) => {
+          const diagnostics = { exploredStates: 0, memoHits: 0, lowerBoundPrunes: 0, exhausted: false };
+          const failedStates = new Set();
+          const stateSignature = (rosters) => underfilled.map((team) => {
+            const originalIds = new Set((projectedRosters.get(team.id) ?? []).map((player) => String(player.id)));
+            const additions = (rosters.get(team.id) ?? [])
+                .filter((player) => !originalIds.has(String(player.id)))
+                .map((player) => {
+                    const equivalenceKey = candidateEquivalenceKey.get(player.id);
+                    const identity = equivalenceKey && (equivalentCounts.get(equivalenceKey) ?? 0) > 1
+                        ? equivalenceKey
+                        : String(player.id);
+                    return `${identity}:${Number(getActiveCapHit(player) ?? 0).toFixed(2)}`;
+                })
+                .sort();
+            return `${team.id}=${additions.join(',')}`;
+          }).join('|');
+          const findCompletion = (rosters, available, plan) => {
+            diagnostics.exploredStates += 1;
+            if (diagnostics.exploredStates > maxStates) {
+                diagnostics.exhausted = true;
+                return null;
+            }
+            const stateKey = stateSignature(rosters);
+            if (failedStates.has(stateKey)) {
+                diagnostics.memoHits += 1;
+                return null;
+            }
+            const remainingSlots = underfilled.reduce(
+                (sum, team) => sum + Math.max(0, minimum - (rosters.get(team.id)?.length ?? 0)), 0,
+            );
+            if (remainingSlots === 0) {
+                if (!acceptPlan || acceptPlan(plan)) return plan;
+                failedStates.add(stateKey);
+                return null;
+            }
+            if (available.length < remainingSlots) return null;
 
-            let roster = cache.getPlayersByTeam(team.id);
-            if (roster.length >= minimum) continue;
-
-            while (roster.length < minimum) {
-                // Recompute from the updated roster after every successful signing.
-                const needs = AiLogic.calculateTeamNeeds(team.id);
-                const neededPositions = Object.keys(needs)
-                    .filter((pos) => Number(needs[pos] ?? 0) > 1)
-                    .sort((a, b) => (Number(needs[b] ?? 0) - Number(needs[a] ?? 0)) || a.localeCompare(b));
-                const positionOrder = [...neededPositions, ...Constants.POSITIONS.filter((pos) => !neededPositions.includes(pos))];
-                const freshTeam = cache.getTeam(team.id);
-                const liveSalaryCap = resolveLiveCapForMinimumRoster(freshTeam, meta);
-                const freeAgents = cache.getAllPlayers()
-                    .filter((p) => isSignableFreeAgent(p))
-                    .sort((a, b) => {
-                        const posDelta = positionRank(a?.pos, positionOrder) - positionRank(b?.pos, positionOrder);
-                        if (posDelta !== 0) return posDelta;
-                        return (Number(b?.ovr ?? 0) - Number(a?.ovr ?? 0)) || stableIdCompare(a?.id, b?.id);
-                    });
-                const capSnapshot = buildTeamCapSnapshot({
+            // Every canonical emergency offer costs at least the league minimum.
+            // This cheap necessary-condition check prevents large, obviously
+            // insolvent rosters from entering the combinatorial search at all.
+            if (affordableOnly && underfilled.some((team) => {
+                const roster = rosters.get(team.id) ?? [];
+                const deficit = Math.max(0, minimum - roster.length);
+                if (deficit === 0) return false;
+                const freshTeam = cache.getTeam(team.id) ?? team;
+                const cap = buildTeamCapSnapshot({
                     team: freshTeam,
                     roster,
-                    salaryCap: liveSalaryCap,
+                    salaryCap: resolveLiveCapForMinimumRoster(freshTeam, meta),
                 });
-                const room = Number(capSnapshot?.capRoom ?? freshTeam?.capRoom ?? 0);
-                let candidate = null;
-                let contract = null;
-                let projectedCap = null;
-                for (const p of freeAgents) {
-                    const strategy = buildAiTeamStrategy({
-                        team: freshTeam,
-                        roster,
-                        league: { year: meta?.year, phase: meta?.phase },
-                        phase: meta?.phase,
-                        year: meta?.year,
-                    });
-                    const proposedContract = buildMinimumRosterContract(p, freshTeam, {
-                        year: meta?.year,
-                        strategy,
-                        capRoom: room,
-                        needMultiplier: needs?.[p?.pos] ?? 1,
-                    });
-                    const projectedPlayer = { ...p, teamId: team.id, status: 'active', contract: proposedContract };
-                    const projection = buildTeamCapSnapshot({
-                        team: freshTeam,
-                        roster: [...roster, projectedPlayer],
-                        salaryCap: liveSalaryCap,
-                    });
-                    if (Number(getActiveCapHit(projectedPlayer) ?? 0) <= room + 0.01 && projection?.isLegallyCompliant !== false) {
-                        candidate = p;
-                        contract = proposedContract;
-                        projectedCap = projection;
-                        break;
-                    }
-                }
-                if (!candidate) break;
-
-                const beforePlayer = JSON.parse(JSON.stringify(candidate));
-                const beforeTeam = JSON.parse(JSON.stringify(freshTeam));
-                cache.updatePlayer(candidate.id, { ...minimumRosterSigningPatch(contract), teamId: team.id });
-                const capResult = AiLogic.updateTeamCap(team.id);
-                if (capResult?.ok === false) {
-                    cache.updatePlayer(candidate.id, restoreMinimumRosterPlayerPatch(beforePlayer));
-                    cache.updateTeam(team.id, beforeTeam);
-                    break;
-                }
-                await Transactions.add({
-                    type: 'SIGN',
-                    seasonId: meta.currentSeasonId,
-                    week: meta.currentWeek,
-                    teamId: team.id,
-                    playerId: candidate.id,
-                    details: { playerId: candidate.id, source: 'minimum_roster_reconciliation', contract, projectedCapRoom: projectedCap?.capRoom },
-                });
-                roster = cache.getPlayersByTeam(team.id);
+                return Number(cap.capRoom ?? 0) + 0.01 < deficit * minimumRosterCapHit();
+            })) {
+                diagnostics.lowerBoundPrunes += 1;
+                return null;
             }
+
+            const demands = underfilled.map((team) => {
+                const roster = rosters.get(team.id) ?? [];
+                return { team, roster, deficit: Math.max(0, minimum - roster.length), rows: candidateRows(team, roster, available, affordableOnly) };
+            }).filter((row) => row.deficit > 0)
+              .sort((a, b) => (a.rows.length - b.rows.length)
+                  || (b.deficit - a.deficit)
+                  || stableIdCompare(a.team?.id, b.team?.id));
+            const demand = demands[0];
+            if (!demand || demand.rows.length < demand?.deficit) {
+                failedStates.add(stateKey);
+                return null;
+            }
+            const rows = affordableOnly ? demand.rows : [...demand.rows].sort((a, b) => {
+                const aHit = Number(getActiveCapHit(a.projectedPlayer) ?? 0);
+                const bHit = Number(getActiveCapHit(b.projectedPlayer) ?? 0);
+                return (aHit - bHit) || stableIdCompare(a.player?.id, b.player?.id);
+            });
+            for (const row of rows) {
+                const nextRosters = new Map(rosters);
+                nextRosters.set(demand.team.id, [...demand.roster, row.projectedPlayer]);
+                const nextAvailable = available.filter((player) => String(player.id) !== String(row.player.id));
+                const result = findCompletion(nextRosters, nextAvailable, [
+                    ...plan,
+                    { teamId: demand.team.id, playerId: row.player.id, contract: row.contract, projectedCapRoom: row.projectedCap?.capRoom },
+                ]);
+                if (result) return result;
+                if (diagnostics.exhausted) return null;
+            }
+            failedStates.add(stateKey);
+            return null;
+          };
+          return { plan: findCompletion(projectedRosters, availablePlayers, []), diagnostics };
+        };
+
+        const affordableSearch = runCompletionSearch({
+            affordableOnly: true,
+            maxStates: Number(searchMaxStates?.affordable ?? 20000),
+        });
+        const plan = affordableSearch.plan;
+        const failures = [];
+        const signedByTeam = [];
+        const completionCandidateIdsByTeam = new Map();
+        const recoveryReserveByTeam = new Map();
+        const recoveryCandidateIdsByTeam = new Map();
+        if (!plan) {
+            // Current cap can be insufficient even though a shared-pool assignment
+            // exists after targeted cap work. Build that assignment once here so
+            // retries never reserve the same scarce player for multiple teams.
+            const recoverySearch = runCompletionSearch({
+                affordableOnly: false,
+                maxStates: Number(searchMaxStates?.recovery ?? 20000),
+                acceptPlan: (candidatePlan) => {
+                    const stepsByTeam = new Map();
+                    for (const step of candidatePlan) {
+                        const rows = stepsByTeam.get(step.teamId) ?? [];
+                        rows.push(step);
+                        stepsByTeam.set(step.teamId, rows);
+                    }
+                    return [...stepsByTeam.entries()].every(([teamId, steps]) => {
+                        const team = cache.getTeam(teamId);
+                        const roster = cache.getPlayersByTeam(teamId);
+                        const reserve = Math.round(steps.reduce(
+                            (sum, step) => sum + Number(getActiveCapHit({ contract: step.contract }) ?? 0), 0,
+                        ) * 100) / 100;
+                        const candidates = steps.map((step) => cache.getPlayer(step.playerId)).filter(Boolean);
+                        const capPlan = AiLogic.buildAiCapCompliancePlan(team, roster, {
+                            legalCap: resolveLiveCapForMinimumRoster(team, meta),
+                            targetBuffer: AiLogic._capPlanningBuffer(meta?.difficulty),
+                            season: Number(meta?.year ?? 0),
+                            rosterCompletionReserve: reserve,
+                            rosterCompletionCandidates: candidates,
+                            rosterCompletionMeta: meta,
+                            excludedCompletionCandidateIds: releasedPlayerIdsByTeam instanceof Map
+                                ? releasedPlayerIdsByTeam.get(teamId)
+                                : null,
+                        });
+                        return !capPlan.failure && capPlan.projected?.isRosterReadyCompliant !== false;
+                    });
+                },
+            });
+            const recoveryPlan = recoverySearch.plan;
+            if (recoveryPlan) {
+                for (const step of recoveryPlan) {
+                    const hit = Number(getActiveCapHit({ contract: step.contract }) ?? 0);
+                    recoveryReserveByTeam.set(step.teamId, Math.round(((recoveryReserveByTeam.get(step.teamId) ?? 0) + hit) * 100) / 100);
+                    const ids = recoveryCandidateIdsByTeam.get(step.teamId) ?? [];
+                    ids.push(step.playerId);
+                    recoveryCandidateIdsByTeam.set(step.teamId, ids);
+                }
+            }
+            for (const team of underfilled) {
+                const roster = cache.getPlayersByTeam(team.id);
+                const rows = candidateRows(team, roster, availablePlayers, false);
+                const offers = actualCompletionOffers(rows.map((row) => ({ player: row.player, contract: row.contract })));
+                const remainingSlots = minimum - roster.length;
+                const completion = cheapestActualCompletion(offers, remainingSlots);
+                const cap = buildTeamCapSnapshot({
+                    team: cache.getTeam(team.id), roster,
+                    salaryCap: resolveLiveCapForMinimumRoster(cache.getTeam(team.id), meta),
+                });
+                completionCandidateIdsByTeam.set(team.id, rows.map(({ player }) => player.id));
+                failures.push({
+                    teamId: team.id,
+                    rosterCount: roster.length,
+                    capRoom: cap.capRoom,
+                    requiredMinimumContractRoom: Math.round(remainingSlots * minimumRosterCapHit() * 100) / 100,
+                    remainingSlots,
+                    cheapestActualCompletionCost: completion.feasible ? completion.cost : null,
+                    availableEligibleMinimumCandidates: completion.candidateCount,
+                    reason: recoverySearch.diagnostics.exhausted
+                        ? 'recovery_search_exhausted'
+                        : affordableSearch.diagnostics.exhausted
+                            ? 'affordable_search_exhausted'
+                            : 'no_feasible_completion',
+                });
+            }
+            failures.sort((a, b) => {
+                const aCompletable = a.cheapestActualCompletionCost !== null
+                    && a.capRoom + 0.001 >= a.cheapestActualCompletionCost;
+                const bCompletable = b.cheapestActualCompletionCost !== null
+                    && b.capRoom + 0.001 >= b.cheapestActualCompletionCost;
+                return Number(aCompletable) - Number(bCompletable)
+                    || (a.availableEligibleMinimumCandidates - b.availableEligibleMinimumCandidates)
+                    || stableIdCompare(b.teamId, a.teamId);
+            });
+            return {
+                failures, signedByTeam, completionCandidateIdsByTeam, recoveryReserveByTeam, recoveryCandidateIdsByTeam,
+                searchDiagnostics: {
+                    affordable: affordableSearch.diagnostics,
+                    recovery: recoverySearch.diagnostics,
+                    totalExploredStates: affordableSearch.diagnostics.exploredStates + recoverySearch.diagnostics.exploredStates,
+                },
+            };
         }
+
+        const signedCounts = new Map();
+        const appliedSnapshots = [];
+        for (const step of plan) {
+            const candidate = cache.getPlayer(step.playerId);
+            const freshTeam = cache.getTeam(step.teamId);
+            if (!candidate || !freshTeam || !isSignableFreeAgent(candidate)) continue;
+            const beforePlayer = JSON.parse(JSON.stringify(candidate));
+            const beforeTeam = JSON.parse(JSON.stringify(freshTeam));
+            appliedSnapshots.push({ playerId: candidate.id, teamId: step.teamId, beforePlayer, beforeTeam });
+            cache.updatePlayer(candidate.id, { ...minimumRosterSigningPatch(step.contract), teamId: step.teamId });
+            const capResult = AiLogic.updateTeamCap(step.teamId);
+            if (capResult?.ok === false) {
+                for (const snapshot of appliedSnapshots.reverse()) {
+                    cache.updatePlayer(snapshot.playerId, restoreMinimumRosterPlayerPatch(snapshot.beforePlayer));
+                    cache.updateTeam(snapshot.teamId, snapshot.beforeTeam);
+                }
+                return {
+                    failures: [{ teamId: step.teamId, rosterCount: cache.getPlayersByTeam(step.teamId).length, reason: 'cap_validation_failed' }],
+                    signedByTeam: [],
+                    completionCandidateIdsByTeam,
+                };
+            }
+            const signingTransaction = {
+                type: 'SIGN', seasonId: meta.currentSeasonId, week: meta.currentWeek,
+                teamId: step.teamId, playerId: candidate.id,
+                details: { playerId: candidate.id, source: 'minimum_roster_reconciliation', contract: step.contract, projectedCapRoom: step.projectedCapRoom },
+            };
+            if (Array.isArray(transactionSink)) transactionSink.push(signingTransaction);
+            else await Transactions.add(signingTransaction);
+            signedCounts.set(step.teamId, (signedCounts.get(step.teamId) ?? 0) + 1);
+        }
+        for (const [teamId, signed] of signedCounts) {
+            signedByTeam.push({ teamId, signed, rosterCount: cache.getPlayersByTeam(teamId).length });
+        }
+        return {
+            failures, signedByTeam, completionCandidateIdsByTeam, recoveryReserveByTeam, recoveryCandidateIdsByTeam,
+            searchDiagnostics: { affordable: affordableSearch.diagnostics, recovery: null, totalExploredStates: affordableSearch.diagnostics.exploredStates },
+        };
     }
 
     /**
@@ -459,33 +852,70 @@ class AiLogic {
      * canonical equation as the pre-advance legality gate:
      *
      *   totalCommitted = Σ activeCapHit(roster) + team.deadCap
-     *   legal          ⇔ totalCommitted ≤ liveSalaryCap
+     *   legal          ⇔ totalCommitted + minimum contracts needed to restore
+     *                    the projected roster to 53 ≤ liveSalaryCap
      *
      * Least-destructive ordering:
      *   1. Restructures (non-destructive) toward the PLANNING TARGET
      *      (legalCap − difficulty buffer). Only actions with proven positive
      *      current-year relief are kept; no player is restructured twice in the
      *      same season.
-     *   2. Releases (destructive) ONLY while still over the LEGAL cap — never to
-     *      chase the buffer. Ranked by realizable NET current-year relief
+     *   2. Releases (destructive) only while the projected roster plus its
+     *      dynamically growing replacement reserve remains over the LEGAL cap.
+     *      Ranked by realizable NET current-year relief
      *      (capHit − new current-year dead cap); zero/negative-relief players are
      *      never chosen, and no position is cut below its floor.
      *
      * @returns {{ actions: object[], projected: object, failure: object|null }}
      */
-    static buildAiCapCompliancePlan(team, roster, { legalCap, targetBuffer = 0, season = 0 } = {}) {
+    static buildAiCapCompliancePlan(team, roster, {
+        legalCap,
+        targetBuffer = 0,
+        season = 0,
+        rosterCompletionReserve = null,
+        rosterCompletionCandidates = null,
+        rosterCompletionMeta = null,
+        priorRestructureProvenance = null,
+        excludedCompletionCandidateIds = null,
+    } = {}) {
         const actions = [];
         let workRoster = roster.map((p) => ({ ...p, contract: { ...(p?.contract ?? {}) } }));
         let deadCap = Math.max(0, Number(team?.deadCap ?? 0));
         // Original (pre-restructure) contracts, kept so a restructure can be rolled
         // back if the player later turns out to be the only cap-legal release.
-        const originalContracts = new Map();
-        const snap = () => buildTeamCapSnapshot({ team: { deadCap }, roster: workRoster, salaryCap: legalCap, targetBuffer });
+        const priorRestructures = priorRestructureProvenance instanceof Map
+            ? priorRestructureProvenance
+            : new Map();
+        const originalContracts = new Map(
+            [...priorRestructures.entries()].map(([playerId, entry]) => [playerId, { ...(entry?.originalContract ?? {}) }]),
+        );
+        const reserveRosterCount = roster.length;
+        const projectedReleasedPlayers = [];
+        const snap = () => {
+            const base = buildTeamCapSnapshot({ team: { ...team, deadCap }, roster: workRoster, salaryCap: legalCap, targetBuffer });
+            const actualCompletionProjection = Array.isArray(rosterCompletionCandidates)
+                ? buildActualCompletionProjection({
+                    players: [...rosterCompletionCandidates, ...projectedReleasedPlayers],
+                    team: { ...team, deadCap, capRoom: base.capRoom },
+                    roster: workRoster,
+                    meta: rosterCompletionMeta,
+                    slots: Math.max(0, Constants.ROSTER_LIMITS.REGULAR_SEASON - workRoster.length),
+                    excludedPlayerIds: excludedCompletionCandidateIds,
+                })
+                : null;
+            return buildRosterReadySnapshot({ ...team, deadCap }, workRoster, {
+                legalCap,
+                targetBuffer,
+                rosterCompletionReserve,
+                reserveRosterCount,
+                actualCompletionProjection,
+            });
+        };
 
         // ── Phase 1: restructures toward the planning target ──────────────────
         const touched = new Set();
         let guard = 0;
-        while (snap().totalCommitted > snap().targetCommitted && guard++ < 500) {
+        while (!snap().isRosterReadyWithinPlanningTarget && guard++ < 500) {
             const s = snap();
             const candidates = workRoster
                 .filter((p) => !touched.has(p.id))
@@ -535,14 +965,15 @@ class AiLogic {
         // cap and LOWER net release relief — restructuring then releasing the same
         // player is wasteful. Keep the players we chose to restructure and cut the
         // rest first.
-        const restructuredIds = new Set(
-            actions.filter((a) => a.type === 'RESTRUCTURE').map((a) => a.playerId),
-        );
+        const restructuredIds = new Set([
+            ...priorRestructures.keys(),
+            ...actions.filter((a) => a.type === 'RESTRUCTURE').map((a) => a.playerId),
+        ]);
         const posCount = {};
         for (const p of workRoster) posCount[p.pos] = (posCount[p.pos] ?? 0) + 1;
 
         guard = 0;
-        while (snap().totalCommitted > legalCap && guard++ < 500) {
+        while (!snap().isRosterReadyCompliant && guard++ < 500) {
             const candidates = workRoster
                 .filter((p) => !restructuredIds.has(p.id))
                 .map((p) => {
@@ -559,6 +990,10 @@ class AiLogic {
 
             const choice = candidates[0];
             workRoster = workRoster.filter((r) => r.id !== choice.p.id);
+            projectedReleasedPlayers.push({
+                ...choice.p, teamId: null, status: 'free_agent', __projectedRelease: true,
+                __projectedReleaseFromTeamId: team?.id,
+            });
             posCount[choice.p.pos] = (posCount[choice.p.pos] ?? 1) - 1;
             deadCap = Math.round((deadCap + choice.currentYearDead) * 100) / 100;
             actions.push({
@@ -578,7 +1013,7 @@ class AiLogic {
         // contract — this both removes the now-pointless restructure and realizes
         // the full original release relief.
         guard = 0;
-        while (snap().totalCommitted > legalCap && guard++ < 500) {
+        while (!snap().isRosterReadyCompliant && guard++ < 500) {
             const candidates = workRoster
                 .filter((p) => restructuredIds.has(p.id) && originalContracts.has(p.id))
                 .map((p) => {
@@ -601,6 +1036,14 @@ class AiLogic {
             if (rIdx >= 0) actions.splice(rIdx, 1);
             restructuredIds.delete(choice.p.id);
             workRoster = workRoster.filter((r) => r.id !== choice.p.id);
+            projectedReleasedPlayers.push({
+                ...choice.p,
+                contract: originalContracts.get(choice.p.id),
+                teamId: null,
+                status: 'free_agent',
+                __projectedRelease: true,
+                __projectedReleaseFromTeamId: team?.id,
+            });
             posCount[choice.p.pos] = (posCount[choice.p.pos] ?? 1) - 1;
             deadCap = Math.round((deadCap + choice.currentYearDead) * 100) / 100;
             actions.push({
@@ -610,11 +1053,13 @@ class AiLogic {
                 futureYearsDead: choice.futureYearsDead,
                 netRelief: choice.netRelief,
                 rolledBackRestructure: true,
+                supersededPriorRestructure: priorRestructures.has(choice.p.id),
+                originalContract: { ...originalContracts.get(choice.p.id) },
             });
         }
 
         const projected = snap();
-        const failure = projected.isLegallyCompliant ? null : {
+        const failure = projected.isRosterReadyCompliant ? null : {
             teamId: team?.id,
             abbr: team?.abbr,
             reason: 'no_legal_plan',
@@ -622,6 +1067,11 @@ class AiLogic {
             rosterCap: projected.rosterCap,
             deadCap: projected.deadCap,
             totalCommitted: projected.totalCommitted,
+            rosterReadyCommitted: projected.rosterReadyCommitted,
+            requiredMinimumRoom: projected.requiredMinimumRoom,
+            requiredRosterCompletionRoom: projected.requiredRosterCompletionRoom,
+            rosterCompletionReserveSource: projected.rosterCompletionReserveSource,
+            projectedRosterCount: workRoster.length,
             legalCap,
             protectedPositions: Object.keys(AiLogic.POSITION_FLOOR).filter((pos) => (posCount[pos] ?? 0) <= (AiLogic.POSITION_FLOOR[pos] ?? 1)),
         };
@@ -643,10 +1093,22 @@ class AiLogic {
      * capability by the caller) so the franchise can start a season without an
      * interactive front office.
      *
-     * @param {{autoManageUserCap?: boolean}} [opts]
+     * @param {{autoManageUserCap?: boolean, teamIds?: Array<number|string>|null,
+     *   rosterCompletionReserveByTeam?: Map<number|string, number>|Record<string, number>|null,
+     *   rosterCompletionCandidateIdsByTeam?: Map<number|string, Array<number|string>>|null,
+     *   transactionSink?: object[]|null,
+     *   restructureProvenanceByTeam?: Map<number|string, Map<number|string, object>>|null}} [opts]
      * @returns {Promise<{failures: object[], teamsManaged: number}>}
      */
-    static async executeAICapManagement({ autoManageUserCap = false } = {}) {
+    static async executeAICapManagement({
+        autoManageUserCap = false,
+        teamIds = null,
+        rosterCompletionReserveByTeam = null,
+        rosterCompletionCandidateIdsByTeam = null,
+        transactionSink = null,
+        restructureProvenanceByTeam = null,
+        releasedPlayerIdsByTeam = null,
+    } = {}) {
         const txsToCommit = [];
         const meta        = cache.getMeta();
         const userTeamId  = meta.userTeamId;
@@ -661,14 +1123,45 @@ class AiLogic {
 
         for (const team of allTeams) {
             if (team.id === userTeamId && !autoManageUserCap) continue;
+            if (Array.isArray(teamIds) && !teamIds.some((id) => Number(id) === Number(team.id))) continue;
 
             this.updateTeamCap(team.id);
             const freshTeam = cache.getTeam(team.id);
             const roster = cache.getPlayersByTeam(team.id);
-            const snapshot = buildTeamCapSnapshot({ team: freshTeam, roster, salaryCap: legalCap, targetBuffer });
-            if (snapshot.isWithinPlanningTarget) continue;
+            const rosterCompletionReserve = rosterCompletionReserveByTeam instanceof Map
+                ? [...rosterCompletionReserveByTeam.entries()].find(([teamId]) => Number(teamId) === Number(team.id))?.[1]
+                : rosterCompletionReserveByTeam?.[String(team.id)];
+            const completionCandidateIds = rosterCompletionCandidateIdsByTeam instanceof Map
+                ? [...rosterCompletionCandidateIdsByTeam.entries()].find(([teamId]) => Number(teamId) === Number(team.id))?.[1]
+                : rosterCompletionCandidateIdsByTeam?.[String(team.id)];
+            const rosterCompletionCandidates = Array.isArray(completionCandidateIds)
+                ? completionCandidateIds.map((playerId) => cache.getPlayer(playerId)).filter(Boolean)
+                : null;
+            const snapshot = buildRosterReadySnapshot(freshTeam, roster, {
+                legalCap,
+                targetBuffer,
+                rosterCompletionReserve,
+                reserveRosterCount: roster.length,
+            });
+            if (snapshot.isRosterReadyWithinPlanningTarget) continue;
 
-            const plan = AiLogic.buildAiCapCompliancePlan(freshTeam, roster, { legalCap, targetBuffer, season });
+            const priorRestructureProvenance = restructureProvenanceByTeam instanceof Map
+                ? ([...restructureProvenanceByTeam.entries()]
+                    .find(([teamId]) => Number(teamId) === Number(team.id))?.[1] ?? null)
+                : null;
+            const releasedPlayerIds = releasedPlayerIdsByTeam instanceof Map
+                ? releasedPlayerIdsByTeam.get(team.id)
+                : null;
+            const plan = AiLogic.buildAiCapCompliancePlan(freshTeam, roster, {
+                legalCap,
+                targetBuffer,
+                season,
+                rosterCompletionReserve,
+                rosterCompletionCandidates,
+                rosterCompletionMeta: meta,
+                priorRestructureProvenance,
+                excludedCompletionCandidateIds: releasedPlayerIds,
+            });
 
             // If no legal plan exists, do NOT commit partial destructive actions.
             // Committing releases/restructures that cannot eliminate the overage
@@ -688,6 +1181,7 @@ class AiLogic {
                 if (!player) continue;
 
                 if (action.type === 'RESTRUCTURE') {
+                    const originalContract = { ...(player.contract ?? {}) };
                     cache.updatePlayer(player.id, {
                         contract: { ...action.newContract, lastRestructuredSeason: season },
                     });
@@ -697,12 +1191,60 @@ class AiLogic {
                         cache.updateTeam(team.id, { deadCapItems: [...existing, action.deadCapItem] });
                     }
                     this.updateTeamCap(team.id);
-                    txsToCommit.push({
+                    const restructureTransaction = {
                         type: 'RESTRUCTURE', seasonId, week, teamId: team.id,
                         details: { playerId: player.id, convertAmount: action.conversionAmount, relief: action.relief, aiInitiated: true },
-                    });
+                    };
+                    txsToCommit.push(restructureTransaction);
+                    // Provenance is meaningful only while transactions are staged:
+                    // an already-persisted restructure must never be retroactively removed.
+                    if (restructureProvenanceByTeam instanceof Map && Array.isArray(transactionSink)) {
+                        let teamProvenance = restructureProvenanceByTeam.get(team.id);
+                        if (!(teamProvenance instanceof Map)) {
+                            teamProvenance = new Map();
+                            restructureProvenanceByTeam.set(team.id, teamProvenance);
+                        }
+                        if (!teamProvenance.has(player.id)) {
+                            teamProvenance.set(player.id, {
+                                originalContract,
+                                deadCapItem: action.deadCapItem ?? null,
+                                transaction: restructureTransaction,
+                            });
+                        }
+                    }
                 } else if (action.type === 'RELEASE') {
-                    cache.updatePlayer(player.id, { teamId: null, status: 'free_agent' });
+                    const priorEntry = action.supersededPriorRestructure
+                        ? priorRestructureProvenance?.get(player.id)
+                        : null;
+                    cache.updatePlayer(player.id, {
+                        ...(priorEntry?.originalContract ? { contract: { ...priorEntry.originalContract } } : {}),
+                        teamId: null,
+                        status: 'free_agent',
+                    });
+                    if (priorEntry) {
+                        const currentTeam = cache.getTeam(team.id);
+                        const existingItems = Array.isArray(currentTeam?.deadCapItems) ? currentTeam.deadCapItems : [];
+                        const targetJson = priorEntry.deadCapItem ? JSON.stringify(priorEntry.deadCapItem) : null;
+                        let deadCapItemIndex = -1;
+                        if (targetJson !== null) {
+                            for (let index = existingItems.length - 1; index >= 0; index -= 1) {
+                                if (JSON.stringify(existingItems[index]) === targetJson) {
+                                    deadCapItemIndex = index;
+                                    break;
+                                }
+                            }
+                        }
+                        if (deadCapItemIndex >= 0) {
+                            const restoredItems = existingItems.slice();
+                            restoredItems.splice(deadCapItemIndex, 1);
+                            cache.updateTeam(team.id, { deadCapItems: restoredItems });
+                        }
+                        if (Array.isArray(transactionSink) && priorEntry.transaction) {
+                            const stagedIndex = transactionSink.indexOf(priorEntry.transaction);
+                            if (stagedIndex >= 0) transactionSink.splice(stagedIndex, 1);
+                        }
+                        priorRestructureProvenance.delete(player.id);
+                    }
                     const t = cache.getTeam(team.id);
                     if (action.currentYearDead > 0) {
                         cache.updateTeam(team.id, { deadCap: Math.round(((t.deadCap ?? 0) + action.currentYearDead) * 100) / 100 });
@@ -716,6 +1258,14 @@ class AiLogic {
                         type: 'RELEASE', seasonId, week, teamId: team.id,
                         details: { playerId: player.id, deadCap: action.currentYearDead, aiCapCut: true },
                     });
+                    if (releasedPlayerIdsByTeam instanceof Map) {
+                        let releasedIds = releasedPlayerIdsByTeam.get(team.id);
+                        if (!(releasedIds instanceof Set)) {
+                            releasedIds = new Set();
+                            releasedPlayerIdsByTeam.set(team.id, releasedIds);
+                        }
+                        releasedIds.add(player.id);
+                    }
                 }
             }
 
@@ -739,7 +1289,8 @@ class AiLogic {
         }
 
         if (txsToCommit.length > 0) {
-            await Promise.all(txsToCommit.map(tx => Transactions.add(tx)));
+            if (Array.isArray(transactionSink)) transactionSink.push(...txsToCommit);
+            else await Promise.all(txsToCommit.map(tx => Transactions.add(tx)));
         }
 
         if (failures.length > 0) {
@@ -817,6 +1368,10 @@ class AiLogic {
         const team = cache.getTeam(teamId);
         const roster = cache.getPlayersByTeam(teamId);
         const meta = cache.getMeta();
+        return this.calculateTeamNeedsFromRoster(team, roster, meta);
+    }
+
+    static calculateTeamNeedsFromRoster(team, roster, meta) {
         const strategy = buildAiTeamStrategy({
             team,
             roster,

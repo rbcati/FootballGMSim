@@ -17,6 +17,7 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { LifecycleDriver } from './lifecycleDriver.js';
 import { ROSTER } from './invariants/bounds.js';
+import { cache } from '../../src/db/cache.js';
 
 const USER_TEAM_ID = 0;
 
@@ -25,6 +26,7 @@ describe('post-rollover roster membership integrity (PR #1689)', () => {
   let driver;
   let preRolloverUserCount = 0;
   let preseasonView = null;
+  let underfilledAiTeamId = null;
 
   beforeAll(async () => {
     driver = new LifecycleDriver({ seed: 1684 });
@@ -33,6 +35,15 @@ describe('post-rollover roster membership integrity (PR #1689)', () => {
     await driver.simToPhase('offseason', { checkpoint: 'afterPlayoffs' });
     const preUser = driver.view.teams.find((t) => Number(t.id) === USER_TEAM_ID);
     preRolloverUserCount = preUser?.roster?.length ?? 0;
+    const aiTeam = cache.getAllTeams().find((team) => Number(team.id) !== USER_TEAM_ID);
+    underfilledAiTeamId = Number(aiTeam.id);
+    const [released] = cache.getPlayersByTeam(underfilledAiTeamId)
+      .slice()
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    cache.updatePlayer(released.id, {
+      teamId: null, status: 'free_agent', ovr: 60, potential: 60, age: 27,
+    });
+    expect(cache.getPlayersByTeam(underfilledAiTeamId).length).toBeLessThan(ROSTER.REGULAR_SEASON_MIN);
     await driver.simToPhase('preseason', { checkpoint: 'afterSeasonRollover' });
     preseasonView = driver.view;
   }, 200_000);
@@ -59,6 +70,11 @@ describe('post-rollover roster membership integrity (PR #1689)', () => {
       .map((t) => ({ id: t.id, size: Array.isArray(t.roster) ? t.roster.length : 0 }))
       .filter((t) => t.size < ROSTER.REGULAR_SEASON_MIN || t.size > ROSTER.ABSOLUTE_MAX);
     expect(offenders).toEqual([]);
+  });
+
+  it('reconciles an underfilled AI team at the afterSeasonRollover boundary', () => {
+    const team = preseasonView.teams.find((row) => Number(row.id) === underfilledAiTeamId);
+    expect(team?.roster?.length).toBeGreaterThanOrEqual(ROSTER.REGULAR_SEASON_MIN);
   });
 
   it('no player is rostered on more than one team after the rollover', () => {
