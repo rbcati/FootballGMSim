@@ -52,6 +52,9 @@ describe('cache.restoreDirty', () => {
     cache.updateTeam(0, { wins: 2 });
     const expectedDirty = cache.drainDirty();
     cache.restoreDirty(expectedDirty);
+    const metaReference = cache.getMeta();
+    const teamReference = cache.getTeam(0);
+    const playerReference = cache.getPlayer(10);
     const snapshot = cache.snapshotStartNewSeasonState();
 
     cache.setMeta({ currentSeasonId: 2, phase: 'preseason' });
@@ -66,5 +69,11 @@ describe('cache.restoreDirty', () => {
     expect(cache.getPlayer(10)).toEqual({ id: 10, teamId: 0 });
     expect(cache.getAllDraftPicks()).toEqual([]);
     expect(cache.drainDirty()).toEqual(expectedDirty);
+    expect(cache.getMeta()).toBe(metaReference);
+    expect(cache.getTeam(0)).toBe(teamReference);
+    expect(cache.getPlayer(10)).toBe(playerReference);
+    expect(metaReference).toEqual({ id: 'L1', currentSeasonId: 1 });
+    expect(teamReference).toEqual({ id: 0, wins: 2 });
+    expect(playerReference).toEqual({ id: 10, teamId: 0 });
   });
 });
