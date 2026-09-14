@@ -8,6 +8,10 @@ import GameResultSummaryCard, {
 } from './GameResultSummaryCard.jsx';
 
 describe('GameResultSummaryCard', () => {
+  it('labels a previous-season result so it cannot read as current-week history', () => {
+    render(<GameResultSummaryCard homeAbbr="HOU" awayAbbr="BAL" homeScore={28} awayScore={7} userIsHome={false} week={8} seasonContext="2025" />);
+    expect(screen.getByText(/2025 Wk8/)).toBeTruthy();
+  });
   afterEach(() => cleanup());
 
   describe('resolveResultFraming', () => {

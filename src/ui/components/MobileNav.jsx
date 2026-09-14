@@ -108,12 +108,6 @@ export default function MobileNav({ activeSection, activeTab, onSectionChange, o
 
   return (
     <>
-      <button className={`mobile-nav-hamburger${collapsed ? ' is-collapsed' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Open navigation menu" aria-expanded={menuOpen} aria-hidden={collapsed || undefined} tabIndex={collapsed ? -1 : undefined}>
-        <span className={`hamburger-line ${menuOpen ? 'open' : ''}`} />
-        <span className={`hamburger-line ${menuOpen ? 'open' : ''}`} />
-        <span className={`hamburger-line ${menuOpen ? 'open' : ''}`} />
-      </button>
-
       {menuOpen && <div className="mobile-nav-backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
 
       <nav className={`mobile-nav-panel mobile-nav-panel-premium ${menuOpen ? 'open' : ''}`} aria-label="More navigation">

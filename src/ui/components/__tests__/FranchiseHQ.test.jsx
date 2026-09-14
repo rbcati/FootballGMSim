@@ -606,7 +606,8 @@ describe('LeagueDashboard Game Book navigation integrity', () => {
     expect(screen.getByTestId('nav-team').getAttribute('aria-current')).toBe('page');
     expect(onDashboardNavigation).toHaveBeenCalledWith('Team');
     expect(document.querySelector('.mobile-bottom-bar')).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Open navigation menu' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'More' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open navigation menu' })).toBeNull();
   });
 });
 
@@ -676,7 +677,7 @@ describe('FranchiseHQ V3 command hierarchy cleanup', () => {
     expect(document.querySelector('[data-testid="gm-loop-hint"]')).toBeNull();
   });
 
-  it('has exactly one Advance Week button — sticky bottom CTA is the sole control', () => {
+  it('has exactly one contextual progression button — sticky bottom CTA is the sole control', () => {
     render(
       <FranchiseHQ
         league={baseLeague}
@@ -689,7 +690,7 @@ describe('FranchiseHQ V3 command hierarchy cleanup', () => {
     // The canonical CTA lives in app-hq-sticky-advance
     expect(screen.getByTestId('advance-week-cta')).toBeTruthy();
     // There must be exactly one button whose accessible name matches "advance week"
-    const advanceBtns = screen.getAllByRole('button', { name: /advance week/i });
+    const advanceBtns = screen.getAllByRole('button', { name: /advance (week|to game)/i });
     expect(advanceBtns).toHaveLength(1);
   });
 

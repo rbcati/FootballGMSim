@@ -1,5 +1,6 @@
 import { autoBuildDepthChart, depthWarnings, DEPTH_CHART_ROWS } from '../../core/depthChart.js';
 import { deriveGamePlanMultipliers, getGamePlanSynergySummary } from '../../core/sim/gamePlanMultipliers.ts';
+import { getNextUserGame } from './userWeeklyGames.js';
 
 const PREP_STORAGE_KEY = 'footballgm_weekly_prep_v1';
 const GAME_PLAN_STORAGE_KEY = 'footballgm_gameplan_v1';
@@ -15,25 +16,7 @@ function getTeam(league, teamId) {
 }
 
 export function getNextGame(league) {
-  const uid = Number(league?.userTeamId);
-  for (const week of league?.schedule?.weeks ?? []) {
-    for (const game of week?.games ?? []) {
-      if (game?.played) continue;
-      const homeId = Number(game?.home?.id ?? game?.home);
-      const awayId = Number(game?.away?.id ?? game?.away);
-      if (homeId !== uid && awayId !== uid) continue;
-      const isHome = homeId === uid;
-      const oppId = isHome ? awayId : homeId;
-      return {
-        week: safeNum(week?.week, safeNum(league?.week, 1)),
-        isHome,
-        oppId,
-        opp: getTeam(league, oppId),
-        game,
-      };
-    }
-  }
-  return null;
+  return getNextUserGame(league);
 }
 
 function getTeamRating(team, type = 'ovr') {

@@ -1764,7 +1764,7 @@ function AppContent() {
                     borderRadius: 'var(--radius-md)',
                   }}
                 >
-                  ⏭️ Sim to End (Instant)
+                  ⏭️ Sim to End (Instant Recap)
                 </button>
                 <button
                   className="btn"
@@ -1780,7 +1780,7 @@ function AppContent() {
                     borderRadius: 'var(--radius-md)',
                   }}
                 >
-                  Simulate (Skip)
+                  Simulate Week (Skip Presentation)
                 </button>
               </div>
             </div>

@@ -146,6 +146,10 @@ function getLatestUserResultFromRecentResults(lastResults, { league, lastSimWeek
       score: { home: finalScore.home, away: finalScore.away },
       played: true,
       week: safeNum(result?.week, fallbackWeek),
+      season: safeNum(
+        result?.season ?? result?.year,
+        fallbackWeek >= safeNum(league?.week, 1) ? safeNum(league?.year, 1) - 1 : safeNum(league?.year, 1),
+      ),
     };
   }
   return null;
@@ -351,6 +355,9 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
       awayScore,
       userIsHome,
       week: weekNum || null,
+      seasonContext: Number(lastGame?.season ?? lastGame?.year) !== Number(league?.year)
+        ? String(lastGame?.season ?? lastGame?.year)
+        : null,
       gameId,
     };
   }, [lastGame, league?.userTeamId]);
@@ -589,6 +596,7 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           awayScore={lastResultRow.awayScore}
           userIsHome={lastResultRow.userIsHome}
           week={lastResultRow.week}
+          seasonContext={lastResultRow.seasonContext}
           onViewGameBook={
             lastResultRow.gameId
               ? () => onNavigate?.(buildGameBookDestination(lastResultRow.gameId))
@@ -1278,8 +1286,10 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         );
       })()}
 
-      {/* ── Franchise Legacy: Ring of Honor, Retired Numbers & All-Time Leaders ── */}
-      {(() => {
+      {/* ── Franchise history remains available without lengthening the weekly loop. ── */}
+      <details className="hq-more-drawer hq-franchise-history" data-testid="hq-franchise-history">
+        <summary className="hq-more-drawer__trigger">Franchise History ▾</summary>
+        {(() => {
         const rohMembers         = Array.isArray(league?.ringOfHonor) ? league.ringOfHonor : [];
         const atLeaders          = league?.allTimeLeaders ?? null;
         const rohCandidates      = Array.isArray(league?.pendingRohCandidates) ? league.pendingRohCandidates : [];
@@ -1300,7 +1310,9 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           }
         };
 
-        if (!hasLegacyData && !atLeaders) return null;
+        if (!hasLegacyData && !atLeaders) {
+          return <p style={{ padding: '0 12px 12px', color: 'var(--text-muted)' }}>No franchise honors recorded yet.</p>;
+        }
 
         return (
           <div style={{ padding: '0 12px', marginBottom: 4 }}>
@@ -1316,7 +1328,8 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
             />
           </div>
         );
-      })()}
+        })()}
+      </details>
 
       <ActivityToastStack messages={activityMessages} />
 
@@ -1336,8 +1349,10 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         <Button
           className="app-command-advance app-command-advance-gold"
           data-testid="advance-week-cta"
-          onClick={handleAdvanceOrGate}
-          disabled={busy || simulating || commandSummary.hasDanger}
+          onClick={commandSummary.hasDanger
+            ? () => onNavigate?.(commandSummary.primaryActions.find((item) => item.level === 'blocker' || item.tone === 'danger')?.tab ?? gate.primaryFixDestination)
+            : handleAdvanceOrGate}
+          disabled={busy || simulating}
           aria-label={
             busy || simulating
               ? 'Advancing week…'
@@ -1347,7 +1362,13 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
           }
           title={commandSummary.hasDanger ? `Resolve blockers to unlock` : 'Advance Week'}
         >
-          {busy || simulating ? 'Advancing…' : 'Advance Week'}
+          {busy || simulating
+            ? 'Advancing…'
+            : commandSummary.hasDanger
+              ? `Resolve ${commandSummary.blockerCount} blocker${commandSummary.blockerCount === 1 ? '' : 's'}`
+              : command.nextGame
+                ? 'Advance to Game'
+                : 'Continue'}
           <HQIcon name="arrowRight" size={16} />
         </Button>
       </div>

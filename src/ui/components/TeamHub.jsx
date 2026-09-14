@@ -10,6 +10,7 @@ import { summarizeRosterDevelopment } from '../utils/playerDevelopmentSignals.js
 import { TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildStaffPhilosophySummary } from '../../core/staff/staffPhilosophy.js';
 import { buildGameDayReadinessModel } from '../utils/gameDayReadinessModel.js';
+import { getNextUserGame, getPreviousUserGame } from '../utils/userWeeklyGames.js';
 
 const TEAM_SECTIONS = ['Overview', 'Roster / Depth', 'Contracts', 'Development', 'Injuries'];
 const CRITICAL_POSITION_MIN = { QB: 2, RB: 3, WR: 5, TE: 3, OL: 8, DL: 8, LB: 6, CB: 5, S: 4, K: 1, P: 1 };
@@ -49,12 +50,14 @@ function getPositionGroupPressure(roster = []) {
     .slice(0, 3);
 }
 
-function makeMatchupLabel(game, team) {
+function makeMatchupLabel(game, team, currentSeason) {
   if (!game || !team) return '—';
   const homeId = Number(game.homeId ?? game.home);
   const isHome = homeId === Number(team.id);
-  const oppAbbr = isHome ? (game.awayAbbr ?? `Team`) : (game.homeAbbr ?? `Team`);
-  return `${isHome ? 'vs' : '@'} ${oppAbbr} · Week ${game.week ?? '—'}`;
+  const oppAbbr = game?.opp?.abbr ?? (isHome ? game.awayAbbr : game.homeAbbr) ?? 'Team';
+  const historicalSeason = Number.isFinite(Number(game?.season)) && Number(game.season) !== Number(currentSeason)
+    ? `${game.season} ` : '';
+  return `${isHome ? 'vs' : '@'} ${oppAbbr} · ${historicalSeason}Week ${game.week ?? '—'}`;
 }
 
 export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSelect, onNavigate = null, initialSection = 'Overview' }) {
@@ -80,15 +83,8 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
     if (next === 'Roster / Depth') setRosterMode('depth');
   }, [initialSection]);
 
-  const latestGame = useMemo(() => {
-    const games = Array.isArray(league?.schedule) ? league.schedule : [];
-    return [...games].reverse().find((g) => (Number(g.homeId ?? g.home) === Number(team?.id) || Number(g.awayId ?? g.away) === Number(team?.id)) && Number(g.homeScore ?? -1) >= 0 && Number(g.awayScore ?? -1) >= 0);
-  }, [league?.schedule, team?.id]);
-
-  const upcomingGame = useMemo(() => {
-    const games = Array.isArray(league?.schedule) ? league.schedule : [];
-    return games.find((g) => (Number(g.homeId ?? g.home) === Number(team?.id) || Number(g.awayId ?? g.away) === Number(team?.id)) && (g.homeScore == null || g.awayScore == null));
-  }, [league?.schedule, team?.id]);
+  const latestGame = useMemo(() => getPreviousUserGame(league), [league]);
+  const upcomingGame = useMemo(() => getNextUserGame(league), [league]);
 
   // Memoize initialState objects so Roster's prop-sync effects receive a stable
   // reference across parent re-renders (prevents the cascade where a new object
@@ -134,8 +130,8 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
           )}
         </div>
         <div className="app-hero-summary-grid">
-          <div><span>Last game</span><strong>{latestGame ? makeMatchupLabel(latestGame, team) : 'No completed game yet'}</strong></div>
-          <div><span>Next game</span><strong>{upcomingGame ? makeMatchupLabel(upcomingGame, team) : 'No upcoming matchup'}</strong></div>
+          <div><span>Last game</span><strong>{latestGame ? makeMatchupLabel(latestGame, team, league?.year) : 'No completed game yet'}</strong></div>
+          <div><span>Next game</span><strong>{upcomingGame ? makeMatchupLabel(upcomingGame, team, league?.year) : 'No upcoming matchup'}</strong></div>
         </div>
       </HeroCard>
 

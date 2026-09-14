@@ -26,4 +26,12 @@ describe('buildGameDayReadinessModel', () => {
     const model = buildGameDayReadinessModel({ roster: [{ id: 1, injury: { status: 'Out', gamesRemaining: 4 } }] });
     expect(model).toMatchObject({ availableCount: 1, unavailableCount: 0, unavailableStarterCount: 0, blockingLineupIssue: false, status: 'ready' });
   });
+
+  it('is ready with optional availability concerns when no starter slot is blocked', () => {
+    const model = buildGameDayReadinessModel({ roster: [
+      { id: 1, pos: 'QB', depthChart: { rowKey: 'QB', order: 1 } },
+      { id: 2, pos: 'QB', holdout: { active: true }, depthChart: { rowKey: 'QB', order: 2 } },
+    ] });
+    expect(model).toMatchObject({ status: 'ready', hasAvailabilityConcerns: true, blockingLineupIssue: false });
+  });
 });

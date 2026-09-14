@@ -146,11 +146,13 @@ export function buildCommandCenterSummary({ gate, weeklyContext } = {}) {
   }
 
   const primaryActions = merged.slice(0, 3);
+  const blockers = primaryActions.filter((item) => item.level === 'blocker' || item.tone === 'danger');
+  const recommendations = primaryActions.filter((item) => !blockers.includes(item));
   const secondaryActions = contextSecondary
     .filter((i) => !seen.has(String(i.label ?? '').toLowerCase()))
     .slice(0, 2);
 
-  const hasDanger = gate?.severity === 'danger' || primaryActions.some((i) => i.tone === 'danger');
+  const hasDanger = blockers.length > 0;
   const hasWarning = gate?.shouldWarn || primaryActions.some((i) => i.tone === 'warning');
 
   const readinessTone = hasDanger ? 'danger' : hasWarning ? 'warning' : 'ok';
@@ -165,7 +167,9 @@ export function buildCommandCenterSummary({ gate, weeklyContext } = {}) {
     secondaryActions,
     readinessLabel,
     readinessTone,
-    criticalCount: primaryActions.length,
+    criticalCount: blockers.length,
+    blockerCount: blockers.length,
+    recommendationCount: recommendations.length + secondaryActions.length,
     hasDanger,
     hasWarning,
     canAdvanceSafely: readinessTone === 'ok',
