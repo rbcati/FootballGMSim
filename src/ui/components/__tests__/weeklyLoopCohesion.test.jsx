@@ -185,8 +185,7 @@ describe('WeeklyHub command center layout', () => {
     expect(html).not.toContain('No urgent blockers');
   });
 
-  it('WeeklyHub Actions Required badge count matches commandSummary criticalCount, not allAttentionItems length', () => {
-    // buildCommandCenterSummary caps to 3 primaryActions; badge should reflect criticalCount
+  it('WeeklyHub blocker count remains complete when primary actions are capped', () => {
     const gate = { shouldWarn: true, severity: 'danger', riskItems: [
       { label: 'Risk A', detail: '', severity: 'danger', fixDestination: 'Weekly Prep' },
       { label: 'Risk B', detail: '', severity: 'danger', fixDestination: 'Weekly Prep' },
@@ -197,9 +196,8 @@ describe('WeeklyHub command center layout', () => {
       { label: 'Urgent E', detail: '', tone: 'danger', level: 'blocker', rank: 30, tab: 'Roster' },
     ] };
     const summary = buildCommandCenterSummary({ gate, weeklyContext });
-    // criticalCount is primaryActions.length, capped to 3
-    expect(summary.criticalCount).toBeLessThanOrEqual(3);
-    expect(summary.criticalCount).toBe(summary.primaryActions.length);
+    expect(summary.primaryActions).toHaveLength(3);
+    expect(summary.criticalCount).toBe(5);
   });
 
   it('WeeklyHub primary actions are capped to 3', () => {
@@ -225,11 +223,11 @@ describe('FranchiseHQ command center layout', () => {
     expect(html).toContain('actions required');
   });
 
-  it('renders advance week CTA', () => {
+  it('renders the contextual progression CTA', () => {
     const html = renderToString(
       <FranchiseHQ league={league} onNavigate={() => {}} onAdvanceWeek={() => {}} />,
     );
-    expect(html).toContain('Advance Week');
+    expect(html).toContain('Resolve 2 blockers');
   });
 
   it('renders Roster Health and Office Status cards (replaced Coordinator Brief section)', () => {

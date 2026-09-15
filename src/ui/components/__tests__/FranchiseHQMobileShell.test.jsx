@@ -55,9 +55,10 @@ describe('FranchiseHQ — mobile shell & safe-area layout', () => {
     expect(document.querySelector('.app-hq-bottom-nav')).toBeNull();
   });
 
-  it('exposes exactly one primary Advance Week action', () => {
+  it('exposes exactly one primary contextual progression action', () => {
     render(<FranchiseHQ league={baseLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-    expect(screen.getAllByRole('button', { name: /advance week/i })).toHaveLength(1);
+    expect(screen.getAllByTestId('advance-week-cta')).toHaveLength(1);
+    expect(screen.getByTestId('advance-week-cta').getAttribute('aria-label')).toBe('Resolve 2 blockers before advancing');
   });
 
   it('presents the completed user game once before standings', () => {
