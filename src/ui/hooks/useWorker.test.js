@@ -32,6 +32,30 @@ describe('workerReducer', () => {
     expect(shouldAcceptBootScopedPayload({ bootRequestId: 'safe_boot_1' }, 'safe_boot_1', ['boot_1'])).toBe(true);
     expect(shouldAcceptBootScopedPayload({ phase: 'regular' }, null, ['boot_1'])).toBe(true);
   });
+
+  it('preserves save-scoped transient results on same-league FULL_STATE', () => {
+    const state = { ...INITIAL_WORKER_STATE, league: { activeLeagueId: 'league_A', week: 8 }, lastResults: [{ id: 'hou' }], lastSimWeek: 8, gameEvents: [{ id: 1 }] };
+    const next = workerReducer(state, { type: 'FULL_STATE', payload: { activeLeagueId: 'league_A', week: 9 } });
+    expect(next.lastResults).toBe(state.lastResults);
+    expect(next.lastSimWeek).toBe(8);
+    expect(next.gameEvents).toBe(state.gameEvents);
+  });
+
+  it('clears all game-session transients on different-league FULL_STATE', () => {
+    const state = {
+      ...INITIAL_WORKER_STATE, league: { activeLeagueId: 'league_A', week: 8 },
+      lastResults: [{ id: 'hou' }], lastSimWeek: 8, gameEvents: [{ id: 1 }],
+      promptUserGame: true, userGameLogs: [{}], userGameLiveStats: {},
+      userGamePlayerStats: {}, userGameTeamStats: {}, userGameCanonicalEvents: [],
+      userGameScoringSummary: [], userGameQuarterScores: {}, userGameReasoningFlags: [],
+      draftTradeProposal: {}, batchSim: { status: 'running' }, simProgress: 73,
+    };
+    const next = workerReducer(state, { type: 'FULL_STATE', payload: { activeLeagueId: 'league_B', week: 1 } });
+    expect(next.league.activeLeagueId).toBe('league_B');
+    expect(next).toMatchObject({ lastResults: null, lastSimWeek: null, gameEvents: [], promptUserGame: false, batchSim: null, simProgress: 0, draftTradeProposal: null });
+    expect(next.userGameLogs).toBeNull();
+    expect(next.userGameLiveStats).toBeNull();
+  });
 });
 
 it('transports and clears watched-game canonical player and team stats together', () => {

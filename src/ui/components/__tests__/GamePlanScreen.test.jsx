@@ -6,6 +6,7 @@ import GamePlanScreen from '../GamePlanScreen.jsx';
 import { getWeeklyPrepProgress } from '../../utils/weeklyPrep.js';
 
 const league = {
+  activeLeagueId: 'league-game-plan',
   year: 2026,
   week: 13,
   seasonId: 's13',
