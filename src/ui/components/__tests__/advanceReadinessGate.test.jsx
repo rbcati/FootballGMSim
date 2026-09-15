@@ -17,6 +17,7 @@ function makeLeague({ phase = 'regular', injuries = false, noNextGame = false } 
     roster.push({ id: 12, pos: 'WR', ovr: 75, teamId: 1, injuryWeeksRemaining: 3 });
   }
   return {
+    activeLeagueId: 'league-advance-readiness',
     year: 2027,
     week: 5,
     seasonId: 's5',

@@ -2,22 +2,10 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES } from "../../core/scheme-core.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
-import { markWeeklyPrepStep, getWeeklyPrepProgress } from '../utils/weeklyPrep.js';
+import { markWeeklyPrepStep, getWeeklyPrepProgress, getStoredGamePlan, saveStoredGamePlan } from '../utils/weeklyPrep.js';
+import { getLeagueIdentity } from '../utils/leagueIdentity.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildGamePlanScreenModel } from '../utils/gamePlanScreenModel.js';
-
-const GP_STORAGE_KEY = "footballgm_gameplan_v1";
-
-function loadStoredPlan() {
-  try {
-    const raw = localStorage.getItem(GP_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-
-function saveStoredPlan(plan) {
-  try { localStorage.setItem(GP_STORAGE_KEY, JSON.stringify(plan)); } catch {}
-}
 
 const SCHEME_ACCENT = {
   WEST_COAST: "#C9A54B", VERTICAL: "#BF5AF2", SMASHMOUTH: "#FF9F0A", AIR_RAID: "#BF5AF2",
@@ -121,13 +109,14 @@ export default function GamePlanScreen({ league, actions, onNavigate }) {
   const strategies = userTeam?.strategies || {};
   const teamIntel = buildTeamIntelligence(userTeam, { week: league?.week ?? 1 });
   const coachingIdentity = deriveTeamCoachingIdentity(userTeam, { intel: teamIntel, direction: teamIntel?.direction });
-  const prepProgress = useMemo(() => getWeeklyPrepProgress(league), [league?.seasonId, league?.week, league?.userTeamId]);
+  const leagueId = getLeagueIdentity(league);
+  const prepProgress = useMemo(() => getWeeklyPrepProgress(league), [leagueId, league?.seasonId, league?.week, league?.userTeamId]);
   const model = useMemo(() => buildGamePlanScreenModel({ league, prepProgress }), [league, prepProgress]);
 
   const [offScheme, setOffScheme] = useState(strategies.offSchemeId || "WEST_COAST");
   const [defScheme, setDefScheme] = useState(strategies.defSchemeId || "COVER_2");
 
-  const stored = loadStoredPlan();
+  const stored = getStoredGamePlan(league);
   const [runPassBalance, setRunPassBalance] = useState(stored?.runPassBalance ?? model?.strategySummary?.runPassBalance ?? 50);
   const [aggressionLevel, setAggressionLevel] = useState(stored?.aggressionLevel ?? model?.strategySummary?.aggressionLevel ?? 50);
   const [deepShortBalance, setDeepShortBalance] = useState(stored?.deepShortBalance ?? model?.strategySummary?.deepShortBalance ?? 50);
@@ -142,7 +131,18 @@ export default function GamePlanScreen({ league, actions, onNavigate }) {
 
   useEffect(() => {
     markWeeklyPrepStep(league, 'planReviewed', true);
-  }, [league?.seasonId, league?.week, league?.userTeamId]);
+  }, [leagueId, league?.seasonId, league?.week, league?.userTeamId]);
+
+  useEffect(() => {
+    const next = getStoredGamePlan(league);
+    setRunPassBalance(next.runPassBalance ?? model?.strategySummary?.runPassBalance ?? 50);
+    setAggressionLevel(next.aggressionLevel ?? model?.strategySummary?.aggressionLevel ?? 50);
+    setDeepShortBalance(next.deepShortBalance ?? model?.strategySummary?.deepShortBalance ?? 50);
+    setBlitzFrequency(next.blitzFrequency ?? model?.strategySummary?.blitzFrequency ?? 30);
+    setKickReturn(next.kickReturn || 'balanced');
+    setPuntReturn(next.puntReturn || 'balanced');
+    setCoverage(next.coverage || 'balanced');
+  }, [leagueId]);
 
   useEffect(() => {
     if (strategies.offSchemeId) setOffScheme(strategies.offSchemeId);
@@ -151,7 +151,7 @@ export default function GamePlanScreen({ league, actions, onNavigate }) {
 
   const handleSave = useCallback(() => {
     const plan = { runPassBalance, aggressionLevel, deepShortBalance, blitzFrequency, kickReturn, puntReturn, coverage };
-    saveStoredPlan(plan);
+    saveStoredGamePlan(league, plan);
     markWeeklyPrepStep(league, 'planReviewed', true);
 
     if (actions?.send) {

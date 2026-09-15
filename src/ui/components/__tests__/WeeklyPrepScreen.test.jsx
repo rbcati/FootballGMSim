@@ -7,6 +7,7 @@ import * as weeklyPrepActionsModule from '../../utils/weeklyPrepActions.js';
 import { getWeeklyPrepProgress } from '../../utils/weeklyPrep.js';
 
 const league = {
+  activeLeagueId: 'league-weekly-prep',
   year: 2027,
   week: 8,
   seasonId: 's8',

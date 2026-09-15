@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import FranchiseHQ from '../FranchiseHQ.jsx';
 import LeagueDashboard from '../LeagueDashboard.jsx';
 import { normalizeManagementDestination, parseGameBookDestination } from '../../utils/managementScreenRouting.js';
+import { INITIAL_WORKER_STATE, workerReducer } from '../../hooks/useWorker.js';
 
 const baseLeague = {
   year: 2026,
@@ -53,6 +54,33 @@ describe('FranchiseHQ', () => {
   afterEach(() => {
     cleanup();
     localStorage.removeItem('footballgm_game_archive_v1');
+  });
+
+  it('renders only new-save truth after a league-switch FULL_STATE', () => {
+    const saveAState = {
+      ...INITIAL_WORKER_STATE,
+      league: { ...baseLeague, activeLeagueId: 'league_A', week: 8 },
+      lastResults: [{ gameId: 'old-hou', week: 8, homeId: 10, awayId: 12, homeScore: 7, awayScore: 28, homeAbbr: 'PIT', awayAbbr: 'HOU' }],
+      lastSimWeek: 8,
+    };
+    const saveB = {
+      ...baseLeague,
+      activeLeagueId: 'league_B', year: 2026, seasonId: '2026', week: 1, userTeamId: 10,
+      teams: [
+        { ...baseLeague.teams[0], city: 'Pittsburgh', name: 'Steelers', abbr: 'PIT', wins: 0, losses: 0, ties: 0 },
+        { ...baseLeague.teams[1], id: 11, city: 'Cleveland', name: 'Browns', abbr: 'CLE', wins: 0, losses: 0, ties: 0 },
+      ],
+      schedule: { weeks: [{ week: 1, games: [{ id: 'pit-cle-w1', home: 10, away: 11, played: false }] }] },
+      gameById: {}, leagueHistory: [],
+    };
+    const switched = workerReducer(saveAState, { type: 'FULL_STATE', payload: saveB });
+    render(<FranchiseHQ league={switched.league} lastResults={switched.lastResults} lastSimWeek={switched.lastSimWeek} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} />);
+
+    expect(screen.getByText(/no completed game yet/i)).toBeTruthy();
+    expect(screen.getByTestId('franchise-hq').textContent).toContain('CLE');
+    expect(screen.queryByText(/7-28 vs HOU/i)).toBeNull();
+    expect(screen.queryByText(/Wk8/i)).toBeNull();
+    expect(screen.queryByText(/View Game Book/i)).toBeNull();
   });
 
   it('renders visible weekly command center essentials and one primary advance CTA', () => {

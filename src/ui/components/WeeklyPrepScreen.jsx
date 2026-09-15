@@ -105,7 +105,7 @@ function GamePlanControlCenter({ prep, league, plan, liveSummary, onPlanChange, 
   const applyPlan = useCallback((nextPlan) => {
     const normalized = normalizeGamePlan(nextPlan);
     onPlanChange(normalized);
-    saveStoredGamePlan(normalized);
+    saveStoredGamePlan(league, normalized);
     markWeeklyPrepStep(league, 'planReviewed', true);
     onPlanReviewed?.();
   }, [league, onPlanChange, onPlanReviewed]);
