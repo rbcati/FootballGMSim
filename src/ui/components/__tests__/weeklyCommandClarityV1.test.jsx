@@ -190,7 +190,7 @@ describe('FranchiseHQ — GM weekly loop hint (V3: loop section removed)', () =>
     render(
       <FranchiseHQ league={league} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
     );
-    expect(screen.getAllByRole('button', { name: /advance week/i })).toHaveLength(1);
+    expect(screen.getAllByTestId('advance-week-cta')).toHaveLength(1);
   });
 });
 
@@ -238,8 +238,8 @@ describe('WeeklyHub — Actions Required source-of-truth', () => {
       ],
     };
     const summary = buildCommandCenterSummary({ gate, weeklyContext });
-    expect(summary.criticalCount).toBe(summary.primaryActions.length);
-    expect(summary.criticalCount).toBeLessThanOrEqual(3);
+    expect(summary.primaryActions).toHaveLength(3);
+    expect(summary.criticalCount).toBe(5);
   });
 
   it('action click navigates to item.tab when present', () => {

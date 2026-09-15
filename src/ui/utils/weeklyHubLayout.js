@@ -145,12 +145,14 @@ export function buildCommandCenterSummary({ gate, weeklyContext } = {}) {
     merged.push(item);
   }
 
+  const allBlockers = merged.filter((item) => item.level === 'blocker' || item.tone === 'danger');
+  const allRecommendations = merged.filter((item) => !allBlockers.includes(item));
   const primaryActions = merged.slice(0, 3);
   const secondaryActions = contextSecondary
     .filter((i) => !seen.has(String(i.label ?? '').toLowerCase()))
     .slice(0, 2);
 
-  const hasDanger = gate?.severity === 'danger' || primaryActions.some((i) => i.tone === 'danger');
+  const hasDanger = allBlockers.length > 0;
   const hasWarning = gate?.shouldWarn || primaryActions.some((i) => i.tone === 'warning');
 
   const readinessTone = hasDanger ? 'danger' : hasWarning ? 'warning' : 'ok';
@@ -165,9 +167,22 @@ export function buildCommandCenterSummary({ gate, weeklyContext } = {}) {
     secondaryActions,
     readinessLabel,
     readinessTone,
-    criticalCount: primaryActions.length,
+    criticalCount: allBlockers.length,
+    blockerCount: allBlockers.length,
+    recommendationCount: allRecommendations.length + secondaryActions.length,
     hasDanger,
     hasWarning,
     canAdvanceSafely: readinessTone === 'ok',
   };
+}
+
+export function getProgressionCtaCopy({ busy, simulating, blockerCount = 0, hasNextGame = false } = {}) {
+  if (busy || simulating) return { label: 'Advancing…', ariaLabel: 'Advancing week…' };
+  if (blockerCount > 0) {
+    const noun = `blocker${blockerCount === 1 ? '' : 's'}`;
+    return { label: `Resolve ${blockerCount} ${noun}`, ariaLabel: `Resolve ${blockerCount} ${noun} before advancing` };
+  }
+  return hasNextGame
+    ? { label: 'Advance to Game', ariaLabel: 'Advance to Game' }
+    : { label: 'Continue', ariaLabel: 'Continue to the next week' };
 }

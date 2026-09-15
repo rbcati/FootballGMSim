@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getLatestUserCompletedGame, getLastGameDisplay, getNextOpponentDisplay } from './hqGameDisplay.js';
+import { getHistoricalSeasonContext, getLatestUserCompletedGame, getLastGameDisplay, getNextOpponentDisplay } from './hqGameDisplay.js';
 
 describe('hqGameDisplay helpers', () => {
   it('returns null when schedule is missing', () => {
@@ -39,6 +39,13 @@ describe('hqGameDisplay helpers', () => {
 
   it('returns no-game fallback copy', () => {
     expect(getLastGameDisplay(null, 10).overviewLine).toContain('No completed game yet');
+  });
+
+  it('only exposes valid prior-year season context', () => {
+    expect(getHistoricalSeasonContext({ week: 1 }, 2026)).toBeNull();
+    expect(getHistoricalSeasonContext({ season: 2025 }, 2026)).toBe('2025');
+    expect(getHistoricalSeasonContext({ season: 'not-a-year' }, 2026)).toBeNull();
+    expect(getHistoricalSeasonContext({ year: null }, 2026)).toBeNull();
   });
 
   it('builds next opponent fallback and populated labels', () => {

@@ -10,9 +10,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 import { workerReducer, INITIAL_WORKER_STATE } from '../../src/ui/hooks/useWorker.js';
+
+afterEach(cleanup);
 
 // ── Suite 1: isHydrated state tracking ───────────────────────────────────────
 

@@ -24,10 +24,10 @@ const league = {
       ],
     },
   ],
-  schedule: [
-    { id: 'g1', week: 4, homeId: 7, awayId: 10, homeAbbr: 'SEA', awayAbbr: 'LAR', homeScore: 21, awayScore: 24 },
-    { id: 'g2', week: 5, homeId: 11, awayId: 7, homeAbbr: 'SF', awayAbbr: 'SEA', homeScore: null, awayScore: null },
-  ],
+  schedule: { weeks: [
+    { week: 4, games: [{ id: 'g1', home: 7, away: 10, homeAbbr: 'SEA', awayAbbr: 'LAR', homeScore: 21, awayScore: 24, played: true }] },
+    { week: 5, games: [{ id: 'g2', home: 11, away: 7, homeAbbr: 'SF', awayAbbr: 'SEA', played: false }] },
+  ] },
 };
 
 describe('TeamHub', () => {
@@ -67,6 +67,29 @@ describe('TeamHub', () => {
 
     expect(html).toContain('Contract Operations');
     expect(html).not.toContain('Position group pressure');
+  });
+
+  it('renders the same canonical nested Week 5 matchup instead of an empty fallback', () => {
+    const withOpponent = { ...league, teams: [...league.teams, { id: 11, abbr: 'SF', name: 'San Francisco' }] };
+    const html = renderToString(<TeamHub league={withOpponent} actions={{}} />);
+    expect(html).toContain('@ SF · Week 5');
+    expect(html).not.toContain('No upcoming matchup');
+  });
+
+  it('moves an archive-confirmed stale schedule game to previous and shows the following opponent', () => {
+    const stale = {
+      ...league,
+      teams: [...league.teams, { id: 10, abbr: 'LAR' }, { id: 11, abbr: 'SF' }],
+      schedule: { weeks: [
+        { week: 5, games: [{ id: 'g1', home: 7, away: 10, played: false }] },
+        { week: 6, games: [{ id: 'g2', home: 11, away: 7, played: false }] },
+      ] },
+      gameById: { g1: { id: 'g1', homeId: 7, awayId: 10, homeScore: 24, awayScore: 17 } },
+    };
+    const html = renderToString(<TeamHub league={stale} actions={{}} />);
+    expect(html).toContain('vs LAR · Week 5');
+    expect(html).toContain('@ SF · Week 6');
+    expect(html).not.toContain('No upcoming matchup');
   });
 
   it('fails safe for partial/legacy saves', () => {

@@ -27,6 +27,11 @@ function hasValidFinalScore(game) {
   return readStrictFinalScore(game) != null;
 }
 
+/** One completion predicate for schedule, archive, and indexed game consumers. */
+export function isCanonicalCompletedGame(game) {
+  return Boolean(game?.played) || hasValidFinalScore(game);
+}
+
 export function resolveCanonicalCompletedGame({ league, gameId, scheduleGame, archivedGame, localArchivedGame } = {}) {
   // Prefer whichever archive source actually carries a valid final. The async
   // worker response (`archivedGame`) and the synchronous localStorage archive

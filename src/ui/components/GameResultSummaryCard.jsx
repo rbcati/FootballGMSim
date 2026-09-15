@@ -136,12 +136,12 @@ function FullVariant({ homeAbbr, awayAbbr, homeName, awayName, homeScore, awaySc
 
 function CompactVariant({
   homeAbbr, awayAbbr, homeScore, awayScore, userIsHome, week,
-  onViewGameBook, gameBookLabel, testId, ctaTestId,
+  seasonContext, onViewGameBook, gameBookLabel, testId, ctaTestId,
 }) {
   const framing = resolveResultFraming({ homeScore, awayScore, userIsHome });
   const oppAbbr = userIsHome ? (awayAbbr ?? 'OPP') : (homeAbbr ?? 'OPP');
   const weekNum = safeNum(week, 0);
-  const text = `${framing.userScore}–${framing.oppScore} vs ${oppAbbr}${weekNum ? ` · Wk${weekNum}` : ''}`;
+  const text = `${framing.userScore}–${framing.oppScore} vs ${oppAbbr}${weekNum ? ` · ${seasonContext ? `${seasonContext} ` : ''}Wk${weekNum}` : ''}`;
   const interactive = typeof onViewGameBook === 'function';
   const label = gameBookLabel ?? VIEW_GAME_BOOK_LABEL;
 

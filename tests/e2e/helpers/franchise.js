@@ -249,7 +249,7 @@ export async function simulateSingleWeek(page, options = {}) {
     });
   }
   // The advance flow can present two dialogs in order: an optional readiness
-  // gate ("Advance anyway"), then the user-game prompt ("Simulate (Skip)").
+  // gate ("Advance anyway"), then the user-game prompt (skip presentation).
   // Each is handled with an explicit visibility probe — but once we commit to a
   // branch, the button's enabled state is asserted and the click is NOT
   // swallowed. A missing button that WAS visible then fails loudly; the final
@@ -264,7 +264,7 @@ export async function simulateSingleWeek(page, options = {}) {
       if (err.name !== 'TimeoutError') throw err;
     }
   }
-  const skipPromptBtn = page.getByRole('button', { name: /Simulate \(Skip\)/i });
+  const skipPromptBtn = page.getByRole('button', { name: /Simulate Week \(Skip Presentation\)/i });
   try {
     await skipPromptBtn.waitFor({ state: 'visible', timeout: 10000 });
     await expect(skipPromptBtn).toBeEnabled({ timeout: 5000 });

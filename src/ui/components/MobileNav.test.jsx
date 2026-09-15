@@ -30,18 +30,18 @@ describe('MobileNav', () => {
     const onDestinationChange = vi.fn();
     render(<MobileNav activeSection={SHELL_SECTIONS.hq} onSectionChange={vi.fn()} onDestinationChange={onDestinationChange} onAppAction={onAppAction} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
-    expect(screen.getByRole('button', { name: 'Open navigation menu' }).getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.getByRole('button', { name: 'More' }).getAttribute('aria-expanded')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'Saves' }));
 
     expect(onAppAction).toHaveBeenCalledWith('saves');
     expect(onDestinationChange).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Open navigation menu' }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('button', { name: 'More' }).getAttribute('aria-expanded')).toBe('false');
   });
 
   it('closes the drawer on Escape and when collapsed', () => {
     const { container, rerender } = render(<MobileNav activeSection={SHELL_SECTIONS.hq} onSectionChange={vi.fn()} onDestinationChange={vi.fn()} />);
-    const toggle = () => container.querySelector('button[aria-label="Open navigation menu"]');
+    const toggle = () => container.querySelector('button[aria-label="More"]');
     fireEvent.click(toggle());
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(toggle().getAttribute('aria-expanded')).toBe('false');
@@ -121,7 +121,7 @@ describe('MobileNav', () => {
     expect(html).toContain('League');
   });
 
-  it('collapses the bottom nav and hamburger when Game Book focus mode is active', () => {
+  it('collapses the sole bottom navigation when Game Book focus mode is active', () => {
     const html = renderToString(
       <MobileNav
         activeSection={SHELL_SECTIONS.hq}
@@ -135,8 +135,7 @@ describe('MobileNav', () => {
     // Bottom bar carries the collapsed marker so CSS hides it during review.
     expect(html).toContain('mobile-bottom-bar premium-bottom-nav is-collapsed');
     expect(html).toContain('data-collapsed="true"');
-    // Hamburger is collapsed too so it cannot float over the result screen.
-    expect(html).toContain('mobile-nav-hamburger is-collapsed');
+    expect(html).not.toContain('mobile-nav-hamburger');
   });
 
   it('keeps the bottom nav visible (no collapsed class) by default — restored on return to HQ', () => {
