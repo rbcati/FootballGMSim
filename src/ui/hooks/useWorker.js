@@ -28,6 +28,7 @@ import {
   handleWorkerMessage,
 } from '../../worker/workerApi.js';
 import { applyLeagueDelta } from '../../worker/serialization.js';
+import { getLeagueIdentity } from '../utils/leagueIdentity.js';
 
 const WORKER_REQUEST_TIMEOUT_MS = 20000;
 const WORKER_TIMEOUT_BY_TYPE = Object.freeze({
@@ -135,8 +136,24 @@ export function workerReducer(state, action) {
       return { ...state, busy: false, simulating: false, simProgress: 0 };
     case 'WORKER_READY':
       return { ...state, workerReady: true, hasSave: action.hasSave ?? false, busy: false, lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType };
-    case 'FULL_STATE':
-      return { ...state, busy: false, simulating: false, batchSim: null, isHydrated: true, league: action.payload, lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType };
+    case 'FULL_STATE': {
+      const previousLeagueId = getLeagueIdentity(state.league);
+      const incomingLeagueId = getLeagueIdentity(action.payload);
+      const isLeagueSwitch = previousLeagueId != null && incomingLeagueId != null && previousLeagueId !== incomingLeagueId;
+      return {
+        ...state, busy: false, simulating: false,
+        simProgress: isLeagueSwitch ? 0 : state.simProgress,
+        batchSim: null, isHydrated: true, league: action.payload,
+        ...(isLeagueSwitch ? {
+          lastResults: null, lastSimWeek: null, gameEvents: [], promptUserGame: false,
+          userGameLogs: null, userGameLiveStats: null, userGamePlayerStats: null,
+          userGameTeamStats: null, userGameCanonicalEvents: null,
+          userGameScoringSummary: null, userGameQuarterScores: null,
+          userGameReasoningFlags: null, draftTradeProposal: null,
+        } : {}),
+        lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType,
+      };
+    }
     case 'STATE_UPDATE':
       // Also clear busy: send()-based actions (releasePlayer, setUserTeam)
       // respond with STATE_UPDATE and have no other mechanism to clear the flag.

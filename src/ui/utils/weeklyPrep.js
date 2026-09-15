@@ -1,6 +1,7 @@
 import { autoBuildDepthChart, depthWarnings, DEPTH_CHART_ROWS } from '../../core/depthChart.js';
 import { deriveGamePlanMultipliers, getGamePlanSynergySummary } from '../../core/sim/gamePlanMultipliers.ts';
 import { getNextUserGame } from './userWeeklyGames.js';
+import { getLeagueIdentity, getLeagueScopedStorageKey } from './leagueIdentity.js';
 
 const PREP_STORAGE_KEY = 'footballgm_weekly_prep_v1';
 const GAME_PLAN_STORAGE_KEY = 'footballgm_gameplan_v1';
@@ -236,13 +237,17 @@ function readStoredPrepProgress() {
 }
 
 function prepProgressKey(league) {
-  return `${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 1}:${league?.userTeamId ?? 'user'}`;
+  const leagueId = getLeagueIdentity(league);
+  if (!leagueId) return null;
+  return `${leagueId}:${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 1}:${league?.userTeamId ?? 'user'}`;
 }
 
-function readStoredGamePlan() {
+function readStoredGamePlan(league) {
   if (typeof window === 'undefined') return {};
+  const storageKey = getLeagueScopedStorageKey(GAME_PLAN_STORAGE_KEY, league);
+  if (!storageKey) return {};
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(GAME_PLAN_STORAGE_KEY) ?? '{}');
+    const parsed = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
     return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
     return {};
@@ -261,6 +266,7 @@ function writeStoredPrepProgress(allProgress) {
 export function getWeeklyPrepProgress(league) {
   const all = readStoredPrepProgress();
   const key = prepProgressKey(league);
+  if (!key) return { lineupChecked: false, injuriesReviewed: false, opponentScouted: false, planReviewed: false };
   return {
     lineupChecked: false,
     injuriesReviewed: false,
@@ -273,6 +279,7 @@ export function getWeeklyPrepProgress(league) {
 export function markWeeklyPrepStep(league, step, value = true) {
   if (!league || !step) return;
   const key = prepProgressKey(league);
+  if (!key) return;
   const all = readStoredPrepProgress();
   all[key] = {
     lineupChecked: false,
@@ -288,6 +295,7 @@ export function markWeeklyPrepStep(league, step, value = true) {
 export function clearWeeklyPrepForWeek(league) {
   if (typeof window === 'undefined') return;
   const key = prepProgressKey(league);
+  if (!key) return;
   const all = readStoredPrepProgress();
   if (!all || typeof all !== 'object' || !all[key]) return;
   delete all[key];
@@ -297,10 +305,12 @@ export function clearWeeklyPrepForWeek(league) {
 export function pruneWeeklyPrepStorage(activeLeague) {
   if (typeof window === 'undefined') return;
   const all = readStoredPrepProgress();
+  const leagueId = getLeagueIdentity(activeLeague);
+  if (!leagueId) return;
   const activeSeason = String(activeLeague?.seasonId ?? activeLeague?.year ?? 'season');
-  const keepPrefix = `${activeSeason}:`;
+  const keepPrefix = `${leagueId}:${activeSeason}:`;
   const next = Object.fromEntries(
-    Object.entries(all).filter(([key]) => key.startsWith(keepPrefix)),
+    Object.entries(all).filter(([key]) => !key.startsWith(`${leagueId}:`) || key.startsWith(keepPrefix)),
   );
   if (Object.keys(next).length !== Object.keys(all).length) {
     writeStoredPrepProgress(next);
@@ -338,25 +348,35 @@ export function normalizeGamePlan(rawPlan) {
   };
 }
 
-export function getStoredGamePlan() {
-  return readStoredGamePlan();
+export function getStoredGamePlan(league) {
+  return readStoredGamePlan(league);
 }
 
-export function saveStoredGamePlan(nextPlan) {
+export function saveStoredGamePlan(league, nextPlan) {
   if (typeof window === 'undefined') return;
+  const storageKey = getLeagueScopedStorageKey(GAME_PLAN_STORAGE_KEY, league);
+  if (!storageKey) return;
   try {
     const normalized = normalizeGamePlan(nextPlan);
-    const existing = readStoredGamePlan();
-    window.localStorage.setItem(GAME_PLAN_STORAGE_KEY, JSON.stringify({ ...existing, ...normalized }));
+    const extended = nextPlan && typeof nextPlan === 'object' ? {
+      ...(Number.isFinite(Number(nextPlan.blitzFrequency)) ? { blitzFrequency: Math.min(100, Math.max(0, Number(nextPlan.blitzFrequency))) } : {}),
+      ...(['safe', 'balanced', 'aggressive', 'risky'].includes(nextPlan.kickReturn) ? { kickReturn: nextPlan.kickReturn } : {}),
+      ...(['fair_catch', 'balanced', 'aggressive'].includes(nextPlan.puntReturn) ? { puntReturn: nextPlan.puntReturn } : {}),
+      ...(['protect_lead', 'balanced', 'pin_deep'].includes(nextPlan.coverage) ? { coverage: nextPlan.coverage } : {}),
+    } : {};
+    const existing = readStoredGamePlan(league);
+    window.localStorage.setItem(storageKey, JSON.stringify({ ...existing, ...normalized, ...extended }));
   } catch {
     // no-op on quota/permission issues
   }
 }
 
-export function resetStoredGamePlan() {
+export function resetStoredGamePlan(league) {
   if (typeof window === 'undefined') return;
+  const storageKey = getLeagueScopedStorageKey(GAME_PLAN_STORAGE_KEY, league);
+  if (!storageKey) return;
   try {
-    window.localStorage.setItem(GAME_PLAN_STORAGE_KEY, JSON.stringify({ ...GAME_PLAN_DEFAULTS }));
+    window.localStorage.setItem(storageKey, JSON.stringify({ ...GAME_PLAN_DEFAULTS }));
   } catch {
     // no-op on quota/permission issues
   }
@@ -401,7 +421,7 @@ export function deriveWeeklyPrepState(league) {
   const recommendations = createRecommendationCards({ userTeam, opponent, matchup });
   const gamePlan = {
     ...(userTeam?.strategies?.gamePlan ?? {}),
-    ...readStoredGamePlan(),
+    ...readStoredGamePlan(league),
   };
   const insights = {
     weakSecondary: oppDef <= 76 || matchup.offenseGap >= 6,
