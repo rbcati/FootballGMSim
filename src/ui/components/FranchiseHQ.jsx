@@ -6,11 +6,11 @@ import { evaluateWeeklyContext } from '../utils/weeklyContext.js';
 import { buildAdvanceReadinessGate } from '../utils/advanceReadinessGate.js';
 import AdvanceReadinessGate from './AdvanceReadinessGate.jsx';
 import { selectFranchiseHQViewModel } from '../utils/franchiseCommandCenter.js';
-import { buildCommandCenterSummary } from '../utils/weeklyHubLayout.js';
+import { buildCommandCenterSummary, getProgressionCtaCopy } from '../utils/weeklyHubLayout.js';
 import { classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../../core/teamCulture.js';
 import { buildRecentCultureEvents } from '../../core/broadcastNarrative.js';
 import { EmptyState, StatusChip, ActionTile, SectionCard } from './ScreenSystem.jsx';
-import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
+import { getHistoricalSeasonContext, getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildGameBookDestination } from '../utils/managementScreenRouting.js';
 import { buildMatchupHistoryContext } from '../utils/matchupHistoryContext.js';
@@ -181,6 +181,10 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
 
   const userTeam = (league?.teams ?? []).find((t) => Number(t?.id) === Number(league?.userTeamId));
   const gameDayReadiness = buildGameDayReadinessModel({ roster: userTeam?.roster, teamId: userTeam?.id });
+  const lineupAlreadyCounted = gate.riskItems.some((item) => item.id === 'depth-blocker' && item.severity === 'danger');
+  const blockerCount = commandSummary.blockerCount
+    + (gameDayReadiness.blockingLineupIssue && !lineupAlreadyCounted ? 1 : 0);
+  const isBlocked = blockerCount > 0;
   const opponent = command.nextGame?.opp ?? null;
   const nextOpponentDisplay = useMemo(() => getNextOpponentDisplay(command.nextGame), [command.nextGame]);
   const matchupHistory = useMemo(() => {
@@ -355,12 +359,16 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
       awayScore,
       userIsHome,
       week: weekNum || null,
-      seasonContext: Number(lastGame?.season ?? lastGame?.year) !== Number(league?.year)
-        ? String(lastGame?.season ?? lastGame?.year)
-        : null,
+      seasonContext: getHistoricalSeasonContext(lastGame, league?.year),
       gameId,
     };
-  }, [lastGame, league?.userTeamId]);
+  }, [lastGame, league?.userTeamId, league?.year]);
+  const progressionCta = getProgressionCtaCopy({
+    busy,
+    simulating,
+    blockerCount,
+    hasNextGame: Boolean(command.nextGame),
+  });
 
   // Division standings for mini-table (max 4 rows)
   const divisionRows = useMemo(() => {
@@ -1349,26 +1357,16 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
         <Button
           className="app-command-advance app-command-advance-gold"
           data-testid="advance-week-cta"
-          onClick={commandSummary.hasDanger
-            ? () => onNavigate?.(commandSummary.primaryActions.find((item) => item.level === 'blocker' || item.tone === 'danger')?.tab ?? gate.primaryFixDestination)
+          onClick={isBlocked
+            ? () => onNavigate?.(gameDayReadiness.blockingLineupIssue && !lineupAlreadyCounted
+              ? gameDayReadiness.actionDestination
+              : commandSummary.primaryActions.find((item) => item.level === 'blocker' || item.tone === 'danger')?.tab ?? gate.primaryFixDestination)
             : handleAdvanceOrGate}
           disabled={busy || simulating}
-          aria-label={
-            busy || simulating
-              ? 'Advancing week…'
-              : commandSummary.hasDanger
-                ? `Advance Week — ${commandSummary.criticalCount} item${commandSummary.criticalCount !== 1 ? 's' : ''} must be resolved first`
-                : `Advance Week — move from ${command.weekLabel} to next week`
-          }
-          title={commandSummary.hasDanger ? `Resolve blockers to unlock` : 'Advance Week'}
+          aria-label={progressionCta.ariaLabel}
+          title={isBlocked ? 'Resolve blockers to unlock' : 'Advance Week'}
         >
-          {busy || simulating
-            ? 'Advancing…'
-            : commandSummary.hasDanger
-              ? `Resolve ${commandSummary.blockerCount} blocker${commandSummary.blockerCount === 1 ? '' : 's'}`
-              : command.nextGame
-                ? 'Advance to Game'
-                : 'Continue'}
+          {progressionCta.label}
           <HQIcon name="arrowRight" size={16} />
         </Button>
       </div>

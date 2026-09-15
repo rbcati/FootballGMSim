@@ -31,4 +31,14 @@ describe('canonical user weekly games', () => {
     completed.schedule.weeks[0].games[0].played = true;
     expect(getPreviousUserGame(completed)).toMatchObject({ week: 1, oppId: 2 });
   });
+
+  it('uses the canonical indexed final when the schedule still says unplayed', () => {
+    const stale = {
+      ...league,
+      gameById: { wk1: { id: 'wk1', home: 1, away: 2, homeScore: 24, awayScore: 17 } },
+    };
+    expect(getPreviousUserGame(stale)).toMatchObject({ id: 'wk1', week: 1, oppId: 2, isCompleted: true, homeScore: 24 });
+    expect(getNextUserGame(stale)).toMatchObject({ id: 'wk2', week: 2, oppId: 3 });
+    expect(getNextGame(stale)).toMatchObject({ id: 'wk2', week: 2, oppId: 3 });
+  });
 });

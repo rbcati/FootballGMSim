@@ -40,6 +40,7 @@ describe('shared game-day readiness consumers', () => {
     expect(readiness.textContent).toContain('2 starter unavailable');
     fireEvent.click(readiness);
     expect(onNavigate).toHaveBeenCalledWith('Team:Roster / Depth');
+    expect(screen.getByTestId('advance-week-cta').getAttribute('aria-label')).toMatch(/^Resolve \d+ blockers? before advancing$/);
   });
 
   it('shows the same counts and readable unavailable starters in Team Hub', () => {
@@ -56,7 +57,7 @@ describe('shared game-day readiness consumers', () => {
     expect(screen.queryByText('Lineup passes readiness check')).toBeNull();
   });
 
-  it('sends a nonblocking HQ availability alert to the existing readiness destination', () => {
+  it('reports nonblocking availability as ready without routing it as a blocker', () => {
     const onNavigate = vi.fn();
     const roster = [
       { id: 1, teamId: 1, name: 'QB One', pos: 'QB', depthChart: { rowKey: 'QB', order: 1 } },
@@ -64,16 +65,17 @@ describe('shared game-day readiness consumers', () => {
     ];
     render(<FranchiseHQ league={makeLeague(roster)} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} />);
     fireEvent.click(screen.getByTestId('hq-actions-required'));
-    expect(onNavigate).toHaveBeenCalledWith('Team:Roster / Depth');
+    expect(screen.getByTestId('hq-actions-required').textContent).toContain('No blockers');
+    expect(onNavigate).not.toHaveBeenCalled();
   });
 
-  it('keeps command blockers visible and opens the existing gate when availability is healthy', () => {
+  it('keeps optional prep recommendations out of blocker copy and opens the gate from progression', () => {
     const healthy = [{ id: 1, teamId: 1, name: 'QB One', pos: 'QB', depthChart: { rowKey: 'QB', order: 1 } }];
     render(<FranchiseHQ league={makeLeague(healthy)} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} />);
     const row = screen.getByTestId('hq-actions-required');
-    expect(row.textContent).toMatch(/\d+ actions required/i);
-    expect(row.getAttribute('aria-label')).toMatch(/\d+ actions required/i);
-    fireEvent.click(row);
+    expect(row.textContent).toContain('No blockers');
+    expect(row.getAttribute('aria-label')).toMatch(/No actions required/i);
+    fireEvent.click(screen.getByTestId('advance-week-cta'));
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 

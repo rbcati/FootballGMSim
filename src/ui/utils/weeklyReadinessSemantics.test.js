@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCommandCenterSummary } from './weeklyHubLayout.js';
+import { buildCommandCenterSummary, getProgressionCtaCopy } from './weeklyHubLayout.js';
 
 describe('weekly readiness semantics', () => {
   it('keeps optional game-plan, scouting, and training recommendations non-blocking', () => {
@@ -20,5 +20,32 @@ describe('weekly readiness semantics', () => {
       weeklyContext: { urgentItems: [] },
     });
     expect(summary).toMatchObject({ hasDanger: true, criticalCount: 1, blockerCount: 1 });
+  });
+
+  it('counts every blocker before limiting visible primary actions', () => {
+    const summary = buildCommandCenterSummary({
+      gate: { shouldWarn: true, riskItems: [
+        { label: 'Recommendation A', severity: 'warning' },
+        { label: 'Recommendation B', severity: 'warning' },
+        { label: 'Blocker A', severity: 'danger' },
+      ] },
+      weeklyContext: { urgentItems: [
+        { label: 'Blocker B', tone: 'danger', level: 'blocker' },
+        { label: 'Blocker C', tone: 'danger', level: 'blocker' },
+      ] },
+    });
+    expect(summary.primaryActions).toHaveLength(3);
+    expect(summary.blockerCount).toBe(3);
+    expect(getProgressionCtaCopy({ blockerCount: summary.blockerCount })).toEqual({
+      label: 'Resolve 3 blockers',
+      ariaLabel: 'Resolve 3 blockers before advancing',
+    });
+  });
+
+  it('uses singular blocker and unblocked progression copy', () => {
+    expect(getProgressionCtaCopy({ blockerCount: 1 }).label).toBe('Resolve 1 blocker');
+    expect(getProgressionCtaCopy({ blockerCount: 0, hasNextGame: true })).toEqual({
+      label: 'Advance to Game', ariaLabel: 'Advance to Game',
+    });
   });
 });

@@ -1,3 +1,5 @@
+import { getPreviousUserGame } from './userWeeklyGames.js';
+
 function safeNum(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -8,33 +10,21 @@ function asTeamId(raw) {
   return Number.isFinite(num) ? num : null;
 }
 
-function gameSortKey(game, fallbackWeek = 0, index = 0) {
-  const week = safeNum(game?.week, fallbackWeek);
-  const slot = safeNum(game?.slot ?? game?.gameNumber, index);
-  return week * 1000 + slot;
+export function getHistoricalSeasonContext(game, currentYear) {
+  const rawGameYear = game?.season ?? game?.year;
+  if (rawGameYear == null || rawGameYear === '') return null;
+  const gameYear = Number(rawGameYear);
+  const leagueYear = Number(currentYear);
+  return Number.isFinite(gameYear) && Number.isFinite(leagueYear) && gameYear !== leagueYear
+    ? String(gameYear)
+    : null;
 }
 
 export function getLatestUserCompletedGame(league) {
-  const weeks = Array.isArray(league?.schedule?.weeks) ? league.schedule.weeks : [];
-  const userTeamId = asTeamId(league?.userTeamId);
-  if (userTeamId == null || weeks.length === 0) return null;
-
-  const completed = [];
-  for (const week of weeks) {
-    const weekNum = safeNum(week?.week, safeNum(league?.week, 1));
-    for (const [idx, game] of (week?.games ?? []).entries()) {
-      if (!game?.played) continue;
-      const homeId = asTeamId(game?.homeId ?? game?.home?.id ?? game?.home);
-      const awayId = asTeamId(game?.awayId ?? game?.away?.id ?? game?.away);
-      if (homeId !== userTeamId && awayId !== userTeamId) continue;
-      completed.push({ ...game, homeId, awayId, week: weekNum, __sortKey: gameSortKey({ ...game, week: weekNum }, weekNum, idx) });
-    }
-  }
-
-  if (!completed.length) return null;
-  completed.sort((a, b) => a.__sortKey - b.__sortKey);
-  const latest = { ...completed[completed.length - 1] };
-  delete latest.__sortKey;
+  const selected = getPreviousUserGame(league);
+  if (!selected) return null;
+  const latest = { ...selected };
+  delete latest._order;
 
   // Slim schedule stores home/away as numeric IDs — enrich with team objects
   // so that opponent abbreviation displays correctly in HQ.

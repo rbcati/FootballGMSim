@@ -1,3 +1,5 @@
+import { isCanonicalCompletedGame, resolveCanonicalCompletedGame } from './canonicalCompletedGame.js';
+
 function asId(value) {
   const id = Number(value);
   return Number.isFinite(id) ? id : null;
@@ -19,8 +21,12 @@ export function getUserScheduleGames(league) {
       if (homeId !== userTeamId && awayId !== userTeamId) return [];
       const isHome = homeId === userTeamId;
       const oppId = isHome ? awayId : homeId;
+      const gameId = game?.gameId ?? game?.id ?? null;
+      const canonical = resolveCanonicalCompletedGame({ league, gameId, scheduleGame: game });
+      const isCompleted = isCanonicalCompletedGame(canonical);
       return [{
         ...game,
+        ...(isCompleted ? canonical : null),
         homeId,
         awayId,
         week: Number(weekRow?.week ?? game?.week ?? league?.week ?? 1),
@@ -29,6 +35,7 @@ export function getUserScheduleGames(league) {
         oppId,
         opp: teamFor(league, oppId),
         game,
+        isCompleted,
         _order: Number(weekRow?.week ?? game?.week ?? 0) * 1000 + index,
       }];
     }),
@@ -36,9 +43,9 @@ export function getUserScheduleGames(league) {
 }
 
 export function getNextUserGame(league) {
-  return getUserScheduleGames(league).find((game) => !game.played) ?? null;
+  return getUserScheduleGames(league).find((game) => !game.isCompleted) ?? null;
 }
 
 export function getPreviousUserGame(league) {
-  return getUserScheduleGames(league).filter((game) => game.played).at(-1) ?? null;
+  return getUserScheduleGames(league).filter((game) => game.isCompleted).at(-1) ?? null;
 }

@@ -60,8 +60,7 @@ describe('FranchiseHQ', () => {
 
     // Week label is visible — compact topbar renders "Wk 10" (abbreviated)
     expect(document.querySelector('[aria-label*="Week 10"]')).not.toBeNull();
-    expect(screen.getByRole('button', { name: /advance week/i })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /advance week/i })).toHaveLength(1);
+    expect(screen.getByTestId('advance-week-cta').textContent).toContain('Advance to Game');
     // Weekly Command Hub and Game Plan Impact pruned from HQ command deck
     expect(screen.queryByRole('heading', { name: /weekly command hub/i })).toBeNull();
     expect(screen.queryByRole('heading', { name: /game plan impact/i })).toBeNull();
@@ -79,6 +78,24 @@ describe('FranchiseHQ', () => {
     expect(within(linkRow).getByRole('button', { name: /^standings$/i })).toBeTruthy();
     expect(within(linkRow).getByRole('button', { name: /^news$/i })).toBeTruthy();
     expect(within(linkRow).getByRole('button', { name: /^ops$/i })).toBeTruthy();
+  });
+
+  it('does not leak missing or invalid per-game season metadata into a current result', () => {
+    const { rerender } = render(<FranchiseHQ league={baseLeague} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} />);
+    expect(screen.getByTestId('hq-last-result-card').textContent).toContain('Wk9');
+    expect(screen.getByTestId('hq-last-result-card').textContent).not.toMatch(/undefined|NaN|null/);
+
+    const invalid = structuredClone(baseLeague);
+    invalid.schedule.weeks[0].games[0].season = 'invalid-season';
+    rerender(<FranchiseHQ league={invalid} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} />);
+    expect(screen.getByTestId('hq-last-result-card').textContent).not.toMatch(/undefined|NaN|null|invalid-season/);
+  });
+
+  it('labels a completed result carrying a valid previous year', () => {
+    const prior = structuredClone(baseLeague);
+    prior.schedule.weeks[0].games[0].season = 2025;
+    render(<FranchiseHQ league={prior} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} />);
+    expect(screen.getByTestId('hq-last-result-card').textContent).toContain('2025 Wk9');
   });
 
   it('renders factual upcoming matchup history and opens the last meeting through the existing Game Book route', () => {

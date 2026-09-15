@@ -76,6 +76,22 @@ describe('TeamHub', () => {
     expect(html).not.toContain('No upcoming matchup');
   });
 
+  it('moves an archive-confirmed stale schedule game to previous and shows the following opponent', () => {
+    const stale = {
+      ...league,
+      teams: [...league.teams, { id: 10, abbr: 'LAR' }, { id: 11, abbr: 'SF' }],
+      schedule: { weeks: [
+        { week: 5, games: [{ id: 'g1', home: 7, away: 10, played: false }] },
+        { week: 6, games: [{ id: 'g2', home: 11, away: 7, played: false }] },
+      ] },
+      gameById: { g1: { id: 'g1', homeId: 7, awayId: 10, homeScore: 24, awayScore: 17 } },
+    };
+    const html = renderToString(<TeamHub league={stale} actions={{}} />);
+    expect(html).toContain('vs LAR · Week 5');
+    expect(html).toContain('@ SF · Week 6');
+    expect(html).not.toContain('No upcoming matchup');
+  });
+
   it('fails safe for partial/legacy saves', () => {
     expect(() => renderToString(
       <TeamHub

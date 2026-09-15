@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveCanonicalCompletedGame } from './canonicalCompletedGame.js';
+import { isCanonicalCompletedGame, resolveCanonicalCompletedGame } from './canonicalCompletedGame.js';
 
 const gid = 's2026_w1_1_2';
 
@@ -40,5 +40,15 @@ describe('resolveCanonicalCompletedGame — archive sources', () => {
 
   it('returns null when no source has any reference', () => {
     expect(resolveCanonicalCompletedGame({ gameId: gid })).toBeNull();
+  });
+
+  it('marks an archive-authoritative final completed despite a stale schedule flag', () => {
+    const resolved = resolveCanonicalCompletedGame({
+      gameId: gid,
+      scheduleGame: { gameId: gid, played: false, home: 1, away: 2 },
+      archivedGame: { gameId: gid, homeScore: 27, awayScore: 20 },
+    });
+    expect(resolved.played).toBe(true);
+    expect(isCanonicalCompletedGame(resolved)).toBe(true);
   });
 });
