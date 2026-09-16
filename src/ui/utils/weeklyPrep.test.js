@@ -178,6 +178,17 @@ describe('game plan write helpers', () => {
     expect(plan.deepShortBalance).toBe(55);
   });
 
+  it('does not migrate ambiguous legacy game-plan storage into either league', () => {
+    bucket.set('footballgm_gameplan_v1', JSON.stringify({ kickReturn: 'aggressive', runPassBalance: 72 }));
+    const saveA = { ...league, activeLeagueId: 'league_A' };
+    const saveB = { ...league, activeLeagueId: 'league_B' };
+
+    expect(getStoredGamePlan(saveA)).toEqual({});
+    expect(getStoredGamePlan(saveB)).toEqual({});
+    expect(bucket.has('footballgm_gameplan_v1:league_A')).toBe(false);
+    expect(bucket.has('footballgm_gameplan_v1:league_B')).toBe(false);
+  });
+
   it('resetStoredGamePlan restores defaults', () => {
     saveStoredGamePlan(league, { runPassBalance: 80, aggressionLevel: 70, deepShortBalance: 65 });
     resetStoredGamePlan(league);

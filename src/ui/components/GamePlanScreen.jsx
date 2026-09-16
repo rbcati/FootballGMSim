@@ -6,6 +6,7 @@ import { markWeeklyPrepStep, getWeeklyPrepProgress, getStoredGamePlan, saveStore
 import { getLeagueIdentity } from '../utils/leagueIdentity.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildGamePlanScreenModel } from '../utils/gamePlanScreenModel.js';
+import { resolveGamePlanForLeague } from '../utils/gamePlanHydration.js';
 
 const SCHEME_ACCENT = {
   WEST_COAST: "#C9A54B", VERTICAL: "#BF5AF2", SMASHMOUTH: "#FF9F0A", AIR_RAID: "#BF5AF2",
@@ -116,15 +117,19 @@ export default function GamePlanScreen({ league, actions, onNavigate }) {
   const [offScheme, setOffScheme] = useState(strategies.offSchemeId || "WEST_COAST");
   const [defScheme, setDefScheme] = useState(strategies.defSchemeId || "COVER_2");
 
-  const stored = getStoredGamePlan(league);
-  const [runPassBalance, setRunPassBalance] = useState(stored?.runPassBalance ?? model?.strategySummary?.runPassBalance ?? 50);
-  const [aggressionLevel, setAggressionLevel] = useState(stored?.aggressionLevel ?? model?.strategySummary?.aggressionLevel ?? 50);
-  const [deepShortBalance, setDeepShortBalance] = useState(stored?.deepShortBalance ?? model?.strategySummary?.deepShortBalance ?? 50);
-  const [blitzFrequency, setBlitzFrequency] = useState(stored?.blitzFrequency ?? model?.strategySummary?.blitzFrequency ?? 30);
+  const initialPlan = resolveGamePlanForLeague({
+    scopedPlan: getStoredGamePlan(league),
+    persistedPlan: strategies.gamePlan,
+    modelSummary: model?.strategySummary,
+  });
+  const [runPassBalance, setRunPassBalance] = useState(initialPlan.runPassBalance);
+  const [aggressionLevel, setAggressionLevel] = useState(initialPlan.aggressionLevel);
+  const [deepShortBalance, setDeepShortBalance] = useState(initialPlan.deepShortBalance);
+  const [blitzFrequency, setBlitzFrequency] = useState(initialPlan.blitzFrequency);
 
-  const [kickReturn, setKickReturn] = useState(stored?.kickReturn || "balanced");
-  const [puntReturn, setPuntReturn] = useState(stored?.puntReturn || "balanced");
-  const [coverage, setCoverage] = useState(stored?.coverage || "balanced");
+  const [kickReturn, setKickReturn] = useState(initialPlan.kickReturn);
+  const [puntReturn, setPuntReturn] = useState(initialPlan.puntReturn);
+  const [coverage, setCoverage] = useState(initialPlan.coverage);
 
   const [saveMessage, setSaveMessage] = useState('');
   const toastTimer = useRef(null);
@@ -134,14 +139,18 @@ export default function GamePlanScreen({ league, actions, onNavigate }) {
   }, [leagueId, league?.seasonId, league?.week, league?.userTeamId]);
 
   useEffect(() => {
-    const next = getStoredGamePlan(league);
-    setRunPassBalance(next.runPassBalance ?? model?.strategySummary?.runPassBalance ?? 50);
-    setAggressionLevel(next.aggressionLevel ?? model?.strategySummary?.aggressionLevel ?? 50);
-    setDeepShortBalance(next.deepShortBalance ?? model?.strategySummary?.deepShortBalance ?? 50);
-    setBlitzFrequency(next.blitzFrequency ?? model?.strategySummary?.blitzFrequency ?? 30);
-    setKickReturn(next.kickReturn || 'balanced');
-    setPuntReturn(next.puntReturn || 'balanced');
-    setCoverage(next.coverage || 'balanced');
+    const next = resolveGamePlanForLeague({
+      scopedPlan: getStoredGamePlan(league),
+      persistedPlan: strategies.gamePlan,
+      modelSummary: model?.strategySummary,
+    });
+    setRunPassBalance(next.runPassBalance);
+    setAggressionLevel(next.aggressionLevel);
+    setDeepShortBalance(next.deepShortBalance);
+    setBlitzFrequency(next.blitzFrequency);
+    setKickReturn(next.kickReturn);
+    setPuntReturn(next.puntReturn);
+    setCoverage(next.coverage);
   }, [leagueId]);
 
   useEffect(() => {
