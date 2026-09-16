@@ -4,6 +4,7 @@ import { buildGameBookPresentation, unwrapBoxScoreResponse } from "../utils/boxS
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { getPlayerProfileId, hasValidPlayerProfileId, openPlayerProfile } from "../utils/playerProfileNavigation.js";
 import { buildReasoningBullets } from "../../core/gameSummary.js";
+import { buildLeagueCacheScopeKey } from '../utils/requestLoopGuard.js';
 
 const mdash = "—";
 
@@ -68,7 +69,7 @@ function BoxScore({
   const { data: archiveGame } = useStableRouteRequest({
     requestKey: canLoadArchive ? `boxscore:${gameId}` : null,
     enabled: canLoadArchive,
-    cacheScopeKey: league?.id ?? league?.leagueId ?? "global",
+    cacheScopeKey: buildLeagueCacheScopeKey(league),
     fetcher: () => actions.getBoxScore(gameId),
   });
 
