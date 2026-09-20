@@ -12,8 +12,10 @@ import {
   GAME_PLAN_PRESETS,
   recommendGamePlanPreset,
 } from './weeklyPrep.js';
+import { resolveGamePlanForLeague } from './gamePlanHydration.js';
 
 const league = {
+  activeLeagueId: 'league-main',
   year: 2028,
   week: 6,
   seasonId: 's-2028',
@@ -70,11 +72,30 @@ describe('weeklyPrep', () => {
         removeItem: (key) => bucket.delete(key),
       },
     };
-    const scopedLeague = { seasonId: 's-reset', week: 3, userTeamId: 1 };
+    const scopedLeague = { activeLeagueId: 'league-reset', seasonId: 's-reset', week: 3, userTeamId: 1 };
     markWeeklyPrepStep(scopedLeague, 'planReviewed', true);
     expect(getWeeklyPrepProgress(scopedLeague).planReviewed).toBe(true);
     clearWeeklyPrepForWeek(scopedLeague);
     expect(getWeeklyPrepProgress(scopedLeague).planReviewed).toBe(false);
+    delete global.window;
+  });
+
+  it('isolates prep and game plans for identical team/week coordinates across saves', () => {
+    const bucket = new Map();
+    global.window = { localStorage: { getItem: (key) => bucket.get(key) ?? null, setItem: (key, value) => bucket.set(key, String(value)), removeItem: (key) => bucket.delete(key) } };
+    const saveA = { ...league, activeLeagueId: 'league_A', year: 2026, seasonId: '2026', week: 1 };
+    const saveB = { ...saveA, activeLeagueId: 'league_B' };
+
+    markWeeklyPrepStep(saveA, 'opponentScouted', true);
+    saveStoredGamePlan(saveA, { runPassBalance: 65, aggressionLevel: 60, deepShortBalance: 55 });
+    expect(getWeeklyPrepProgress(saveB).opponentScouted).toBe(false);
+    expect(getStoredGamePlan(saveB)).toEqual({});
+
+    markWeeklyPrepStep(saveB, 'lineupChecked', true);
+    saveStoredGamePlan(saveB, { runPassBalance: 35, aggressionLevel: 40, deepShortBalance: 45 });
+    expect(getStoredGamePlan(saveA).runPassBalance).toBe(65);
+    expect(getWeeklyPrepProgress(saveA).opponentScouted).toBe(true);
+    expect(getWeeklyPrepProgress(saveA).lineupChecked).toBe(false);
     delete global.window;
   });
 
@@ -151,17 +172,49 @@ describe('game plan write helpers', () => {
   });
 
   it('saveStoredGamePlan and getStoredGamePlan round-trip correctly', () => {
-    saveStoredGamePlan({ runPassBalance: 65, aggressionLevel: 60, deepShortBalance: 55 });
-    const plan = getStoredGamePlan();
+    saveStoredGamePlan(league, { runPassBalance: 65, aggressionLevel: 60, deepShortBalance: 55 });
+    const plan = getStoredGamePlan(league);
     expect(plan.runPassBalance).toBe(65);
     expect(plan.aggressionLevel).toBe(60);
     expect(plan.deepShortBalance).toBe(55);
   });
 
+  it('claims a legacy game plan once without exposing it to another league', () => {
+    const saveA = { ...league, activeLeagueId: 'league_A', year: 2026, seasonId: '2026', week: 1, userTeamId: 1 };
+    const saveB = { ...saveA, activeLeagueId: 'league_B' };
+    const legacyPlan = {
+      runPassBalance: 0,
+      aggressionLevel: 64,
+      deepShortBalance: 73,
+      blitzFrequency: 0,
+      kickReturn: 'aggressive',
+      puntReturn: 'fair_catch',
+      coverage: 'protect_lead',
+    };
+    bucket.set('footballgm_gameplan_v1', JSON.stringify(legacyPlan));
+    markWeeklyPrepStep(saveA, 'opponentScouted', true);
+    markWeeklyPrepStep(saveB, 'lineupChecked', true);
+
+    expect(getStoredGamePlan(saveA)).toEqual(legacyPlan);
+    expect(JSON.parse(bucket.get('footballgm_gameplan_v1:league_A'))).toEqual(legacyPlan);
+    expect(bucket.has('footballgm_gameplan_v1')).toBe(false);
+    expect(bucket.get('footballgm_gameplan_v1:legacy-claimed-by')).toBe('league_A');
+    expect(getWeeklyPrepProgress(saveA).opponentScouted).toBe(true);
+    expect(getWeeklyPrepProgress(saveB).lineupChecked).toBe(true);
+
+    expect(getStoredGamePlan(saveB)).toEqual({});
+    expect(bucket.has('footballgm_gameplan_v1:league_B')).toBe(false);
+    expect(resolveGamePlanForLeague({
+      scopedPlan: getStoredGamePlan(saveB),
+      persistedPlan: { runPassBalance: 41, kickReturn: 'safe' },
+    })).toMatchObject({ runPassBalance: 41, kickReturn: 'safe' });
+    expect(getStoredGamePlan(saveA)).toEqual(legacyPlan);
+  });
+
   it('resetStoredGamePlan restores defaults', () => {
-    saveStoredGamePlan({ runPassBalance: 80, aggressionLevel: 70, deepShortBalance: 65 });
-    resetStoredGamePlan();
-    const plan = getStoredGamePlan();
+    saveStoredGamePlan(league, { runPassBalance: 80, aggressionLevel: 70, deepShortBalance: 65 });
+    resetStoredGamePlan(league);
+    const plan = getStoredGamePlan(league);
     expect(plan.runPassBalance).toBe(50);
     expect(plan.aggressionLevel).toBe(50);
     expect(plan.deepShortBalance).toBe(50);
@@ -169,10 +222,10 @@ describe('game plan write helpers', () => {
 
   it('does not crash when window/localStorage is unavailable', () => {
     delete global.window;
-    expect(() => saveStoredGamePlan({ runPassBalance: 60 })).not.toThrow();
-    expect(() => resetStoredGamePlan()).not.toThrow();
-    expect(() => getStoredGamePlan()).not.toThrow();
-    expect(getStoredGamePlan()).toEqual({});
+    expect(() => saveStoredGamePlan(league, { runPassBalance: 60 })).not.toThrow();
+    expect(() => resetStoredGamePlan(league)).not.toThrow();
+    expect(() => getStoredGamePlan(league)).not.toThrow();
+    expect(getStoredGamePlan(league)).toEqual({});
   });
 
   it('each preset sets only the three supported fields (plus label)', () => {

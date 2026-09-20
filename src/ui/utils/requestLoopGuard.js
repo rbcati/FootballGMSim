@@ -1,6 +1,8 @@
+import { getLeagueIdentity } from './leagueIdentity.js';
+
 export function buildLeagueCacheScopeKey(league) {
   if (!league) return "global";
-  return `${league.seasonId ?? league.year ?? "season"}:${league.week ?? 0}`;
+  return `${getLeagueIdentity(league) ?? 'unscoped'}:${league.seasonId ?? league.year ?? "season"}:${league.week ?? 0}`;
 }
 
 export function buildRouteRequestKey(prefix, id) {

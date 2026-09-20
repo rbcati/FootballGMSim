@@ -61,7 +61,9 @@ import {
   shouldShowNewFranchiseBootstrapGate,
   summarizeBootstrapState,
 } from './utils/leagueBootstrap.js';
-import { clearWeeklyPrepForWeek, pruneWeeklyPrepStorage } from './utils/weeklyPrep.js';
+import { pruneWeeklyPrepStorage } from './utils/weeklyPrep.js';
+import { transitionWeeklyPrep } from './utils/weeklyPrepTransition.js';
+import { getLeagueIdentity } from './utils/leagueIdentity.js';
 import { buildCanonicalGameId } from '../core/gameIdentity.js';
 import { readStrictFinalScore } from '../core/gameArchive.js';
 import { getRecentGames, saveGame } from '../core/archive/gameArchive.ts';
@@ -746,16 +748,11 @@ function AppContent() {
   }, [league?.seasonId, league?.year]);
 
   const previousWeekRef = useRef(null);
+  const activeLeagueIdentity = getLeagueIdentity(league);
   useEffect(() => {
     if (!league) return;
-    const marker = `${league?.seasonId ?? league?.year}:${league?.week ?? 0}:${league?.userTeamId ?? 'user'}`;
-    const prior = previousWeekRef.current;
-    if (prior && prior !== marker) {
-      const [seasonId, week, userTeamId] = String(prior).split(':');
-      clearWeeklyPrepForWeek({ seasonId, week: Number(week), userTeamId });
-    }
-    previousWeekRef.current = marker;
-  }, [league?.seasonId, league?.year, league?.week, league?.userTeamId]);
+    previousWeekRef.current = transitionWeeklyPrep(previousWeekRef.current, league);
+  }, [activeLeagueIdentity, league?.seasonId, league?.year, league?.week, league?.userTeamId]);
 
   useEffect(() => {
     console.info('[BuildMarker]', {

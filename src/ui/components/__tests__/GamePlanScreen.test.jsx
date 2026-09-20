@@ -1,11 +1,12 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import GamePlanScreen from '../GamePlanScreen.jsx';
 import { getWeeklyPrepProgress } from '../../utils/weeklyPrep.js';
 
 const league = {
+  activeLeagueId: 'league-game-plan',
   year: 2026,
   week: 13,
   seasonId: 's13',
@@ -30,6 +31,9 @@ const league = {
 };
 
 describe('GamePlanScreen', () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(cleanup);
+
   it('shows HQ-aligned tactical recommendations and dispatches strategy save', () => {
     const actions = { send: vi.fn() };
     render(<GamePlanScreen league={league} actions={actions} onNavigate={vi.fn()} />);
@@ -53,5 +57,42 @@ describe('GamePlanScreen', () => {
     const noOpp = { ...league, schedule: { weeks: [] } };
     render(<GamePlanScreen league={noOpp} actions={{ send: vi.fn() }} />);
     expect(screen.getByText(/No opponent locked yet/i)).toBeTruthy();
+  });
+
+  it('preserves persisted save-owned game-plan values when saved unchanged', () => {
+    const actions = { send: vi.fn() };
+    const persistedLeague = {
+      ...league,
+      teams: league.teams.map((team) => team.id === league.userTeamId ? {
+        ...team,
+        strategies: {
+          ...team.strategies,
+          gamePlan: {
+            runPassBalance: 57,
+            aggressionLevel: 48,
+            deepShortBalance: 39,
+            blitzFrequency: 42,
+            kickReturn: 'aggressive',
+            puntReturn: 'fair_catch',
+            coverage: 'protect_lead',
+          },
+        },
+      } : team),
+    };
+
+    render(<GamePlanScreen league={persistedLeague} actions={actions} />);
+    fireEvent.click(screen.getByRole('button', { name: /Save Game Plan/i }));
+
+    expect(actions.send).toHaveBeenCalledWith('UPDATE_STRATEGY', expect.objectContaining({
+      gamePlan: {
+        runPassBalance: 57,
+        aggressionLevel: 48,
+        deepShortBalance: 39,
+        blitzFrequency: 42,
+        kickReturn: 'aggressive',
+        puntReturn: 'fair_catch',
+        coverage: 'protect_lead',
+      },
+    }));
   });
 });

@@ -1,9 +1,17 @@
 import { autoBuildDepthChart, depthWarnings, DEPTH_CHART_ROWS } from '../../core/depthChart.js';
 import { deriveGamePlanMultipliers, getGamePlanSynergySummary } from '../../core/sim/gamePlanMultipliers.ts';
 import { getNextUserGame } from './userWeeklyGames.js';
+import { getLeagueIdentity, getLeagueScopedStorageKey } from './leagueIdentity.js';
 
 const PREP_STORAGE_KEY = 'footballgm_weekly_prep_v1';
 const GAME_PLAN_STORAGE_KEY = 'footballgm_gameplan_v1';
+const GAME_PLAN_LEGACY_CLAIM_KEY = `${GAME_PLAN_STORAGE_KEY}:legacy-claimed-by`;
+const GAME_PLAN_NUMBER_FIELDS = ['runPassBalance', 'aggressionLevel', 'deepShortBalance', 'blitzFrequency'];
+const GAME_PLAN_OPTION_FIELDS = Object.freeze({
+  kickReturn: new Set(['safe', 'balanced', 'aggressive', 'risky']),
+  puntReturn: new Set(['fair_catch', 'balanced', 'aggressive']),
+  coverage: new Set(['protect_lead', 'balanced', 'pin_deep']),
+});
 
 function safeNum(value, fallback = 0) {
   const parsed = Number(value);
@@ -236,14 +244,66 @@ function readStoredPrepProgress() {
 }
 
 function prepProgressKey(league) {
-  return `${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 1}:${league?.userTeamId ?? 'user'}`;
+  const leagueId = getLeagueIdentity(league);
+  if (!leagueId) return null;
+  return `${leagueId}:${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 1}:${league?.userTeamId ?? 'user'}`;
 }
 
-function readStoredGamePlan() {
-  if (typeof window === 'undefined') return {};
+function parseStoredObject(value) {
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(GAME_PLAN_STORAGE_KEY) ?? '{}');
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function sanitizeLegacyGamePlan(rawPlan) {
+  const raw = rawPlan && typeof rawPlan === 'object' ? rawPlan : {};
+  const plan = {};
+  for (const field of GAME_PLAN_NUMBER_FIELDS) {
+    if (raw[field] == null) continue;
+    const value = Number(raw[field]);
+    if (Number.isFinite(value)) plan[field] = Math.min(100, Math.max(0, value));
+  }
+  for (const [field, allowed] of Object.entries(GAME_PLAN_OPTION_FIELDS)) {
+    if (allowed.has(raw[field])) plan[field] = raw[field];
+  }
+  return plan;
+}
+
+function readStoredGamePlan(league) {
+  if (typeof window === 'undefined') return {};
+  const leagueId = getLeagueIdentity(league);
+  const storageKey = getLeagueScopedStorageKey(GAME_PLAN_STORAGE_KEY, league);
+  if (!leagueId || !storageKey) return {};
+  try {
+    const scopedValue = window.localStorage.getItem(storageKey);
+    if (scopedValue !== null) return parseStoredObject(scopedValue);
+
+    const legacyValue = window.localStorage.getItem(GAME_PLAN_STORAGE_KEY);
+    if (legacyValue === null) return {};
+    const claimedBy = window.localStorage.getItem(GAME_PLAN_LEGACY_CLAIM_KEY);
+    if (claimedBy && claimedBy !== leagueId) return {};
+
+    const legacyPlan = sanitizeLegacyGamePlan(parseStoredObject(legacyValue));
+    if (Object.keys(legacyPlan).length === 0) return {};
+
+    // Claim before removing the source so a failed remove cannot expose the
+    // legacy plan to another save. Roll back the scoped copy if claiming fails.
+    window.localStorage.setItem(storageKey, JSON.stringify(legacyPlan));
+    try {
+      window.localStorage.setItem(GAME_PLAN_LEGACY_CLAIM_KEY, leagueId);
+    } catch (error) {
+      window.localStorage.removeItem(storageKey);
+      throw error;
+    }
+    try {
+      window.localStorage.removeItem(GAME_PLAN_STORAGE_KEY);
+    } catch {
+      // The claim marker is authoritative if cleanup of the legacy source fails.
+    }
+    return legacyPlan;
   } catch {
     return {};
   }
@@ -261,6 +321,7 @@ function writeStoredPrepProgress(allProgress) {
 export function getWeeklyPrepProgress(league) {
   const all = readStoredPrepProgress();
   const key = prepProgressKey(league);
+  if (!key) return { lineupChecked: false, injuriesReviewed: false, opponentScouted: false, planReviewed: false };
   return {
     lineupChecked: false,
     injuriesReviewed: false,
@@ -273,6 +334,7 @@ export function getWeeklyPrepProgress(league) {
 export function markWeeklyPrepStep(league, step, value = true) {
   if (!league || !step) return;
   const key = prepProgressKey(league);
+  if (!key) return;
   const all = readStoredPrepProgress();
   all[key] = {
     lineupChecked: false,
@@ -288,6 +350,7 @@ export function markWeeklyPrepStep(league, step, value = true) {
 export function clearWeeklyPrepForWeek(league) {
   if (typeof window === 'undefined') return;
   const key = prepProgressKey(league);
+  if (!key) return;
   const all = readStoredPrepProgress();
   if (!all || typeof all !== 'object' || !all[key]) return;
   delete all[key];
@@ -297,10 +360,12 @@ export function clearWeeklyPrepForWeek(league) {
 export function pruneWeeklyPrepStorage(activeLeague) {
   if (typeof window === 'undefined') return;
   const all = readStoredPrepProgress();
+  const leagueId = getLeagueIdentity(activeLeague);
+  if (!leagueId) return;
   const activeSeason = String(activeLeague?.seasonId ?? activeLeague?.year ?? 'season');
-  const keepPrefix = `${activeSeason}:`;
+  const keepPrefix = `${leagueId}:${activeSeason}:`;
   const next = Object.fromEntries(
-    Object.entries(all).filter(([key]) => key.startsWith(keepPrefix)),
+    Object.entries(all).filter(([key]) => !key.startsWith(`${leagueId}:`) || key.startsWith(keepPrefix)),
   );
   if (Object.keys(next).length !== Object.keys(all).length) {
     writeStoredPrepProgress(next);
@@ -338,25 +403,35 @@ export function normalizeGamePlan(rawPlan) {
   };
 }
 
-export function getStoredGamePlan() {
-  return readStoredGamePlan();
+export function getStoredGamePlan(league) {
+  return readStoredGamePlan(league);
 }
 
-export function saveStoredGamePlan(nextPlan) {
+export function saveStoredGamePlan(league, nextPlan) {
   if (typeof window === 'undefined') return;
+  const storageKey = getLeagueScopedStorageKey(GAME_PLAN_STORAGE_KEY, league);
+  if (!storageKey) return;
   try {
     const normalized = normalizeGamePlan(nextPlan);
-    const existing = readStoredGamePlan();
-    window.localStorage.setItem(GAME_PLAN_STORAGE_KEY, JSON.stringify({ ...existing, ...normalized }));
+    const extended = nextPlan && typeof nextPlan === 'object' ? {
+      ...(Number.isFinite(Number(nextPlan.blitzFrequency)) ? { blitzFrequency: Math.min(100, Math.max(0, Number(nextPlan.blitzFrequency))) } : {}),
+      ...(['safe', 'balanced', 'aggressive', 'risky'].includes(nextPlan.kickReturn) ? { kickReturn: nextPlan.kickReturn } : {}),
+      ...(['fair_catch', 'balanced', 'aggressive'].includes(nextPlan.puntReturn) ? { puntReturn: nextPlan.puntReturn } : {}),
+      ...(['protect_lead', 'balanced', 'pin_deep'].includes(nextPlan.coverage) ? { coverage: nextPlan.coverage } : {}),
+    } : {};
+    const existing = readStoredGamePlan(league);
+    window.localStorage.setItem(storageKey, JSON.stringify({ ...existing, ...normalized, ...extended }));
   } catch {
     // no-op on quota/permission issues
   }
 }
 
-export function resetStoredGamePlan() {
+export function resetStoredGamePlan(league) {
   if (typeof window === 'undefined') return;
+  const storageKey = getLeagueScopedStorageKey(GAME_PLAN_STORAGE_KEY, league);
+  if (!storageKey) return;
   try {
-    window.localStorage.setItem(GAME_PLAN_STORAGE_KEY, JSON.stringify({ ...GAME_PLAN_DEFAULTS }));
+    window.localStorage.setItem(storageKey, JSON.stringify({ ...GAME_PLAN_DEFAULTS }));
   } catch {
     // no-op on quota/permission issues
   }
@@ -401,7 +476,7 @@ export function deriveWeeklyPrepState(league) {
   const recommendations = createRecommendationCards({ userTeam, opponent, matchup });
   const gamePlan = {
     ...(userTeam?.strategies?.gamePlan ?? {}),
-    ...readStoredGamePlan(),
+    ...readStoredGamePlan(league),
   };
   const insights = {
     weakSecondary: oppDef <= 76 || matchup.offenseGap >= 6,
