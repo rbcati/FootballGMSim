@@ -5,6 +5,13 @@ import { getLeagueIdentity, getLeagueScopedStorageKey } from './leagueIdentity.j
 
 const PREP_STORAGE_KEY = 'footballgm_weekly_prep_v1';
 const GAME_PLAN_STORAGE_KEY = 'footballgm_gameplan_v1';
+const GAME_PLAN_LEGACY_CLAIM_KEY = `${GAME_PLAN_STORAGE_KEY}:legacy-claimed-by`;
+const GAME_PLAN_NUMBER_FIELDS = ['runPassBalance', 'aggressionLevel', 'deepShortBalance', 'blitzFrequency'];
+const GAME_PLAN_OPTION_FIELDS = Object.freeze({
+  kickReturn: new Set(['safe', 'balanced', 'aggressive', 'risky']),
+  puntReturn: new Set(['fair_catch', 'balanced', 'aggressive']),
+  coverage: new Set(['protect_lead', 'balanced', 'pin_deep']),
+});
 
 function safeNum(value, fallback = 0) {
   const parsed = Number(value);
@@ -242,13 +249,61 @@ function prepProgressKey(league) {
   return `${leagueId}:${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 1}:${league?.userTeamId ?? 'user'}`;
 }
 
+function parseStoredObject(value) {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function sanitizeLegacyGamePlan(rawPlan) {
+  const raw = rawPlan && typeof rawPlan === 'object' ? rawPlan : {};
+  const plan = {};
+  for (const field of GAME_PLAN_NUMBER_FIELDS) {
+    if (raw[field] == null) continue;
+    const value = Number(raw[field]);
+    if (Number.isFinite(value)) plan[field] = Math.min(100, Math.max(0, value));
+  }
+  for (const [field, allowed] of Object.entries(GAME_PLAN_OPTION_FIELDS)) {
+    if (allowed.has(raw[field])) plan[field] = raw[field];
+  }
+  return plan;
+}
+
 function readStoredGamePlan(league) {
   if (typeof window === 'undefined') return {};
+  const leagueId = getLeagueIdentity(league);
   const storageKey = getLeagueScopedStorageKey(GAME_PLAN_STORAGE_KEY, league);
-  if (!storageKey) return {};
+  if (!leagueId || !storageKey) return {};
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}');
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    const scopedValue = window.localStorage.getItem(storageKey);
+    if (scopedValue !== null) return parseStoredObject(scopedValue);
+
+    const legacyValue = window.localStorage.getItem(GAME_PLAN_STORAGE_KEY);
+    if (legacyValue === null) return {};
+    const claimedBy = window.localStorage.getItem(GAME_PLAN_LEGACY_CLAIM_KEY);
+    if (claimedBy && claimedBy !== leagueId) return {};
+
+    const legacyPlan = sanitizeLegacyGamePlan(parseStoredObject(legacyValue));
+    if (Object.keys(legacyPlan).length === 0) return {};
+
+    // Claim before removing the source so a failed remove cannot expose the
+    // legacy plan to another save. Roll back the scoped copy if claiming fails.
+    window.localStorage.setItem(storageKey, JSON.stringify(legacyPlan));
+    try {
+      window.localStorage.setItem(GAME_PLAN_LEGACY_CLAIM_KEY, leagueId);
+    } catch (error) {
+      window.localStorage.removeItem(storageKey);
+      throw error;
+    }
+    try {
+      window.localStorage.removeItem(GAME_PLAN_STORAGE_KEY);
+    } catch {
+      // The claim marker is authoritative if cleanup of the legacy source fails.
+    }
+    return legacyPlan;
   } catch {
     return {};
   }

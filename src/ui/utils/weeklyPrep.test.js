@@ -12,6 +12,7 @@ import {
   GAME_PLAN_PRESETS,
   recommendGamePlanPreset,
 } from './weeklyPrep.js';
+import { resolveGamePlanForLeague } from './gamePlanHydration.js';
 
 const league = {
   activeLeagueId: 'league-main',
@@ -178,15 +179,36 @@ describe('game plan write helpers', () => {
     expect(plan.deepShortBalance).toBe(55);
   });
 
-  it('does not migrate ambiguous legacy game-plan storage into either league', () => {
-    bucket.set('footballgm_gameplan_v1', JSON.stringify({ kickReturn: 'aggressive', runPassBalance: 72 }));
-    const saveA = { ...league, activeLeagueId: 'league_A' };
-    const saveB = { ...league, activeLeagueId: 'league_B' };
+  it('claims a legacy game plan once without exposing it to another league', () => {
+    const saveA = { ...league, activeLeagueId: 'league_A', year: 2026, seasonId: '2026', week: 1, userTeamId: 1 };
+    const saveB = { ...saveA, activeLeagueId: 'league_B' };
+    const legacyPlan = {
+      runPassBalance: 0,
+      aggressionLevel: 64,
+      deepShortBalance: 73,
+      blitzFrequency: 0,
+      kickReturn: 'aggressive',
+      puntReturn: 'fair_catch',
+      coverage: 'protect_lead',
+    };
+    bucket.set('footballgm_gameplan_v1', JSON.stringify(legacyPlan));
+    markWeeklyPrepStep(saveA, 'opponentScouted', true);
+    markWeeklyPrepStep(saveB, 'lineupChecked', true);
 
-    expect(getStoredGamePlan(saveA)).toEqual({});
+    expect(getStoredGamePlan(saveA)).toEqual(legacyPlan);
+    expect(JSON.parse(bucket.get('footballgm_gameplan_v1:league_A'))).toEqual(legacyPlan);
+    expect(bucket.has('footballgm_gameplan_v1')).toBe(false);
+    expect(bucket.get('footballgm_gameplan_v1:legacy-claimed-by')).toBe('league_A');
+    expect(getWeeklyPrepProgress(saveA).opponentScouted).toBe(true);
+    expect(getWeeklyPrepProgress(saveB).lineupChecked).toBe(true);
+
     expect(getStoredGamePlan(saveB)).toEqual({});
-    expect(bucket.has('footballgm_gameplan_v1:league_A')).toBe(false);
     expect(bucket.has('footballgm_gameplan_v1:league_B')).toBe(false);
+    expect(resolveGamePlanForLeague({
+      scopedPlan: getStoredGamePlan(saveB),
+      persistedPlan: { runPassBalance: 41, kickReturn: 'safe' },
+    })).toMatchObject({ runPassBalance: 41, kickReturn: 'safe' });
+    expect(getStoredGamePlan(saveA)).toEqual(legacyPlan);
   });
 
   it('resetStoredGamePlan restores defaults', () => {
