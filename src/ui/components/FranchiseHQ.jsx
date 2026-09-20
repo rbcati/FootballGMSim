@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { autoBuildDepthChart, depthWarnings } from '../../core/depthChart.js';
-import { markWeeklyPrepStep, deriveWeeklyPrepState } from '../utils/weeklyPrep.js';
+import { markWeeklyPrepStep, deriveWeeklyPrepState, getStoredGamePlan } from '../utils/weeklyPrep.js';
 import { evaluateWeeklyContext } from '../utils/weeklyContext.js';
 import { buildAdvanceReadinessGate } from '../utils/advanceReadinessGate.js';
 import AdvanceReadinessGate from './AdvanceReadinessGate.jsx';
@@ -27,6 +27,7 @@ import GameResultSummaryCard from './GameResultSummaryCard.jsx';
 import GMDecisionCenter from './GMDecisionCenter.jsx';
 import { readStrictFinalScore, recoverArchivedGameFromSchedule } from '../../core/gameArchive.js';
 import { buildGameDayReadinessModel } from '../utils/gameDayReadinessModel.js';
+import { buildLeagueCacheScopeKey } from '../utils/requestLoopGuard.js';
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -155,11 +156,6 @@ function getLatestUserResultFromRecentResults(lastResults, { league, lastSimWeek
   return null;
 }
 
-const HQ_GP_STORAGE_KEY = 'footballgm_gameplan_v1';
-function loadHQStoredPlan() {
-  try { return JSON.parse(localStorage.getItem(HQ_GP_STORAGE_KEY) || 'null'); } catch { return null; }
-}
-
 export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = null, onNavigate, onAdvanceWeek, busy, simulating, actions }) {
   const [lineupToast, setLineupToast] = useState(null);
   const [showGate, setShowGate] = useState(false);
@@ -216,7 +212,7 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
   const { data: lastMeetingArchiveResponse } = useStableRouteRequest({
     requestKey: shouldCheckLastMeetingArchive ? `boxscore:${lastMeetingGameId}` : null,
     enabled: shouldCheckLastMeetingArchive,
-    cacheScopeKey: league?.activeLeagueId ?? league?.id ?? league?.leagueId ?? 'global',
+    cacheScopeKey: buildLeagueCacheScopeKey(league),
     fetcher: () => actions.getBoxScore(lastMeetingGameId),
     warnLabel: 'FranchiseHQLastMeeting',
   });
@@ -266,7 +262,7 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
   const handleGamePlanTile = () => {
     markWeeklyPrepStep(league, 'planReviewed', true);
     if (actions?.send) {
-      const storedPlan = loadHQStoredPlan();
+      const storedPlan = getStoredGamePlan(league);
       const strats = userTeam?.strategies ?? {};
       actions.send('UPDATE_STRATEGY', {
         offSchemeId: strats.offSchemeId || 'WEST_COAST',

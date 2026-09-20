@@ -6,6 +6,7 @@ import { buildGameBookPresentation, unwrapBoxScoreResponse } from '../utils/boxS
 import useStableRouteRequest from '../hooks/useStableRouteRequest.js';
 import { resolveCanonicalCompletedGame } from '../utils/canonicalCompletedGame.js';
 import { getGame as getLocalArchivedGame } from '../../core/archive/gameArchive.ts';
+import { buildLeagueCacheScopeKey } from '../utils/requestLoopGuard.js';
 
 function findScheduleGame(league, gameId) {
   for (const week of league?.schedule?.weeks ?? []) {
@@ -59,7 +60,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
   const { data: archiveResponse, loading: archiveLoading } = useStableRouteRequest({
     requestKey: canLoadArchive ? `boxscore:${gameId}` : null,
     enabled: canLoadArchive,
-    cacheScopeKey: league?.id ?? league?.leagueId ?? 'global',
+    cacheScopeKey: buildLeagueCacheScopeKey(league),
     fetcher: () => actions.getBoxScore(gameId),
     warnLabel: 'GameDetailScreen',
   });

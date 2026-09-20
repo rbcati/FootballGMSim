@@ -71,13 +71,13 @@ src/
 - Game simulation runs in a Web Worker (`src/worker/worker.js`).
 - State management uses postMessage between UI thread and worker; no Redux/Zustand.
 - The `@` path alias resolves to `src/ui/`.
-- The only external service is an optional Groq LLM API proxy via Netlify Function (`netlify/functions/groq-proxy.js`); the game is fully playable without it.
+- The only external service is an optional Groq LLM API proxy via Netlify Function (`netlify/functions/groq-proxy.cjs`); the game is fully playable without it.
 - Node.js >=22 <23 is required (enforced by `engines` field in `package.json`).
 - Game simulation runs in a **Web Worker** (`src/worker/worker.js`). UI communicates via `postMessage` (see `src/worker/protocol.js`).
 - No Redux/Zustand — state flows through worker responses and React context.
 - The `@` import alias resolves to `src/ui/` (configured in `vite.config.js`).
 - **IndexedDB** is the only database (`src/db/index.js`). No backend DB.
-- The optional Groq LLM proxy lives at `netlify/functions/groq-proxy.js`; game is fully playable without it.
+- The optional Groq LLM proxy lives at `netlify/functions/groq-proxy.cjs`; game is fully playable without it.
 
 ### Gotchas
 ### Testing details
