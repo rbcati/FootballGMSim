@@ -223,7 +223,7 @@ export async function simulateSingleWeek(page, options = {}) {
       try {
         await expect(advanceCta).toBeEnabled({ timeout: 500 });
       } catch (err) {
-        if (err.name !== 'TimeoutError') throw err;
+        if (err.name !== 'TimeoutError' && !err.message.includes('toBeEnabled')) throw err;
       }
     } catch (err) {
       if (err.name !== 'TimeoutError') throw err;
