@@ -71,12 +71,13 @@ export function createEventEntry(type, payload, context = {}) {
     phase: context.phase ?? 'regular',
     week: context.week ?? 1,
     year: context.year ?? null,
-    timestamp: Date.now(),
+    timestamp: context.timestamp ?? Date.now(),
     tooltip: EVENT_TOOLTIPS[type] ?? '',
   };
 }
 
 export function generateDynamicEvents({ players = [], teams = [], userTeamId = null, week = 1, year = null, phase = 'regular', suspensionFrequency = 50, rng = Math.random } = {}) {
+  const batchTimestamp = Date.now();
   const teamById = Object.fromEntries((teams || []).map((t) => [Number(t.id), t]));
   const candidates = players
     .filter((p) => Number(p?.teamId) >= 0 && p?.status !== 'retired' && p?.status !== 'draft_eligible')
@@ -99,7 +100,7 @@ export function generateDynamicEvents({ players = [], teams = [], userTeamId = n
         actionTarget: 'Contract Center',
         effects: { morale: -5, negotiationLeverage: 6 },
         priority: 'high',
-      }, { week, year, phase }));
+      }, { week, year, phase, timestamp: batchTimestamp }));
     }
 
     if (phase === 'regular' && rng() < clamp((volatility - discipline) / 5000, 0, 0.08)) {
@@ -111,7 +112,7 @@ export function generateDynamicEvents({ players = [], teams = [], userTeamId = n
         actionLabel: 'View Profile',
         actionTarget: 'Player',
         effects: { morale: -4, popularity: -2 },
-      }, { week, year, phase }));
+      }, { week, year, phase, timestamp: batchTimestamp }));
     }
 
     const suspensionChance = clamp((Number(profile?.offFieldRisk ?? 20) - discipline) / 4000, 0, 0.04) * clamp(Number(suspensionFrequency) / 50, 0, 2);
@@ -123,7 +124,7 @@ export function generateDynamicEvents({ players = [], teams = [], userTeamId = n
         teamId: player.teamId,
         effects: { morale: -8, popularity: -6 },
         priority: 'high',
-      }, { week, year, phase }));
+      }, { week, year, phase, timestamp: batchTimestamp }));
     }
 
     if (phase === 'regular' && rng() < 0.025) {
@@ -145,7 +146,7 @@ export function generateDynamicEvents({ players = [], teams = [], userTeamId = n
         teamId: player.teamId,
         effects,
         priority: storyline === 'controversy' ? 'medium' : 'low',
-      }, { week, year, phase }));
+      }, { week, year, phase, timestamp: batchTimestamp }));
     }
 
     if (events.length >= 10) break;
@@ -159,7 +160,7 @@ export function generateDynamicEvents({ players = [], teams = [], userTeamId = n
         body: `${rumorTeam.name} is reportedly exploring a trade-up package for a premium prospect.`,
         teamId: rumorTeam.id,
         scope: Number(rumorTeam.id) === Number(userTeamId) ? 'team' : 'league',
-      }, { week, year, phase }));
+      }, { week, year, phase, timestamp: batchTimestamp }));
     }
   }
 
