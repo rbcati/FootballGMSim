@@ -141,13 +141,6 @@ function SchemeCard({ title, schemes, selectedId, onChange }) {
               }}>
                 {scheme.description}
               </div>
-              {isActive && (
-                <div style={{ marginTop: "var(--space-1)", fontSize: "var(--text-xs)" }}>
-                  <span style={{ color: "var(--success)" }}>{scheme.bonus}</span>
-                  {' · '}
-                  <span style={{ color: "var(--danger)" }}>{scheme.penalty}</span>
-                </div>
-              )}
             </button>
           );
         })}
@@ -294,10 +287,9 @@ export default function StrategyPanel({ league, actions }) {
         marginBottom: "var(--space-4)",
         lineHeight: 1.4,
       }}>
-        Your scheme determines how well each player fits your system. Players
-        whose attributes match your scheme get a +2 to +4 OVR boost; mismatches
-        receive a penalty. Build your roster around your scheme for maximum
-        tactical advantage.
+        Scheme selections describe your team and coaching identity. Scheme fit
+        notes help evaluate roster alignment; they do not apply a direct rich-sim
+        ratings bonus.
       </p>
       <div
         style={{

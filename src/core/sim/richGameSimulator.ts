@@ -144,8 +144,8 @@ export interface RichGameSummary {
   shutoutFloorApplied: { home: boolean; away: boolean };
   advancedAttribution?: Record<string, AdvancedGameStats>;
   simFactors: {
-    home: { qbRating: number; rushYpc: number; successRate: number; passRate: number };
-    away: { qbRating: number; rushYpc: number; successRate: number; passRate: number };
+    home: { qbRating: number; rushYpc: number; successRate: number; passRate: number; defensiveBlitzFrequency: number; defensivePressureDelta: number; defensiveCoverageExposureDelta: number; defensiveExplosiveRiskDelta: number };
+    away: { qbRating: number; rushYpc: number; successRate: number; passRate: number; defensiveBlitzFrequency: number; defensivePressureDelta: number; defensiveCoverageExposureDelta: number; defensiveExplosiveRiskDelta: number };
   };
 }
 
@@ -264,6 +264,10 @@ const NEUTRAL_PREP: DerivedGamePlanMultipliers = {
   redZoneDelta: 0,
   fatigueDisciplineDelta: 0,
   chemistryPenalty: 0,
+  blitzFrequency: 30,
+  blitzPressureDelta: 0,
+  blitzCoverageExposureDelta: 0,
+  blitzExplosiveRiskDelta: 0,
   score: 0,
   netImpact: 0,
   severity: 'ready',
@@ -616,6 +620,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     const wasFourthDown = state.down === 4;
 
     const offensePrep = state.possession === 'home' ? homePrep : awayPrep;
+    const defensePrep = state.possession === 'home' ? awayPrep : homePrep;
     const playType = getPlayType(state, rng, offensePrep);
     const offensePlayers = state.possession === 'home' ? homePlayers : awayPlayers;
     const defensePlayers = state.possession === 'home' ? awayPlayers : homePlayers;
@@ -647,6 +652,9 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       defenderId: defender?.id != null ? String(defender.id) : undefined,
       blockerId: blocker?.id != null ? String(blocker.id) : undefined,
       rusherId: rusher?.id != null ? String(rusher.id) : undefined,
+      pressureOpportunityDelta: defensePrep.blitzPressureDelta ?? 0,
+      coverageExposureDelta: defensePrep.blitzCoverageExposureDelta ?? 0,
+      explosiveRiskDelta: defensePrep.blitzExplosiveRiskDelta ?? 0,
     }, rng);
 
     offenseStats.plays += 1;
@@ -1125,12 +1133,20 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
         rushYpc: Number((homeTeamLine.rushYd / Math.max(1, homeTeamLine.rushAtt)).toFixed(2)),
         successRate: homeTeamLine.successRate,
         passRate: Number((homeTeamLine.passAtt / Math.max(1, homeTeamLine.plays)).toFixed(3)),
+        defensiveBlitzFrequency: homePrep.blitzFrequency ?? 30,
+        defensivePressureDelta: homePrep.blitzPressureDelta ?? 0,
+        defensiveCoverageExposureDelta: homePrep.blitzCoverageExposureDelta ?? 0,
+        defensiveExplosiveRiskDelta: homePrep.blitzExplosiveRiskDelta ?? 0,
       },
       away: {
         qbRating: buildQbRating(awayTeamLine.passComp, awayTeamLine.passAtt, awayTeamLine.passYd, awayTeamLine.passTD, awayTeamLine.turnovers),
         rushYpc: Number((awayTeamLine.rushYd / Math.max(1, awayTeamLine.rushAtt)).toFixed(2)),
         successRate: awayTeamLine.successRate,
         passRate: Number((awayTeamLine.passAtt / Math.max(1, awayTeamLine.plays)).toFixed(3)),
+        defensiveBlitzFrequency: awayPrep.blitzFrequency ?? 30,
+        defensivePressureDelta: awayPrep.blitzPressureDelta ?? 0,
+        defensiveCoverageExposureDelta: awayPrep.blitzCoverageExposureDelta ?? 0,
+        defensiveExplosiveRiskDelta: awayPrep.blitzExplosiveRiskDelta ?? 0,
       },
     },
   };

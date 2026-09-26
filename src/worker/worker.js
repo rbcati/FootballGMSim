@@ -9596,9 +9596,14 @@ async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId
   if (starTargetId !== undefined) strategies.starTargetId = starTargetId;
   // Extended game-plan sliders (from GamePlanScreen)
   if (gamePlan) {
+    const nextGamePlan = { ...gamePlan };
+    if (Object.prototype.hasOwnProperty.call(nextGamePlan, 'blitzFrequency')) {
+      const parsed = Number(nextGamePlan.blitzFrequency);
+      nextGamePlan.blitzFrequency = Number.isFinite(parsed) ? Math.min(100, Math.max(0, parsed)) : 30;
+    }
     strategies.gamePlan = {
       ...(strategies.gamePlan || {}),
-      ...gamePlan,
+      ...nextGamePlan,
     };
   }
 

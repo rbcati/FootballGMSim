@@ -16,6 +16,9 @@ export interface PlayContext {
   defenderId?: string;
   blockerId?: string;
   rusherId?: string;
+  pressureOpportunityDelta?: number;
+  coverageExposureDelta?: number;
+  explosiveRiskDelta?: number;
 }
 
 export interface PlayAttributionEvent {
@@ -135,18 +138,20 @@ function estimateYards({
   defenseScore,
   playType,
   rng,
+  explosiveRiskDelta = 0,
 }: {
   successProb: number;
   offenseScore: number;
   defenseScore: number;
   playType: 'pass' | 'run';
   rng: () => number;
+  explosiveRiskDelta?: number;
 }): number {
   const delta = (offenseScore - defenseScore) / 100;
   // Yardage tuned to NFL norms: ~11–12 yds per completion, ~4.5 yds per carry.
   // (Was ~4 / ~1.5, which produced ~90 total yds/game and zero touchdowns.)
   const base = playType === 'pass'
-    ? 12 + delta * 2.6
+    ? 12 + delta * 2.6 + clamp(explosiveRiskDelta, -0.02, 0.1) * 28
     : 6.8 + delta * 1.8;
   const volatility = (playType === 'pass' ? 9 : 6) * (0.5 + successProb);
   const sampled = base + (rng() - 0.5) * volatility;
@@ -207,16 +212,20 @@ export function resolveMatchup(
   // Talent gap influences success; per-game form (ctx.formBias) injects the
   // hot/cold-day variance that keeps favorites at a realistic ~70% win rate and
   // gives final scores NFL-like spread instead of grinding to the mean.
-  const input = base + (matchupDelta * 2 * normalization) + (ctx.formBias ?? 0) - pressurePenalty - fatiguePenalty - downDistancePenalty + weatherAdjustment(ctx.weather);
+  const pressureOpportunity = playType === 'pass'
+    ? clamp(ctx.pressureOpportunityDelta ?? 0, -0.06, 0.14) * Math.max(0.35, (defense.passRush ?? 50) / 75)
+    : 0;
+  const coverageExposure = playType === 'pass' ? clamp(ctx.coverageExposureDelta ?? 0, -0.04, 0.12) : 0;
+  const input = base + (matchupDelta * 2 * normalization) + (ctx.formBias ?? 0) - pressurePenalty - pressureOpportunity + coverageExposure - fatiguePenalty - downDistancePenalty + weatherAdjustment(ctx.weather);
   const successProbability = clamp(sigmoid(input), 0.03, 0.97);
 
   const success = rng() <= successProbability;
   const sackProbability = playType === 'pass'
-    ? clamp(0.03 + (defense.passRush - offense.passBlockFootwork) / 230 + (ctx.down >= 3 ? 0.02 : 0), 0.01, 0.2)
+    ? clamp(0.03 + (defense.passRush - offense.passBlockFootwork) / 230 + (ctx.down >= 3 ? 0.02 : 0) + pressureOpportunity * 0.16, 0.01, 0.2)
     : clamp(0.005 + (defense.passRush - offense.passBlockStrength) / 450, 0.002, 0.06);
   const isSack = !success && rng() <= sackProbability;
   const yardsGained = success
-    ? estimateYards({ successProb: successProbability, offenseScore, defenseScore, playType, rng })
+    ? estimateYards({ successProb: successProbability, offenseScore, defenseScore, playType, rng, explosiveRiskDelta: ctx.explosiveRiskDelta })
     : (isSack
       ? -Math.round(clamp((defense.passRush - offense.pocketPresence) / 24, 1, 10))
       : -Math.round(clamp((defense.passRush - offense.passBlockStrength) / 36, 0, playType === 'pass' ? 4 : 3)));

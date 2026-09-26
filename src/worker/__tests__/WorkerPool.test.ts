@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SimulationManager, type Matchup } from '../WorkerPool.ts';
 import { mapOverallToAttributesV2 } from '../../core/migration/attributeMigrator.ts';
+import { deriveGamePlanMultipliers } from '../../core/sim/gamePlanMultipliers.ts';
 
 function buildMatchup(gameId: number): Matchup {
   return {
@@ -32,5 +33,21 @@ describe('SimulationManager', () => {
     expect(summary.results[0].teamStats.home.plays).toBeGreaterThan(0);
     expect(summary.results[0].boxScore.home).toBeTruthy();
     expect(summary.results[0].playDigest.length).toBeGreaterThan(0);
+  });
+
+  it('transports each defense blitz plan unchanged through the canonical matchup adapter', async () => {
+    const manager = new SimulationManager();
+    const matchup = buildMatchup(77);
+    matchup.homePrepMultipliers = deriveGamePlanMultipliers({ gamePlan: { blitzFrequency: 100 } });
+    matchup.awayPrepMultipliers = deriveGamePlanMultipliers({ gamePlan: { blitzFrequency: 0 } });
+
+    const first = await manager.simWeekParallel([matchup]);
+    const second = await manager.simWeekParallel([matchup]);
+
+    expect(first).toEqual(second);
+    expect(first.results[0].simFactors.home.defensiveBlitzFrequency).toBe(100);
+    expect(first.results[0].simFactors.away.defensiveBlitzFrequency).toBe(0);
+    expect(first.results[0].simFactors.home.defensivePressureDelta).toBeGreaterThan(0);
+    expect(first.results[0].simFactors.away.defensivePressureDelta).toBeLessThan(0);
   });
 });
