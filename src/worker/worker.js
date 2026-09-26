@@ -336,7 +336,7 @@ import {
   simulateWithOptionalNewEngine,
 } from '../core/sim/weekSimulationBridge.ts';
 import { deriveFeatsFromRichGame } from '../core/sim/featDerivation.js';
-import { deriveGamePlanMultipliers } from '../core/sim/gamePlanMultipliers.ts';
+import { deriveGamePlanMultipliers, normalizeBlitzFrequency } from '../core/sim/gamePlanMultipliers.ts';
 import { deriveGameDayAvailability } from '../core/gameDayAvailability.js';
 import { buildGamePlanNarrative } from '../core/narrative.js';
 import { buildAiTeamStrategy, mapPlayerPosToNeedGroup } from '../core/aiTeamStrategy.js';
@@ -9598,8 +9598,7 @@ async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId
   if (gamePlan) {
     const nextGamePlan = { ...gamePlan };
     if (Object.prototype.hasOwnProperty.call(nextGamePlan, 'blitzFrequency')) {
-      const parsed = Number(nextGamePlan.blitzFrequency);
-      nextGamePlan.blitzFrequency = Number.isFinite(parsed) ? Math.min(100, Math.max(0, parsed)) : 30;
+      nextGamePlan.blitzFrequency = normalizeBlitzFrequency(nextGamePlan.blitzFrequency);
     }
     strategies.gamePlan = {
       ...(strategies.gamePlan || {}),

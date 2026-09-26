@@ -91,11 +91,34 @@ describe('gamePlanMultipliers', () => {
 
   it('preserves the legacy neutral, deliberate zero, valid maximum, and safe bounds', () => {
     expect(normalizeBlitzFrequency(undefined)).toBe(30);
+    expect(normalizeBlitzFrequency(null)).toBe(30);
+    expect(normalizeBlitzFrequency('')).toBe(30);
+    expect(normalizeBlitzFrequency('   ')).toBe(30);
+    expect(normalizeBlitzFrequency('garbage')).toBe(30);
     expect(normalizeBlitzFrequency(Number.NaN)).toBe(30);
     expect(normalizeBlitzFrequency(0)).toBe(0);
+    expect(normalizeBlitzFrequency('0')).toBe(0);
+    expect(normalizeBlitzFrequency('30')).toBe(30);
     expect(normalizeBlitzFrequency(100)).toBe(100);
-    expect(normalizeBlitzFrequency(-40)).toBe(0);
-    expect(normalizeBlitzFrequency(240)).toBe(100);
+    expect(normalizeBlitzFrequency('100')).toBe(100);
+    expect(normalizeBlitzFrequency(-1)).toBe(0);
+    expect(normalizeBlitzFrequency(101)).toBe(100);
+  });
+
+  it('derives blank legacy blitz state exactly like explicit neutral 30', () => {
+    const blank = deriveGamePlanMultipliers({ gamePlan: { blitzFrequency: '' } });
+    const neutral = deriveGamePlanMultipliers({ gamePlan: { blitzFrequency: 30 } });
+    expect({
+      frequency: blank.blitzFrequency,
+      pressure: blank.blitzPressureDelta,
+      coverage: blank.blitzCoverageExposureDelta,
+      explosive: blank.blitzExplosiveRiskDelta,
+    }).toEqual({
+      frequency: neutral.blitzFrequency,
+      pressure: neutral.blitzPressureDelta,
+      coverage: neutral.blitzCoverageExposureDelta,
+      explosive: neutral.blitzExplosiveRiskDelta,
+    });
   });
 
   it('models blitzing as bounded pressure with coverage and explosive risk, not a flat bonus', () => {

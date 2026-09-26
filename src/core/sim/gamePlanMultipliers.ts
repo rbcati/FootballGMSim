@@ -82,7 +82,9 @@ const TUNING = Object.freeze({
 export const NEUTRAL_BLITZ_FREQUENCY = 30;
 
 export function normalizeBlitzFrequency(value: unknown): number {
-  if (value === null || value === undefined || value === '') return NEUTRAL_BLITZ_FREQUENCY;
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+    return NEUTRAL_BLITZ_FREQUENCY;
+  }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? clamp(parsed, 0, 100) : NEUTRAL_BLITZ_FREQUENCY;
 }
