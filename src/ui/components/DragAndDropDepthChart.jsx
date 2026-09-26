@@ -220,7 +220,7 @@ function PositionGroup({ group, players, onPlayerSelect, recentlyMovedId }) {
   );
 }
 
-export default function DragAndDropDepthChart({ league, actions, onPlayerSelect, onNavigate = null }) {
+export default function DragAndDropDepthChart({ league, actions, onPlayerSelect, onNavigate = null, initialViewMode = 'lineup' }) {
   // Guard against null entries in the teams array after a save/load migration
   const userTeam = league?.teams?.find((t) => t?.id === league?.userTeamId);
   // Keep the filtered roster referentially stable. A fresh array on every
@@ -234,7 +234,7 @@ export default function DragAndDropDepthChart({ league, actions, onPlayerSelect,
   const [chartOrder, setChartOrder] = useState(() => buildChartOrder(roster));
   const [activeGroup, setActiveGroup] = useState(null);
   const [recentlyMovedId, setRecentlyMovedId] = useState(null);
-  const [viewMode, setViewMode] = useState('lineup');
+  const [viewMode, setViewMode] = useState(initialViewMode);
   const [lineupUnit, setLineupUnit] = useState('offense');
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -254,7 +254,10 @@ export default function DragAndDropDepthChart({ league, actions, onPlayerSelect,
 
   const persistOrder = useCallback((nextOrder) => {
     if (!actions?.updateDepthChart) return;
-    actions.updateDepthChart(nextOrder).catch(() => {});
+    const updates = Object.entries(nextOrder).flatMap(([rowKey, ids]) => ids.map((playerId, index) => ({
+      playerId, rowKey, newOrder: index + 1,
+    })));
+    actions.updateDepthChart(updates).catch(() => {});
   }, [actions]);
 
   const handleDragEnd = useCallback((event) => {

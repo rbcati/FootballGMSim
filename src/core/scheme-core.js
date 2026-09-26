@@ -2,9 +2,9 @@
  * scheme-core.js — Scheme & Chemistry Engine v1
  *
  * Defines exactly 3 Offensive Schemes and 3 Defensive Schemes with clear
- * attribute weight tables. Scheme fit gives a temporary +2 to +4 OVR bonus
- * (or penalty) for matching attributes — cached once on roster/scheme change,
- * NEVER recalculated every play or tick.
+ * attribute weight tables. Scheme fit describes personnel alignment. Legacy
+ * simulation callers may derive a display/runtime adjustment separately;
+ * the fit score itself does not promise a flat rich-simulation ratings bonus.
  *
  * Offensive Schemes:
  *   1. West Coast      — short, high-percentage passing; values accuracy & awareness
@@ -121,6 +121,16 @@ export const DEFENSIVE_SCHEMES = {
 const OFF_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'OL', 'K']);
 const DEF_POSITIONS = new Set(['DL', 'LB', 'CB', 'S', 'P']);
 
+/** Normalize detailed roster positions to the groups used by scheme weights. */
+export function normalizeSchemePosition(pos) {
+  const value = String(pos ?? '').toUpperCase();
+  if (['LT', 'LG', 'C', 'RG', 'RT', 'OT', 'OG'].includes(value)) return 'OL';
+  if (['DE', 'DT', 'NT', 'IDL', 'EDGE'].includes(value)) return 'DL';
+  if (['OLB', 'MLB', 'ILB'].includes(value)) return 'LB';
+  if (['FS', 'SS'].includes(value)) return 'S';
+  return value;
+}
+
 // ── Pre-built lookup tables (v2: zero loops at runtime) ─────────────────────
 // Convert each scheme's weight maps into flat arrays of [attr, weight] pairs
 // keyed by position. This means calculatePlayerSchemeFit avoids Object.entries()
@@ -159,7 +169,7 @@ for (const key of Object.keys(DEFENSIVE_SCHEMES)) {
  */
 export function getTopSchemeAttribute(schemeId, pos) {
   const table = _offWeightTables[schemeId] || _defWeightTables[schemeId];
-  return table?.[pos]?.topAttr || null;
+  return table?.[normalizeSchemePosition(pos)]?.topAttr || null;
 }
 
 /**
@@ -172,7 +182,7 @@ export function getTopSchemeAttribute(schemeId, pos) {
 export function calculatePlayerSchemeFit(player, scheme) {
   if (!player || !scheme) return 50;
 
-  const pos = player.pos;
+  const pos = normalizeSchemePosition(player.pos);
   const weights = scheme.weights?.[pos];
 
   // Positions not in this scheme's weight table are unaffected
@@ -249,7 +259,7 @@ export function computeTeamSchemeFits(roster, offSchemeId, defSchemeId) {
   const defTable = _defWeightTables[defSchemeId] || _defWeightTables.COVER_2;
 
   return roster.map(player => {
-    const pos = player.pos;
+    const pos = normalizeSchemePosition(player.pos);
     let fit;
     let topAttr = null;
 
@@ -421,4 +431,3 @@ export function recalcTeamSchemeFit(team) {
   team.schemeFit = fit;
   return fit;
 }
-
