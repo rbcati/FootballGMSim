@@ -34,4 +34,14 @@ describe('resolveGamePlanForLeague', () => {
       kickReturn: 'balanced', puntReturn: 'balanced', coverage: 'balanced', blitzFrequency: 30,
     });
   });
+
+  it('preserves deliberate zero and 100 while clamping invalid persisted values', () => {
+    expect(resolveGamePlanForLeague({ persistedPlan: { blitzFrequency: '' } }).blitzFrequency).toBe(30);
+    expect(resolveGamePlanForLeague({ persistedPlan: { blitzFrequency: null } }).blitzFrequency).toBe(30);
+    expect(resolveGamePlanForLeague({ persistedPlan: { blitzFrequency: 0 } }).blitzFrequency).toBe(0);
+    expect(resolveGamePlanForLeague({ persistedPlan: { blitzFrequency: 100 } }).blitzFrequency).toBe(100);
+    expect(resolveGamePlanForLeague({ persistedPlan: { blitzFrequency: 140 } }).blitzFrequency).toBe(100);
+    expect(resolveGamePlanForLeague({ persistedPlan: { blitzFrequency: -12 } }).blitzFrequency).toBe(0);
+    expect(resolveGamePlanForLeague({ persistedPlan: { blitzFrequency: 'invalid' } }).blitzFrequency).toBe(30);
+  });
 });

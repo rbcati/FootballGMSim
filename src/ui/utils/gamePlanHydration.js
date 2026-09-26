@@ -1,3 +1,5 @@
+import { normalizeBlitzFrequency } from '../../core/sim/gamePlanMultipliers.ts';
+
 const GAME_PLAN_DEFAULTS = Object.freeze({
   runPassBalance: 50,
   aggressionLevel: 50,
@@ -18,7 +20,7 @@ export function resolveGamePlanForLeague({ scopedPlan, persistedPlan, modelSumma
     runPassBalance: resolve('runPassBalance'),
     aggressionLevel: resolve('aggressionLevel'),
     deepShortBalance: resolve('deepShortBalance'),
-    blitzFrequency: resolve('blitzFrequency'),
+    blitzFrequency: normalizeBlitzFrequency(resolve('blitzFrequency')),
     kickReturn: resolve('kickReturn'),
     puntReturn: resolve('puntReturn'),
     coverage: resolve('coverage'),

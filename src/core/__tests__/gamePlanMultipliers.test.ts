@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveGamePlanMultipliers, getGamePlanSynergySummary } from '../sim/gamePlanMultipliers.ts';
+import { deriveBlitzStrategy, deriveGamePlanMultipliers, getGamePlanSynergySummary, normalizeBlitzFrequency } from '../sim/gamePlanMultipliers.ts';
 
 describe('gamePlanMultipliers', () => {
   it('applies pass synergy for weak secondary with pass-heavy plan', () => {
@@ -87,5 +87,51 @@ describe('gamePlanMultipliers', () => {
 
     const summary = getGamePlanSynergySummary(one);
     expect(['Ready', 'Minor risk', 'Major risk']).toContain(summary.status);
+  });
+
+  it('preserves the legacy neutral, deliberate zero, valid maximum, and safe bounds', () => {
+    expect(normalizeBlitzFrequency(undefined)).toBe(30);
+    expect(normalizeBlitzFrequency(null)).toBe(30);
+    expect(normalizeBlitzFrequency('')).toBe(30);
+    expect(normalizeBlitzFrequency('   ')).toBe(30);
+    expect(normalizeBlitzFrequency('garbage')).toBe(30);
+    expect(normalizeBlitzFrequency(Number.NaN)).toBe(30);
+    expect(normalizeBlitzFrequency(0)).toBe(0);
+    expect(normalizeBlitzFrequency('0')).toBe(0);
+    expect(normalizeBlitzFrequency('30')).toBe(30);
+    expect(normalizeBlitzFrequency(100)).toBe(100);
+    expect(normalizeBlitzFrequency('100')).toBe(100);
+    expect(normalizeBlitzFrequency(-1)).toBe(0);
+    expect(normalizeBlitzFrequency(101)).toBe(100);
+  });
+
+  it('derives blank legacy blitz state exactly like explicit neutral 30', () => {
+    const blank = deriveGamePlanMultipliers({ gamePlan: { blitzFrequency: '' } });
+    const neutral = deriveGamePlanMultipliers({ gamePlan: { blitzFrequency: 30 } });
+    expect({
+      frequency: blank.blitzFrequency,
+      pressure: blank.blitzPressureDelta,
+      coverage: blank.blitzCoverageExposureDelta,
+      explosive: blank.blitzExplosiveRiskDelta,
+    }).toEqual({
+      frequency: neutral.blitzFrequency,
+      pressure: neutral.blitzPressureDelta,
+      coverage: neutral.blitzCoverageExposureDelta,
+      explosive: neutral.blitzExplosiveRiskDelta,
+    });
+  });
+
+  it('models blitzing as bounded pressure with coverage and explosive risk, not a flat bonus', () => {
+    const low = deriveBlitzStrategy(0);
+    const neutral = deriveBlitzStrategy(30);
+    const high = deriveBlitzStrategy(100);
+
+    expect(low.blitzPressureDelta).toBeLessThan(neutral.blitzPressureDelta);
+    expect(low.blitzCoverageExposureDelta).toBeLessThan(neutral.blitzCoverageExposureDelta);
+    expect(high.blitzPressureDelta).toBeGreaterThan(neutral.blitzPressureDelta);
+    expect(high.blitzCoverageExposureDelta).toBeGreaterThan(0);
+    expect(high.blitzExplosiveRiskDelta).toBeGreaterThan(0);
+    expect(high.blitzCoverageExposureDelta + high.blitzExplosiveRiskDelta)
+      .toBeGreaterThan(high.blitzPressureDelta);
   });
 });

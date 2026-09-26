@@ -23,6 +23,7 @@ export interface GamePlanLike {
   runPassBalance?: number;
   aggressionLevel?: number;
   deepShortBalance?: number;
+  blitzFrequency?: number;
 }
 
 export interface TeamReadinessContext {
@@ -38,6 +39,14 @@ export interface DerivedGamePlanMultipliers {
   redZoneDelta: number;
   fatigueDisciplineDelta: number;
   chemistryPenalty: number;
+  /** Canonical, clamped defensive call tendency. Legacy/missing plans use 30. */
+  blitzFrequency: number;
+  /** Relative pressure opportunity adjustment, applied against existing rush/protection talent. */
+  blitzPressureDelta: number;
+  /** Relative coverage exposure; positive values make successful passes easier. */
+  blitzCoverageExposureDelta: number;
+  /** Additional explosive-pass exposure when pressure does not win. */
+  blitzExplosiveRiskDelta: number;
   score: number;
   netImpact: number;
   severity: 'ready' | 'minor_risk' | 'major_risk';
@@ -69,6 +78,31 @@ const TUNING = Object.freeze({
   MAX_TOTAL_PREP_BONUS: 0.06,
   MAX_TOTAL_PREP_PENALTY: 0.08,
 });
+
+export const NEUTRAL_BLITZ_FREQUENCY = 30;
+
+export function normalizeBlitzFrequency(value: unknown): number {
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+    return NEUTRAL_BLITZ_FREQUENCY;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? clamp(parsed, 0, 100) : NEUTRAL_BLITZ_FREQUENCY;
+}
+
+export function deriveBlitzStrategy(value: unknown) {
+  const blitzFrequency = normalizeBlitzFrequency(value);
+  // Separate slopes preserve 30 as the existing neutral plan. Aggressive calls
+  // buy pressure at a deliberately larger coverage/explosive price; sitting
+  // back sacrifices pressure for a smaller coverage benefit.
+  const aboveNeutral = Math.max(0, blitzFrequency - NEUTRAL_BLITZ_FREQUENCY) / 70;
+  const belowNeutral = Math.max(0, NEUTRAL_BLITZ_FREQUENCY - blitzFrequency) / 30;
+  return {
+    blitzFrequency,
+    blitzPressureDelta: Number((aboveNeutral * 0.12 - belowNeutral * 0.05).toFixed(4)),
+    blitzCoverageExposureDelta: Number((aboveNeutral * 0.09 - belowNeutral * 0.025).toFixed(4)),
+    blitzExplosiveRiskDelta: Number((aboveNeutral * 0.08 - belowNeutral * 0.01).toFixed(4)),
+  };
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -110,6 +144,7 @@ export function deriveGamePlanMultipliers({
   const runPassBalance = toNumber(gamePlan?.runPassBalance, 50);
   const aggressionLevel = toNumber(gamePlan?.aggressionLevel, 50);
   const deepShortBalance = toNumber(gamePlan?.deepShortBalance, 50);
+  const blitzStrategy = deriveBlitzStrategy(gamePlan?.blitzFrequency);
 
   const passHeavy = runPassBalance >= 60;
   const runHeavy = runPassBalance <= 40;
@@ -230,6 +265,7 @@ export function deriveGamePlanMultipliers({
     redZoneDelta: Number(redZoneDelta.toFixed(4)),
     fatigueDisciplineDelta: Number(fatigueDisciplineDelta.toFixed(4)),
     chemistryPenalty: Number(chemistryPenalty.toFixed(4)),
+    ...blitzStrategy,
     score,
     netImpact: score,
     severity,
