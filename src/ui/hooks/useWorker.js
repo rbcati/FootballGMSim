@@ -29,6 +29,7 @@ import {
 } from '../../worker/workerApi.js';
 import { applyLeagueDelta } from '../../worker/serialization.js';
 import { getLeagueIdentity } from '../utils/leagueIdentity.js';
+import { isScopedSimulationMessage, shouldAcceptSimulationScope } from '../../worker/simulationScope.js';
 
 const WORKER_REQUEST_TIMEOUT_MS = 20000;
 const WORKER_TIMEOUT_BY_TYPE = Object.freeze({
@@ -140,11 +141,15 @@ export function workerReducer(state, action) {
       const previousLeagueId = getLeagueIdentity(state.league);
       const incomingLeagueId = getLeagueIdentity(action.payload);
       const isLeagueSwitch = previousLeagueId != null && incomingLeagueId != null && previousLeagueId !== incomingLeagueId;
+      const isGenerationSwitch = state.league?._stateEpoch != null
+        && action.payload?._stateEpoch != null
+        && Number(state.league._stateEpoch) !== Number(action.payload._stateEpoch);
+      const shouldClearTransients = isLeagueSwitch || isGenerationSwitch;
       return {
         ...state, busy: false, simulating: false,
-        simProgress: isLeagueSwitch ? 0 : state.simProgress,
+        simProgress: shouldClearTransients ? 0 : state.simProgress,
         batchSim: null, isHydrated: true, league: action.payload,
-        ...(isLeagueSwitch ? {
+        ...(shouldClearTransients ? {
           lastResults: null, lastSimWeek: null, gameEvents: [], promptUserGame: false,
           userGameLogs: null, userGameLiveStats: null, userGamePlayerStats: null,
           userGameTeamStats: null, userGameCanonicalEvents: null,
@@ -288,6 +293,7 @@ export function useWorker() {
    * is lower than the most recently accepted authoritative snapshot.
    */
   const lastAcceptedEpochRef = useRef(0);
+  const acceptedSimulationLeagueIdRef = useRef(null);
 
   // ── Spawn worker once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -299,6 +305,22 @@ export function useWorker() {
 
     worker.onmessage = (event) => {
       const { type, payload = {}, id } = event.data;
+      const staleSimulationMessage = isScopedSimulationMessage(type) && !shouldAcceptSimulationScope(payload, {
+        stateEpoch: lastAcceptedEpochRef.current,
+        activeLeagueId: acceptedSimulationLeagueIdRef.current,
+      });
+
+      // A discarded response still settles its caller as an intentional
+      // cancellation, but must not clear busy/progress owned by the new save.
+      if (staleSimulationMessage) {
+        if (id && pendingRef.current.has(id)) {
+          const { resolve, timeoutId } = pendingRef.current.get(id);
+          pendingRef.current.delete(id);
+          if (timeoutId) clearTimeout(timeoutId);
+          resolve({ type, payload, discarded: true });
+        }
+        return;
+      }
       // Invalidate route-detail cache on material changes
       if (type === toUI.READY || type === toUI.FULL_STATE) {
         __invalidateStableRouteRequestCache(); // Full wipe for new saves/reset
@@ -351,6 +373,7 @@ export function useWorker() {
           if (payload?._stateEpoch != null) {
             lastAcceptedEpochRef.current = payload._stateEpoch;
           }
+          acceptedSimulationLeagueIdRef.current = payload?.activeLeagueId ?? null;
           if (payload?.bootRequestId && activeBootRequestIdRef.current === payload.bootRequestId) {
             activeBootRequestIdRef.current = null;
           }

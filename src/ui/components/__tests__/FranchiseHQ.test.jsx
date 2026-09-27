@@ -56,16 +56,16 @@ describe('FranchiseHQ', () => {
     localStorage.removeItem('footballgm_game_archive_v1');
   });
 
-  it('renders only new-save truth after a league-switch FULL_STATE', () => {
+  it('renders only new-save truth after a same-slot generation FULL_STATE', () => {
     const saveAState = {
       ...INITIAL_WORKER_STATE,
-      league: { ...baseLeague, activeLeagueId: 'league_A', week: 8 },
+      league: { ...baseLeague, activeLeagueId: 'save_slot_1', _stateEpoch: 10, week: 8 },
       lastResults: [{ gameId: 'old-hou', week: 8, homeId: 10, awayId: 12, homeScore: 7, awayScore: 28, homeAbbr: 'PIT', awayAbbr: 'HOU' }],
       lastSimWeek: 8,
     };
     const saveB = {
       ...baseLeague,
-      activeLeagueId: 'league_B', year: 2026, seasonId: '2026', week: 1, userTeamId: 10,
+      activeLeagueId: 'save_slot_1', _stateEpoch: 11, year: 2026, seasonId: '2026', week: 1, userTeamId: 10,
       teams: [
         { ...baseLeague.teams[0], city: 'Pittsburgh', name: 'Steelers', abbr: 'PIT', wins: 0, losses: 0, ties: 0 },
         { ...baseLeague.teams[1], id: 11, city: 'Cleveland', name: 'Browns', abbr: 'CLE', wins: 0, losses: 0, ties: 0 },

@@ -51,4 +51,12 @@
   - boot guard and epoch guard interaction.
 
 ## Conclusion
-No additional protocol/schema change is required in V1. Existing `_stateEpoch` + boot scoping + `_requiresFullState` fallback already provides the minimal stale-packet guard and recovery behavior requested.
+The original conclusion was incomplete: `_stateEpoch`, boot scoping, and
+`_requiresFullState` protected `FULL_STATE`/`STATE_UPDATE`, but asynchronous
+simulation transients could still bypass that authority. Save-Scoped Simulation
+Events V1 extends the accepted FULL_STATE generation to `SIM_PROGRESS`, batch
+progress/status, `WEEK_COMPLETE`, `PROMPT_USER_GAME`, `PLAY_LOGS`, and
+`GAME_EVENT`. Each operation captures its immutable epoch/save scope before its
+first await, and UI ingress requires an exact generation match once a baseline
+exists. Slot identity alone is insufficient because replacing `save_slot_1`
+with another franchise retains the same slot ID.
