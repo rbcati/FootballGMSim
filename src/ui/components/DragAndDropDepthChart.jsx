@@ -24,7 +24,7 @@ import { derivePlayerContractFinancials, formatContractMoney } from "../utils/co
 import { TeamWorkspaceHeader, TeamCapSummaryStrip } from "./TeamWorkspacePrimitives.jsx";
 import { deriveTeamCapSnapshot } from "../utils/numberFormatting.js";
 import { aggregateTeamUnitsFromRoster } from "../../core/sim/weekSimulationBridge.ts";
-import { getPlayerScrimmageUnitRow } from "../../core/depthChart.js";
+import { buildCanonicalDepthUpdates, getPlayerScrimmageUnitRow } from "../../core/depthChart.js";
 
 const POSITION_GROUPS = [
   { key: "QB", label: "QB Room", positions: ["QB"] },
@@ -254,11 +254,9 @@ export default function DragAndDropDepthChart({ league, actions, onPlayerSelect,
 
   const persistOrder = useCallback((nextOrder) => {
     if (!actions?.updateDepthChart) return;
-    const updates = Object.entries(nextOrder).flatMap(([rowKey, ids]) => ids.map((playerId, index) => ({
-      playerId, rowKey, newOrder: index + 1,
-    })));
+    const updates = buildCanonicalDepthUpdates(nextOrder, roster);
     actions.updateDepthChart(updates).catch(() => {});
-  }, [actions]);
+  }, [actions, roster]);
 
   const handleDragEnd = useCallback((event) => {
     const { active, over } = event;

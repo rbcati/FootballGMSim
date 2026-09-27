@@ -80,6 +80,36 @@ export function getPlayerScrimmageUnitRow(player, group) {
   return DEPTH_CHART_ROWS.find((row) => row.group === group && row.match.includes(primaryPos)) ?? null;
 }
 
+/** Canonical persisted row for a player, including special teams rows. */
+export function getCanonicalDepthRow(player) {
+  const preferredRowKey = String(player?.depthChart?.rowKey ?? player?.depthRowKey ?? '');
+  return rowForPosition(String(player?.pos ?? '').toUpperCase(), preferredRowKey);
+}
+
+/**
+ * Convert presentation-group ordering into canonical per-row worker updates.
+ * Composite groups (DL/DB/ST) preserve each player's existing canonical row;
+ * they never become durable row keys themselves.
+ */
+export function buildCanonicalDepthUpdates(groupedOrder = {}, roster = []) {
+  const byId = new Map(roster.map((player) => [String(player?.id), player]));
+  const orderedByRow = new Map();
+  for (const ids of Object.values(groupedOrder ?? {})) {
+    for (const playerId of Array.isArray(ids) ? ids : []) {
+      const player = byId.get(String(playerId));
+      const row = getCanonicalDepthRow(player);
+      if (!player || !row || !isPlayerEligibleForDepthRow(player, row)) continue;
+      if (!orderedByRow.has(row.key)) orderedByRow.set(row.key, []);
+      orderedByRow.get(row.key).push(player.id);
+    }
+  }
+  return [...orderedByRow].flatMap(([rowKey, ids]) => ids.map((playerId, index) => ({
+    playerId,
+    rowKey,
+    newOrder: index + 1,
+  })));
+}
+
 function playerMatchTier(player, row) {
   const primary = String(player?.pos ?? '');
   if (row.match.includes(primary)) return 0;

@@ -221,7 +221,16 @@ export function serializeLeagueDelta(fullState, previousState) {
         t.capUsed !== pt.capUsed ||
         t.ovr !== pt.ovr ||
         t.fanApproval !== pt.fanApproval ||
-        t.rosterCount !== pt.rosterCount
+        t.rosterCount !== pt.rosterCount ||
+        t.strategies?.offSchemeId !== pt.strategies?.offSchemeId ||
+        t.strategies?.defSchemeId !== pt.strategies?.defSchemeId ||
+        (t.roster ?? []).some((player, playerIndex) => {
+          const previousPlayer = pt.roster?.[playerIndex];
+          return String(player?.id) !== String(previousPlayer?.id)
+            || player?.depthChart?.rowKey !== previousPlayer?.depthChart?.rowKey
+            || Number(player?.depthChart?.order ?? player?.depthOrder ?? 0)
+              !== Number(previousPlayer?.depthChart?.order ?? previousPlayer?.depthOrder ?? 0);
+        })
       );
     });
 

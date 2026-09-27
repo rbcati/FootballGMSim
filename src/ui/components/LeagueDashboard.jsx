@@ -1370,6 +1370,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={handlePlayerSelect}
+              onNavigate={setActiveTab}
             />
           </TabErrorBoundary>
         )}
