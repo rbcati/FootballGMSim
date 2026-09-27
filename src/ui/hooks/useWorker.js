@@ -141,10 +141,12 @@ export function workerReducer(state, action) {
       const previousLeagueId = getLeagueIdentity(state.league);
       const incomingLeagueId = getLeagueIdentity(action.payload);
       const isLeagueSwitch = previousLeagueId != null && incomingLeagueId != null && previousLeagueId !== incomingLeagueId;
-      const isGenerationSwitch = state.league?._stateEpoch != null
-        && action.payload?._stateEpoch != null
-        && Number(state.league._stateEpoch) !== Number(action.payload._stateEpoch);
-      const shouldClearTransients = isLeagueSwitch || isGenerationSwitch;
+      const previousGenerationId = state.league?.franchiseGenerationId ?? null;
+      const incomingGenerationId = action.payload?.franchiseGenerationId ?? null;
+      const isFranchiseReplacement = previousGenerationId != null
+        && incomingGenerationId != null
+        && String(previousGenerationId) !== String(incomingGenerationId);
+      const shouldClearTransients = isLeagueSwitch || isFranchiseReplacement;
       return {
         ...state, busy: false, simulating: false,
         simProgress: shouldClearTransients ? 0 : state.simProgress,
@@ -294,6 +296,7 @@ export function useWorker() {
    */
   const lastAcceptedEpochRef = useRef(0);
   const acceptedSimulationLeagueIdRef = useRef(null);
+  const acceptedFranchiseGenerationIdRef = useRef(null);
 
   // ── Spawn worker once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -308,6 +311,7 @@ export function useWorker() {
       const staleSimulationMessage = isScopedSimulationMessage(type) && !shouldAcceptSimulationScope(payload, {
         stateEpoch: lastAcceptedEpochRef.current,
         activeLeagueId: acceptedSimulationLeagueIdRef.current,
+        franchiseGenerationId: acceptedFranchiseGenerationIdRef.current,
       });
 
       // A discarded response still settles its caller as an intentional
@@ -374,6 +378,7 @@ export function useWorker() {
             lastAcceptedEpochRef.current = payload._stateEpoch;
           }
           acceptedSimulationLeagueIdRef.current = payload?.activeLeagueId ?? null;
+          acceptedFranchiseGenerationIdRef.current = payload?.franchiseGenerationId ?? null;
           if (payload?.bootRequestId && activeBootRequestIdRef.current === payload.bootRequestId) {
             activeBootRequestIdRef.current = null;
           }

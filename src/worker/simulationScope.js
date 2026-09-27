@@ -14,10 +14,11 @@ export function isScopedSimulationMessage(type) {
   return SCOPED_SIMULATION_MESSAGE_TYPES.has(type);
 }
 
-export function captureSimulationScope({ stateEpoch, activeLeagueId, seasonId, week } = {}) {
+export function captureSimulationScope({ stateEpoch, activeLeagueId, franchiseGenerationId, seasonId, week } = {}) {
   return Object.freeze({
     stateEpoch: Number.isFinite(Number(stateEpoch)) ? Number(stateEpoch) : null,
     activeLeagueId: activeLeagueId ?? null,
+    franchiseGenerationId: franchiseGenerationId ?? null,
     seasonId: seasonId ?? null,
     week: week ?? null,
   });
@@ -35,7 +36,12 @@ export function shouldAcceptSimulationScope(payload = {}, baseline = {}) {
   if (!scope || scope.stateEpoch == null) return false;
   if (Number(scope.stateEpoch) !== Number(baselineEpoch)) return false;
   const currentLeagueId = baseline?.activeLeagueId ?? null;
-  return currentLeagueId == null || scope.activeLeagueId == null
+  const leagueMatches = currentLeagueId == null || scope.activeLeagueId == null
     ? currentLeagueId === scope.activeLeagueId
     : String(scope.activeLeagueId) === String(currentLeagueId);
+  const currentGeneration = baseline?.franchiseGenerationId ?? null;
+  const generationMatches = currentGeneration == null || scope.franchiseGenerationId == null
+    ? currentGeneration === scope.franchiseGenerationId
+    : String(scope.franchiseGenerationId) === String(currentGeneration);
+  return leagueMatches && generationMatches;
 }

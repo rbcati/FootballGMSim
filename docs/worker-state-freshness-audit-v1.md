@@ -60,3 +60,10 @@ progress/status, `WEEK_COMPLETE`, `PROMPT_USER_GAME`, `PLAY_LOGS`, and
 first await, and UI ingress requires an exact generation match once a baseline
 exists. Slot identity alone is insufficient because replacing `save_slot_1`
 with another franchise retains the same slot ID.
+
+`_stateEpoch` is only a transport-baseline counter and may change during a
+routine refresh of the same franchise. A separately persisted
+`franchiseGenerationId` identifies the franchise instance: ordinary loads and
+FULL_STATE refreshes retain it, while new/replaced/imported franchises mint a
+new value. Transient clearing uses save ID plus this persistent identity, while
+scoped-message ingress requires save ID, franchise identity, and exact epoch.

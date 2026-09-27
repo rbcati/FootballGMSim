@@ -54,6 +54,7 @@
 
 import { toWorker, toUI } from './protocol.js';
 import { captureSimulationScope, withSimulationScope } from './simulationScope.js';
+import { createFranchiseGenerationId, ensureFranchiseGenerationId } from '../state/franchiseGeneration.js';
 import { createCommandRegistry } from './commandRegistry.js';
 import { createWorkerContext } from './workerContext.js';
 import { handleGetRoster } from './handlers/rosterHandlers.js';
@@ -533,6 +534,7 @@ function captureCurrentSimulationScope() {
   return captureSimulationScope({
     stateEpoch: _stateEpoch,
     activeLeagueId: getActiveLeagueId() ?? meta?.activeLeagueId ?? null,
+    franchiseGenerationId: meta?.franchiseGenerationId ?? null,
     seasonId: meta?.currentSeasonId ?? null,
     week: meta?.currentWeek ?? null,
   });
@@ -1189,6 +1191,7 @@ function buildViewState() {
 
   return {
     activeLeagueId: getActiveLeagueId() ?? meta?.activeLeagueId ?? null,
+    franchiseGenerationId: meta?.franchiseGenerationId ?? null,
     seasonId:   meta?.currentSeasonId,
     year:       meta?.year,
     week:       meta?.currentWeek ?? 1,
@@ -2253,6 +2256,14 @@ async function handleLoadSave({ leagueId }, id) {
         return;
       }
 
+      // Legacy saves receive one persistent franchise identity. Routine loads
+      // reuse it; only creation/replacement/import paths mint a new identity.
+      const generation = ensureFranchiseGenerationId(cache.getMeta() ?? {});
+      if (generation.created) {
+        cache.setMeta(generation.meta);
+        await flushDirty();
+      }
+
       // Backfill immutable player GUIDs onto players + record holders so old
       // saves stop attributing records by recyclable numeric id.
       try {
@@ -2589,6 +2600,7 @@ async function handleNewLeague(payload, id) {
     }, { year: league.year });
     const meta = ensureLeagueMemoryMeta({
       id:              'league',
+      franchiseGenerationId: createFranchiseGenerationId(),
       name:            String(options.name || resolvedSettings.leagueName || `League ${leagueId}`).slice(0, 80),
       userTeamId:      userTeamId,
       currentSeasonId: seasonId,
@@ -2915,6 +2927,7 @@ async function handleUseSafeStarterLeague(payload, id) {
 
     const meta = ensureLeagueMemoryMeta({
       id: 'league',
+      franchiseGenerationId: createFranchiseGenerationId(),
       name: String(safeLeague.name ?? `Safe Starter ${slotKey?.split('_')?.[2] ?? '1'}`).slice(0, 80),
       userTeamId,
       currentSeasonId: seasonId,
@@ -6742,6 +6755,11 @@ async function copyLeagueData(sourceLeagueId, targetLeagueId) {
   configureActiveLeague(sourceLeagueId);
   await openDB();
   const snapshot = await snapshotActiveLeagueDB();
+  if (Array.isArray(snapshot.meta)) {
+    snapshot.meta = snapshot.meta.map((row) => row?.id === 'league'
+      ? { ...row, franchiseGenerationId: createFranchiseGenerationId() }
+      : row);
+  }
   await writeLeagueSnapshot(targetLeagueId, snapshot);
 }
 
@@ -7058,6 +7076,9 @@ async function handleImportSave({ data, saveName }, id) {
     if (migration.migratedTo !== migration.migratedFrom) {
       cache.setMeta(migration.migrated);
     }
+    // An imported file is a distinct franchise instance even when its source
+    // snapshot already carried an identity.
+    cache.setMeta({ franchiseGenerationId: createFranchiseGenerationId() });
     const meta = ensureDynastyMeta(cache.getMeta());
     repairRosterAndTeamLinks({ reason: 'import-save' });
     for (const team of cache.getAllTeams()) {
