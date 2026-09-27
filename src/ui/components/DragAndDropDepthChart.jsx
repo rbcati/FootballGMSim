@@ -24,7 +24,7 @@ import { derivePlayerContractFinancials, formatContractMoney } from "../utils/co
 import { TeamWorkspaceHeader, TeamCapSummaryStrip } from "./TeamWorkspacePrimitives.jsx";
 import { deriveTeamCapSnapshot } from "../utils/numberFormatting.js";
 import { aggregateTeamUnitsFromRoster } from "../../core/sim/weekSimulationBridge.ts";
-import { getPlayerScrimmageUnitRow } from "../../core/depthChart.js";
+import { buildCanonicalDepthUpdates, getPlayerScrimmageUnitRow } from "../../core/depthChart.js";
 
 const POSITION_GROUPS = [
   { key: "QB", label: "QB Room", positions: ["QB"] },
@@ -220,7 +220,7 @@ function PositionGroup({ group, players, onPlayerSelect, recentlyMovedId }) {
   );
 }
 
-export default function DragAndDropDepthChart({ league, actions, onPlayerSelect, onNavigate = null }) {
+export default function DragAndDropDepthChart({ league, actions, onPlayerSelect, onNavigate = null, initialViewMode = 'lineup' }) {
   // Guard against null entries in the teams array after a save/load migration
   const userTeam = league?.teams?.find((t) => t?.id === league?.userTeamId);
   // Keep the filtered roster referentially stable. A fresh array on every
@@ -234,7 +234,7 @@ export default function DragAndDropDepthChart({ league, actions, onPlayerSelect,
   const [chartOrder, setChartOrder] = useState(() => buildChartOrder(roster));
   const [activeGroup, setActiveGroup] = useState(null);
   const [recentlyMovedId, setRecentlyMovedId] = useState(null);
-  const [viewMode, setViewMode] = useState('lineup');
+  const [viewMode, setViewMode] = useState(initialViewMode);
   const [lineupUnit, setLineupUnit] = useState('offense');
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -254,8 +254,9 @@ export default function DragAndDropDepthChart({ league, actions, onPlayerSelect,
 
   const persistOrder = useCallback((nextOrder) => {
     if (!actions?.updateDepthChart) return;
-    actions.updateDepthChart(nextOrder).catch(() => {});
-  }, [actions]);
+    const updates = buildCanonicalDepthUpdates(nextOrder, roster);
+    actions.updateDepthChart(updates).catch(() => {});
+  }, [actions, roster]);
 
   const handleDragEnd = useCallback((event) => {
     const { active, over } = event;

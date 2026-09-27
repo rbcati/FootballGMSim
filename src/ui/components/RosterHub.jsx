@@ -19,6 +19,7 @@ import { applyRangeFilter, inTier, cycleSort } from "../utils/managementList.js"
 import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
 import { evaluateResignRecommendation, classifyTeamDirection } from "../utils/contractInsights.js";
 import RosterDecisionBoard from "./RosterDecisionBoard.jsx";
+import LineupCommandCenter from "./LineupCommandCenter.jsx";
 
 // ── Position color map (matches stadium-theme.css pos-badge classes) ──
 const POS_COLORS = {
@@ -265,13 +266,13 @@ function PlayerRow({ player, isUser, onSelect, schemeName }) {
 
 // ── View-mode toggle ─────────────────────────────────────────────────────────
 
-function ViewToggle({ mode, onChange }) {
-  const modes = [
-    { key: "cards", label: "Cards" },
-    { key: "table", label: "Table" },
-    { key: "depth", label: "Depth" },
+function ViewToggle({ mode, onChange, isUserTeam }) {
+  const modes = (isUserTeam ? [
+    { key: "lineup", label: "Lineup" },
+    { key: "full", label: "Full Roster" },
+    { key: "depth", label: "Position Rooms" },
     { key: "decisions", label: "Decision Board" },
-  ];
+  ] : [{ key: "full", label: "Full Roster" }]);
   return (
     <div style={{
       display: "flex", gap: 2,
@@ -302,8 +303,11 @@ function ViewToggle({ mode, onChange }) {
   );
 }
 
-export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
-  const [viewMode, setViewMode] = useState("cards"); // default to cards view
+export default function RosterHub({ league, actions, onPlayerSelect, onNavigate, teamId }) {
+  const activeTeamId = teamId ?? league?.userTeamId;
+  const isUserTeam = activeTeamId === league?.userTeamId;
+  const [viewMode, setViewMode] = useState(isUserTeam ? "lineup" : "full");
+  const [fullRosterView, setFullRosterView] = useState("cards");
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("ALL");
   const [sortKey, setSortKey] = useState("ovr");
@@ -313,13 +317,11 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
   const [expiringOnly, setExpiringOnly] = useState(false);
   const [injuredOnly, setInjuredOnly] = useState(false);
 
-  const activeTeamId = teamId ?? league?.userTeamId;
   // Use optional chaining on `t` to guard against null entries in the teams array
   const team = league?.teams?.find(t => t?.id === activeTeamId);
   const safeRoster = Array.isArray(team?.roster) ? team.roster : [];
   // Filter null/undefined/non-object players so downstream helpers don't throw on bad save data.
   const roster = safeRoster.filter((player) => player && typeof player === "object");
-  const isUserTeam = activeTeamId === league?.userTeamId;
 
   // Decision Board data contract (PR #1655 / resignDecisionFilters.js): rows
   // carry their recommendation under player._resignMeta, mirroring the
@@ -420,10 +422,10 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
         ]}
       />
       <StickySubnav title="Roster controls">
-        <ViewToggle mode={viewMode} onChange={setViewMode} />
+        <ViewToggle mode={viewMode} onChange={setViewMode} isUserTeam={isUserTeam} />
       </StickySubnav>
       {/* ── Scheme banner ── */}
-      {schemeName && (
+      {viewMode !== "lineup" && schemeName && (
         <SectionCard title="Scheme context" subtitle="Track roster fit against your active offensive approach.">
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -447,7 +449,7 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
       )}
 
       {/* ── Header Stats + View Toggle ── */}
-      <SectionCard title="Roster overview">
+      {viewMode !== "lineup" && <SectionCard title="Roster overview">
       <div style={{
         display: "flex", alignItems: "flex-start",
         gap: "var(--space-3)",
@@ -465,10 +467,19 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
           <StatCard label="Injured" value={injuredCount} color={injuredCount > 3 ? "var(--danger)" : "var(--text)"} />
         </div>
       </div>
-      </SectionCard>
+      </SectionCard>}
+
+      {viewMode === "lineup" && isUserTeam && (
+        <LineupCommandCenter team={team} roster={roster} actions={actions} onPlayerSelect={onPlayerSelect} onNavigate={onNavigate} />
+      )}
+
+      {viewMode === "full" && <div className="depth-view-switcher" role="tablist" aria-label="Full roster view">
+        <button role="tab" aria-selected={fullRosterView === "cards"} className={fullRosterView === "cards" ? "is-active" : ""} onClick={() => setFullRosterView("cards")}>Cards</button>
+        <button role="tab" aria-selected={fullRosterView === "table"} className={fullRosterView === "table" ? "is-active" : ""} onClick={() => setFullRosterView("table")}>Table</button>
+      </div>}
 
       {/* ── Cards view ── */}
-      {viewMode === "cards" && (
+      {viewMode === "full" && fullRosterView === "cards" && (
         <SectionCard title="Card view" subtitle="Mobile-first browsing with visual player summaries.">
           <RosterProfileErrorBoundary>
             <PlayerCardGrid roster={roster} onPlayerSelect={onPlayerSelect} />
@@ -484,6 +495,7 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
             league={league}
             actions={actions}
             onPlayerSelect={onPlayerSelect}
+            initialViewMode="rooms"
           />
         </RosterProfileErrorBoundary>
         </SectionCard>
@@ -504,7 +516,7 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
       )}
 
       {/* ── Table view (existing list with search/filter/sort) ── */}
-      {viewMode === "table" && (
+      {viewMode === "full" && fullRosterView === "table" && (
         <SectionCard title="Table view" subtitle="Dense sortable roster table for power-user management.">
           {/* Search + Sort */}
           <div style={{

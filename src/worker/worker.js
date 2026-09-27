@@ -240,7 +240,7 @@ import { inferChampionshipOutcome, isCompletedGame, isPostseasonGame } from '../
 import { repairDepthChart, validateDepthChart, optimizeDepthChartForPlan } from "../core/roster/depthChartManager.ts";
 import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
 import { isValidSaveId, sanitizeSaveList } from './saveIntegrity.js';
-import { autoBuildDepthChart, applyDepthChartToPlayers } from '../core/depthChart.js';
+import { DEPTH_CHART_ROWS, autoBuildDepthChart, applyDepthChartToPlayers, isPlayerEligibleForDepthRow } from '../core/depthChart.js';
 import { getPlayerCapHit, getRosterLimitForPhase, validateLeagueTeamLegality } from '../core/teamValidation.js';
 import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings, getRuleEditType } from '../core/leagueSettings.js';
 import { migrateSaveMetaToCurrent, CURRENT_SAVE_SCHEMA_VERSION } from '../state/saveSchema.js';
@@ -1062,7 +1062,10 @@ function buildViewState() {
     const roster = sanitizeRosterForClient(attachSeasonStatsToRoster(
       cache.getPlayersByTeam(t.id),
       (pid) => cache.getSeasonStat(pid)?.totals,
-    ));
+    )).map((player) => player && typeof player === 'object' ? ({
+      ...player,
+      depthChart: player.depthChart ? { ...player.depthChart } : player.depthChart,
+    }) : player);
     return ({
     id:        t.id,
     name:      t.name,
@@ -1084,6 +1087,10 @@ function buildViewState() {
     defRating: t.defRating ?? t.defenseRating ?? t.defOvr ?? 0,
     offOvr: t.offOvr ?? t.offenseRating ?? t.offRating ?? 0,
     defOvr: t.defOvr ?? t.defenseRating ?? t.defRating ?? 0,
+    strategies: {
+      offSchemeId: t?.strategies?.offSchemeId ?? null,
+      defSchemeId: t?.strategies?.defSchemeId ?? null,
+    },
     rosterCount: roster.length,
     roster,
     fanApproval: t?.fanApproval ?? 50,
@@ -10242,14 +10249,53 @@ async function handleUpdateDepthChart({ updates, positions }, id) {
   const normalizedUpdates = Array.isArray(updates) ? updates : (Array.isArray(positions) ? positions : []);
   if (!normalizedUpdates.length) return;
   const dcMeta = ensureDynastyMeta(cache.getMeta());
+  const userTeamId = dcMeta?.userTeamId;
+  const team = userTeamId != null ? cache.getTeam(userTeamId) : null;
+  const canonicalRows = new Map(DEPTH_CHART_ROWS.map((row) => [row.key, row]));
+  const acceptedUpdates = [];
+  for (const update of normalizedUpdates) {
+    const player = cache.getPlayer(update?.playerId);
+    const row = canonicalRows.get(String(update?.rowKey ?? ''));
+    const newOrder = Number(update?.newOrder);
+    if (!team || !player || String(player.teamId) !== String(userTeamId)
+      || !row || !isPlayerEligibleForDepthRow(player, row)
+      || !Number.isInteger(newOrder) || newOrder < 1) {
+      post(toUI.ERROR, { message: 'Invalid depth chart update.' }, id);
+      return;
+    }
+    acceptedUpdates.push({ player, rowKey: row.key, newOrder });
+  }
+
+  // team.depthChart is the writable authority used by ensureTeamDepthChart.
+  // Apply the requested row ordering there first so canonical repair validates
+  // the new assignments rather than restoring a stale team-level chart.
+  const nextAssignments = Object.fromEntries(Object.entries(team.depthChart ?? {}).map(([rowKey, playerIds]) => [
+    rowKey,
+    Array.isArray(playerIds) ? [...playerIds] : [],
+  ]));
+  const movedIds = new Set(acceptedUpdates.map(({ player }) => String(player.id)));
+  for (const rowKey of canonicalRows.keys()) {
+    nextAssignments[rowKey] = (nextAssignments[rowKey] ?? []).filter((playerId) => !movedIds.has(String(playerId)));
+  }
+  const updatesByRow = new Map();
+  for (const update of acceptedUpdates) {
+    if (!updatesByRow.has(update.rowKey)) updatesByRow.set(update.rowKey, []);
+    updatesByRow.get(update.rowKey).push(update);
+  }
+  for (const [rowKey, rowUpdates] of updatesByRow) {
+    const ordered = nextAssignments[rowKey] ?? [];
+    for (const update of rowUpdates.sort((a, b) => a.newOrder - b.newOrder)) {
+      ordered.splice(Math.min(update.newOrder - 1, ordered.length), 0, update.player.id);
+    }
+    nextAssignments[rowKey] = ordered;
+  }
+  cache.updateTeam(userTeamId, { depthChart: nextAssignments });
+
   const dcSeason = dcMeta.currentSeasonId ?? dcMeta.season ?? 0;
   const dcWeek = dcMeta.currentWeek ?? 0;
-  normalizedUpdates.forEach((u) => {
-      const p = cache.getPlayer(u.playerId);
+  acceptedUpdates.forEach(({ player: p, rowKey, newOrder }) => {
       if (p) {
           const prevOrder = Number(p?.depthChart?.order ?? p?.depthOrder ?? 0);
-          const newOrder  = Number(u.newOrder) || 1;
-          const rowKey = u.rowKey ?? p?.depthChart?.rowKey ?? null;
           cache.updatePlayer(p.id, {
             depthOrder: newOrder,
             depthChart: {
@@ -10283,7 +10329,6 @@ async function handleUpdateDepthChart({ updates, positions }, id) {
           }
       }
   });
-  const userTeamId = dcMeta?.userTeamId;
   if (userTeamId != null) ensureTeamDepthChart(userTeamId);
   await flushDirty();
   post(toUI.STATE_UPDATE, buildViewState(), id);
