@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { calculatePlayerSchemeFit, DEFENSIVE_SCHEMES, OFFENSIVE_SCHEMES } from '../../core/scheme-core.js';
-import { buildReplacementUpdates, deriveLineupRatingSnapshot } from './lineupCommandCenter.js';
+import { buildReplacementUpdates, deriveEditableCanonicalLineup, deriveLineupRatingSnapshot } from './lineupCommandCenter.js';
 
 const attributes = (rating) => ({ throwAccuracyShort: rating, throwAccuracyDeep: rating, throwPower: rating, release: rating, routeRunning: rating, separation: rating, catchInTraffic: rating, ballTracking: rating, decisionMaking: rating, pocketPresence: rating, passBlockFootwork: rating, passBlockStrength: rating, passRush: rating, pressCoverage: rating, zoneCoverage: rating });
 const make = (id, pos, rowKey, order, rating, extra = {}) => ({ id, name: `P${id}`, pos, ovr: rating, teamId: 1, attributesV2: attributes(rating), ratings: { throwPower: rating, throwAccuracy: rating, awareness: rating, speed: rating, acceleration: rating, catching: rating, catchInTraffic: rating, passBlock: rating, runBlock: rating, runStop: rating, passRushPower: rating, passRushSpeed: rating, coverage: rating, intelligence: rating }, depthChart: { rowKey, order }, ...extra });
@@ -50,5 +50,7 @@ describe('lineup command center derivation', () => {
     const result = deriveLineupRatingSnapshot({ team, roster: [...roster.filter((p) => p.depthChart.rowKey !== 'QB'), unavailableStar, available] });
     expect(result.offenseStarterIds).not.toContain(900);
     expect(result.offenseStarterIds).toContain(901);
+    const editable = deriveEditableCanonicalLineup({ roster: [...roster.filter((p) => p.depthChart.rowKey !== 'QB'), unavailableStar, available], simulationStarterIds: result.offenseStarterIds, group: 'OFFENSE' });
+    expect(editable.find((player) => player.depthChart.rowKey === 'QB')?.id).toBe(900);
   });
 });

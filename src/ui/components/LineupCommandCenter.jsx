@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { DEPTH_CHART_ROWS, getPlayerScrimmageUnitRow, getScrimmageDepthRow, isPlayerEligibleForDepthRow } from '../../core/depthChart.js';
 import { calculatePlayerSchemeFit } from '../../core/scheme-core.js';
 import { isAvailableForGameDay } from '../../core/holdouts/holdoutEngine.js';
-import { buildReplacementUpdates, deriveLineupRatingSnapshot } from '../utils/lineupCommandCenter.js';
+import { buildReplacementUpdates, deriveEditableCanonicalLineup, deriveLineupRatingSnapshot } from '../utils/lineupCommandCenter.js';
 import { deriveRosterReadinessModel } from '../utils/rosterReadinessModel.js';
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
 
@@ -15,13 +15,15 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
   const [projectedRoster, setProjectedRoster] = useState(null);
   const displayedRoster = projectedRoster ?? roster;
   const snapshot = useMemo(() => deriveLineupRatingSnapshot({ team, roster: displayedRoster }), [team, displayedRoster]);
+  const offensePlayers = useMemo(() => deriveEditableCanonicalLineup({ roster: displayedRoster, simulationStarterIds: snapshot.offenseStarterIds, group: 'OFFENSE' }), [displayedRoster, snapshot.offenseStarterIds]);
+  const defensePlayers = useMemo(() => deriveEditableCanonicalLineup({ roster: displayedRoster, simulationStarterIds: snapshot.defenseStarterIds, group: 'DEFENSE' }), [displayedRoster, snapshot.defenseStarterIds]);
   const specialPlayers = useMemo(() => DEPTH_CHART_ROWS
     .filter((row) => row.group === 'SPECIAL')
     .map((row) => displayedRoster
       .filter((player) => player?.depthChart?.rowKey === row.key && isPlayerEligibleForDepthRow(player, row))
       .sort((a, b) => Number(a?.depthChart?.order ?? a.depthOrder ?? 999) - Number(b?.depthChart?.order ?? b.depthOrder ?? 999))[0])
     .filter(Boolean), [displayedRoster]);
-  const players = unit === 'offense' ? snapshot.offensePlayers : unit === 'defense' ? snapshot.defensePlayers : specialPlayers;
+  const players = unit === 'offense' ? offensePlayers : unit === 'defense' ? defensePlayers : specialPlayers;
   const group = unit.toUpperCase();
   const scheme = unit === 'offense' ? snapshot.schemes.offense : snapshot.schemes.defense;
   const comparison = unit === 'offense' ? snapshot.offenseComparison : snapshot.defenseComparison;
@@ -32,9 +34,11 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
       ? DEPTH_CHART_ROWS.find((entry) => entry.key === starter?.depthChart?.rowKey)
       : getScrimmageDepthRow(starter, group) ?? getPlayerScrimmageUnitRow(starter, group);
     if (!row) return [];
-    const starterIds = new Set((group === 'SPECIAL' ? specialPlayers.map((player) => player.id) : [...snapshot.offenseStarterIds, ...snapshot.defenseStarterIds]).map(String));
+    const starterIds = new Set([...offensePlayers, ...defensePlayers, ...specialPlayers].map((player) => String(player.id)));
     return roster.filter((candidate) => String(candidate.id) !== String(starter.id)
-      && !starterIds.has(String(candidate.id)) && isPlayerEligibleForDepthRow(candidate, row) && !unavailable(candidate, team?.id))
+      && !starterIds.has(String(candidate.id))
+      && (group !== 'SPECIAL' || candidate?.depthChart?.rowKey === row.key)
+      && isPlayerEligibleForDepthRow(candidate, row) && !unavailable(candidate, team?.id))
       .sort((a, b) => Number(b.ovr ?? 0) - Number(a.ovr ?? 0));
   };
 
@@ -78,6 +82,12 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
         const row = unit === 'special' ? DEPTH_CHART_ROWS.find((item) => item.key === player?.depthChart?.rowKey) : getScrimmageDepthRow(player, group) ?? getPlayerScrimmageUnitRow(player, group);
         const fit = unit === 'special' ? null : calculatePlayerSchemeFit(player, scheme);
         const isChanging = changingId === player.id;
+        const selectedIds = unit === 'offense' ? snapshot.offenseStarterIds : snapshot.defenseStarterIds;
+        const fallback = unit === 'special' || selectedIds.some((id) => String(id) === String(player.id)) ? null
+          : (unit === 'offense' ? snapshot.offensePlayers : snapshot.defensePlayers).find((candidate) => {
+            const candidateRow = getScrimmageDepthRow(candidate, group) ?? getPlayerScrimmageUnitRow(candidate, group);
+            return candidateRow?.key === row?.key;
+          });
         return <div className="lineup-starter" key={player.id ?? `lineup-${playerIndex}`} data-player-id={player.id}>
           <button className="lineup-starter__profile" onClick={() => onPlayerSelect?.(player.id)}>
             <span className="lineup-starter__role">{row?.key ?? player.pos}</span>
@@ -85,9 +95,10 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
             <strong className="lineup-starter__ovr">{player.ovr ?? '—'}<small>OVR</small></strong>
             {fit != null && <strong className="lineup-starter__fit" style={{ color: fitColor(fit) }}>{fit}%<small>FIT</small></strong>}
           </button>
+          {fallback && <small className="lineup-starter__fallback">Game-day fallback: {fallback.name ?? `Player #${fallback.id}`}</small>}
           <button className="lineup-change" onClick={() => setChangingId(isChanging ? null : player.id)}>Change</button>
           {isChanging && <div className="lineup-alternatives" aria-label={`Replace ${player.name}`}>
-            {alternativesFor(player).map((candidate) => <button key={candidate.id} onClick={() => replace(player, candidate)}><span><strong>{candidate.name}</strong><small>{candidate.pos} · Ready</small></span><span>{candidate.ovr ?? '—'} OVR · {calculatePlayerSchemeFit(candidate, scheme)}% FIT</span></button>)}
+            {alternativesFor(player).map((candidate) => <button key={candidate.id} onClick={() => replace(player, candidate)}><span><strong>{candidate.name}</strong><small>{candidate.pos} · Ready</small></span><span>{candidate.ovr ?? '—'} OVR{unit === 'special' ? ' · Ready' : ` · ${calculatePlayerSchemeFit(candidate, scheme)}% FIT`}</span></button>)}
             {!alternativesFor(player).length && <p>No eligible available alternatives.</p>}
           </div>}
         </div>;
