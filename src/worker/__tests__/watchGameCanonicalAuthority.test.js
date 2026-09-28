@@ -33,7 +33,7 @@ describe('Watch Game canonical authority', () => {
     expect(watch.match(/applyGameResultToCache\(res, week, seasonId\)/g)).toHaveLength(1);
     const applied = watch.indexOf('applyGameResultToCache(res, week, seasonId)');
     const markedPlayed = watch.indexOf('slimGame.played = true');
-    const presented = watch.indexOf('post(toUI.PLAY_LOGS');
+    const presented = watch.indexOf('postScoped(toUI.PLAY_LOGS');
     expect(markedPlayed).toBeGreaterThan(applied);
     expect(presented).toBeGreaterThan(markedPlayed);
   });

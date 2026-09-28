@@ -51,4 +51,23 @@
   - boot guard and epoch guard interaction.
 
 ## Conclusion
-No additional protocol/schema change is required in V1. Existing `_stateEpoch` + boot scoping + `_requiresFullState` fallback already provides the minimal stale-packet guard and recovery behavior requested.
+The original conclusion was incomplete: `_stateEpoch`, boot scoping, and
+`_requiresFullState` protected `FULL_STATE`/`STATE_UPDATE`, but asynchronous
+simulation transients could still bypass that authority. Save-Scoped Simulation
+Events V1 extends the accepted FULL_STATE generation to `SIM_PROGRESS`, batch
+progress/status, `WEEK_COMPLETE`, `PROMPT_USER_GAME`, `PLAY_LOGS`, and
+`GAME_EVENT`. Each operation captures its immutable epoch/save scope before its
+first await, and UI ingress requires an exact generation match once a baseline
+exists. Slot identity alone is insufficient because replacing `save_slot_1`
+with another franchise retains the same slot ID.
+
+`_stateEpoch` is only a transport-baseline counter and may change during a
+routine refresh of the same franchise. A separately persisted
+`franchiseGenerationId` identifies the franchise instance: ordinary loads and
+FULL_STATE refreshes retain it, while new/replaced/imported franchises mint a
+new value. Transient clearing uses save ID plus this persistent identity, while
+scoped-message ingress requires save ID, franchise identity, and exact epoch.
+SAVE_SLOT is an identity-preserving move, not a clone: it publishes its
+authoritative STATE_UPDATE before SAVED so UI ingress adopts the final slot ID
+before Week 1 can begin. Same-slot saves flush in place; duplicate/import paths
+remain the only copy flows that mint a new franchise generation.

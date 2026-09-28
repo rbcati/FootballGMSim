@@ -53,6 +53,8 @@
  */
 
 import { toWorker, toUI } from './protocol.js';
+import { captureSimulationScope, withSimulationScope } from './simulationScope.js';
+import { createFranchiseGenerationId, ensureFranchiseGenerationId, prepareCopiedLeagueSnapshot, shouldCopyLeagueForSave } from '../state/franchiseGeneration.js';
 import { createCommandRegistry } from './commandRegistry.js';
 import { createWorkerContext } from './workerContext.js';
 import { handleGetRoster } from './handlers/rosterHandlers.js';
@@ -525,6 +527,21 @@ function post(type, payload = {}, id = null) {
       `[Worker|Serialization] type=${type} serMs=${serMs} totalMs=${totalMs} transfers=${transferList.length}`,
     );
   }
+}
+
+function captureCurrentSimulationScope() {
+  const meta = cache.getMeta();
+  return captureSimulationScope({
+    stateEpoch: _stateEpoch,
+    activeLeagueId: getActiveLeagueId() ?? meta?.activeLeagueId ?? null,
+    franchiseGenerationId: meta?.franchiseGenerationId ?? null,
+    seasonId: meta?.currentSeasonId ?? null,
+    week: meta?.currentWeek ?? null,
+  });
+}
+
+function postScoped(type, payload, scope, id = null) {
+  post(type, withSimulationScope(payload, scope), id);
 }
 
 /** Yield to the event loop so the worker stays responsive during long batches. */
@@ -1174,6 +1191,7 @@ function buildViewState() {
 
   return {
     activeLeagueId: getActiveLeagueId() ?? meta?.activeLeagueId ?? null,
+    franchiseGenerationId: meta?.franchiseGenerationId ?? null,
     seasonId:   meta?.currentSeasonId,
     year:       meta?.year,
     week:       meta?.currentWeek ?? 1,
@@ -2238,6 +2256,14 @@ async function handleLoadSave({ leagueId }, id) {
         return;
       }
 
+      // Legacy saves receive one persistent franchise identity. Routine loads
+      // reuse it; only creation/replacement/import paths mint a new identity.
+      const generation = ensureFranchiseGenerationId(cache.getMeta() ?? {});
+      if (generation.created) {
+        cache.setMeta(generation.meta);
+        await flushDirty();
+      }
+
       // Backfill immutable player GUIDs onto players + record holders so old
       // saves stop attributing records by recyclable numeric id.
       try {
@@ -2469,7 +2495,7 @@ async function handleDuplicateSave({ leagueId, name }, id) {
   }
   try {
     const newLeagueId = await createUniqueLeagueId();
-    await copyLeagueData(leagueId, newLeagueId);
+    await copyLeagueData(leagueId, newLeagueId, { generationMode: 'mint' });
     const original = await Saves.get(leagueId);
     const duplicateName = String(name || `${original?.name ?? 'League'} (Copy)`).trim().slice(0, 80);
     await Saves.save({
@@ -2574,6 +2600,7 @@ async function handleNewLeague(payload, id) {
     }, { year: league.year });
     const meta = ensureLeagueMemoryMeta({
       id:              'league',
+      franchiseGenerationId: createFranchiseGenerationId(),
       name:            String(options.name || resolvedSettings.leagueName || `League ${leagueId}`).slice(0, 80),
       userTeamId:      userTeamId,
       currentSeasonId: seasonId,
@@ -2900,6 +2927,7 @@ async function handleUseSafeStarterLeague(payload, id) {
 
     const meta = ensureLeagueMemoryMeta({
       id: 'league',
+      franchiseGenerationId: createFranchiseGenerationId(),
       name: String(safeLeague.name ?? `Safe Starter ${slotKey?.split('_')?.[2] ?? '1'}`).slice(0, 80),
       userTeamId,
       currentSeasonId: seasonId,
@@ -3195,7 +3223,8 @@ function advancePlayoffBracket(results, currentWeek) {
 
 // ── Handler: ADVANCE_WEEK ─────────────────────────────────────────────────────
 
-async function handleAdvanceWeek(payload, id) {
+async function handleAdvanceWeek(payload, id, operationScope = null) {
+  const simulationScope = operationScope ?? captureCurrentSimulationScope();
   const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
@@ -3369,14 +3398,14 @@ async function handleAdvanceWeek(payload, id) {
     }
 
     // Return state update (no simulation)
-    post(toUI.WEEK_COMPLETE, {
+    postScoped(toUI.WEEK_COMPLETE, {
       week: 1,
       results: [],
       standings: buildStandings(),
       nextWeek: 1,
       phase: 'regular',
       isSeasonOver: false,
-    }, id);
+    }, simulationScope, id);
     post(toUI.STATE_UPDATE, buildViewState());
     return;
   }
@@ -3490,7 +3519,7 @@ async function handleAdvanceWeek(payload, id) {
           const userGame = currentWeekData.games.find(g => (Number(g.home) === numericUserTeamId || Number(g.away) === numericUserTeamId) && !g.played);
           if (userGame) {
               // Pause simulation and prompt the UI
-              post(toUI.PROMPT_USER_GAME, {}, id);
+              postScoped(toUI.PROMPT_USER_GAME, {}, simulationScope, id);
               return;
           }
       }
@@ -3556,19 +3585,19 @@ async function handleAdvanceWeek(payload, id) {
   // ── DEFENSIVE: If no games found for this week, bail without marking played ──
   if (league._weekGames.length === 0) {
     console.warn(`[Worker] ADVANCE_WEEK: No unplayed games found for week ${week}. Skipping.`);
-    post(toUI.WEEK_COMPLETE, {
+    postScoped(toUI.WEEK_COMPLETE, {
       week,
       results:    [],
       standings:  buildStandings(),
       nextWeek:   week,       // do NOT advance — nothing happened
       phase:      cache.getPhase(),
       isSeasonOver: false,
-    }, id);
+    }, simulationScope, id);
     post(toUI.STATE_UPDATE, buildViewState());
     return;
   }
 
-  post(toUI.SIM_PROGRESS, { done: 0, total: league._weekGames.length }, id);
+  postScoped(toUI.SIM_PROGRESS, { done: 0, total: league._weekGames.length }, simulationScope, id);
   const gamesToSim = [...league._weekGames];
   const playerSeasonStatsArchive = (meta?.playerSeasonStatsArchive && typeof meta.playerSeasonStatsArchive === 'object')
     ? meta.playerSeasonStatsArchive
@@ -3595,7 +3624,7 @@ async function handleAdvanceWeek(payload, id) {
     enabled: useNewSimulationEngine,
     matchups,
     manager: simulationManager,
-    onProgress: ({ done, total }) => post(toUI.SIM_PROGRESS, { done, total }, id),
+    onProgress: ({ done, total }) => postScoped(toUI.SIM_PROGRESS, { done, total }, simulationScope, id),
     onError: (error) => {
       console.warn('[Worker] New simulation path failed, reverting to legacy simulation.', error);
       post(toUI.NOTIFICATION, {
@@ -3603,7 +3632,7 @@ async function handleAdvanceWeek(payload, id) {
         message: 'New simulation engine failed this week. The legacy simulator completed the week safely.',
       });
     },
-    legacySimulate: () => simulateWeekLegacy({ gamesToSim, league, meta, id }),
+    legacySimulate: () => simulateWeekLegacy({ gamesToSim, league, meta, id, simulationScope }),
   });
 
   if (simulationMode === 'new') {
@@ -3613,14 +3642,14 @@ async function handleAdvanceWeek(payload, id) {
   // SAFETY: If simulation produced 0 results, don't advance the week
   if (results.length === 0) {
     console.error(`[Worker] ADVANCE_WEEK: simulation returned 0 results for week ${week} (${gamesToSim.length} games attempted) — aborting advance.`);
-    post(toUI.WEEK_COMPLETE, {
+    postScoped(toUI.WEEK_COMPLETE, {
       week,
       results:    [],
       standings:  buildStandings(),
       nextWeek:   week,       // stay on same week
       phase:      cache.getPhase(),
       isSeasonOver: false,
-    }, id);
+    }, simulationScope, id);
     post(toUI.STATE_UPDATE, buildViewState());
     post(toUI.NOTIFICATION, { level: 'warn', message: `Week ${week} simulation failed — please try again.`, retryable: true });
     return;
@@ -3676,7 +3705,7 @@ async function handleAdvanceWeek(payload, id) {
     const homeId = Number(typeof rawH === 'object' ? rawH?.id : rawH);
     const awayId = Number(typeof rawA === 'object' ? rawA?.id : rawA);
     if (!isNaN(homeId) && !isNaN(awayId)) {
-      post(toUI.GAME_EVENT, {
+      postScoped(toUI.GAME_EVENT, {
         gameId:    buildCanonicalGameId({ seasonId, week, homeId, awayId }),
         week,
         homeId,
@@ -3689,7 +3718,7 @@ async function handleAdvanceWeek(payload, id) {
         awayScore: res.scoreAway ?? res.awayScore ?? 0,
         recapText: res.recapText ?? null,
         teamDriveStats: res.teamDriveStats ?? null,
-      });
+      }, simulationScope);
     }
   }
 
@@ -4687,14 +4716,14 @@ async function handleAdvanceWeek(payload, id) {
     };
   });
 
-  post(toUI.WEEK_COMPLETE, {
+  postScoped(toUI.WEEK_COMPLETE, {
     week,
     results:    gameResults,
     standings:  buildStandings(),
     nextWeek:   nextWeekNum,
     phase:      cache.getPhase(),
     isSeasonOver: isRegSeasonEnd || seasonEndFlag,
-  }, id);
+  }, simulationScope, id);
 
   // Also send a full state update so UI can re-render all panels
   post(toUI.STATE_UPDATE, buildViewState());
@@ -4865,7 +4894,7 @@ function buildWeekMatchupsFromLeague(league, meta, week, opts = {}) {
   return { matchups, migratedPlayers };
 }
 
-async function simulateWeekLegacy({ gamesToSim, league, meta, id }) {
+async function simulateWeekLegacy({ gamesToSim, league, meta, id, simulationScope }) {
   const BATCH_SIZE = 2;
   const results = [];
   const injuryFactor = Math.max(0, Number(getLeagueSetting('injuryFrequency', 50)) / 50);
@@ -4897,7 +4926,7 @@ async function simulateWeekLegacy({ gamesToSim, league, meta, id }) {
         batch.map(g => `${g.home?.abbr ?? g.home?.id ?? '?'} vs ${g.away?.abbr ?? g.away?.id ?? '?'}`).join(', '));
     }
     results.push(...batchResults);
-    post(toUI.SIM_PROGRESS, { done: i + batch.length, total: gamesToSim.length }, id);
+    postScoped(toUI.SIM_PROGRESS, { done: i + batch.length, total: gamesToSim.length }, simulationScope, id);
     await yieldFrame();
   }
 
@@ -5455,14 +5484,15 @@ async function handleSimToWeek({ targetWeek }, id) {
 // ── Handler: SIM_TO_PHASE ────────────────────────────────────────────────────
 
 async function handleSimToPhase({ targetPhase }, id) {
+  const simulationScope = captureCurrentSimulationScope();
   const __simProfileToken = offseasonProfiler.start('lifecycle.SIM_TO_PHASE', { targetPhase });
   try {
   if (batchSimControl.running) {
-    post(toUI.SIM_BATCH_STATUS, {
+    postScoped(toUI.SIM_BATCH_STATUS, {
       status: 'running',
       targetPhase: batchSimControl.targetPhase,
       stage: batchSimControl.stage,
-    });
+    }, simulationScope);
     post(toUI.NOTIFICATION, { level: 'info', message: 'Simulation already in progress.' });
     post(toUI.FULL_STATE, buildViewState(), id);
     return;
@@ -5521,8 +5551,9 @@ async function handleSimToPhase({ targetPhase }, id) {
     cancelRequested: false,
     targetPhase,
     stage: meta.phase,
+    simulationScope,
   };
-  post(toUI.SIM_BATCH_STATUS, { status: 'running', targetPhase, stage: meta.phase });
+  postScoped(toUI.SIM_BATCH_STATUS, { status: 'running', targetPhase, stage: meta.phase }, simulationScope);
   await persistSimSession({
     ...(buildSimSessionPatch({ targetPhase, stage: meta.phase, checkpoint: 'start' }).simSession),
   });
@@ -5535,11 +5566,11 @@ async function handleSimToPhase({ targetPhase }, id) {
       // Check if we've reached the target
       if (isTarget(currentMeta)) break;
       if (batchSimControl.cancelRequested) {
-        post(toUI.SIM_BATCH_STATUS, {
+        postScoped(toUI.SIM_BATCH_STATUS, {
           status: 'cancelled',
           targetPhase,
           stage: currentMeta.phase,
-        });
+        }, simulationScope);
         if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__) {
           await flushDirty(true);
         }
@@ -5549,11 +5580,11 @@ async function handleSimToPhase({ targetPhase }, id) {
       }
 
       // Send progress to UI
-      post(toUI.SIM_BATCH_PROGRESS, {
+      postScoped(toUI.SIM_BATCH_PROGRESS, {
         currentWeek: currentMeta.currentWeek ?? 0,
         phase: currentMeta.phase,
         targetPhase,
-      });
+      }, simulationScope);
       await maybePersistSimSession(
         {
           status: 'running',
@@ -5569,7 +5600,7 @@ async function handleSimToPhase({ targetPhase }, id) {
       // Pass skipUserGame:true during batch sim to avoid prompting the user
       if (['regular', 'playoffs', 'preseason'].includes(currentMeta.phase)) {
         validateLeagueFlowState({ stage: currentMeta.phase });
-        await offseasonProfiler.measure(`stage.${currentMeta.phase}.advance-week`, { phase: currentMeta.phase, week: currentMeta.currentWeek ?? 0 }, () => handleAdvanceWeek({ skipUserGame: true }, null));
+        await offseasonProfiler.measure(`stage.${currentMeta.phase}.advance-week`, { phase: currentMeta.phase, week: currentMeta.currentWeek ?? 0 }, () => handleAdvanceWeek({ skipUserGame: true }, null, simulationScope));
       } else if (['offseason_resign', 'offseason'].includes(currentMeta.phase)) {
         validateLeagueFlowState({ stage: 'retirements_resignings' });
         await offseasonProfiler.measure('stage.offseason.advance', { phase: currentMeta.phase }, () => handleAdvanceOffseason({}, null));
@@ -5615,11 +5646,11 @@ async function handleSimToPhase({ targetPhase }, id) {
           await yieldFrame();
         }
         if (batchSimControl.cancelRequested) {
-          post(toUI.SIM_BATCH_STATUS, {
+          postScoped(toUI.SIM_BATCH_STATUS, {
             status: 'cancelled',
             targetPhase,
             stage: 'draft',
-          });
+          }, simulationScope);
           if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__) {
             await flushDirty(true);
           }
@@ -5638,7 +5669,7 @@ async function handleSimToPhase({ targetPhase }, id) {
     }
 
     // Final state broadcast
-    post(toUI.SIM_BATCH_STATUS, { status: 'completed', targetPhase, stage: cache.getMeta()?.phase ?? null });
+    postScoped(toUI.SIM_BATCH_STATUS, { status: 'completed', targetPhase, stage: cache.getMeta()?.phase ?? null }, simulationScope);
     await persistSimSession({
       status: 'completed',
       targetPhase,
@@ -5662,7 +5693,7 @@ async function handleSimToPhase({ targetPhase }, id) {
     if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__) {
       await flushDirty(true);
     }
-    post(toUI.SIM_BATCH_STATUS, { status: 'failed', targetPhase, stage: cache.getMeta()?.phase ?? null });
+    postScoped(toUI.SIM_BATCH_STATUS, { status: 'failed', targetPhase, stage: cache.getMeta()?.phase ?? null }, simulationScope);
     post(toUI.NOTIFICATION, { level: 'warn', message: `Simulation paused: ${error?.message ?? 'unknown error'}. You can retry or cancel.` });
     recordDynastySoakBatchProfile(iterations, isTarget(cache.getMeta()));
     post(toUI.FULL_STATE, buildViewState(), id);
@@ -5672,6 +5703,7 @@ async function handleSimToPhase({ targetPhase }, id) {
       cancelRequested: false,
       targetPhase: null,
       stage: null,
+      simulationScope: null,
     };
   }
   } finally {
@@ -6719,10 +6751,13 @@ async function writeLeagueSnapshot(leagueId, snapshot) {
   });
 }
 
-async function copyLeagueData(sourceLeagueId, targetLeagueId) {
+async function copyLeagueData(sourceLeagueId, targetLeagueId, { generationMode } = {}) {
+  if (!['preserve', 'mint'].includes(generationMode)) {
+    throw new Error('copyLeagueData requires an explicit franchise generation mode.');
+  }
   configureActiveLeague(sourceLeagueId);
   await openDB();
-  const snapshot = await snapshotActiveLeagueDB();
+  const snapshot = prepareCopiedLeagueSnapshot(await snapshotActiveLeagueDB(), generationMode);
   await writeLeagueSnapshot(targetLeagueId, snapshot);
 }
 
@@ -6748,9 +6783,13 @@ async function handleSaveSlot({ slotKey }, id) {
     }
 
     await flushDirty();
-    await copyLeagueData(sourceLeagueId, slotKey);
-    configureActiveLeague(slotKey);
-    await openDB();
+    if (shouldCopyLeagueForSave(sourceLeagueId, slotKey)) {
+      // Saving/moving a franchise preserves its identity. In particular, the
+      // initial temporary NEW_LEAGUE id -> save_slot_1 transition is not a clone.
+      await copyLeagueData(sourceLeagueId, slotKey, { generationMode: 'preserve' });
+      configureActiveLeague(slotKey);
+      await openDB();
+    }
 
     const meta = cache.getMeta() ?? {};
     const userTeam = cache.getTeam(meta?.userTeamId);
@@ -6772,8 +6811,11 @@ async function handleSaveSlot({ slotKey }, id) {
     });
 
     _saveIsExplicitlyLoaded = true;
-    post(toUI.SAVED, {}, id);
+    // Establish the authoritative slot identity before resolving SAVE_SLOT.
+    // Worker message ordering then guarantees callers cannot start Week 1 with
+    // the UI ingress guard still scoped to the temporary NEW_LEAGUE id.
     post(toUI.STATE_UPDATE, buildViewState(), id);
+    post(toUI.SAVED, {}, id);
   } catch (err) {
     post(toUI.ERROR, { message: err?.message ?? 'Failed to save slot.' }, id);
   }
@@ -6802,7 +6844,9 @@ async function migrateLegacySaveToSlot1IfNeeded() {
   const legacy = saves.find(s => !isValidSlotKey(s?.id));
   if (!legacy?.id) return;
 
-  await copyLeagueData(legacy.id, 'save_slot_1');
+  // Slot migration moves the same franchise; preserve an existing generation
+  // (legacy LOAD_SAVE backfills one when absent).
+  await copyLeagueData(legacy.id, 'save_slot_1', { generationMode: 'preserve' });
   await Saves.save({ ...legacy, id: 'save_slot_1', lastPlayed: Date.now() });
 }
 
@@ -7039,6 +7083,9 @@ async function handleImportSave({ data, saveName }, id) {
     if (migration.migratedTo !== migration.migratedFrom) {
       cache.setMeta(migration.migrated);
     }
+    // An imported file is a distinct franchise instance even when its source
+    // snapshot already carried an identity.
+    cache.setMeta({ franchiseGenerationId: createFranchiseGenerationId() });
     const meta = ensureDynastyMeta(cache.getMeta());
     repairRosterAndTeamLinks({ reason: 'import-save' });
     for (const team of cache.getAllTeams()) {
@@ -14622,6 +14669,7 @@ let batchSimControl = {
   cancelRequested: false,
   targetPhase: null,
   stage: null,
+  simulationScope: null,
 };
 
 self.onmessage = (event) => {
@@ -14630,13 +14678,14 @@ self.onmessage = (event) => {
   if (type === toWorker.CANCEL_SIM_TO_PHASE) {
     if (batchSimControl.running) {
       batchSimControl.cancelRequested = true;
-      post(toUI.SIM_BATCH_STATUS, {
+      postScoped(toUI.SIM_BATCH_STATUS, {
         status: 'cancelling',
         targetPhase: batchSimControl.targetPhase,
         stage: batchSimControl.stage,
-      });
+      }, batchSimControl.simulationScope);
     } else {
-      post(toUI.SIM_BATCH_STATUS, { status: 'idle', targetPhase: null, stage: null });
+      const simulationScope = captureCurrentSimulationScope();
+      postScoped(toUI.SIM_BATCH_STATUS, { status: 'idle', targetPhase: null, stage: null }, simulationScope);
     }
     return;
   }
@@ -14972,6 +15021,7 @@ async function handleAdvanceCombineWeek(payload, id) {
 // ── Handler: WATCH_GAME ──────────────────────────────────────────────────────
 
 async function handleWatchGame(payload, id) {
+  const simulationScope = captureCurrentSimulationScope();
   const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
@@ -15042,7 +15092,7 @@ async function handleWatchGame(payload, id) {
     // Make sure we emit the GAME_EVENT so it shows in the UI later
     const homeId = Number(typeof res.home === 'object' ? res.home.id : (res.home ?? res.homeTeamId));
     const awayId = Number(typeof res.away === 'object' ? res.away.id : (res.away ?? res.awayTeamId));
-    post(toUI.GAME_EVENT, {
+    postScoped(toUI.GAME_EVENT, {
         gameId:    buildCanonicalGameId({ seasonId, week, homeId, awayId }),
         week,
         homeId,
@@ -15055,7 +15105,7 @@ async function handleWatchGame(payload, id) {
         awayScore: res.scoreAway ?? res.awayScore ?? 0,
         recapText: res.recapText ?? null,
         teamDriveStats: res.teamDriveStats ?? null,
-    });
+    }, simulationScope);
 
     // Mark the user game as played in the slim schedule so ADVANCE_WEEK
     // (called after LiveGameViewer completes) won't re-simulate it.
@@ -15084,7 +15134,7 @@ async function handleWatchGame(payload, id) {
     // Send play-by-play logs to UI so the viewer can render.
     // gameReasoningFlags rides along so the live FinalOverlay can render the
     // Executive Summary without a second round-trip to the worker.
-    post(toUI.PLAY_LOGS, {
+    postScoped(toUI.PLAY_LOGS, {
       logs: res.playLogs || [],
       liveStats: res.liveStats || {},
       // Canonical player box score (the same authority that owns the final
@@ -15100,7 +15150,7 @@ async function handleWatchGame(payload, id) {
       scoringSummary: Array.isArray(res.scoringSummary) ? res.scoringSummary : [],
       quarterScores: res.quarterScores ?? null,
       gameReasoningFlags: Array.isArray(res.gameReasoningFlags) ? res.gameReasoningFlags : [],
-    }, id);
+    }, simulationScope, id);
 
     // Second flush (belt-and-suspenders): catch any dirty bits set during log building
     try { await flushDirty(); } catch (e) { console.warn('[Worker] secondary flush failed (non-fatal):', e.message); }

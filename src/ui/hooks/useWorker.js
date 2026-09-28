@@ -29,6 +29,7 @@ import {
 } from '../../worker/workerApi.js';
 import { applyLeagueDelta } from '../../worker/serialization.js';
 import { getLeagueIdentity } from '../utils/leagueIdentity.js';
+import { isScopedSimulationMessage, shouldAcceptSimulationScope } from '../../worker/simulationScope.js';
 
 const WORKER_REQUEST_TIMEOUT_MS = 20000;
 const WORKER_TIMEOUT_BY_TYPE = Object.freeze({
@@ -124,6 +125,18 @@ export function shouldAcceptBootScopedPayload(payload = {}, activeBootRequestId 
   return true;
 }
 
+export function syncAcceptedSimulationScope(baseline = {}, payload = {}) {
+  return {
+    stateEpoch: payload?._stateEpoch != null ? payload._stateEpoch : baseline.stateEpoch,
+    activeLeagueId: Object.prototype.hasOwnProperty.call(payload ?? {}, 'activeLeagueId')
+      ? payload.activeLeagueId
+      : baseline.activeLeagueId,
+    franchiseGenerationId: Object.prototype.hasOwnProperty.call(payload ?? {}, 'franchiseGenerationId')
+      ? payload.franchiseGenerationId
+      : baseline.franchiseGenerationId,
+  };
+}
+
 export function workerReducer(state, action) {
   switch (action.type) {
     case 'BUSY':
@@ -140,11 +153,17 @@ export function workerReducer(state, action) {
       const previousLeagueId = getLeagueIdentity(state.league);
       const incomingLeagueId = getLeagueIdentity(action.payload);
       const isLeagueSwitch = previousLeagueId != null && incomingLeagueId != null && previousLeagueId !== incomingLeagueId;
+      const previousGenerationId = state.league?.franchiseGenerationId ?? null;
+      const incomingGenerationId = action.payload?.franchiseGenerationId ?? null;
+      const isFranchiseReplacement = previousGenerationId != null
+        && incomingGenerationId != null
+        && String(previousGenerationId) !== String(incomingGenerationId);
+      const shouldClearTransients = isLeagueSwitch || isFranchiseReplacement;
       return {
         ...state, busy: false, simulating: false,
-        simProgress: isLeagueSwitch ? 0 : state.simProgress,
+        simProgress: shouldClearTransients ? 0 : state.simProgress,
         batchSim: null, isHydrated: true, league: action.payload,
-        ...(isLeagueSwitch ? {
+        ...(shouldClearTransients ? {
           lastResults: null, lastSimWeek: null, gameEvents: [], promptUserGame: false,
           userGameLogs: null, userGameLiveStats: null, userGamePlayerStats: null,
           userGameTeamStats: null, userGameCanonicalEvents: null,
@@ -288,6 +307,8 @@ export function useWorker() {
    * is lower than the most recently accepted authoritative snapshot.
    */
   const lastAcceptedEpochRef = useRef(0);
+  const acceptedSimulationLeagueIdRef = useRef(null);
+  const acceptedFranchiseGenerationIdRef = useRef(null);
 
   // ── Spawn worker once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -299,6 +320,23 @@ export function useWorker() {
 
     worker.onmessage = (event) => {
       const { type, payload = {}, id } = event.data;
+      const staleSimulationMessage = isScopedSimulationMessage(type) && !shouldAcceptSimulationScope(payload, {
+        stateEpoch: lastAcceptedEpochRef.current,
+        activeLeagueId: acceptedSimulationLeagueIdRef.current,
+        franchiseGenerationId: acceptedFranchiseGenerationIdRef.current,
+      });
+
+      // A discarded response still settles its caller as an intentional
+      // cancellation, but must not clear busy/progress owned by the new save.
+      if (staleSimulationMessage) {
+        if (id && pendingRef.current.has(id)) {
+          const { resolve, timeoutId } = pendingRef.current.get(id);
+          pendingRef.current.delete(id);
+          if (timeoutId) clearTimeout(timeoutId);
+          resolve({ type, payload, discarded: true });
+        }
+        return;
+      }
       // Invalidate route-detail cache on material changes
       if (type === toUI.READY || type === toUI.FULL_STATE) {
         __invalidateStableRouteRequestCache(); // Full wipe for new saves/reset
@@ -351,6 +389,8 @@ export function useWorker() {
           if (payload?._stateEpoch != null) {
             lastAcceptedEpochRef.current = payload._stateEpoch;
           }
+          acceptedSimulationLeagueIdRef.current = payload?.activeLeagueId ?? null;
+          acceptedFranchiseGenerationIdRef.current = payload?.franchiseGenerationId ?? null;
           if (payload?.bootRequestId && activeBootRequestIdRef.current === payload.bootRequestId) {
             activeBootRequestIdRef.current = null;
           }
@@ -374,6 +414,18 @@ export function useWorker() {
             worker.postMessage(withRequestId(buildMsg(toWorker.REQUEST_FULL_STATE)));
             break;
           }
+          // SAVE_SLOT intentionally changes only the storage identity and sends
+          // it through this authoritative delta. Synchronize the ingress scope
+          // before a following Week 1 event can arrive; omitted partial fields
+          // retain their established baseline values.
+          const acceptedScope = syncAcceptedSimulationScope({
+            stateEpoch: lastAcceptedEpochRef.current,
+            activeLeagueId: acceptedSimulationLeagueIdRef.current,
+            franchiseGenerationId: acceptedFranchiseGenerationIdRef.current,
+          }, payload);
+          lastAcceptedEpochRef.current = acceptedScope.stateEpoch;
+          acceptedSimulationLeagueIdRef.current = acceptedScope.activeLeagueId;
+          acceptedFranchiseGenerationIdRef.current = acceptedScope.franchiseGenerationId;
           dispatch({ type: 'STATE_UPDATE', payload: merged, messageType: type });
           break;
         }
