@@ -3,27 +3,36 @@ import { DEPTH_CHART_ROWS, getPlayerScrimmageUnitRow, getScrimmageDepthRow, isPl
 import { calculatePlayerSchemeFit } from '../../core/scheme-core.js';
 import { isAvailableForGameDay } from '../../core/holdouts/holdoutEngine.js';
 import { buildReplacementUpdates, deriveLineupRatingSnapshot } from '../utils/lineupCommandCenter.js';
+import { deriveRosterReadinessModel } from '../utils/rosterReadinessModel.js';
+import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
 
 const fitColor = (fit) => fit >= 80 ? 'var(--success)' : fit >= 65 ? 'var(--warning)' : 'var(--danger)';
 const unavailable = (player, teamId) => !isAvailableForGameDay(player, { teamId });
 
-export default function LineupCommandCenter({ team, roster, actions, onPlayerSelect, onNavigate }) {
+export default function LineupCommandCenter({ league, team, roster, actions, onPlayerSelect, onNavigate }) {
   const [unit, setUnit] = useState('offense');
   const [changingId, setChangingId] = useState(null);
   const [projectedRoster, setProjectedRoster] = useState(null);
   const displayedRoster = projectedRoster ?? roster;
   const snapshot = useMemo(() => deriveLineupRatingSnapshot({ team, roster: displayedRoster }), [team, displayedRoster]);
-  const players = unit === 'offense' ? snapshot.offensePlayers : unit === 'defense' ? snapshot.defensePlayers
-    : roster.filter((player) => ['K', 'P'].includes(player.pos) || player?.depthChart?.rowKey === 'RS');
+  const specialPlayers = useMemo(() => DEPTH_CHART_ROWS
+    .filter((row) => row.group === 'SPECIAL')
+    .map((row) => displayedRoster
+      .filter((player) => player?.depthChart?.rowKey === row.key && isPlayerEligibleForDepthRow(player, row))
+      .sort((a, b) => Number(a?.depthChart?.order ?? a.depthOrder ?? 999) - Number(b?.depthChart?.order ?? b.depthOrder ?? 999))[0])
+    .filter(Boolean), [displayedRoster]);
+  const players = unit === 'offense' ? snapshot.offensePlayers : unit === 'defense' ? snapshot.defensePlayers : specialPlayers;
   const group = unit.toUpperCase();
   const scheme = unit === 'offense' ? snapshot.schemes.offense : snapshot.schemes.defense;
   const comparison = unit === 'offense' ? snapshot.offenseComparison : snapshot.defenseComparison;
   const weakest = unit === 'special' ? null : [...players].sort((a, b) => Number(a.ovr ?? 0) - Number(b.ovr ?? 0))[0];
 
   const alternativesFor = (starter) => {
-    const row = getScrimmageDepthRow(starter, group) ?? getPlayerScrimmageUnitRow(starter, group);
+    const row = group === 'SPECIAL'
+      ? DEPTH_CHART_ROWS.find((entry) => entry.key === starter?.depthChart?.rowKey)
+      : getScrimmageDepthRow(starter, group) ?? getPlayerScrimmageUnitRow(starter, group);
     if (!row) return [];
-    const starterIds = new Set([...snapshot.offenseStarterIds, ...snapshot.defenseStarterIds].map(String));
+    const starterIds = new Set((group === 'SPECIAL' ? specialPlayers.map((player) => player.id) : [...snapshot.offenseStarterIds, ...snapshot.defenseStarterIds]).map(String));
     return roster.filter((candidate) => String(candidate.id) !== String(starter.id)
       && !starterIds.has(String(candidate.id)) && isPlayerEligibleForDepthRow(candidate, row) && !unavailable(candidate, team?.id))
       .sort((a, b) => Number(b.ovr ?? 0) - Number(a.ovr ?? 0));
@@ -33,12 +42,21 @@ export default function LineupCommandCenter({ team, roster, actions, onPlayerSel
     const updates = buildReplacementUpdates(roster, starter, replacement, group);
     if (!updates.length) return;
     const updateById = new Map(updates.map((update) => [String(update.playerId), update]));
-    setProjectedRoster(roster.map((player) => {
+    const nextRoster = roster.map((player) => {
       const update = updateById.get(String(player.id));
       return update ? { ...player, depthOrder: update.newOrder, depthChart: { ...(player.depthChart ?? {}), rowKey: update.rowKey, order: update.newOrder } } : player;
-    }));
+    });
+    setProjectedRoster(nextRoster);
     setChangingId(null);
-    try { await actions?.updateDepthChart?.(updates); } finally { setProjectedRoster(null); }
+    try {
+      await actions?.updateDepthChart?.(updates);
+      const assignments = Object.fromEntries(DEPTH_CHART_ROWS.map((row) => [row.key, nextRoster
+        .filter((player) => player?.depthChart?.rowKey === row.key)
+        .sort((a, b) => Number(a?.depthChart?.order ?? a.depthOrder ?? 999) - Number(b?.depthChart?.order ?? b.depthOrder ?? 999))
+        .map((player) => player.id)]));
+      const readiness = deriveRosterReadinessModel({ league, team, roster: nextRoster, assignments, source: 'team-lineup' });
+      if (readiness.safeToMarkLineupChecked) markWeeklyPrepStep(league, 'lineupChecked', true);
+    } finally { setProjectedRoster(null); }
   };
 
   return <div className="lineup-command-center" data-testid="lineup-command-center">
@@ -67,7 +85,7 @@ export default function LineupCommandCenter({ team, roster, actions, onPlayerSel
             <strong className="lineup-starter__ovr">{player.ovr ?? '—'}<small>OVR</small></strong>
             {fit != null && <strong className="lineup-starter__fit" style={{ color: fitColor(fit) }}>{fit}%<small>FIT</small></strong>}
           </button>
-          {unit !== 'special' && <button className="lineup-change" onClick={() => setChangingId(isChanging ? null : player.id)}>Change</button>}
+          <button className="lineup-change" onClick={() => setChangingId(isChanging ? null : player.id)}>Change</button>
           {isChanging && <div className="lineup-alternatives" aria-label={`Replace ${player.name}`}>
             {alternativesFor(player).map((candidate) => <button key={candidate.id} onClick={() => replace(player, candidate)}><span><strong>{candidate.name}</strong><small>{candidate.pos} · Ready</small></span><span>{candidate.ovr ?? '—'} OVR · {calculatePlayerSchemeFit(candidate, scheme)}% FIT</span></button>)}
             {!alternativesFor(player).length && <p>No eligible available alternatives.</p>}

@@ -59,9 +59,12 @@ describe("normalizeManagementDestination", () => {
       tab: "Team",
       teamSection: "Contracts",
     });
+    expect(normalizeManagementDestination("Team:Injuries")).toMatchObject({ tab: "Team", teamSection: "Injuries" });
+    expect(normalizeManagementDestination("Team:Overview")).toMatchObject({ tab: "Team", teamSection: "Overview" });
+    expect(normalizeManagementDestination("Team")).toMatchObject({ tab: "Team", teamSection: "Lineup" });
     expect(normalizeManagementDestination("Team:unknown")).toMatchObject({
       tab: "Team",
-      teamSection: "Overview",
+      teamSection: "Lineup",
     });
   });
 

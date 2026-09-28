@@ -1,7 +1,7 @@
 import { aggregateTeamUnitsFromRoster } from '../../core/sim/weekSimulationBridge.ts';
 import { ensureAttributesV2 } from '../../core/migration/attributeMigrator.ts';
 import { getEffectivePlayerForRole } from '../../core/sim/positionalMultipliers.js';
-import { getPlayerScrimmageUnitRow, getScrimmageDepthRow, isPlayerEligibleForDepthRow } from '../../core/depthChart.js';
+import { getCanonicalDepthRow, getPlayerScrimmageUnitRow, getScrimmageDepthRow, isPlayerEligibleForDepthRow } from '../../core/depthChart.js';
 import { calculateOverallFromAttributesV2 } from '../../worker/playerDerivedRatings.js';
 import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES, calculatePlayerSchemeFit } from '../../core/scheme-core.js';
 
@@ -62,10 +62,14 @@ export function deriveLineupRatingSnapshot({ team = {}, roster = [] } = {}) {
 }
 
 export function buildReplacementUpdates(roster, starter, replacement, group) {
-  const row = getScrimmageDepthRow(starter, group) ?? getPlayerScrimmageUnitRow(starter, group);
+  const row = group === 'SPECIAL'
+    ? getCanonicalDepthRow(starter)
+    : getScrimmageDepthRow(starter, group) ?? getPlayerScrimmageUnitRow(starter, group);
   if (!row || !isPlayerEligibleForDepthRow(replacement, row)) return [];
   const ordered = roster.filter((player) => {
-    const playerRow = getScrimmageDepthRow(player, group) ?? getPlayerScrimmageUnitRow(player, group);
+    const playerRow = group === 'SPECIAL'
+      ? getCanonicalDepthRow(player)
+      : getScrimmageDepthRow(player, group) ?? getPlayerScrimmageUnitRow(player, group);
     return playerRow?.key === row.key && isPlayerEligibleForDepthRow(player, row);
   }).sort((a, b) => Number(a?.depthChart?.order ?? a.depthOrder ?? 999) - Number(b?.depthChart?.order ?? b.depthOrder ?? 999));
   const next = ordered.filter((player) => String(player.id) !== String(replacement.id));

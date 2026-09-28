@@ -31,7 +31,7 @@ const league = {
 };
 
 describe('TeamHub', () => {
-  it('renders command center section tabs and useful overview summaries', () => {
+  it('opens the canonical lineup first and exposes the required section order', () => {
     const html = renderToString(
       <TeamHub
         league={league}
@@ -43,14 +43,12 @@ describe('TeamHub', () => {
     );
 
     expect(html).toContain('Lineup Check Before Kickoff');
-    expect(html).toContain('Overview');
-    expect(html).toContain('Roster / Depth');
-    expect(html).toContain('Contracts');
-    expect(html).toContain('Development');
-    expect(html).toContain('Injuries');
-    expect(html).toContain('Position pressure');
-    expect(html).toContain('Expiring');
-    expect(html).toContain('Development');
+    expect(html).toContain('lineup-command-center');
+    expect(html).not.toContain('Position pressure');
+    const sectionIndexes = ['Lineup', 'Overview', 'Roster / Depth', 'Contracts', 'Development', 'Injuries']
+      .map((label) => html.indexOf(`>${label}<`));
+    expect(sectionIndexes.every((index) => index >= 0)).toBe(true);
+    expect(sectionIndexes).toEqual([...sectionIndexes].sort((a, b) => a - b));
   });
 
   it('supports direct section entry for team-context deep links', () => {

@@ -444,7 +444,7 @@ export function selectFranchiseHQViewModel(league) {
   const momentum = deriveMomentum(team?.id, vm.league?.schedule?.weeks ?? []);
   const lastGameMoments = deriveLastGameMoments(latestArchived ?? fallbackLastGame);
   const prepChecklist = [
-    { key: 'lineupChecked', label: 'Set Lineup', tab: 'Team:Roster / Depth', done: Boolean(prep?.completion?.lineupChecked) },
+    { key: 'lineupChecked', label: 'Set Lineup', tab: 'Team:Lineup', done: Boolean(prep?.completion?.lineupChecked) },
     { key: 'opponentScouted', label: 'Scout Opponent', tab: 'Weekly Prep', done: Boolean(prep?.completion?.opponentScouted) },
     { key: 'planReviewed', label: 'Game Plan', tab: 'Game Plan', done: Boolean(prep?.completion?.planReviewed) },
   ];

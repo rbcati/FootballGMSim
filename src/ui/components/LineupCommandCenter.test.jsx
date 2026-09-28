@@ -41,4 +41,37 @@ describe('LineupCommandCenter', () => {
     fireEvent.click(view.getByRole('button', { name: 'Review Game Plan' }));
     expect(onNavigate).toHaveBeenCalledWith('Game Plan');
   });
+
+  it('persists a defensive starter replacement with its canonical row', async () => {
+    const defender = (id, name, order, ovr) => ({ id, name, pos: 'CB', teamId: 1, ovr, attributesV2: attrs(ovr), ratings: {}, depthChart: { rowKey: 'CB', order } });
+    const defenseRoster = Array.from({ length: 12 }, (_, index) => defender(11 + index, `CB ${index + 1}`, index + 1, 75 + index));
+    const updateDepthChart = vi.fn(async () => ({}));
+    const view = render(<LineupCommandCenter team={team} roster={defenseRoster} actions={{ updateDepthChart }} />);
+    fireEvent.click(view.getByRole('tab', { name: 'defense' }));
+    fireEvent.click(view.getAllByRole('button', { name: 'Change' })[0]);
+    fireEvent.click(view.getByText('CB 12'));
+    await waitFor(() => expect(updateDepthChart).toHaveBeenCalledWith(expect.arrayContaining([
+      { playerId: 22, rowKey: 'CB', newOrder: 1 },
+      { playerId: 11, rowKey: 'CB', newOrder: 2 },
+    ])));
+  });
+
+  it.each([
+    ['K', 'Kicker'],
+    ['P', 'Punter'],
+    ['RS', 'Returner'],
+  ])('edits the canonical %s special-teams row without inventing ST', async (rowKey, label) => {
+    const pos = rowKey === 'RS' ? 'WR' : rowKey;
+    const specialists = [1, 2].map((order) => ({ id: `${rowKey}-${order}`, name: `${label} ${order}`, pos, teamId: 1, ovr: 70 + order, attributesV2: attrs(70 + order), ratings: {}, depthChart: { rowKey, order } }));
+    const updateDepthChart = vi.fn(async () => ({}));
+    const view = render(<LineupCommandCenter team={team} roster={specialists} actions={{ updateDepthChart }} />);
+    fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));
+    fireEvent.click(view.getByRole('button', { name: 'Change' }));
+    fireEvent.click(view.getByText(`${label} 2`));
+    await waitFor(() => expect(updateDepthChart).toHaveBeenCalledWith(expect.arrayContaining([
+      { playerId: `${rowKey}-2`, rowKey, newOrder: 1 },
+      { playerId: `${rowKey}-1`, rowKey, newOrder: 2 },
+    ])));
+    expect(JSON.stringify(updateDepthChart.mock.calls)).not.toContain('"ST"');
+  });
 });
