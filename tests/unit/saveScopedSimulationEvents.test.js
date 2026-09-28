@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { INITIAL_WORKER_STATE, workerReducer } from '../../src/ui/hooks/useWorker.js';
+import { INITIAL_WORKER_STATE, syncAcceptedSimulationScope, workerReducer } from '../../src/ui/hooks/useWorker.js';
 import { handleWorkerMessage, toUI } from '../../src/worker/workerApi.js';
 import {
   captureSimulationScope,
   shouldAcceptSimulationScope,
   withSimulationScope,
 } from '../../src/worker/simulationScope.js';
-import { createFranchiseGenerationId, ensureFranchiseGenerationId } from '../../src/state/franchiseGeneration.js';
+import { createFranchiseGenerationId, ensureFranchiseGenerationId, prepareCopiedLeagueSnapshot, shouldCopyLeagueForSave } from '../../src/state/franchiseGeneration.js';
 
 const league = (activeLeagueId, epoch, overrides = {}) => ({
   activeLeagueId, franchiseGenerationId: 'gen_B', _stateEpoch: epoch, seasonId: `season-${epoch}`, year: 2026,
@@ -135,5 +135,37 @@ describe('save-scoped simulation events', () => {
 
   it('mints distinct identities for two same-slot franchise creations', () => {
     expect(createFranchiseGenerationId()).not.toBe(createFranchiseGenerationId());
+  });
+
+  it('synchronizes NEW_LEAGUE -> SAVE_SLOT scope so current Week 1 events are accepted', () => {
+    let baseline = { stateEpoch: 10, activeLeagueId: 'temporary_id', franchiseGenerationId: 'gen_A' };
+    baseline = syncAcceptedSimulationScope(baseline, {
+      _stateEpoch: 10,
+      activeLeagueId: 'save_slot_1',
+      // A delta may omit the unchanged generation.
+    });
+    expect(baseline).toEqual({ stateEpoch: 10, activeLeagueId: 'save_slot_1', franchiseGenerationId: 'gen_A' });
+    const scope = captureSimulationScope(baseline);
+    expect(shouldAcceptSimulationScope(withSimulationScope({ done: 1, total: 1 }, scope), baseline)).toBe(true);
+
+    let state = { ...INITIAL_WORKER_STATE, league: league('save_slot_1', 10, { franchiseGenerationId: 'gen_A' }), simulating: true };
+    state = applyIfCurrent(state, scoped(toUI.WEEK_COMPLETE, scope, {
+      week: 1, nextWeek: 2, phase: 'regular', results: [{ id: 'week-1' }],
+    }));
+    expect(state).toMatchObject({ lastResults: [{ id: 'week-1' }], lastSimWeek: 1, simulating: false, league: { week: 2 } });
+  });
+
+  it('preserves generation for bootstrap/quick saves and skips same-slot database copying', () => {
+    const snapshot = { meta: [{ id: 'league', franchiseGenerationId: 'gen_A' }] };
+    expect(prepareCopiedLeagueSnapshot(snapshot, 'preserve')).toBe(snapshot);
+    expect(shouldCopyLeagueForSave('temporary_id', 'save_slot_1')).toBe(true);
+    expect(shouldCopyLeagueForSave('save_slot_1', 'save_slot_1')).toBe(false);
+  });
+
+  it('mints generation only for duplicate-style copies', () => {
+    const snapshot = { meta: [{ id: 'league', franchiseGenerationId: 'gen_A' }] };
+    const duplicate = prepareCopiedLeagueSnapshot(snapshot, 'mint', () => 'gen_B');
+    expect(duplicate.meta[0].franchiseGenerationId).toBe('gen_B');
+    expect(snapshot.meta[0].franchiseGenerationId).toBe('gen_A');
   });
 });

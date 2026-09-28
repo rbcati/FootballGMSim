@@ -54,7 +54,7 @@
 
 import { toWorker, toUI } from './protocol.js';
 import { captureSimulationScope, withSimulationScope } from './simulationScope.js';
-import { createFranchiseGenerationId, ensureFranchiseGenerationId } from '../state/franchiseGeneration.js';
+import { createFranchiseGenerationId, ensureFranchiseGenerationId, prepareCopiedLeagueSnapshot, shouldCopyLeagueForSave } from '../state/franchiseGeneration.js';
 import { createCommandRegistry } from './commandRegistry.js';
 import { createWorkerContext } from './workerContext.js';
 import { handleGetRoster } from './handlers/rosterHandlers.js';
@@ -2495,7 +2495,7 @@ async function handleDuplicateSave({ leagueId, name }, id) {
   }
   try {
     const newLeagueId = await createUniqueLeagueId();
-    await copyLeagueData(leagueId, newLeagueId);
+    await copyLeagueData(leagueId, newLeagueId, { generationMode: 'mint' });
     const original = await Saves.get(leagueId);
     const duplicateName = String(name || `${original?.name ?? 'League'} (Copy)`).trim().slice(0, 80);
     await Saves.save({
@@ -6751,15 +6751,13 @@ async function writeLeagueSnapshot(leagueId, snapshot) {
   });
 }
 
-async function copyLeagueData(sourceLeagueId, targetLeagueId) {
+async function copyLeagueData(sourceLeagueId, targetLeagueId, { generationMode } = {}) {
+  if (!['preserve', 'mint'].includes(generationMode)) {
+    throw new Error('copyLeagueData requires an explicit franchise generation mode.');
+  }
   configureActiveLeague(sourceLeagueId);
   await openDB();
-  const snapshot = await snapshotActiveLeagueDB();
-  if (Array.isArray(snapshot.meta)) {
-    snapshot.meta = snapshot.meta.map((row) => row?.id === 'league'
-      ? { ...row, franchiseGenerationId: createFranchiseGenerationId() }
-      : row);
-  }
+  const snapshot = prepareCopiedLeagueSnapshot(await snapshotActiveLeagueDB(), generationMode);
   await writeLeagueSnapshot(targetLeagueId, snapshot);
 }
 
@@ -6785,9 +6783,13 @@ async function handleSaveSlot({ slotKey }, id) {
     }
 
     await flushDirty();
-    await copyLeagueData(sourceLeagueId, slotKey);
-    configureActiveLeague(slotKey);
-    await openDB();
+    if (shouldCopyLeagueForSave(sourceLeagueId, slotKey)) {
+      // Saving/moving a franchise preserves its identity. In particular, the
+      // initial temporary NEW_LEAGUE id -> save_slot_1 transition is not a clone.
+      await copyLeagueData(sourceLeagueId, slotKey, { generationMode: 'preserve' });
+      configureActiveLeague(slotKey);
+      await openDB();
+    }
 
     const meta = cache.getMeta() ?? {};
     const userTeam = cache.getTeam(meta?.userTeamId);
@@ -6809,8 +6811,11 @@ async function handleSaveSlot({ slotKey }, id) {
     });
 
     _saveIsExplicitlyLoaded = true;
-    post(toUI.SAVED, {}, id);
+    // Establish the authoritative slot identity before resolving SAVE_SLOT.
+    // Worker message ordering then guarantees callers cannot start Week 1 with
+    // the UI ingress guard still scoped to the temporary NEW_LEAGUE id.
     post(toUI.STATE_UPDATE, buildViewState(), id);
+    post(toUI.SAVED, {}, id);
   } catch (err) {
     post(toUI.ERROR, { message: err?.message ?? 'Failed to save slot.' }, id);
   }
@@ -6839,7 +6844,9 @@ async function migrateLegacySaveToSlot1IfNeeded() {
   const legacy = saves.find(s => !isValidSlotKey(s?.id));
   if (!legacy?.id) return;
 
-  await copyLeagueData(legacy.id, 'save_slot_1');
+  // Slot migration moves the same franchise; preserve an existing generation
+  // (legacy LOAD_SAVE backfills one when absent).
+  await copyLeagueData(legacy.id, 'save_slot_1', { generationMode: 'preserve' });
   await Saves.save({ ...legacy, id: 'save_slot_1', lastPlayed: Date.now() });
 }
 

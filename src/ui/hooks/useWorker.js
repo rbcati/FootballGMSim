@@ -125,6 +125,18 @@ export function shouldAcceptBootScopedPayload(payload = {}, activeBootRequestId 
   return true;
 }
 
+export function syncAcceptedSimulationScope(baseline = {}, payload = {}) {
+  return {
+    stateEpoch: payload?._stateEpoch != null ? payload._stateEpoch : baseline.stateEpoch,
+    activeLeagueId: Object.prototype.hasOwnProperty.call(payload ?? {}, 'activeLeagueId')
+      ? payload.activeLeagueId
+      : baseline.activeLeagueId,
+    franchiseGenerationId: Object.prototype.hasOwnProperty.call(payload ?? {}, 'franchiseGenerationId')
+      ? payload.franchiseGenerationId
+      : baseline.franchiseGenerationId,
+  };
+}
+
 export function workerReducer(state, action) {
   switch (action.type) {
     case 'BUSY':
@@ -402,6 +414,18 @@ export function useWorker() {
             worker.postMessage(withRequestId(buildMsg(toWorker.REQUEST_FULL_STATE)));
             break;
           }
+          // SAVE_SLOT intentionally changes only the storage identity and sends
+          // it through this authoritative delta. Synchronize the ingress scope
+          // before a following Week 1 event can arrive; omitted partial fields
+          // retain their established baseline values.
+          const acceptedScope = syncAcceptedSimulationScope({
+            stateEpoch: lastAcceptedEpochRef.current,
+            activeLeagueId: acceptedSimulationLeagueIdRef.current,
+            franchiseGenerationId: acceptedFranchiseGenerationIdRef.current,
+          }, payload);
+          lastAcceptedEpochRef.current = acceptedScope.stateEpoch;
+          acceptedSimulationLeagueIdRef.current = acceptedScope.activeLeagueId;
+          acceptedFranchiseGenerationIdRef.current = acceptedScope.franchiseGenerationId;
           dispatch({ type: 'STATE_UPDATE', payload: merged, messageType: type });
           break;
         }

@@ -20,3 +20,20 @@ export function ensureFranchiseGenerationId(meta = {}, createId = createFranchis
     created: true,
   };
 }
+
+export function prepareCopiedLeagueSnapshot(snapshot = {}, generationMode, createId = createFranchiseGenerationId) {
+  if (!['preserve', 'mint'].includes(generationMode)) {
+    throw new Error('A franchise generation copy mode is required.');
+  }
+  if (generationMode === 'preserve' || !Array.isArray(snapshot.meta)) return snapshot;
+  return {
+    ...snapshot,
+    meta: snapshot.meta.map((row) => row?.id === 'league'
+      ? { ...row, franchiseGenerationId: createId() }
+      : row),
+  };
+}
+
+export function shouldCopyLeagueForSave(sourceLeagueId, targetLeagueId) {
+  return String(sourceLeagueId) !== String(targetLeagueId);
+}

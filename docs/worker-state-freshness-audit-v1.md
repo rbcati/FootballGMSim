@@ -67,3 +67,7 @@ routine refresh of the same franchise. A separately persisted
 FULL_STATE refreshes retain it, while new/replaced/imported franchises mint a
 new value. Transient clearing uses save ID plus this persistent identity, while
 scoped-message ingress requires save ID, franchise identity, and exact epoch.
+SAVE_SLOT is an identity-preserving move, not a clone: it publishes its
+authoritative STATE_UPDATE before SAVED so UI ingress adopts the final slot ID
+before Week 1 can begin. Same-slot saves flush in place; duplicate/import paths
+remain the only copy flows that mint a new franchise generation.
