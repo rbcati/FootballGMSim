@@ -104,11 +104,12 @@ export function buildReplacementUpdates(roster, starter, replacement, group) {
     : getScrimmageDepthRow(starter, group) ?? getPlayerScrimmageUnitRow(starter, group);
   if (!row || !isPlayerEligibleForDepthRow(replacement, row)) return [];
   const ordered = roster.filter((player) => {
-    const playerRow = group === 'SPECIAL'
-      ? getCanonicalDepthRow(player)
-      : getScrimmageDepthRow(player, group) ?? getPlayerScrimmageUnitRow(player, group);
+    if (group === 'SPECIAL') return getPersistedDepthAssignment(player)?.rowKey === row.key;
+    const playerRow = getScrimmageDepthRow(player, group) ?? getPlayerScrimmageUnitRow(player, group);
     return playerRow?.key === row.key && isPlayerEligibleForDepthRow(player, row);
-  }).sort((a, b) => Number(a?.depthChart?.order ?? a.depthOrder ?? 999) - Number(b?.depthChart?.order ?? b.depthOrder ?? 999));
+  }).sort((a, b) => group === 'SPECIAL'
+    ? Number(getPersistedDepthAssignment(a)?.order ?? 999) - Number(getPersistedDepthAssignment(b)?.order ?? 999)
+    : Number(a?.depthChart?.order ?? a.depthOrder ?? 999) - Number(b?.depthChart?.order ?? b.depthOrder ?? 999));
   const next = ordered.filter((player) => String(player.id) !== String(replacement.id));
   const index = Math.max(0, next.findIndex((player) => String(player.id) === String(starter.id)));
   next.splice(index, 0, replacement);

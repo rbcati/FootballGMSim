@@ -64,6 +64,34 @@ describe('UPDATE_DEPTH_CHART authority', () => {
     expect(cache.getTeam(teamId).depthChart.QB.slice(0, 2)).toEqual([two.id, one.id]);
   }, 180_000);
 
+  it('persists only the selected unassigned specialist through worker reconciliation', async () => {
+    const teamId = cache.getMeta().userTeamId;
+    const [starter, selected, untouched] = cache.getPlayersByTeam(teamId).filter((player) => player.pos !== 'QB').slice(0, 3);
+    expect([starter, selected, untouched].filter(Boolean)).toHaveLength(3);
+    const team = cache.getTeam(teamId);
+    const movedIds = new Set([starter.id, selected.id, untouched.id].map(String));
+    const depthChart = Object.fromEntries(Object.entries(team.depthChart ?? {}).map(([rowKey, ids]) => [
+      rowKey,
+      (ids ?? []).filter((playerId) => !movedIds.has(String(playerId))),
+    ]));
+    depthChart.K = [starter.id];
+    cache.updateTeam(teamId, { depthChart });
+    cache.updatePlayer(starter.id, { pos: 'K', depthOrder: 1, depthChart: { rowKey: 'K', order: 1 } });
+    cache.updatePlayer(selected.id, { pos: 'K', depthOrder: null, depthChart: null });
+    cache.updatePlayer(untouched.id, { pos: 'K', depthOrder: null, depthChart: null });
+
+    const response = await send(toWorker.UPDATE_DEPTH_CHART, { updates: [
+      { playerId: selected.id, rowKey: 'K', newOrder: 1 },
+      { playerId: starter.id, rowKey: 'K', newOrder: 2 },
+    ] });
+    expect(response.type).toBe(toUI.STATE_UPDATE);
+    expect(cache.getTeam(teamId).depthChart.K.slice(0, 2)).toEqual([selected.id, starter.id]);
+    expect(cache.getPlayer(selected.id).depthChart).toMatchObject({ rowKey: 'K', order: 1 });
+    expect(cache.getPlayer(starter.id).depthChart).toMatchObject({ rowKey: 'K', order: 2 });
+    expect(Object.values(cache.getTeam(teamId).depthChart).flat().map(String)).not.toContain(String(untouched.id));
+    expect(cache.getPlayer(untouched.id)?.depthChart?.rowKey).not.toBe('K');
+  }, 180_000);
+
   it('rejects presentation-only or ineligible row keys atomically', async () => {
     const teamId = cache.getMeta().userTeamId;
     const qb = cache.getPlayersByTeam(teamId).find((player) => player.pos === 'QB');

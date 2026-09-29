@@ -127,16 +127,18 @@ describe('LineupCommandCenter', () => {
     const specialists = [
       { id: `${rowKey}-1`, name: `${label} 1`, pos, teamId: 1, ovr: 71, attributesV2: attrs(71), ratings: {}, depthChart: { rowKey, order: 1 } },
       { id: `${rowKey}-2`, name: `${label} 2`, pos, teamId: 1, ovr: 72, attributesV2: attrs(72), ratings: {} },
+      { id: `${rowKey}-3`, name: `${label} 3`, pos, teamId: 1, ovr: 73, attributesV2: attrs(73), ratings: {} },
     ];
     const updateDepthChart = vi.fn(async () => ({}));
     const view = render(<LineupCommandCenter team={team} roster={specialists} actions={{ updateDepthChart }} />);
     fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));
     fireEvent.click(view.getByRole('button', { name: 'Change' }));
     fireEvent.click(view.getByText(`${label} 2`));
-    await waitFor(() => expect(updateDepthChart).toHaveBeenCalledWith(expect.arrayContaining([
+    await waitFor(() => expect(updateDepthChart).toHaveBeenCalledWith([
       { playerId: `${rowKey}-2`, rowKey, newOrder: 1 },
       { playerId: `${rowKey}-1`, rowKey, newOrder: 2 },
-    ])));
+    ]));
+    expect(JSON.stringify(updateDepthChart.mock.calls)).not.toContain(`${rowKey}-3`);
     expect(JSON.stringify(updateDepthChart.mock.calls)).not.toContain('"ST"');
   });
 });

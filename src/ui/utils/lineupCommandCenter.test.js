@@ -59,4 +59,28 @@ describe('lineup command center derivation', () => {
     expect(getPersistedDepthAssignment({ id: 911, pos: 'K' })).toBeNull();
     expect(getPersistedDepthAssignment({ id: 912, pos: 'WR', depthChart: { rowKey: 'K', order: 1 } })).toBeNull();
   });
+
+  it.each([
+    ['K', 'K'],
+    ['P', 'P'],
+    ['RS', 'WR'],
+  ])('adds only the selected unassigned %s candidate to the persisted row', (rowKey, pos) => {
+    const starter = make(`${rowKey}-1`, pos, rowKey, 1, 70);
+    const selected = { ...make(`${rowKey}-2`, pos, rowKey, 2, 72), depthChart: undefined, depthOrder: undefined };
+    const untouched = { ...make(`${rowKey}-3`, pos, rowKey, 3, 74), depthChart: undefined, depthOrder: undefined };
+    expect(buildReplacementUpdates([starter, selected, untouched], starter, selected, 'SPECIAL')).toEqual([
+      { playerId: `${rowKey}-2`, rowKey, newOrder: 1 },
+      { playerId: `${rowKey}-1`, rowKey, newOrder: 2 },
+    ]);
+  });
+
+  it('preserves an existing same-row specialist backup without assigning unrelated eligible players', () => {
+    const starter = make('K-1', 'K', 'K', 1, 70);
+    const backup = make('K-2', 'K', 'K', 2, 72);
+    const untouched = { ...make('K-3', 'K', 'K', 3, 74), depthChart: undefined, depthOrder: undefined };
+    expect(buildReplacementUpdates([starter, backup, untouched], starter, backup, 'SPECIAL')).toEqual([
+      { playerId: 'K-2', rowKey: 'K', newOrder: 1 },
+      { playerId: 'K-1', rowKey: 'K', newOrder: 2 },
+    ]);
+  });
 });
