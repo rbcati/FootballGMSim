@@ -98,16 +98,18 @@ describe('LineupCommandCenter', () => {
     }));
     const returners = [
       { id: 301, name: 'Current Returner', pos: 'WR', teamId: 1, ovr: 70, attributesV2: attrs(70), ratings: {}, depthChart: { rowKey: 'RS', order: 1 } },
-      { id: 302, name: 'Backup Returner', pos: 'WR', teamId: 1, ovr: 72, attributesV2: attrs(72), ratings: {}, depthChart: { rowKey: 'RS', order: 2 } },
+      { id: 302, name: 'Backup Returner', pos: 'WR', teamId: 1, ovr: 72, attributesV2: attrs(72), ratings: {} },
+      { id: 303, name: 'Kicker Returner', pos: 'WR', secondaryPositions: ['K'], teamId: 1, ovr: 71, attributesV2: attrs(71), ratings: {}, depthChart: { rowKey: 'K', order: 1 } },
     ];
     const updateDepthChart = vi.fn(async () => ({}));
     const view = render(<LineupCommandCenter team={team} roster={[...offense, ...defense, ...returners]} actions={{ updateDepthChart }} />);
     fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));
-    fireEvent.click(view.getByRole('button', { name: 'Change' }));
+    fireEvent.click(view.getAllByRole('button', { name: 'Change' }).at(-1));
     const alternatives = view.getByLabelText('Replace Current Returner');
     expect(alternatives.textContent).toContain('Backup Returner');
     expect(alternatives.textContent).not.toContain('Starting WR');
     expect(alternatives.textContent).not.toContain('Starting CB');
+    expect(alternatives.textContent).not.toContain('Kicker Returner');
     expect(alternatives.textContent).not.toContain('FIT');
     fireEvent.click(view.getByText('Backup Returner'));
     await waitFor(() => expect(updateDepthChart).toHaveBeenCalledWith([
@@ -120,10 +122,12 @@ describe('LineupCommandCenter', () => {
   it.each([
     ['K', 'Kicker'],
     ['P', 'Punter'],
-    ['RS', 'Returner'],
-  ])('edits the canonical %s special-teams row without inventing ST', async (rowKey, label) => {
+  ])('offers an unassigned eligible %s and persists the canonical row without inventing ST', async (rowKey, label) => {
     const pos = rowKey === 'RS' ? 'WR' : rowKey;
-    const specialists = [1, 2].map((order) => ({ id: `${rowKey}-${order}`, name: `${label} ${order}`, pos, teamId: 1, ovr: 70 + order, attributesV2: attrs(70 + order), ratings: {}, depthChart: { rowKey, order } }));
+    const specialists = [
+      { id: `${rowKey}-1`, name: `${label} 1`, pos, teamId: 1, ovr: 71, attributesV2: attrs(71), ratings: {}, depthChart: { rowKey, order: 1 } },
+      { id: `${rowKey}-2`, name: `${label} 2`, pos, teamId: 1, ovr: 72, attributesV2: attrs(72), ratings: {} },
+    ];
     const updateDepthChart = vi.fn(async () => ({}));
     const view = render(<LineupCommandCenter team={team} roster={specialists} actions={{ updateDepthChart }} />);
     fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));

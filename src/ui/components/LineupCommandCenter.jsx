@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { DEPTH_CHART_ROWS, getPlayerScrimmageUnitRow, getScrimmageDepthRow, isPlayerEligibleForDepthRow } from '../../core/depthChart.js';
 import { calculatePlayerSchemeFit } from '../../core/scheme-core.js';
 import { isAvailableForGameDay } from '../../core/holdouts/holdoutEngine.js';
-import { buildReplacementUpdates, deriveEditableCanonicalLineup, deriveLineupRatingSnapshot } from '../utils/lineupCommandCenter.js';
+import { buildReplacementUpdates, deriveEditableCanonicalLineup, deriveLineupRatingSnapshot, getPersistedDepthAssignment } from '../utils/lineupCommandCenter.js';
 import { deriveRosterReadinessModel } from '../utils/rosterReadinessModel.js';
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
 
@@ -37,7 +37,7 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
     const starterIds = new Set([...offensePlayers, ...defensePlayers, ...specialPlayers].map((player) => String(player.id)));
     return roster.filter((candidate) => String(candidate.id) !== String(starter.id)
       && !starterIds.has(String(candidate.id))
-      && (group !== 'SPECIAL' || candidate?.depthChart?.rowKey === row.key)
+      && (group !== 'SPECIAL' || [null, row.key].includes(getPersistedDepthAssignment(candidate)?.rowKey ?? null))
       && isPlayerEligibleForDepthRow(candidate, row) && !unavailable(candidate, team?.id))
       .sort((a, b) => Number(b.ovr ?? 0) - Number(a.ovr ?? 0));
   };

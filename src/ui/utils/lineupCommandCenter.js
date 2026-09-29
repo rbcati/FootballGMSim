@@ -89,6 +89,15 @@ export function deriveEditableCanonicalLineup({ roster = [], simulationStarterId
   });
 }
 
+/** Return only real persisted depth ownership; never infer assignment from position. */
+export function getPersistedDepthAssignment(player = {}) {
+  const rowKey = String(player?.depthChart?.rowKey ?? player?.depthRowKey ?? '');
+  const order = Number(player?.depthChart?.order ?? player?.depthOrder);
+  const row = DEPTH_CHART_ROWS.find((entry) => entry.key === rowKey);
+  if (!row || !Number.isFinite(order) || order <= 0 || !isPlayerEligibleForDepthRow(player, row)) return null;
+  return { rowKey: row.key, order };
+}
+
 export function buildReplacementUpdates(roster, starter, replacement, group) {
   const row = group === 'SPECIAL'
     ? getCanonicalDepthRow(starter)

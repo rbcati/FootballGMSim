@@ -1,4 +1,5 @@
 import { DEPTH_CHART_ROWS, autoBuildDepthChart, depthWarnings } from '../../core/depthChart.js';
+import { isAvailableForGameDay } from '../../core/holdouts/holdoutEngine.js';
 
 function toNumber(value, fallback = 0) {
   const parsed = Number(value);
@@ -101,10 +102,11 @@ export function deriveRosterReadinessModel({
     const missing = ids.length === 0 ? 1 : 0;
     const thin = ids.length < row.min ? 1 : 0;
     const injuredStarter = starter && isInjured(starter) ? 1 : 0;
-    const riskScore = (missing * 100) + (injuredStarter * 45) + (thin * 20) + (injuredInRow * 8);
+    const unavailableStarter = starter && (!isAvailableForGameDay(starter, { teamId: team.id }) || injuredStarter) ? 1 : 0;
+    const riskScore = (missing * 100) + (unavailableStarter * 45) + (thin * 20) + (injuredInRow * 8);
     let reason = 'Stable';
     if (missing) reason = 'No assigned starter';
-    else if (injuredStarter) reason = 'Starter injured';
+    else if (unavailableStarter) reason = 'Starter unavailable';
     else if (thin) reason = `Depth thin (${ids.length}/${row.min})`;
     else if (injuredInRow > 1) reason = `${injuredInRow} injured in group`;
 
@@ -116,11 +118,12 @@ export function deriveRosterReadinessModel({
       missing,
       thin,
       injuredStarter,
+      unavailableStarter,
     };
   });
 
   const missingStarterCount = perRowRisk.reduce((sum, row) => sum + row.missing, 0);
-  const injuryReplacementConcerns = perRowRisk.reduce((sum, row) => sum + row.injuredStarter + (row.thin && row.injuredStarter ? 1 : 0), 0);
+  const injuryReplacementConcerns = perRowRisk.reduce((sum, row) => sum + row.unavailableStarter + (row.thin && row.unavailableStarter ? 1 : 0), 0);
   const riskyGroups = topRiskGroups(perRowRisk.filter((row) => row.riskScore > 0));
   const staffedGroups = DEPTH_CHART_ROWS.length - missingStarterCount;
 
