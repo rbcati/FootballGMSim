@@ -18,14 +18,14 @@ describe('TeamHub staff philosophy card', () => {
       ...baseLeague,
       teams: [{ ...baseLeague.teams[0], staff: { headCoach: { name: 'Jordan Shaw', offensivePhilosophy: 'VERTICAL', defensivePhilosophy: 'HYBRID', traits: ['SCHEME_TEACHER'] } } }],
     };
-    const html = renderToString(<TeamHub league={league} actions={{}} />);
+    const html = renderToString(<TeamHub league={league} actions={{}} initialSection="Overview" />);
     expect(html).toContain('Staff philosophy');
     expect(html).toContain('Jordan Shaw');
     expect(html).toContain('Vertical passing offense');
   });
 
   it('renders safe fallback when staff is missing', () => {
-    const html = renderToString(<TeamHub league={baseLeague} actions={{}} />);
+    const html = renderToString(<TeamHub league={baseLeague} actions={{}} initialSection="Overview" />);
     expect(html).toContain('Staff philosophy');
     expect(html).toContain('Interim Staff');
     expect(html).toContain('Balanced offense');

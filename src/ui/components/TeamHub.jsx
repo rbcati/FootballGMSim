@@ -3,6 +3,7 @@ import Roster from './Roster.jsx';
 import ContractCenter from './ContractCenter.jsx';
 import SectionSubnav from './SectionSubnav.jsx';
 import InjuryReport from './InjuryReport.jsx';
+import LineupCommandCenter from './LineupCommandCenter.jsx';
 import { SectionCard, CtaRow, StatusChip, CompactListRow, HeroCard, StatStrip, SectionHeader, CompactInsightCard } from './ScreenSystem.jsx';
 import { derivePlayerContractFinancials } from '../utils/contractFormatting.js';
 import { deriveTeamCapSnapshot, formatMoneyM } from '../utils/numberFormatting.js';
@@ -12,12 +13,12 @@ import { buildStaffPhilosophySummary } from '../../core/staff/staffPhilosophy.js
 import { buildGameDayReadinessModel } from '../utils/gameDayReadinessModel.js';
 import { getNextUserGame, getPreviousUserGame } from '../utils/userWeeklyGames.js';
 
-const TEAM_SECTIONS = ['Overview', 'Roster / Depth', 'Contracts', 'Development', 'Injuries'];
+export const TEAM_SECTIONS = ['Lineup', 'Overview', 'Roster / Depth', 'Contracts', 'Development', 'Injuries'];
 const CRITICAL_POSITION_MIN = { QB: 2, RB: 3, WR: 5, TE: 3, OL: 8, DL: 8, LB: 6, CB: 5, S: 4, K: 1, P: 1 };
 
 function normalizeSection(section) {
-  if (typeof section !== 'string') return 'Overview';
-  return TEAM_SECTIONS.find((entry) => entry.toLowerCase() === section.toLowerCase()) ?? 'Overview';
+  if (typeof section !== 'string') return 'Lineup';
+  return TEAM_SECTIONS.find((entry) => entry.toLowerCase() === section.toLowerCase()) ?? 'Lineup';
 }
 
 function getGameId(game) {
@@ -60,7 +61,7 @@ function makeMatchupLabel(game, team, currentSeason) {
   return `${isHome ? 'vs' : '@'} ${oppAbbr} · ${historicalSeason}Week ${game.week ?? '—'}`;
 }
 
-export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSelect, onNavigate = null, initialSection = 'Overview' }) {
+export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSelect, onNavigate = null, initialSection = 'Lineup' }) {
   const [subtab, setSubtab] = useState(() => normalizeSection(initialSection));
   const [rosterMode, setRosterMode] = useState('roster');
   const team = useMemo(() => (league?.teams ?? []).find((t) => Number(t.id) === Number(league?.userTeamId)) ?? null, [league]);
@@ -124,7 +125,7 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
               : 'No unavailable starters detected.'}</small>
           </div>
           {gameDayReadiness.blockingLineupIssue && (
-            <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setSubtab('Roster / Depth'); setRosterMode('depth'); }}>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setSubtab('Lineup')}>
               Review lineup
             </button>
           )}
@@ -136,6 +137,17 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
       </HeroCard>
 
       <SectionSubnav items={TEAM_SECTIONS} activeItem={subtab} onChange={setSubtab} sticky />
+
+      {subtab === 'Lineup' && (
+        <LineupCommandCenter
+          league={league}
+          team={team}
+          roster={roster}
+          actions={actions}
+          onPlayerSelect={onPlayerSelect}
+          onNavigate={onNavigate}
+        />
+      )}
 
       {subtab === 'Overview' && (
         <div className="app-screen-stack">

@@ -3,7 +3,7 @@ const ROSTER_VIEWS = new Set(["table", "cards", "depth"]);
 const ROSTER_FILTERS = new Set(["ALL", "EXPIRING", "STARTERS", "DEPTH", "INJURED", "DEVELOPMENT"]);
 const STAT_FAMILIES = new Set(["passing", "rushing", "receiving", "defense"]);
 const LEAGUE_SECTIONS = new Set(["Overview", "Results", "Standings", "News", "Leaders"]);
-const TEAM_SECTIONS = new Set(["Overview", "Roster / Depth", "Contracts", "Development", "Injuries"]);
+const TEAM_SECTIONS = new Set(["Lineup", "Overview", "Roster / Depth", "Contracts", "Development", "Injuries"]);
 
 
 export function buildGameBookDestination(gameId) {
@@ -80,7 +80,7 @@ export function normalizeManagementDestination(tabToken) {
   if (tab === "Team") {
     normalized.tab = "Team";
     const canonicalSection = [...TEAM_SECTIONS].find((v) => v.toLowerCase() === state.toLowerCase());
-    normalized.teamSection = canonicalSection ?? "Overview";
+    normalized.teamSection = canonicalSection ?? "Lineup";
     return normalized;
   }
 

@@ -39,7 +39,7 @@ describe('shared game-day readiness consumers', () => {
     expect(readiness.textContent).toContain('2 unavailable');
     expect(readiness.textContent).toContain('2 starter unavailable');
     fireEvent.click(readiness);
-    expect(onNavigate).toHaveBeenCalledWith('Team:Roster / Depth');
+    expect(onNavigate).toHaveBeenCalledWith('Team:Lineup');
     expect(screen.getByTestId('advance-week-cta').getAttribute('aria-label')).toMatch(/^Resolve \d+ blockers? before advancing$/);
   });
 
@@ -49,12 +49,8 @@ describe('shared game-day readiness consumers', () => {
     expect(within(readiness).getByText('Lineup action required')).toBeTruthy();
     expect(readiness.textContent).toContain('2 starters unavailable: QB QB One, WR Wide One');
     fireEvent.click(within(readiness).getByRole('button', { name: /review lineup/i }));
-    expect(screen.getByText('Weekly lineup decisions')).toBeTruthy();
-    const destination = screen.getByTestId('team-hub-unavailable-starters');
-    expect(destination.textContent).toContain('2 starters unavailable');
-    expect(destination.textContent).toContain('QB QB One');
-    expect(destination.textContent).toContain('WR Wide One');
-    expect(screen.queryByText('Lineup passes readiness check')).toBeNull();
+    expect(screen.getByTestId('lineup-command-center')).toBeTruthy();
+    expect(screen.queryByText('Weekly lineup decisions')).toBeNull();
   });
 
   it('reports nonblocking availability as ready without routing it as a blocker', () => {

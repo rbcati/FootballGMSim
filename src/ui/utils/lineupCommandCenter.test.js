@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { calculatePlayerSchemeFit, DEFENSIVE_SCHEMES, OFFENSIVE_SCHEMES } from '../../core/scheme-core.js';
-import { buildReplacementUpdates, deriveLineupRatingSnapshot } from './lineupCommandCenter.js';
+import { buildReplacementUpdates, deriveEditableCanonicalLineup, deriveLineupRatingSnapshot, getPersistedDepthAssignment } from './lineupCommandCenter.js';
 
 const attributes = (rating) => ({ throwAccuracyShort: rating, throwAccuracyDeep: rating, throwPower: rating, release: rating, routeRunning: rating, separation: rating, catchInTraffic: rating, ballTracking: rating, decisionMaking: rating, pocketPresence: rating, passBlockFootwork: rating, passBlockStrength: rating, passRush: rating, pressCoverage: rating, zoneCoverage: rating });
 const make = (id, pos, rowKey, order, rating, extra = {}) => ({ id, name: `P${id}`, pos, ovr: rating, teamId: 1, attributesV2: attributes(rating), ratings: { throwPower: rating, throwAccuracy: rating, awareness: rating, speed: rating, acceleration: rating, catching: rating, catchInTraffic: rating, passBlock: rating, runBlock: rating, runStop: rating, passRushPower: rating, passRushSpeed: rating, coverage: rating, intelligence: rating }, depthChart: { rowKey, order }, ...extra });
@@ -50,5 +50,37 @@ describe('lineup command center derivation', () => {
     const result = deriveLineupRatingSnapshot({ team, roster: [...roster.filter((p) => p.depthChart.rowKey !== 'QB'), unavailableStar, available] });
     expect(result.offenseStarterIds).not.toContain(900);
     expect(result.offenseStarterIds).toContain(901);
+    const editable = deriveEditableCanonicalLineup({ roster: [...roster.filter((p) => p.depthChart.rowKey !== 'QB'), unavailableStar, available], simulationStarterIds: result.offenseStarterIds, group: 'OFFENSE' });
+    expect(editable.find((player) => player.depthChart.rowKey === 'QB')?.id).toBe(900);
+  });
+
+  it('distinguishes persisted depth ownership from positional eligibility', () => {
+    expect(getPersistedDepthAssignment(make(910, 'K', 'K', 1, 70))).toEqual({ rowKey: 'K', order: 1 });
+    expect(getPersistedDepthAssignment({ id: 911, pos: 'K' })).toBeNull();
+    expect(getPersistedDepthAssignment({ id: 912, pos: 'WR', depthChart: { rowKey: 'K', order: 1 } })).toBeNull();
+  });
+
+  it.each([
+    ['K', 'K'],
+    ['P', 'P'],
+    ['RS', 'WR'],
+  ])('adds only the selected unassigned %s candidate to the persisted row', (rowKey, pos) => {
+    const starter = make(`${rowKey}-1`, pos, rowKey, 1, 70);
+    const selected = { ...make(`${rowKey}-2`, pos, rowKey, 2, 72), depthChart: undefined, depthOrder: undefined };
+    const untouched = { ...make(`${rowKey}-3`, pos, rowKey, 3, 74), depthChart: undefined, depthOrder: undefined };
+    expect(buildReplacementUpdates([starter, selected, untouched], starter, selected, 'SPECIAL')).toEqual([
+      { playerId: `${rowKey}-2`, rowKey, newOrder: 1 },
+      { playerId: `${rowKey}-1`, rowKey, newOrder: 2 },
+    ]);
+  });
+
+  it('preserves an existing same-row specialist backup without assigning unrelated eligible players', () => {
+    const starter = make('K-1', 'K', 'K', 1, 70);
+    const backup = make('K-2', 'K', 'K', 2, 72);
+    const untouched = { ...make('K-3', 'K', 'K', 3, 74), depthChart: undefined, depthOrder: undefined };
+    expect(buildReplacementUpdates([starter, backup, untouched], starter, backup, 'SPECIAL')).toEqual([
+      { playerId: 'K-2', rowKey: 'K', newOrder: 1 },
+      { playerId: 'K-1', rowKey: 'K', newOrder: 2 },
+    ]);
   });
 });

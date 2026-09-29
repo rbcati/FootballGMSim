@@ -1,7 +1,7 @@
 import { aggregateTeamUnitsFromRoster } from '../../core/sim/weekSimulationBridge.ts';
 import { ensureAttributesV2 } from '../../core/migration/attributeMigrator.ts';
 import { getEffectivePlayerForRole } from '../../core/sim/positionalMultipliers.js';
-import { getPlayerScrimmageUnitRow, getScrimmageDepthRow, isPlayerEligibleForDepthRow } from '../../core/depthChart.js';
+import { DEPTH_CHART_ROWS, getCanonicalDepthRow, getCanonicalScrimmageAssignment, getPlayerScrimmageUnitRow, getScrimmageDepthRow, isPlayerEligibleForDepthRow } from '../../core/depthChart.js';
 import { calculateOverallFromAttributesV2 } from '../../worker/playerDerivedRatings.js';
 import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES, calculatePlayerSchemeFit } from '../../core/scheme-core.js';
 
@@ -61,13 +61,55 @@ export function deriveLineupRatingSnapshot({ team = {}, roster = [] } = {}) {
   };
 }
 
+/**
+ * Return the persisted scrimmage assignments that the lineup editor owns.
+ * Simulation-selected ids only determine each row's slot count; player choice
+ * always follows canonical row/order metadata, including unavailable players.
+ */
+export function deriveEditableCanonicalLineup({ roster = [], simulationStarterIds = [], group } = {}) {
+  const normalizedGroup = String(group ?? '').toUpperCase();
+  const byId = new Map(roster.map((player) => [String(player?.id), player]));
+  const selectedCounts = new Map();
+  for (const id of simulationStarterIds) {
+    const assignment = getCanonicalScrimmageAssignment(byId.get(String(id)));
+    const row = DEPTH_CHART_ROWS.find((entry) => entry.key === assignment?.rowKey);
+    if (row?.group === normalizedGroup) selectedCounts.set(row.key, (selectedCounts.get(row.key) ?? 0) + 1);
+  }
+
+  return DEPTH_CHART_ROWS.filter((row) => row.group === normalizedGroup).flatMap((row) => {
+    const assigned = roster.filter((player) => getCanonicalScrimmageAssignment(player)?.rowKey === row.key)
+      .sort((a, b) => Number(getCanonicalScrimmageAssignment(a)?.order ?? 999) - Number(getCanonicalScrimmageAssignment(b)?.order ?? 999));
+    if (!assigned.length) return simulationStarterIds.map((id) => byId.get(String(id)))
+      .filter((player) => {
+        const persistedRow = DEPTH_CHART_ROWS.find((entry) => entry.key === player?.depthChart?.rowKey);
+        return persistedRow?.group !== 'SPECIAL' && getPlayerScrimmageUnitRow(player, normalizedGroup)?.key === row.key;
+      });
+    const slotCount = Math.max(selectedCounts.get(row.key) ?? 0, assigned[0] && getCanonicalScrimmageAssignment(assigned[0])?.order === 1 ? 1 : 0);
+    return assigned.slice(0, slotCount);
+  });
+}
+
+/** Return only real persisted depth ownership; never infer assignment from position. */
+export function getPersistedDepthAssignment(player = {}) {
+  const rowKey = String(player?.depthChart?.rowKey ?? player?.depthRowKey ?? '');
+  const order = Number(player?.depthChart?.order ?? player?.depthOrder);
+  const row = DEPTH_CHART_ROWS.find((entry) => entry.key === rowKey);
+  if (!row || !Number.isFinite(order) || order <= 0 || !isPlayerEligibleForDepthRow(player, row)) return null;
+  return { rowKey: row.key, order };
+}
+
 export function buildReplacementUpdates(roster, starter, replacement, group) {
-  const row = getScrimmageDepthRow(starter, group) ?? getPlayerScrimmageUnitRow(starter, group);
+  const row = group === 'SPECIAL'
+    ? getCanonicalDepthRow(starter)
+    : getScrimmageDepthRow(starter, group) ?? getPlayerScrimmageUnitRow(starter, group);
   if (!row || !isPlayerEligibleForDepthRow(replacement, row)) return [];
   const ordered = roster.filter((player) => {
+    if (group === 'SPECIAL') return getPersistedDepthAssignment(player)?.rowKey === row.key;
     const playerRow = getScrimmageDepthRow(player, group) ?? getPlayerScrimmageUnitRow(player, group);
     return playerRow?.key === row.key && isPlayerEligibleForDepthRow(player, row);
-  }).sort((a, b) => Number(a?.depthChart?.order ?? a.depthOrder ?? 999) - Number(b?.depthChart?.order ?? b.depthOrder ?? 999));
+  }).sort((a, b) => group === 'SPECIAL'
+    ? Number(getPersistedDepthAssignment(a)?.order ?? 999) - Number(getPersistedDepthAssignment(b)?.order ?? 999)
+    : Number(a?.depthChart?.order ?? a.depthOrder ?? 999) - Number(b?.depthChart?.order ?? b.depthOrder ?? 999));
   const next = ordered.filter((player) => String(player.id) !== String(replacement.id));
   const index = Math.max(0, next.findIndex((player) => String(player.id) === String(starter.id)));
   next.splice(index, 0, replacement);

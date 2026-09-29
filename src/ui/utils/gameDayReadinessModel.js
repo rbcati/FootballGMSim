@@ -19,6 +19,6 @@ export function buildGameDayReadinessModel({ roster = [], teamId = null } = {}) 
     // Availability concerns are useful context, but only an invalid lineup is a blocker.
     status: facts.blockingLineupIssue ? 'blocking' : 'ready',
     hasAvailabilityConcerns: facts.unavailablePlayers.length > 0,
-    actionDestination: 'Team:Roster / Depth',
+    actionDestination: 'Team:Lineup',
   };
 }

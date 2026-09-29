@@ -687,7 +687,7 @@ export default function LeagueDashboard({
   }, [activeTab]);
 
   const [leagueInitialSection, setLeagueInitialSection] = useState("Overview");
-  const [teamInitialSection, setTeamInitialSection] = useState("Overview");
+  const [teamInitialSection, setTeamInitialSection] = useState("Lineup");
   const [newsSubtab, setNewsSubtab] = useState("All");
   const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 767 : false));
 
@@ -821,7 +821,11 @@ export default function LeagueDashboard({
   const ownerApprovalText = formatPercent(ownerApproval, "—");
   const pressure = deriveFranchisePressure(league);
   const shell = getAppShellContext(league);
-  const teamSummaryNav = () => setActiveTab("Roster Hub");
+  const openPrimaryTeam = () => {
+    setTeamInitialSection("Lineup");
+    setActiveTab("Team");
+  };
+  const teamSummaryNav = openPrimaryTeam;
   const openGameDetail = (gameId, sourceTab = activeTab) => {
     if (!gameId) return;
     const source = sourceTab === "Weekly Results" ? "weekly-results" : "internal";
@@ -841,6 +845,7 @@ export default function LeagueDashboard({
     const normalizedSection = normalizeShellSectionId(sectionId);
     const group = NAV_GROUPS.find((entry) => entry.id === normalizedSection);
     const targetTab = group?.tabs?.find((tab) => TABS.includes(tab)) ?? "HQ";
+    if (normalizedSection === SHELL_SECTIONS.team) setTeamInitialSection("Lineup");
     setGameDetailModal({ open: false, gameId: null, source: null });
     onDashboardNavigation?.(targetTab);
     setActiveTab(targetTab);
@@ -976,7 +981,7 @@ export default function LeagueDashboard({
                 key={tab}
                 data-testid={`section-tab-${toTestId(tab)}`}
                 className={`standings-tab${activeTab === tab ? " active" : ""}`}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => tab === "Team" ? openPrimaryTeam() : setActiveTab(tab)}
                 aria-current={activeTab === tab ? "page" : undefined}
                 style={{ flexShrink: 0, fontSize: "11px", padding: "7px 10px" }}
               >

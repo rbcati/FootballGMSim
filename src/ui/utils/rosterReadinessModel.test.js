@@ -15,6 +15,23 @@ function makePlayer(id, pos, overrides = {}) {
   };
 }
 
+function completeLineup(starterOverride = {}, backupOverride = {}) {
+  const rows = [
+    ['QB', 'QB'], ['RB', 'RB'], ['WR', 'WR'], ['TE', 'TE'], ['OL', 'OL'],
+    ['EDGE', 'DE'], ['IDL', 'DT'], ['LB', 'LB'], ['CB', 'CB'], ['S', 'S'],
+    ['K', 'K'], ['P', 'P'], ['RS', 'WR'],
+  ];
+  const starters = rows.map(([rowKey, pos], index) => makePlayer(index + 1, pos, {
+    depthChart: { rowKey, order: 1 },
+    ...(rowKey === 'QB' ? starterOverride : {}),
+  }));
+  const backup = makePlayer(99, 'QB', { depthChart: { rowKey: 'QB', order: 2 }, ...backupOverride });
+  return {
+    roster: [...starters, backup],
+    assignments: { ...Object.fromEntries(rows.map(([rowKey], index) => [rowKey, [index + 1]])), QB: [1, 99] },
+  };
+}
+
 describe('deriveRosterReadinessModel', () => {
   it('returns ready status for a healthy balanced roster', () => {
     const roster = [makePlayer(1, 'QB'), makePlayer(2, 'RB'), makePlayer(3, 'WR'), makePlayer(4, 'TE'), makePlayer(5, 'OL'), makePlayer(6, 'DE', { depthChart: { rowKey: 'EDGE', order: 1 } }), makePlayer(7, 'DT', { depthChart: { rowKey: 'IDL', order: 1 } }), makePlayer(8, 'LB'), makePlayer(9, 'CB'), makePlayer(10, 'S'), makePlayer(11, 'K'), makePlayer(12, 'P')];
@@ -51,6 +68,39 @@ describe('deriveRosterReadinessModel', () => {
     const model = deriveRosterReadinessModel({ team, roster });
     expect(model.injuryReplacementConcerns).toBeGreaterThan(0);
     expect(model.status).not.toBe('ready');
+  });
+
+  it('clears the canonical unavailable-starter blocker after promoting a healthy backup', () => {
+    const rows = [
+      ['QB', 'QB'], ['RB', 'RB'], ['WR', 'WR'], ['TE', 'TE'], ['OL', 'OL'],
+      ['EDGE', 'DE'], ['IDL', 'DT'], ['LB', 'LB'], ['CB', 'CB'], ['S', 'S'],
+      ['K', 'K'], ['P', 'P'], ['RS', 'WR'],
+    ];
+    const injuredQb = makePlayer(1, 'QB', { injuryWeeksRemaining: 2 });
+    const healthyQb = makePlayer(2, 'QB', { depthChart: { rowKey: 'QB', order: 2 } });
+    const others = rows.slice(1).map(([rowKey, pos], index) => makePlayer(index + 3, pos, { depthChart: { rowKey, order: 1 } }));
+    const roster = [injuredQb, healthyQb, ...others];
+    const assignments = { QB: [1, 2], ...Object.fromEntries(rows.slice(1).map(([rowKey], index) => [rowKey, [index + 3]])) };
+    expect(deriveRosterReadinessModel({ team, roster, assignments }).safeToMarkLineupChecked).toBe(false);
+
+    const promoted = roster.map((player) => player.id === 1
+      ? { ...player, depthChart: { rowKey: 'QB', order: 2 } }
+      : player.id === 2 ? { ...player, depthChart: { rowKey: 'QB', order: 1 } } : player);
+    expect(deriveRosterReadinessModel({ team, roster: promoted, assignments: { ...assignments, QB: [2, 1] } }).safeToMarkLineupChecked).toBe(true);
+  });
+
+  it.each([
+    ['injured:true', { injured: true }],
+    ['active holdout', { holdout: { active: true } }],
+    ['practice squad status', { status: 'practice_squad' }],
+  ])('uses game-day availability so an %s starter cannot complete lineup prep', (_label, starterOverride) => {
+    const { roster, assignments } = completeLineup(starterOverride);
+    expect(deriveRosterReadinessModel({ team, roster, assignments }).safeToMarkLineupChecked).toBe(false);
+  });
+
+  it('does not block lineup completion for an unavailable backup', () => {
+    const { roster, assignments } = completeLineup({}, { injured: true, holdout: { active: true } });
+    expect(deriveRosterReadinessModel({ team, roster, assignments }).safeToMarkLineupChecked).toBe(true);
   });
 
   it('handles empty roster and missing team fallback safely', () => {

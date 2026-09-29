@@ -256,7 +256,7 @@ export default function FranchiseHQ({ league, lastResults = [], lastSimWeek = nu
     if (!hasBlockingLineupIssue) markWeeklyPrepStep(league, 'lineupChecked', true);
     setLineupToast(hasBlockingLineupIssue ? 'Depth chart still has missing starters.' : 'Lineup is valid. Opening depth chart.');
     window.setTimeout(() => setLineupToast(null), 2200);
-    onNavigate?.('Team:Roster / Depth');
+    onNavigate?.('Team:Lineup');
   };
 
   const handleGamePlanTile = () => {
