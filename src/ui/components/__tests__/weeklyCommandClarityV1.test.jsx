@@ -180,7 +180,7 @@ describe('FranchiseHQ — GM weekly loop hint (V3: loop section removed)', () =>
       <FranchiseHQ league={league} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
     );
     // Scout Opponent tile covers the scouting/prep check route
-    const scoutBtns = screen.getAllByRole('button', { name: /scout opponent/i });
+    const scoutBtns = screen.getAllByRole('button', { name: /opponent.*scout|scout.*opponent/i });
     fireEvent.click(scoutBtns[0]);
     expect(onNavigate).toHaveBeenCalled();
   });

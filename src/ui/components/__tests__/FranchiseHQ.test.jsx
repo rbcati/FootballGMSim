@@ -3,856 +3,108 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import FranchiseHQ from '../FranchiseHQ.jsx';
-import LeagueDashboard from '../LeagueDashboard.jsx';
-import { normalizeManagementDestination, parseGameBookDestination } from '../../utils/managementScreenRouting.js';
-import { INITIAL_WORKER_STATE, workerReducer } from '../../hooks/useWorker.js';
+import { buildHqDivisionSnapshot, buildHqNextAction, buildHqStrengthSnapshot, deriveSpecialTeamsPresentationRating } from '../../utils/hqCommandCenterV2.js';
+import { prepareStandingsView } from '../../../views/standingsView.js';
+import { buildPowerRankings } from '../../utils/franchiseCommandCenter.js';
 
-const baseLeague = {
-  year: 2026,
-  week: 10,
-  seasonId: 's10',
-  phase: 'regular',
-  userTeamId: 10,
-  ownerApproval: 58,
-  teams: [
-    {
-      id: 10,
-      city: 'Chicago',
-      name: 'Bears',
-      abbr: 'CHI',
-      conf: 1,
-      div: 0,
-      wins: 6,
-      losses: 3,
-      ties: 0,
-      ovr: 84,
-      offenseRating: 82,
-      defenseRating: 83,
-      capRoom: 7,
-      roster: [{ id: 1 }, { id: 2 }],
-      recentResults: ['W', 'W', 'L', 'W'],
-    },
-    { id: 11, city: 'Detroit', name: 'Lions', abbr: 'DET', conf: 1, div: 0, wins: 5, losses: 4, ties: 0, ovr: 83, offenseRating: 86, defenseRating: 80, capRoom: 11, roster: [] },
-  ],
-  schedule: {
-    weeks: [
-      { week: 9, games: [{ id: 'g-9', home: { id: 11, abbr: 'DET' }, away: { id: 10, abbr: 'CHI' }, homeId: 11, awayId: 10, homeAbbr: 'DET', awayAbbr: 'CHI', homeScore: 20, awayScore: 23, played: true }] },
-      { week: 10, games: [{ id: 'g-10', home: { id: 10, abbr: 'CHI' }, away: { id: 11, abbr: 'DET' }, played: false }] },
-    ],
-  },
-  gameById: {
-    'g-9': { id: 'g-9', home: 11, away: 10, homeId: 11, awayId: 10, week: 9, played: true, homeScore: 20, awayScore: 23 },
-  },
-  incomingTradeOffers: [],
-  leaguePulse: [
-            { id: 'pulse-1', source: 'league_pulse_v1', type: 'pulse', headline: 'Rookie hype is building', body: 'A young runner just forced more weekly attention.', priority: 'medium', importance: 75, week: 9, relatedTeamId: 10, teamId: 10 }
-          ],
-          newsItems: [{ id: 'n1', teamId: 10, headline: 'Starter upgraded to probable status.' }],
-};
+const player = (id, name, pos, ovr, rowKey, order = 1) => ({ id, name, pos, ovr, depthChart: { rowKey, order } });
+const roster = [
+  player(1, 'Justin Fields', 'QB', 78, 'QB'), player(2, 'Runner One', 'RB', 76, 'RB'),
+  player(3, 'Wide One', 'WR', 80, 'WR'), player(4, 'Tight One', 'TE', 77, 'TE'),
+  ...Array.from({ length: 5 }, (_, i) => player(10 + i, `Line ${i}`, 'OL', 74 + i, 'OL', i + 1)),
+  player(20, 'Edge One', 'EDGE', 82, 'EDGE'), player(21, 'Tackle One', 'DT', 79, 'IDL'),
+  player(22, 'Backer One', 'LB', 78, 'LB'), player(23, 'Corner One', 'CB', 83, 'CB'), player(24, 'Safety One', 'S', 80, 'S'),
+];
+const specialists = [player(31, 'Kicker', 'K', 75, 'K'), player(32, 'Punter', 'P', 72, 'P'), player(33, 'Returner', 'WR', 81, 'RS')];
 
-describe('FranchiseHQ', () => {
-  afterEach(() => {
-    cleanup();
-    localStorage.removeItem('footballgm_game_archive_v1');
-  });
+function league(overrides = {}) {
+  const teams = [
+    { id: 7, city: 'Pittsburgh', name: 'Steelers', abbr: 'PIT', conf: 0, div: 1, wins: 2, losses: 1, ovr: 78, roster: [...roster, ...specialists] },
+    { id: 4, abbr: 'BAL', conf: 0, div: 1, wins: 2, losses: 1, ovr: 77, offenseRating: 77, defenseRating: 78, roster: [] },
+    { id: 5, abbr: 'CIN', conf: 0, div: 1, wins: 1, losses: 2, ovr: 74, offenseRating: 73, defenseRating: 75, roster: [] },
+    { id: 6, abbr: 'CLE', conf: 0, div: 1, wins: 3, losses: 0, ovr: 82, offenseRating: 81, defenseRating: 83, roster: [] },
+    { id: 16, abbr: 'DAL', conf: 1, div: 0, wins: 3, losses: 0, ovr: 83, offenseRating: 84, defenseRating: 80, roster: [] },
+  ];
+  return { id: 'save-a', franchiseGenerationId: 'a', year: 2026, seasonId: 's1', week: 4, phase: 'regular', userTeamId: 7, teams, weeklyPrep: { lineupChecked: true, planReviewed: true, opponentScouted: true }, schedule: { weeks: [{ week: 1, games: [{ home: 7, away: 4, homeScore: 24, awayScore: 17, played: true }] }, { week: 2, games: [{ home: 5, away: 7, homeScore: 21, awayScore: 17, played: true }] }, { week: 3, games: [{ home: 7, away: 16, homeScore: 28, awayScore: 14, played: true }] }, { week: 4, games: [{ home: 7, away: 6, played: false }] }] }, ...overrides };
+}
 
-  it('renders only new-save truth after a same-slot generation FULL_STATE', () => {
-    const saveAState = {
-      ...INITIAL_WORKER_STATE,
-      league: { ...baseLeague, activeLeagueId: 'save_slot_1', franchiseGenerationId: 'gen_A', _stateEpoch: 10, week: 8 },
-      lastResults: [{ gameId: 'old-hou', week: 8, homeId: 10, awayId: 12, homeScore: 7, awayScore: 28, homeAbbr: 'PIT', awayAbbr: 'HOU' }],
-      lastSimWeek: 8,
-    };
-    const saveB = {
-      ...baseLeague,
-      activeLeagueId: 'save_slot_1', franchiseGenerationId: 'gen_B', _stateEpoch: 11, year: 2026, seasonId: '2026', week: 1, userTeamId: 10,
-      teams: [
-        { ...baseLeague.teams[0], city: 'Pittsburgh', name: 'Steelers', abbr: 'PIT', wins: 0, losses: 0, ties: 0 },
-        { ...baseLeague.teams[1], id: 11, city: 'Cleveland', name: 'Browns', abbr: 'CLE', wins: 0, losses: 0, ties: 0 },
-      ],
-      schedule: { weeks: [{ week: 1, games: [{ id: 'pit-cle-w1', home: 10, away: 11, played: false }] }] },
-      gameById: {}, leagueHistory: [],
-    };
-    const switched = workerReducer(saveAState, { type: 'FULL_STATE', payload: saveB });
-    render(<FranchiseHQ league={switched.league} lastResults={switched.lastResults} lastSimWeek={switched.lastSimWeek} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} />);
+describe('HQ Command Center V2', () => {
+  afterEach(cleanup);
 
-    expect(screen.getByText(/no completed game yet/i)).toBeTruthy();
-    expect(screen.getByTestId('franchise-hq').textContent).toContain('CLE');
-    expect(screen.queryByText(/7-28 vs HOU/i)).toBeNull();
-    expect(screen.queryByText(/Wk8/i)).toBeNull();
-    expect(screen.queryByText(/View Game Book/i)).toBeNull();
-  });
-
-  it('renders visible weekly command center essentials and one primary advance CTA', () => {
-    render(<FranchiseHQ league={baseLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    // Week label is visible — compact topbar renders "Wk 10" (abbreviated)
-    expect(document.querySelector('[aria-label*="Week 10"]')).not.toBeNull();
-    expect(screen.getByTestId('advance-week-cta').textContent).toContain('Advance to Game');
-    // Weekly Command Hub and Game Plan Impact pruned from HQ command deck
-    expect(screen.queryByRole('heading', { name: /weekly command hub/i })).toBeNull();
-    expect(screen.queryByRole('heading', { name: /game plan impact/i })).toBeNull();
-    // "Coordinator Brief" section removed — intel is compressed into Roster Health & Office Status cards
-    expect(document.querySelector('[data-testid="roster-health-card"]')).not.toBeNull();
-    expect(document.querySelector('[data-testid="office-status-card"]')).not.toBeNull();
-    const seasonPulse = within(screen.getByTestId('season-pulse'));
-    expect(seasonPulse.getByText(/owner mandate/i)).toBeTruthy();
-    expect(seasonPulse.getByText(/momentum/i)).toBeTruthy();
-    expect(seasonPulse.getByText(/roster lever/i)).toBeTruthy();
-    expect(seasonPulse.getByText(/film room/i)).toBeTruthy();
-    // League Views nav pills present
-    const linkRow = screen.getByTestId('hq-league-destination-links');
-    expect(within(linkRow).getByRole('button', { name: /^stats$/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /^standings$/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /^news$/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /^ops$/i })).toBeTruthy();
-  });
-
-  it('does not leak missing or invalid per-game season metadata into a current result', () => {
-    const { rerender } = render(<FranchiseHQ league={baseLeague} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} />);
-    expect(screen.getByTestId('hq-last-result-card').textContent).toContain('Wk9');
-    expect(screen.getByTestId('hq-last-result-card').textContent).not.toMatch(/undefined|NaN|null/);
-
-    const invalid = structuredClone(baseLeague);
-    invalid.schedule.weeks[0].games[0].season = 'invalid-season';
-    rerender(<FranchiseHQ league={invalid} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} />);
-    expect(screen.getByTestId('hq-last-result-card').textContent).not.toMatch(/undefined|NaN|null|invalid-season/);
-  });
-
-  it('labels a completed result carrying a valid previous year', () => {
-    const prior = structuredClone(baseLeague);
-    prior.schedule.weeks[0].games[0].season = 2025;
-    render(<FranchiseHQ league={prior} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} />);
-    expect(screen.getByTestId('hq-last-result-card').textContent).toContain('2025 Wk9');
-  });
-
-  it('renders factual upcoming matchup history and opens the last meeting through the existing Game Book route', () => {
+  it('puts the authoritative lineup blocker first and routes to Team:Lineup', () => {
     const onNavigate = vi.fn();
-    const actions = { getBoxScore: vi.fn() };
-    render(<FranchiseHQ league={baseLeague} actions={actions} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    const context = screen.getByTestId('hq-matchup-history');
-    expect(within(context).getByText('Division matchup')).toBeTruthy();
-    expect(within(context).getByText('Second meeting this season')).toBeTruthy();
-    expect(within(context).getByTestId('hq-matchup-recent-series').textContent).toBe('CHI leads last 1 meeting 1-0');
-    expect(within(context).getByTestId('hq-matchup-last-meeting').textContent).toContain('CHI 23–20 DET');
-    expect(within(context).queryByTestId('hq-matchup-series-streak')).toBeNull();
-
-    fireEvent.click(within(context).getByRole('button', { name: /open last meeting/i }));
-    expect(onNavigate).toHaveBeenCalledWith('Game Book:g-9');
-    expect(actions.getBoxScore).not.toHaveBeenCalled();
+    const blocked = league({ teams: league().teams.map((team) => team.id === 7 ? { ...team, roster: team.roster.map((member) => member.id === 1 ? { ...member, injuryWeeksRemaining: 2 } : member) } : team) });
+    render(<FranchiseHQ league={blocked} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} />);
+    expect(screen.getByTestId('hq-next-action').compareDocumentPosition(screen.getByTestId('hq-division-card')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /review depth chart/i }));
+    expect(onNavigate).toHaveBeenCalledWith('Team:Lineup');
   });
 
-  it('updates matchup context immediately from WEEK_COMPLETE results before the schedule refreshes', () => {
-    const staleLeague = {
-      ...baseLeague,
-      week: 10,
-      schedule: {
-        weeks: [
-          { week: 4, games: [{ id: 'first', home: 10, away: 11, homeScore: 21, awayScore: 17, played: true }] },
-          { week: 9, games: [{ id: 's10_w9_11_10', home: 11, away: 10, played: false }] },
-          { week: 10, games: [{ id: 'next', home: 10, away: 11, played: false }] },
-        ],
-      },
-      gameById: {},
-    };
-    const lastResults = [{
-      gameId: 's10_w9_11_10', seasonId: 's10', week: 9,
-      homeId: 11, awayId: 10, homeScore: 20, awayScore: 27,
-    }];
-    render(<FranchiseHQ league={staleLeague} lastResults={lastResults} lastSimWeek={9} onNavigate={vi.fn()} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    const context = screen.getByTestId('hq-matchup-history');
-    expect(within(context).getByText('Second meeting this season')).toBeTruthy();
-    expect(within(context).getByTestId('hq-matchup-last-meeting').textContent).toContain('CHI 27–20 DET');
-    expect(within(context).getByTestId('hq-matchup-recent-series').textContent).toBe('CHI leads last 2 meetings 2-0');
-    expect(within(context).getByTestId('hq-matchup-series-streak').textContent).toBe('CHI has won 2 straight meetings');
+  it('uses existing risk severity and preserves order within a severity', () => {
+    const action = buildHqNextAction({ league: league(), gameDayReadiness: {}, gate: { riskItems: [{ id: 'scout', severity: 'info', label: 'Scout', fixDestination: 'Weekly Prep' }, { id: 'cap', severity: 'danger', label: 'Cap blocker', fixDestination: 'Financials' }, { id: 'depth-blocker', severity: 'danger', label: 'Lineup blocker', fixDestination: 'old' }] } });
+    expect(action.title).toBe('Cap blocker');
+    expect(action.destination).toBe('Financials');
   });
 
-  it('renders a flat archived playoff meeting without the fallback bracket heading as a round suffix', () => {
-    const league = {
-      ...baseLeague,
-      schedule: { weeks: [{ week: 10, games: [{ id: 'next', home: 10, away: 11, played: false }] }] },
-      gameById: {},
-      leagueHistory: [{
-        id: 's9', year: 2025,
-        gameIndex: [{ id: 'flat-playoff', week: 20, homeId: 11, awayId: 10, homeScore: 20, awayScore: 27 }],
-        playoffBracketSnapshot: { mode: 'flat', rounds: [{ label: 'Postseason games', games: [{ gameId: 'flat-playoff' }] }] },
-      }],
-    };
-    render(<FranchiseHQ league={league} onNavigate={vi.fn()} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    const context = screen.getByTestId('hq-matchup-history');
-    expect(within(context).getByText('1 recorded playoff meeting')).toBeTruthy();
-    expect(within(context).getByTestId('hq-matchup-last-meeting').textContent).toContain('CHI 27–20 DET');
-    expect(within(context).getByTestId('hq-matchup-last-meeting').textContent).not.toContain('Postseason games');
+  it('shows ready state and advances when no authoritative work remains', () => {
+    const onAdvanceWeek = vi.fn();
+    const ready = buildHqNextAction({ league: league(), gate: { riskItems: [] }, gameDayReadiness: {}, nextGame: { isHome: true, opp: { abbr: 'CLE' } } });
+    expect(ready.eyebrow).toBe('READY FOR GAME DAY');
+    render(<FranchiseHQ league={league()} actions={{ getDashboardLeaders: vi.fn().mockResolvedValue({ team: {}, league: {} }) }} onAdvanceWeek={onAdvanceWeek} />);
+    fireEvent.click(screen.getByRole('button', { name: /play week/i }));
+    expect(onAdvanceWeek).toHaveBeenCalled();
   });
 
-  it('keeps a compact archived last score but hides Game Book when the detailed archive is missing', async () => {
-    const archivedLeague = {
-      ...baseLeague,
-      schedule: { weeks: [{ week: 10, games: [{ id: 'g-10', home: 10, away: 11, played: false }] }] },
-      gameById: {},
-      leagueHistory: [{
-        id: 's9',
-        year: 2025,
-        gameIndex: [{ id: 'archived-compact', week: 7, homeId: 11, awayId: 10, homeScore: 20, awayScore: 27 }],
-      }],
-    };
-    const actions = { getBoxScore: vi.fn().mockResolvedValue({ gameId: 'archived-compact', game: null, error: 'Game not found' }) };
-
-    render(<FranchiseHQ league={archivedLeague} actions={actions} onNavigate={vi.fn()} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    const context = screen.getByTestId('hq-matchup-history');
-    expect(within(context).getByTestId('hq-matchup-last-meeting').textContent).toContain('CHI 27–20 DET');
-    await waitFor(() => expect(actions.getBoxScore).toHaveBeenCalledWith('archived-compact'));
-    expect(within(context).queryByRole('button', { name: /open last meeting/i })).toBeNull();
+  it('uses canonical division membership, ordering, and played-game division record', () => {
+    const state = league();
+    const snapshot = buildHqDivisionSnapshot(state);
+    const canonical = prepareStandingsView(state).divisions.find((division) => Number(division.conf) === 0 && Number(division.div) === 1);
+    expect(snapshot.teams.map((team) => team.id)).toEqual(canonical.teams.map((team) => team.id));
+    expect(snapshot.teams.map((team) => team.abbr)).not.toContain('DAL');
+    expect(snapshot.teams.find((team) => team.id === 7).divisionRecord).toBe('1-1');
   });
 
-  it('keeps Open Last Meeting for an archived game confirmed by the existing Game Book resolver', async () => {
-    const archivedLeague = {
-      ...baseLeague,
-      schedule: { weeks: [{ week: 10, games: [{ id: 'g-10', home: 10, away: 11, played: false }] }] },
-      gameById: {},
-      leagueHistory: [{
-        id: 's9',
-        year: 2025,
-        gameIndex: [{ id: 'archived-detailed', week: 7, homeId: 11, awayId: 10, homeScore: 20, awayScore: 27 }],
-      }],
-    };
-    const onNavigate = vi.fn();
-    const actions = {
-      getBoxScore: vi.fn().mockResolvedValue({
-        gameId: 'archived-detailed',
-        game: { id: 'archived-detailed', seasonId: 's9', week: 7, homeId: 11, awayId: 10, homeScore: 20, awayScore: 27 },
-      }),
-    };
-
-    render(<FranchiseHQ league={archivedLeague} actions={actions} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    const context = screen.getByTestId('hq-matchup-history');
-    const button = await within(context).findByRole('button', { name: /open last meeting/i });
-    fireEvent.click(button);
-    expect(actions.getBoxScore).toHaveBeenCalledWith('archived-detailed');
-    expect(onNavigate).toHaveBeenCalledWith('Game Book:archived-detailed');
+  it('highlights the user and renders honest canonical/presentation strength values', () => {
+    render(<FranchiseHQ league={league()} actions={{ getDashboardLeaders: vi.fn().mockResolvedValue({ team: {}, league: {} }) }} />);
+    expect(document.querySelector('[data-user-team="true"].is-user')).toBeTruthy();
+    const card = screen.getByTestId('hq-team-strength');
+    for (const label of ['TEAM', 'OFF', 'DEF', 'SPEC']) expect(within(card).getByText(label)).toBeTruthy();
+    expect(deriveSpecialTeamsPresentationRating(league().teams[0])).toBe(76);
+    expect(deriveSpecialTeamsPresentationRating({ roster: specialists.slice(0, 2) })).toBeNull();
   });
 
-  it('does not reuse a last-meeting archive result across saves with the same game ID', async () => {
-    const sharedHistory = [{
-      id: 's9',
-      year: 2025,
-      gameIndex: [{ id: 'shared-archive-id', week: 7, homeId: 11, awayId: 10, homeScore: 20, awayScore: 27 }],
-    }];
-    const leagueForSave = (activeLeagueId) => ({
-      ...baseLeague,
-      activeLeagueId,
-      schedule: { weeks: [{ week: 10, games: [{ id: 'g-10', home: 10, away: 11, played: false }] }] },
-      gameById: {},
-      leagueHistory: sharedHistory,
-    });
-    const firstActions = {
-      getBoxScore: vi.fn().mockResolvedValue({
-        gameId: 'shared-archive-id',
-        game: { id: 'shared-archive-id', seasonId: 's9', week: 7, homeId: 11, awayId: 10, homeScore: 20, awayScore: 27 },
-      }),
-    };
-    const first = render(<FranchiseHQ league={leagueForSave('save-a')} actions={firstActions} onNavigate={vi.fn()} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-    await within(screen.getByTestId('hq-matchup-history')).findByRole('button', { name: /open last meeting/i });
-    first.unmount();
-
-    localStorage.setItem('footballgm_game_archive_v1', JSON.stringify({
-      version: 1,
-      games: {
-        'shared-archive-id': {
-          id: 'shared-archive-id', season: 's9', week: 7, homeId: 11, awayId: 10,
-          homeAbbr: 'DET', awayAbbr: 'CHI', score: { home: 20, away: 27 }, timestamp: 1,
-        },
-      },
-    }));
-
-    const secondActions = {
-      getBoxScore: vi.fn().mockResolvedValue({ gameId: 'shared-archive-id', game: null, error: 'Game not found' }),
-    };
-    render(<FranchiseHQ league={leagueForSave('save-b')} actions={secondActions} onNavigate={vi.fn()} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    const secondContext = screen.getByTestId('hq-matchup-history');
-    await waitFor(() => expect(secondActions.getBoxScore).toHaveBeenCalledWith('shared-archive-id'));
-    expect(within(secondContext).queryByRole('button', { name: /open last meeting/i })).toBeNull();
+  it('matches existing power rank and deterministically ranks displayed unit strength', () => {
+    const state = league();
+    const snapshot = buildHqStrengthSnapshot({ league: state, team: state.teams[0] });
+    expect(snapshot.powerRank).toBe(buildPowerRankings(state).find((row) => row.teamId === 7).rank);
+    expect(snapshot.offenseRank).toBeGreaterThan(0);
+    expect(snapshot.defenseRank).toBeGreaterThan(0);
   });
 
-  it('shows a real head-to-head streak and keeps the compact markup mobile-safe', () => {
-    const streakLeague = {
-      ...baseLeague,
-      schedule: {
-        weeks: [
-          { week: 7, games: [{ id: 'g-7', home: 10, away: 11, homeScore: 24, awayScore: 17, played: true }] },
-          { week: 8, games: [{ id: 'g-8', home: 11, away: 10, homeScore: 20, awayScore: 27, played: true }] },
-          { week: 9, games: [{ id: 'g-9', home: 10, away: 11, homeScore: 30, awayScore: 21, played: true }] },
-          { week: 10, games: [{ id: 'g-10', home: 10, away: 11, played: false }] },
-        ],
-      },
-    };
-    render(<FranchiseHQ league={streakLeague} onNavigate={vi.fn()} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    const context = screen.getByTestId('hq-matchup-history');
-    expect(within(context).getByTestId('hq-matchup-series-streak').textContent).toBe('CHI has won 3 straight meetings');
-    expect(context.querySelector('table')).toBeNull();
-    expect(context.querySelector('[role="region"]')).toBeNull();
-    expect(context.classList.contains('hq-matchup-history')).toBe(true);
+  it('renders exactly the six headline yardage leaders from dashboard authority', async () => {
+    const category = (prefix, value) => [{ playerId: prefix, name: `${prefix} Player`, value }];
+    const data = { team: { passing: category('TeamPass', 1000), rushing: category('TeamRush', 500), receiving: category('TeamRec', 600) }, league: { passing: category('LeaguePass', 1200), rushing: category('LeagueRush', 700), receiving: category('LeagueRec', 800) } };
+    render(<FranchiseHQ league={league()} actions={{ getDashboardLeaders: vi.fn().mockResolvedValue(data) }} />);
+    await waitFor(() => expect(screen.getAllByText('T. Player')).toHaveLength(3));
+    expect(screen.getAllByText(/Player$/)).toHaveLength(6);
+    expect(screen.queryByText(/completion|fantasy|passing td|ppg/i)).toBeNull();
   });
 
-  it('degrades to recorded-history empty copy and hides unsupported division, streak, playoff, and drill-down lines', () => {
-    const noHistoryLeague = {
-      ...baseLeague,
-      teams: [
-        { ...baseLeague.teams[0], name: 'A Very Long Franchise Name That Must Wrap' },
-        { id: 12, name: 'Another Extremely Long Expansion Franchise Name', abbr: 'EXP', conf: 0, div: 3, wins: 0, losses: 0, ties: 0, roster: [] },
-      ],
-      schedule: { weeks: [{ week: 10, games: [{ id: 'future', home: 10, away: 12, played: false }] }] },
-      gameById: {},
-    };
-    render(<FranchiseHQ league={noHistoryLeague} onNavigate={vi.fn()} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    const context = screen.getByTestId('hq-matchup-history');
-    expect(within(context).getByText('No prior meeting found in recorded franchise history.')).toBeTruthy();
-    expect(context.textContent).not.toMatch(/division matchup|rival|all-time|revenge|playoff meeting|straight meetings/i);
-    expect(within(context).queryByRole('button', { name: /open last meeting/i })).toBeNull();
+  it('keeps fresh saves truthful and clears leaders across save generations', async () => {
+    const actions = { getDashboardLeaders: vi.fn().mockResolvedValue({ team: { passing: [{ name: 'Old Leader', value: 10 }] }, league: {} }) };
+    const view = render(<FranchiseHQ league={league()} actions={actions} />);
+    await screen.findByText('O. Leader');
+    const fresh = league({ franchiseGenerationId: 'b', week: 1, teams: league().teams.map((team) => ({ ...team, wins: 0, losses: 0, ties: 0 })), schedule: { weeks: [{ week: 1, games: [{ home: 7, away: 6, played: false }] }] } });
+    view.rerender(<FranchiseHQ league={fresh} actions={actions} />);
+    expect(screen.queryByText('O. Leader')).toBeNull();
+    expect(screen.getByText(/season leaders appear after games are played/i)).toBeTruthy();
+    expect(within(screen.getByTestId('hq-division-card')).getAllByText('0-0').length).toBeGreaterThan(0);
   });
 
-  it('does not render pruned Weekly Command Hub or Game Plan Impact sections', () => {
-    const onNavigate = vi.fn();
-    render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    // Weekly Command Hub removed — purpose covered by Actions Required + Quick Actions
-    expect(screen.queryByRole('heading', { name: /weekly command hub/i })).toBeNull();
-    // Game Plan Impact removed — strategy details belong in Game Plan / Weekly Prep tabs
-    expect(screen.queryByRole('heading', { name: /game plan impact/i })).toBeNull();
-    // Quick Actions (action tiles) still present for the key navigation paths
-    expect(screen.getByTestId('hq-league-destination-links')).toBeTruthy();
-    expect(screen.getByTestId('hq-actions-required')).toBeTruthy();
-    expect(screen.getByTestId('advance-week-cta')).toBeTruthy();
-  });
-
-  it('routes season pulse roster action through onNavigate', () => {
-    const onNavigate = vi.fn();
-    render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    fireEvent.click(screen.getByRole('button', { name: /open team builder/i }));
-    expect(onNavigate).toHaveBeenCalledWith('Team:Roster / Team Builder');
-  });
-
-
-  it('renders weekly decision review and routes the recommended action', () => {
-    const onNavigate = vi.fn();
-    render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    expect(screen.getAllByRole('heading', { name: /what mattered last week|decision review/i }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('heading', { name: /roster needs/i })).toBeNull();
-    const button = screen.getByRole('button', { name: /decision review:/i });
-    fireEvent.click(button);
-    expect(onNavigate).toHaveBeenCalled();
-  });
-
-  it('does not render duplicated passive League Pulse panel and keeps league destination links', () => {
-    const onNavigate = vi.fn();
-    render(
-      <FranchiseHQ
-        league={{
-          ...baseLeague,
-          newsItems: [
-            { id: 'pulse-1', source: 'league_pulse_v1', category: 'league_pulse', headline: 'Rookie hype is building', body: 'A young runner just forced more weekly attention.', priority: 'medium', importance: 75, week: 9, relatedTeamId: 10, teamId: 10 },
-          ],
-        }}
-        onNavigate={onNavigate}
-        onAdvanceWeek={() => {}}
-        busy={false}
-        simulating={false}
-      />,
-    );
-
-    expect(screen.queryByRole('heading', { name: /league pulse/i })).toBeNull();
-    const linkRow = screen.getByTestId('hq-league-destination-links');
-    expect(within(linkRow).getByRole('button', { name: /^stats$/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /^standings$/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /^news$/i })).toBeTruthy();
-    fireEvent.click(within(linkRow).getByRole('button', { name: /^news$/i }));
-    expect(onNavigate).toHaveBeenCalledWith('News');
-  });
-
-  it('renders Review Game Book as the postgame next action and emits a Game Book route', () => {
-    const onNavigate = vi.fn();
-    render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    // "Next Action" panel removed — Game Book access is now via the Film Room card in Season Pulse
-    const seasonPulse = screen.getByTestId('season-pulse');
-    const filmRoomBtn = within(seasonPulse).getByRole('button', { name: /view game book/i });
-    expect(filmRoomBtn).toBeTruthy();
-    fireEvent.click(filmRoomBtn);
-
-    expect(onNavigate).toHaveBeenCalledWith('Game Book:g-9');
-  });
-
-  it('uses latest simulation results for the HQ last result while schedule is still scoreless', () => {
-    const league = {
-      ...baseLeague,
-      week: 10,
-      teams: baseLeague.teams.map((team) => team.id === 10 ? { ...team, wins: 7, losses: 3 } : team),
-      schedule: {
-        weeks: [
-          { week: 9, games: [{ id: 'g-9', home: { id: 11, abbr: 'DET' }, away: { id: 10, abbr: 'CHI' }, homeId: 11, awayId: 10, played: false }] },
-          { week: 10, games: [{ id: 'g-10', home: { id: 10, abbr: 'CHI' }, away: { id: 11, abbr: 'DET' }, played: false }] },
-        ],
-      },
-      gameById: {},
-    };
-
-    render(
-      <FranchiseHQ
-        league={league}
-        lastResults={[{ gameId: 'g-9', homeId: 11, awayId: 10, homeScore: 20, awayScore: 23 }]}
-        lastSimWeek={9}
-        onNavigate={() => {}}
-        onAdvanceWeek={() => {}}
-        busy={false}
-        simulating={false}
-      />,
-    );
-
-    expect(screen.getByTestId('hq-last-result').textContent).toMatch(/W.*23-20.*DET/i);
-  });
-
-  it('shows one compact Last Result card before engine/development notices', () => {
-    // Force an engine/development notice (injury) into the activity stack so we
-    // can prove the Last Result card lands ahead of it on the post-advance HQ.
-    const leagueWithInjury = {
-      ...baseLeague,
-      teams: [
-        { ...baseLeague.teams[0], roster: [{ id: 1, injuryWeeksRemaining: 3 }, { id: 2 }] },
-        baseLeague.teams[1],
-      ],
-    };
-    render(<FranchiseHQ league={leagueWithInjury} onNavigate={() => {}} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
-
-    const lastResultCard = screen.getByTestId('hq-last-result-card');
-    const noticeStack = screen.getByTestId('activity-toast-stack');
-
-    const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING;
-    // The canonical result is the only postgame presentation before notices.
-    expect(screen.getAllByTestId('hq-last-result-card')).toHaveLength(1);
-    expect(screen.queryByTestId('hq-postsim-status-strip')).toBeNull();
-    expect(lastResultCard.compareDocumentPosition(noticeStack) & FOLLOWING).toBeTruthy();
-
-    // The canonical review CTA on the HQ surface reads exactly "View Game Book".
-    expect(screen.getByTestId('hq-last-result-cta').textContent).toContain('View Game Book');
-  });
-
-  it('parses Game Book route intents before tab normalization can reject them', () => {
-    expect(parseGameBookDestination('Game Book:g-9')).toEqual({ type: 'gameBook', gameId: 'g-9' });
-    expect(parseGameBookDestination({ type: 'gameBook', gameId: 'g-9' })).toEqual({ type: 'gameBook', gameId: 'g-9' });
-    expect(normalizeManagementDestination('Game Book:g-9').tab).toBe('Game Book');
-  });
-
-  it('opens Game Detail from the HQ Film Room card and returns to Franchise HQ', async () => {
-    window.matchMedia = window.matchMedia ?? (() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
-    render(<LeagueDashboard league={baseLeague} actions={{ getDashboardLeaders: vi.fn(() => Promise.resolve({ league: {}, team: {} })) }} busy={false} simulating={false} onAdvanceWeek={() => {}} />);
-
-    // "Next Action" panel removed — Game Book access is now via the Film Room card in Season Pulse
-    const seasonPulse = screen.getByTestId('season-pulse');
-    fireEvent.click(within(seasonPulse).getByRole('button', { name: /view game book/i }));
-
-    expect(await screen.findByTestId('game-book')).toBeTruthy();
-    expect(screen.getByTestId('game-book-final-score').textContent).toContain('CHI 23 - 20 DET');
-
-    fireEvent.click(screen.getByTestId('game-book-return'));
-    expect(await screen.findByTestId('franchise-hq')).toBeTruthy();
-  });
-
-  it('renders record, standing, and fallback copy when schedule is missing', () => {
-    render(
-      <FranchiseHQ
-        league={{ year: 2026, week: 2, phase: 'regular', userTeamId: 1, teams: [{ id: 1, name: 'Legacy Team', city: 'Legacy', conf: 0, div: 0, wins: 0, losses: 0, ties: 0 }], schedule: { weeks: [] } }}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-
-    expect(screen.getByText(/no completed game yet/i)).toBeTruthy();
-    expect(screen.getByText(/no opponent is locked yet/i)).toBeTruthy();
-    // Game Plan Impact pruned — no longer rendered on HQ
-    expect(screen.queryByRole('heading', { name: /game plan impact/i })).toBeNull();
-    expect(screen.getByText(/no future games on file/i)).toBeTruthy();
-    // Matchup ticker replaces the old hero subcards — record is shown via the HQ topbar
-    expect(screen.getByTestId('hq-matchup-hero')).toBeTruthy();
-  });
-});
-
-describe('FranchiseHQ V4 compact home screen', () => {
-  afterEach(() => {
-    cleanup();
-  });
-
-  it('renders compact home structure — Season Pulse in More drawer, core elements at top level', () => {
-    render(
-      <FranchiseHQ
-        league={baseLeague}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    // Top-level command elements present
-    expect(screen.getByTestId('franchise-hq')).toBeTruthy();
-    expect(screen.getByTestId('hq-actions-required')).toBeTruthy();
-    expect(screen.getByTestId('advance-week-cta')).toBeTruthy();
-    expect(screen.getByTestId('hq-matchup-hero')).toBeTruthy();
-    // Season Pulse is inside the More drawer (still reachable via testid)
-    expect(screen.getByTestId('hq-more-drawer')).toBeTruthy();
-    expect(screen.getByTestId('season-pulse')).toBeTruthy();
-  });
-
-  it('shows compact ready div — not a section card — when there are no blockers', () => {
-    const offseasonLeague = { ...baseLeague, phase: 'offseason_resign', schedule: { weeks: [] } };
-    render(
-      <FranchiseHQ
-        league={offseasonLeague}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    const actionsRequired = screen.getByTestId('hq-actions-required');
-    // Must be a plain div, not a section card
-    expect(actionsRequired.tagName.toLowerCase()).toBe('div');
-    expect(actionsRequired.classList.contains('card')).toBe(false);
-    // Shows ready-state text
-    expect(actionsRequired.textContent).toMatch(/ready|no blocker/i);
-  });
-
-  it('matchup card shows last result and next opponent when available', () => {
-    render(
-      <FranchiseHQ
-        league={baseLeague}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    const hero = screen.getByTestId('hq-matchup-hero');
-    // Opponent abbreviation (DET) shown in hero
-    expect(hero.textContent).toContain('DET');
-    // Last result from game g-9: W 23-20
-    const lastResultEl = document.querySelector('[data-testid="hq-last-result"]');
-    expect(lastResultEl).not.toBeNull();
-    expect(lastResultEl.textContent).toMatch(/W.*23|23.*W/i);
-  });
-
-  it('Actions Required renders with blockers when criticalCount > 0', () => {
-    // baseLeague has week 10 regular season — evaluate gate to see if it generates blockers
-    render(
-      <FranchiseHQ
-        league={baseLeague}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    // hq-actions-required always renders (either blocker card or compact ready row)
-    expect(screen.getByTestId('hq-actions-required')).toBeTruthy();
-  });
-
-  it('league quick links appear after quick action tiles — not between hero and actions required', () => {
-    render(
-      <FranchiseHQ
-        league={baseLeague}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    const root = screen.getByTestId('franchise-hq');
-    const html = root.innerHTML;
-    // Quick action tiles appear before league links in DOM order
-    const tilesPos = html.indexOf('app-hq-action-tiles');
-    const linksPos = html.indexOf('hq-league-destination-links');
-    expect(tilesPos).toBeGreaterThan(-1);
-    expect(linksPos).toBeGreaterThan(-1);
-    expect(tilesPos).toBeLessThan(linksPos);
-    // Hero is before actions-required in DOM
-    const heroPos = html.indexOf('hq-matchup-hero');
-    const actionsPos = html.indexOf('hq-actions-required');
-    expect(heroPos).toBeLessThan(actionsPos);
-  });
-});
-
-describe('LeagueDashboard Game Book navigation integrity', () => {
-  afterEach(() => {
-    cleanup();
-  });
-
-  it('keeps the bottom nav visible while the Game Book is open and after return to HQ', async () => {
-    window.matchMedia = window.matchMedia ?? (() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
-    render(
-      <LeagueDashboard
-        league={baseLeague}
-        actions={{ getDashboardLeaders: vi.fn(() => Promise.resolve({ league: {}, team: {} })) }}
-        busy={false}
-        simulating={false}
-        onAdvanceWeek={() => {}}
-      />,
-    );
-
-    const bottomBar = () => document.querySelector('.mobile-bottom-bar');
-    // Bottom nav visible at HQ.
-    expect(bottomBar()).not.toBeNull();
-    expect(bottomBar().classList.contains('is-collapsed')).toBe(false);
-
-    // Open the Game Book from the HQ Film Room card.
-    const seasonPulse = screen.getByTestId('season-pulse');
-    fireEvent.click(within(seasonPulse).getByRole('button', { name: /view game book/i }));
-    expect(await screen.findByTestId('game-book')).toBeTruthy();
-    expect(screen.getAllByTestId('game-book')).toHaveLength(1);
-    expect(screen.getAllByTestId('game-book-return')).toHaveLength(1);
-
-    // Navigation stays available so Game Book cannot trap the weekly loop.
-    expect(bottomBar().classList.contains('is-collapsed')).toBe(false);
-
-    // Return to HQ restores the nav.
-    fireEvent.click(screen.getByTestId('game-book-return'));
-    expect(await screen.findByTestId('franchise-hq')).toBeTruthy();
-    expect(bottomBar().classList.contains('is-collapsed')).toBe(false);
-  });
-
-  it('closes the Game Book when mobile navigation changes route', async () => {
-    const onDashboardNavigation = vi.fn();
-    window.matchMedia = window.matchMedia ?? (() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
-    render(
-      <LeagueDashboard
-        league={baseLeague}
-        actions={{ getDashboardLeaders: vi.fn(() => Promise.resolve({ league: {}, team: {} })) }}
-        busy={false}
-        simulating={false}
-        onAdvanceWeek={() => {}}
-        onDashboardNavigation={onDashboardNavigation}
-      />,
-    );
-
-    fireEvent.click(within(screen.getByTestId('season-pulse')).getByRole('button', { name: /view game book/i }));
-    expect(await screen.findByTestId('game-book')).toBeTruthy();
-    fireEvent.click(document.querySelector('.mobile-bottom-tab[aria-label="Team"]'));
-
-    expect(screen.queryByTestId('game-book')).toBeNull();
-    expect(screen.getByTestId('nav-team').getAttribute('aria-current')).toBe('page');
-    expect(onDashboardNavigation).toHaveBeenCalledWith('Team');
-    expect(document.querySelector('.mobile-bottom-bar')).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'More' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Open navigation menu' })).toBeNull();
-  });
-});
-
-describe('FranchiseHQ post-sim result consolidation', () => {
-  afterEach(() => {
-    cleanup();
-  });
-
-  it('does not repeat the completed result in a status strip', () => {
-    render(
-      <FranchiseHQ league={baseLeague} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
-    );
-    expect(screen.getAllByTestId('hq-last-result-card')).toHaveLength(1);
-    expect(screen.queryByTestId('hq-postsim-status-strip')).toBeNull();
-  });
-
-  it('routes the canonical result to Game Book', () => {
-    const onNavigate = vi.fn();
-    render(
-      <FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
-    );
-    fireEvent.click(screen.getByTestId('hq-last-result-card'));
-    expect(onNavigate).toHaveBeenCalledWith('Game Book:g-9');
-  });
-
-  it('keeps league navigation reachable without a duplicate post-sim strip', () => {
-    const onNavigate = vi.fn();
-    render(
-      <FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} busy={false} simulating={false} />,
-    );
-    expect(screen.queryByTestId('hq-postsim-status-strip')).toBeNull();
-    // Weekly Results remains reachable via the league destination nav.
-    fireEvent.click(within(screen.getByTestId('hq-league-destination-links')).getByRole('button', { name: /^standings$/i }));
-    expect(onNavigate).toHaveBeenCalledWith('Standings');
-  });
-});
-
-describe('FranchiseHQ V3 command hierarchy cleanup', () => {
-  afterEach(() => {
-    cleanup();
-  });
-
-  it('does not render gm-loop-hint at any week — Weekly Loop section removed in V3', () => {
-    // Week 2 — was the most likely week to show the old hint (<=4 gate)
-    render(
-      <FranchiseHQ
-        league={{ ...baseLeague, week: 2 }}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    expect(document.querySelector('[data-testid="gm-loop-hint"]')).toBeNull();
-  });
-
-  it('does not render gm-loop-hint at week 1 either', () => {
-    render(
-      <FranchiseHQ
-        league={{ ...baseLeague, week: 1 }}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    expect(document.querySelector('[data-testid="gm-loop-hint"]')).toBeNull();
-  });
-
-  it('has exactly one contextual progression button — sticky bottom CTA is the sole control', () => {
-    render(
-      <FranchiseHQ
-        league={baseLeague}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    // The canonical CTA lives in app-hq-sticky-advance
-    expect(screen.getByTestId('advance-week-cta')).toBeTruthy();
-    // There must be exactly one button whose accessible name matches "advance week"
-    const advanceBtns = screen.getAllByRole('button', { name: /advance (week|to game)/i });
-    expect(advanceBtns).toHaveLength(1);
-  });
-
-  it('Quick Actions still render Game Plan, Set Lineup, Training, Scout Opponent', () => {
-    render(
-      <FranchiseHQ
-        league={baseLeague}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    // Use getAllByRole because "Game Plan" / "Scout Opponent" can appear in multiple places
-    // (action tile + game-plan accordion). We just need at least one.
-    expect(screen.getAllByRole('button', { name: /game plan/i }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole('button', { name: /set lineup/i }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole('button', { name: /training/i }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole('button', { name: /scout opponent/i }).length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('Actions Required section renders', () => {
-    render(
-      <FranchiseHQ
-        league={baseLeague}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    expect(screen.getByTestId('hq-actions-required')).toBeTruthy();
-  });
-
-  it('League nav pills still render in the compact horizontal row', () => {
-    render(
-      <FranchiseHQ
-        league={baseLeague}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    const linkRow = screen.getByTestId('hq-league-destination-links');
-    expect(within(linkRow).getByRole('button', { name: /^stats$/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /^standings$/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /^news$/i })).toBeTruthy();
-    expect(within(linkRow).getByRole('button', { name: /^ops$/i })).toBeTruthy();
-  });
-
-  it('Decision Review section is present but body is collapsed by default', () => {
-    render(
-      <FranchiseHQ
-        league={baseLeague}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    // Section heading is visible
-    expect(screen.getAllByRole('heading', { name: /what mattered last week|decision review/i }).length).toBeGreaterThan(0);
-    // Inner body is behind a <details> — not open by default
-    const decisionDetails = document.querySelector('.app-hq-background-section__inner');
-    expect(decisionDetails).not.toBeNull();
-    expect(decisionDetails.hasAttribute('open')).toBe(false);
-  });
-
-  it('Operations Snapshot section is present but body is collapsed by default', () => {
-    render(
-      <FranchiseHQ
-        league={baseLeague}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    // Both background section details elements should be present and closed
-    const allDetails = document.querySelectorAll('.app-hq-background-section__inner');
-    expect(allDetails.length).toBeGreaterThanOrEqual(2);
-    allDetails.forEach((el) => {
-      expect(el.hasAttribute('open')).toBe(false);
-    });
-  });
-
-  it('Stats/League Leaders are not rendered under FranchiseHQ root', () => {
-    render(
-      <FranchiseHQ
-        league={baseLeague}
-        onNavigate={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    );
-    // StatLeadersWidget adds data-testid="stat-leaders-widget" or a heading "League Leaders"
-    // It must not be present inside the HQ component itself
-    expect(document.querySelector('[data-testid="stat-leaders-widget"]')).toBeNull();
-    expect(screen.queryByRole('heading', { name: /^league leaders$/i })).toBeNull();
-  });
-
-  it('LeagueDashboard HQ tab does not mount StatLeadersWidget below FranchiseHQ', () => {
-    window.matchMedia = window.matchMedia ?? (() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
-    render(
-      <LeagueDashboard
-        league={{ ...baseLeague, phase: 'regular' }}
-        actions={{ getDashboardLeaders: vi.fn(() => Promise.resolve({ league: {}, team: {} })) }}
-        busy={false}
-        simulating={false}
-        onAdvanceWeek={() => {}}
-      />,
-    );
-    // FranchiseHQ renders
-    expect(screen.getByTestId('franchise-hq')).toBeTruthy();
-    // StatLeadersWidget must NOT be below HQ on the HQ tab
-    expect(document.querySelector('[data-testid="stat-leaders-widget"]')).toBeNull();
+  it('uses the existing offseason action center instead of game-day copy', () => {
+    const action = buildHqNextAction({ league: league({ phase: 'offseason_resign' }), gate: {}, gameDayReadiness: {} });
+    expect(action.destination).toBe('Contract Center');
+    expect(action.eyebrow).toBe('NEXT UP');
+    expect(action.title).not.toMatch(/game day/i);
   });
 });

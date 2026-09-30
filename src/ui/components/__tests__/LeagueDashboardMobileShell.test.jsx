@@ -17,7 +17,7 @@ const league = {
 describe('LeagueDashboard + FranchiseHQ mobile shell', () => {
   afterEach(() => cleanup());
 
-  it('owns one global app nav and one separate contextual Advance Week action', () => {
+  it('owns one global app nav and one thumb-sized HQ primary action', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
     window.matchMedia = vi.fn().mockReturnValue({
       matches: true,
@@ -35,13 +35,9 @@ describe('LeagueDashboard + FranchiseHQ mobile shell', () => {
     );
 
     const globalNavs = document.querySelectorAll('[data-layout-owner="global-app-navigation"]');
-    const contextualActions = document.querySelectorAll('[data-layout-owner="hq-context-action"]');
     expect(globalNavs).toHaveLength(1);
-    expect(contextualActions).toHaveLength(1);
     expect(screen.getAllByTestId('advance-week-cta')).toHaveLength(1);
     expect(document.querySelector('.app-hq-bottom-nav')).toBeNull();
-    expect(globalNavs[0].contains(contextualActions[0])).toBe(false);
-    expect(contextualActions[0].classList.contains('app-hq-sticky-advance')).toBe(true);
     expect(globalNavs[0].classList.contains('premium-bottom-nav')).toBe(true);
     for (const label of ['HQ', 'Team', 'League', 'News', 'More']) {
       expect(globalNavs[0].querySelectorAll(`button[aria-label="${label}"]`)).toHaveLength(1);

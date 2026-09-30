@@ -245,10 +245,10 @@ describe('FranchiseHQ layout — 375px mobile bounds', () => {
     );
 
     // Twin cards are present — CSS collapses them to single column at 375px via media query
-    const rosterCard = document.querySelector('[data-testid="roster-health-card"]');
-    const officeCard = document.querySelector('[data-testid="office-status-card"]');
-    expect(rosterCard).not.toBeNull();
-    expect(officeCard).not.toBeNull();
+    const divisionCard = document.querySelector('[data-testid="hq-division-card"]');
+    const strengthCard = document.querySelector('[data-testid="hq-team-strength"]');
+    expect(divisionCard).not.toBeNull();
+    expect(strengthCard).not.toBeNull();
   });
 });
 
