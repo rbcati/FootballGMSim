@@ -102,8 +102,11 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await advanceBtn.click();
   await expect(page.getByRole('button', { name: 'Save Game Plan', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Back to HQ', exact: true }).click();
-  await expect(advanceBtn).toHaveText(/Scout/);
-  await advanceBtn.click();
+  await expect(advanceBtn).toHaveText(/Play Week/);
+  await page.getByText('More Prep', { exact: true }).click();
+  const optionalScout = page.locator('.hq-v2-more button').filter({ hasText: 'Opponent has not been scouted.' });
+  await expect(optionalScout).toContainText('Optional');
+  await optionalScout.click();
   await expect(page.getByTestId('weekly-prep-scout-summary')).toBeVisible();
   await page.getByRole('button', { name: 'Back to HQ', exact: true }).click();
   await expect(page.getByTestId('hq-next-action')).toContainText('READY FOR GAME DAY');

@@ -196,6 +196,41 @@ describe('HQ Command Center V2', () => {
     expect(screen.queryByText(/ready for game day|no game scheduled/i)).toBeNull();
   });
 
+  it('keeps a later opponent informational on a bye and scopes prep to its actual week', () => {
+    window.localStorage.clear();
+    const state = league({ schedule: { weeks: [{ week: 4, games: [] }, { week: 5, games: [{ home: 7, away: 6, played: false }] }] } });
+    const onAdvanceWeek = vi.fn();
+    const view = render(<FranchiseHQ league={state} onAdvanceWeek={onAdvanceWeek} />);
+    expect(screen.getByText('READY TO ADVANCE')).toBeTruthy();
+    expect(screen.getByTestId('hq-next-game').textContent).toContain('vs CLE');
+    expect(screen.queryByRole('button', { name: /review game plan|scout|play week/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /advance week/i }));
+    expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
+    view.rerender(<FranchiseHQ league={{ ...state, week: 5 }} onAdvanceWeek={onAdvanceWeek} />);
+    expect(screen.getByRole('button', { name: /review game plan/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /play week/i })).toBeNull();
+  });
+
+  it('keeps informational scouting optional in More Prep while allowing the one progression action', () => {
+    markWeeklyPrepStep(league(), 'opponentScouted', false);
+    const onAdvanceWeek = vi.fn();
+    const onNavigate = vi.fn();
+    const info = { id: 'opponent-not-scouted', severity: 'info', fixDestination: 'Weekly Prep' };
+    expect(buildHqNextAction({ league: league(), gate: { riskItems: [info] }, nextGame: { isHome: true, opp: { abbr: 'CLE' } } })).toMatchObject({ advance: true, cta: 'Play Week' });
+    render(<FranchiseHQ league={league()} onAdvanceWeek={onAdvanceWeek} onNavigate={onNavigate} />);
+    expect(screen.getByText('READY FOR GAME DAY')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /play week/i })).toHaveLength(1);
+    const more = screen.getByText('More Prep').closest('details');
+    expect(more.hasAttribute('open')).toBe(false);
+    fireEvent.click(screen.getByText('More Prep'));
+    const scout = within(more).getByRole('button', { name: /opponent has not been scouted.*optional/i });
+    fireEvent.click(scout);
+    expect(onNavigate).toHaveBeenCalledWith('Weekly Prep');
+    expect(onAdvanceWeek).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /play week/i }));
+    expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
+  });
+
   it.each([[0, 1, 'AFC NORTH'], ['AFC', 'North', 'AFC NORTH'], ['nfc', 'west', 'NFC WEST'], ['AFC', 'AFC_NORTH', 'AFC NORTH']])('normalizes %s / %s and preserves canonical membership/order', (conf, div, title) => {
     const state = league();
     state.teams = state.teams.map((team) => team.id === 16 ? { ...team, conf: 3, div: 2 } : { ...team, conf, div });

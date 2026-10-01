@@ -140,6 +140,7 @@ export function buildHqNextAction({ league = {}, gate = {}, gameDayReadiness = {
     return { eyebrow: 'NEXT UP', title: `${count} lineup issue${count === 1 ? '' : 's'} need attention`, cta: 'Review Depth Chart', destination: 'Team:Lineup' };
   }
   const risks = (gate.riskItems ?? []).map((risk, index) => ({ ...risk, index }))
+    .filter((risk) => risk.severity === 'danger' || risk.severity === 'warning')
     .sort((a, b) => (SEVERITY[b.severity] ?? 0) - (SEVERITY[a.severity] ?? 0) || a.index - b.index);
   const risk = risks[0];
   if (risk) {

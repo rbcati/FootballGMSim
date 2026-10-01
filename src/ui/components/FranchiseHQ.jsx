@@ -8,6 +8,7 @@ import { buildHqDivisionSnapshot, buildHqNextAction, buildHqStrengthSnapshot, fo
 import { EmptyState } from './ScreenSystem.jsx';
 import JobSecurityCard from './JobSecurityCard.jsx';
 import HqInfoPopover from './HqInfoPopover.jsx';
+import { getUserScheduleGames } from '../utils/userWeeklyGames.js';
 
 const value = (number) => number == null ? '—' : number;
 const rank = (number) => number == null ? '—' : `#${number}`;
@@ -97,12 +98,15 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
   const command = useMemo(() => selectFranchiseHQViewModel(league), [league]);
   const prep = useMemo(() => deriveWeeklyPrepState(league), [league]);
   const weekly = useMemo(() => evaluateWeeklyContext(league), [league]);
-  const gate = useMemo(() => buildAdvanceReadinessGate({ league, prep, weeklyContext: weekly }), [league, prep, weekly]);
+  const currentGame = useMemo(() => getUserScheduleGames(league).find((game) => !game.isCompleted && game.week === Number(league?.week ?? 1)) ?? null, [league]);
+  // Future matchup prep belongs to its own week. Keep roster/injury/cap risks
+  // on a bye, while excluding game-plan and matchup risks for a later game.
+  const gate = useMemo(() => buildAdvanceReadinessGate({ league, prep: currentGame ? prep : { ...prep, nextGame: null, prepSummary: null, readinessTier: null }, weeklyContext: weekly }), [league, prep, weekly, currentGame]);
   const team = (league?.teams ?? []).find((row) => String(row?.id) === String(league?.userTeamId));
   const readiness = useMemo(() => buildGameDayReadinessModel({ roster: team?.roster, teamId: team?.id }), [team]);
   const division = useMemo(() => buildHqDivisionSnapshot(league), [league]);
   const strength = useMemo(() => buildHqStrengthSnapshot({ league, team }), [league, team]);
-  const action = useMemo(() => buildHqNextAction({ league, gate, gameDayReadiness: readiness, nextGame: command.nextGame }), [league, gate, readiness, command.nextGame]);
+  const action = useMemo(() => buildHqNextAction({ league, gate, gameDayReadiness: readiness, nextGame: currentGame }), [league, gate, readiness, currentGame]);
   if (command.readyState !== 'ready' || !team) return <EmptyState title="HQ loading" body="Team context is still loading or this save is missing team ownership metadata." />;
   const completedGames = (league?.schedule?.weeks ?? []).flatMap((week) => week?.games ?? []).some((game) => game?.played || (Number.isFinite(Number(game?.homeScore ?? game?.scoreHome)) && Number.isFinite(Number(game?.awayScore ?? game?.scoreAway))));
   const saveKey = `${league?.activeLeagueId ?? league?.id ?? 'league'}:${league?.franchiseGenerationId ?? league?.seasonId ?? league?.year ?? 'season'}`;
