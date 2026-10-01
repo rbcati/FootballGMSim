@@ -121,6 +121,9 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
     <details className="hq-v2-more"><summary>More Prep</summary><div>{gate.riskItems?.length ? gate.riskItems.map((item) => {
       const destination = item.id === 'depth-blocker' ? 'Team:Lineup' : item.fixDestination;
       return <button type="button" key={item.id} disabled={!destination} onClick={() => destination && onNavigate?.(destination)}><span>{item.label}</span><b>{destination ? item.severity === 'info' ? 'Optional' : 'Review' : 'Status'}</b></button>;
-    }) : <p>Lineup, game plan, scouting and training are ready.</p>}</div></details>
+    }) : <p>Lineup, game plan, scouting and training are ready.</p>}
+      {team.tradeRequestAlerts?.length > 0 && <button type="button" onClick={() => onNavigate?.('Team:Overview')}><span>{team.tradeRequestAlerts.length} player trade request{team.tradeRequestAlerts.length === 1 ? '' : 's'}</span><b>Review</b></button>}
+      {league.pendingRohCandidates?.length > 0 && <button type="button" onClick={() => onNavigate?.('Team:Overview')}><span>{league.pendingRohCandidates.length} Ring of Honor candidate{league.pendingRohCandidates.length === 1 ? '' : 's'}</span><b>Review</b></button>}
+    </div></details>
   </main>;
 }
