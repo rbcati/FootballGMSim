@@ -66,6 +66,29 @@ async function revealLatestUserGameResult(page, fallbackWeek) {
   return latestCompletedWeek;
 }
 
+async function openUserResultGameBook(page) {
+  const link = page.getByTestId('user-game-result-card').getByTestId('game-book-primary-cta');
+  await expect(link).toBeVisible();
+  await expect(link).toBeEnabled();
+  // The app uses smooth document scrolling. Settle the result's position
+  // before a real pointer click, including after reload scroll restoration.
+  await link.evaluate((button) => button.scrollIntoView({ behavior: 'instant', block: 'center' }));
+  await expect(link).toBeInViewport();
+  try {
+    await link.click({ timeout: 15000 });
+  } catch (error) {
+    console.log('Game Book navigation state', await page.evaluate(() => ({
+      hydrated: window.state?.isHydrated,
+      busy: window.state?.busy,
+      week: window.state?.league?.week,
+      phase: window.state?.league?.phase,
+      resultsVisible: Boolean(document.querySelector('[data-testid="weekly-results"]')),
+      hqVisible: Boolean(document.querySelector('[data-testid="franchise-hq"]')),
+    })));
+    throw error;
+  }
+}
+
 test('fresh franchise first week smoke', async ({ page, context }) => {
   const consoleErrors = [];
   page.on('pageerror', (err) => consoleErrors.push(String(err)));
@@ -167,9 +190,7 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   const weeklyScoreMatch = weeklyResultText.match(/(\d+)\s*[-–]\s*(\d+)/);
   const weeklyScore = weeklyScoreMatch ? `${weeklyScoreMatch[1]}-${weeklyScoreMatch[2]}` : null;
 
-  const completedGameLink = page.getByTestId('game-book-primary-cta').first();
-  await expect(completedGameLink).toBeVisible({ timeout: SMOKE_TIMEOUT });
-  await completedGameLink.click();
+  await openUserResultGameBook(page);
 
   // ── Game book shows the correct final score ─────────────────────────────────
   await expect(page.getByTestId('game-book')).toBeVisible({ timeout: SMOKE_TIMEOUT });
@@ -213,6 +234,7 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   // Reload retains the canonical result on Weekly Results and Game Book.
   await page.reload();
   await ensureLeagueLoaded(page);
+  await page.waitForFunction(() => window.state?.isHydrated && !window.state?.busy && !window.state?.simulating, null, { timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await goToTab(page, 'weekly-results');
@@ -220,7 +242,7 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   const reloadedResult = await page.getByTestId('user-game-result-card').textContent();
   expect(reloadedResult).toMatch(/\b\d+\s*-\s*\d+\b/);
   if (weeklyScore) expect(reloadedResult.replace(/\s/g, '')).toContain(weeklyScore);
-  await page.getByTestId('game-book-primary-cta').first().click();
+  await openUserResultGameBook(page);
   await expect(page.getByTestId('game-book-final-score')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   expect(consoleErrors.join('\n')).not.toMatch(/Uncaught|TypeError|ReferenceError/);
 });
