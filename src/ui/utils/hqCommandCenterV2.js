@@ -53,15 +53,19 @@ export function buildHqDivisionSnapshot(league = {}) {
   const division = standings.divisions.find((row) => normalizeConference(row.conf) === conf && normalizeDivision(row.div) === div);
   const normalized = source
     .map((team) => ({ ...team, conf: normalizeConference(team.conf), div: normalizeDivision(team.div), winPct: (() => { const games = Number(team.wins ?? 0) + Number(team.losses ?? 0) + Number(team.ties ?? 0); return games ? (Number(team.wins ?? 0) + Number(team.ties ?? 0) * .5) / games : 0; })() }));
-  const context = buildTiebreakContext(normalized, league.schedule);
+  // The new preseason schedule belongs to a different season than archive
+  // standings. Do not invent or mix division records across those seasons.
+  const isArchived = league.standingsContext?.mode === 'archive';
+  const context = isArchived ? null : buildTiebreakContext(normalized, league.schedule);
   return {
+    isArchived,
     title: `${groupName(conf, league.settings?.conferenceNames, CONFERENCES, 'CONF')} ${groupName(div, league.settings?.divisionNames, DIVISIONS, 'DIV')}`,
     teams: (division?.teams ?? []).map((team) => {
-      const record = context.get(Number(team.id));
+      const record = context?.get(Number(team.id));
       return {
         ...team,
         record: formatHqRecord(team),
-        divisionRecord: `${record?.divW ?? 0}-${record?.divL ?? 0}${record?.divT ? `-${record.divT}` : ''}`,
+        divisionRecord: isArchived ? null : `${record?.divW ?? 0}-${record?.divL ?? 0}${record?.divT ? `-${record.divT}` : ''}`,
       };
     }),
   };

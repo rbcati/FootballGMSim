@@ -28,9 +28,9 @@ function HqDivisionCard({ division, onNavigate }) {
   return (
     <section className="hq-v2-card" data-testid="hq-division-card">
       <button className="hq-v2-heading-link" type="button" onClick={() => onNavigate?.('League:Standings')}><span>{division.title}</span><span>Standings →</span></button>
-      <div className="hq-v2-table-head"><span>TEAM</span><span>RECORD</span><span>DIV <HqInfoPopover label="Division record">Record against teams in your division.</HqInfoPopover></span></div>
+      <div className="hq-v2-table-head"><span>TEAM</span><span>RECORD</span><span>DIV <HqInfoPopover label="Division record">{division.isArchived ? 'Previous-season division records are unavailable.' : 'Record against teams in your division.'}</HqInfoPopover></span></div>
       {division.teams.map((team) => <div key={team.id} className={`hq-v2-division-row${team.isUser ? ' is-user' : ''}`} data-user-team={team.isUser ? 'true' : undefined}>
-        <strong>{team.abbr}</strong><span>{team.record}</span><span>{team.divisionRecord}{team.isUser ? <small>YOU</small> : null}</span>
+        <strong>{team.abbr}</strong><span>{team.record}</span><span>{value(team.divisionRecord)}{team.isUser ? <small>YOU</small> : null}</span>
       </div>)}
     </section>
   );

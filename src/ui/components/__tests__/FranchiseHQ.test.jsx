@@ -215,7 +215,7 @@ describe('HQ Command Center V2', () => {
   });
 
   it.each([[0, 1], ['AFC', 'North']])('enriches archived preseason membership %s / %s without changing records or league state', (conf, div) => {
-    const state = league({ phase: 'preseason', standingsContext: { mode: 'archive' } });
+    const state = league({ phase: 'preseason', standingsContext: { mode: 'archive' }, schedule: { weeks: [{ week: 1, games: [{ home: 7, away: 4, played: false }] }] } });
     state.teams = state.teams.map((team) => team.id === 16 ? team : { ...team, conf, div });
     state.standings = state.teams.map((team) => ({ id: team.id, abbr: team.abbr, name: team.name, wins: team.wins, losses: team.losses, ties: 0, conf: null, div: null }));
     state.teams = state.teams.map((team) => ({ ...team, wins: 0, losses: 0 }));
@@ -230,8 +230,16 @@ describe('HQ Command Center V2', () => {
     expect(snapshot.teams.map((team) => team.id)).toEqual(canonical.teams.map((team) => team.id));
     expect(snapshot.teams).toHaveLength(4);
     expect(snapshot.teams.find((team) => team.id === 7).record).toBe('2-1');
-    expect(snapshot.teams.find((team) => team.id === 7).divisionRecord).toBe('1-1');
+    expect(snapshot.teams.every((team) => team.divisionRecord === null)).toBe(true);
     expect(JSON.stringify(state)).toBe(before);
+    // Current-season preseason results must not become archive DIV records.
+    state.schedule.weeks[0].games[0] = { home: 7, away: 4, homeScore: 24, awayScore: 17, played: true };
+    expect(buildHqDivisionSnapshot(state).teams.every((team) => team.divisionRecord === null)).toBe(true);
+    render(<FranchiseHQ league={state} />);
+    const card = screen.getByTestId('hq-division-card');
+    expect([...card.querySelectorAll('.hq-v2-division-row > span:last-child')].map((cell) => cell.textContent)).toEqual(expect.arrayContaining(['—', '—YOU']));
+    fireEvent.click(within(card).getByRole('button', { name: /division record help/i }));
+    expect(screen.getByText('Previous-season division records are unavailable.')).toBeTruthy();
   });
 
   it('opens metric help on tap at 390px and closes with Escape, a second tap or outside tap', () => {
