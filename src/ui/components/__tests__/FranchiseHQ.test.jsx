@@ -214,6 +214,26 @@ describe('HQ Command Center V2', () => {
     expect(buildHqDivisionSnapshot(state).title).toBe('GAMMA CENTRAL');
   });
 
+  it.each([[0, 1], ['AFC', 'North']])('enriches archived preseason membership %s / %s without changing records or league state', (conf, div) => {
+    const state = league({ phase: 'preseason', standingsContext: { mode: 'archive' } });
+    state.teams = state.teams.map((team) => team.id === 16 ? team : { ...team, conf, div });
+    state.standings = state.teams.map((team) => ({ id: team.id, abbr: team.abbr, name: team.name, wins: team.wins, losses: team.losses, ties: 0, conf: null, div: null }));
+    state.teams = state.teams.map((team) => ({ ...team, wins: 0, losses: 0 }));
+    const canonicalInput = { ...state, standings: state.standings.map((row) => {
+      const team = state.teams.find((team) => team.id === row.id);
+      return { ...row, conf: team.conf, div: team.div };
+    }) };
+    const canonical = prepareStandingsView(canonicalInput).divisions.find((row) => row.teams.some((team) => team.id === 7));
+    const before = JSON.stringify(state);
+    const snapshot = buildHqDivisionSnapshot(state);
+    expect(snapshot.title).toBe('AFC NORTH');
+    expect(snapshot.teams.map((team) => team.id)).toEqual(canonical.teams.map((team) => team.id));
+    expect(snapshot.teams).toHaveLength(4);
+    expect(snapshot.teams.find((team) => team.id === 7).record).toBe('2-1');
+    expect(snapshot.teams.find((team) => team.id === 7).divisionRecord).toBe('1-1');
+    expect(JSON.stringify(state)).toBe(before);
+  });
+
   it('opens metric help on tap at 390px and closes with Escape, a second tap or outside tap', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
     render(<FranchiseHQ league={league()} />);

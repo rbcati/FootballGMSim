@@ -42,11 +42,16 @@ export function formatHqRecord(team = {}) {
 export function buildHqDivisionSnapshot(league = {}) {
   const user = (league.teams ?? []).find((team) => String(team?.id) === String(league.userTeamId));
   if (!user) return null;
-  const standings = prepareStandingsView(league);
+  const teamsById = new Map((league.teams ?? []).map((team) => [String(team.id), team]));
+  // Archived preseason rows omit grouping fields. Enrich only the read-only
+  // standings input; retain the archive's records and canonical sorter.
+  const source = (Array.isArray(league.standings) && league.standings.length ? league.standings : league.teams ?? [])
+    .map((team) => ({ ...team, conf: team.conf ?? teamsById.get(String(team.id))?.conf, div: team.div ?? teamsById.get(String(team.id))?.div }));
+  const standings = prepareStandingsView({ ...league, standings: source });
   const conf = normalizeConference(user.conf);
   const div = normalizeDivision(user.div);
   const division = standings.divisions.find((row) => normalizeConference(row.conf) === conf && normalizeDivision(row.div) === div);
-  const normalized = (Array.isArray(league.standings) && league.standings.length ? league.standings : league.teams ?? [])
+  const normalized = source
     .map((team) => ({ ...team, conf: normalizeConference(team.conf), div: normalizeDivision(team.div), winPct: (() => { const games = Number(team.wins ?? 0) + Number(team.losses ?? 0) + Number(team.ties ?? 0); return games ? (Number(team.wins ?? 0) + Number(team.ties ?? 0) * .5) / games : 0; })() }));
   const context = buildTiebreakContext(normalized, league.schedule);
   return {

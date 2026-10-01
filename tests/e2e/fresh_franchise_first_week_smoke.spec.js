@@ -245,6 +245,9 @@ test('390px HQ exposes one readiness owner and touch help', async ({ page }) => 
   const div = page.getByRole('button', { name: 'Division record help', exact: true });
   await div.tap();
   await expect(page.getByText('Record against teams in your division.')).toBeVisible();
+  const triggerBounds = await div.boundingBox();
+  const helpBounds = await page.getByText('Record against teams in your division.').boundingBox();
+  expect(helpBounds.y).toBeGreaterThanOrEqual(triggerBounds.y + triggerBounds.height);
   await div.tap();
   await expect(page.getByText('Record against teams in your division.')).toHaveCount(0);
   const week = await page.evaluate(() => window.state.league.week);
