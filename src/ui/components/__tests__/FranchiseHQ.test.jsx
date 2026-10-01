@@ -1,13 +1,16 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import FranchiseHQ from '../FranchiseHQ.jsx';
 import { buildHqDivisionSnapshot, buildHqNextAction, buildHqStrengthSnapshot, deriveSpecialTeamsPresentationRating } from '../../utils/hqCommandCenterV2.js';
 import { prepareStandingsView } from '../../../views/standingsView.js';
 import { buildPowerRankings } from '../../utils/franchiseCommandCenter.js';
+import { markWeeklyPrepStep } from '../../utils/weeklyPrep.js';
+import { buildOffseasonActionCenter } from '../../utils/offseasonActionCenter.js';
+import { DEPTH_CHART_ROWS } from '../../../core/depthChart.js';
 
-const player = (id, name, pos, ovr, rowKey, order = 1) => ({ id, name, pos, ovr, depthChart: { rowKey, order } });
+const player = (id, name, pos, ovr, rowKey, order = 1) => ({ id, teamId: 7, name, pos, ovr, depthChart: { rowKey, order } });
 const roster = [
   player(1, 'Justin Fields', 'QB', 78, 'QB'), player(2, 'Runner One', 'RB', 76, 'RB'),
   player(3, 'Wide One', 'WR', 80, 'WR'), player(4, 'Tight One', 'TE', 77, 'TE'),
@@ -16,10 +19,14 @@ const roster = [
   player(22, 'Backer One', 'LB', 78, 'LB'), player(23, 'Corner One', 'CB', 83, 'CB'), player(24, 'Safety One', 'S', 80, 'S'),
 ];
 const specialists = [player(31, 'Kicker', 'K', 75, 'K'), player(32, 'Punter', 'P', 72, 'P'), player(33, 'Returner', 'WR', 81, 'RS')];
+const backups = DEPTH_CHART_ROWS.filter((row) => row.group !== 'SPECIAL').flatMap((row, index) => {
+  const existing = roster.filter((member) => member.depthChart.rowKey === row.key).length;
+  return Array.from({ length: Math.max(0, row.min - existing) }, (_, i) => player(400 + index * 10 + i, `${row.key} Backup ${i}`, row.match[0], 65, row.key, existing + i + 1));
+}).concat([player(600, 'Receiver Depth 1', 'WR', 64, 'WR', 6), player(601, 'Receiver Depth 2', 'WR', 63, 'WR', 7), player(602, 'Return Depth', 'WR', 62, 'RS', 2)]);
 
 function league(overrides = {}) {
   const teams = [
-    { id: 7, city: 'Pittsburgh', name: 'Steelers', abbr: 'PIT', conf: 0, div: 1, wins: 2, losses: 1, ovr: 78, roster: [...roster, ...specialists] },
+    { id: 7, city: 'Pittsburgh', name: 'Steelers', abbr: 'PIT', conf: 0, div: 1, wins: 2, losses: 1, ovr: 78, roster: [...roster, ...specialists, ...backups] },
     { id: 4, abbr: 'BAL', conf: 0, div: 1, wins: 2, losses: 1, ovr: 77, offenseRating: 77, defenseRating: 78, roster: [] },
     { id: 5, abbr: 'CIN', conf: 0, div: 1, wins: 1, losses: 2, ovr: 74, offenseRating: 73, defenseRating: 75, roster: [] },
     { id: 6, abbr: 'CLE', conf: 0, div: 1, wins: 3, losses: 0, ovr: 82, offenseRating: 81, defenseRating: 83, roster: [] },
@@ -29,15 +36,29 @@ function league(overrides = {}) {
 }
 
 describe('HQ Command Center V2', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    for (const step of ['lineupChecked', 'injuriesReviewed', 'planReviewed', 'opponentScouted']) markWeeklyPrepStep(league(), step);
+  });
   afterEach(cleanup);
 
   it('puts the authoritative lineup blocker first and routes to Team:Lineup', () => {
     const onNavigate = vi.fn();
-    const blocked = league({ teams: league().teams.map((team) => team.id === 7 ? { ...team, roster: team.roster.map((member) => member.id === 1 ? { ...member, injuryWeeksRemaining: 2 } : member) } : team) });
-    render(<FranchiseHQ league={blocked} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} />);
+    const onAdvanceWeek = vi.fn();
+    const blocked = league({ teams: league().teams.map((team) => team.id === 7 ? { ...team, roster: team.roster.map((member) => [1, 3].includes(member.id) ? { ...member, injured: true, injuryWeeksRemaining: 2 } : member) } : team) });
+    render(<FranchiseHQ league={blocked} onNavigate={onNavigate} onAdvanceWeek={onAdvanceWeek} />);
+    expect(screen.getByTestId('hq-next-action').textContent).toContain('2 lineup issues need attention');
     expect(screen.getByTestId('hq-next-action').compareDocumentPosition(screen.getByTestId('hq-division-card')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /review depth chart/i }));
     expect(onNavigate).toHaveBeenCalledWith('Team:Lineup');
+    expect(screen.queryByRole('button', { name: /play week|advance week/i })).toBeNull();
+    const game = screen.getByTestId('hq-next-game');
+    expect(game.textContent).toContain('vs CLE');
+    expect(game.textContent).toContain('3-0 · 82 OVR');
+    expect(within(game).queryAllByRole('button')).toHaveLength(0);
+    for (const element of [game, ...game.querySelectorAll('*')]) fireEvent.click(element);
+    for (const button of screen.getAllByRole('button')) fireEvent.click(button);
+    expect(onAdvanceWeek).not.toHaveBeenCalled();
   });
 
   it('uses existing risk severity and preserves order within a severity', () => {
@@ -51,8 +72,11 @@ describe('HQ Command Center V2', () => {
     const ready = buildHqNextAction({ league: league(), gate: { riskItems: [] }, gameDayReadiness: {}, nextGame: { isHome: true, opp: { abbr: 'CLE' } } });
     expect(ready.eyebrow).toBe('READY FOR GAME DAY');
     render(<FranchiseHQ league={league()} actions={{ getDashboardLeaders: vi.fn().mockResolvedValue({ team: {}, league: {} }) }} onAdvanceWeek={onAdvanceWeek} />);
-    fireEvent.click(screen.getByRole('button', { name: /play week/i }));
-    expect(onAdvanceWeek).toHaveBeenCalled();
+    const advance = screen.getAllByRole('button', { name: /play week|advance week/i });
+    expect(advance).toHaveLength(1);
+    expect(within(screen.getByTestId('hq-next-action')).getByRole('button', { name: /play week/i })).toBe(advance[0]);
+    fireEvent.click(advance[0]);
+    expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
   });
 
   it('uses canonical division membership, ordering, and played-game division record', () => {
@@ -101,10 +125,124 @@ describe('HQ Command Center V2', () => {
     expect(within(screen.getByTestId('hq-division-card')).getAllByText('0-0').length).toBeGreaterThan(0);
   });
 
-  it('uses the existing offseason action center instead of game-day copy', () => {
-    const action = buildHqNextAction({ league: league({ phase: 'offseason_resign' }), gate: {}, gameDayReadiness: {} });
+  it('cannot bypass a game-plan warning through Next Game', () => {
+    markWeeklyPrepStep(league(), 'planReviewed', false);
+    const onAdvanceWeek = vi.fn();
+    const onNavigate = vi.fn();
+    render(<FranchiseHQ league={league()} onAdvanceWeek={onAdvanceWeek} onNavigate={onNavigate} />);
+    expect(screen.getByTestId('hq-next-action').textContent).toContain('Game plan not reviewed');
+    fireEvent.click(screen.getByRole('button', { name: /review game plan/i }));
+    expect(onNavigate).toHaveBeenCalledWith('Game Plan');
+    for (const element of screen.getByTestId('hq-next-game').querySelectorAll('*')) fireEvent.click(element);
+    expect(screen.queryByRole('button', { name: /play week/i })).toBeNull();
+    expect(onAdvanceWeek).not.toHaveBeenCalled();
+  });
+
+  it.each(['offseason_resign', 'offseason'])('uses re-signing authority without mutating phase %s', (phase) => {
+    const state = league({ phase });
+    state.teams[0] = { ...state.teams[0], capRoom: 20, roster: [...state.teams[0].roster, { id: 100, pos: 'QB', ovr: 80, contract: { years: 1 } }] };
+    const canonical = buildOffseasonActionCenter({ ...state, phase: 'offseason_resign' });
+    const action = buildHqNextAction({ league: state });
+    expect(action.title).toBe(canonical.blockers[0]);
     expect(action.destination).toBe('Contract Center');
-    expect(action.eyebrow).toBe('NEXT UP');
-    expect(action.title).not.toMatch(/game day/i);
+    expect(state.phase).toBe(phase);
+    render(<FranchiseHQ league={state} />);
+    expect(screen.getByRole('button', { name: /open re-signing center/i })).toBeTruthy();
+    expect(screen.queryByText(/ready for game day/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /play week/i })).toBeNull();
+  });
+
+  it('shows Re-signing when decisions are clear, without making suggestions blockers', () => {
+    const state = league({ phase: 'offseason' });
+    state.teams[0] = { ...state.teams[0], capRoom: 20, roster: ['QB', 'LT', 'EDGE', 'CB'].map((pos, id) => ({ id, pos, contract: { years: 3 } })) };
+    expect(buildOffseasonActionCenter({ ...state, phase: 'offseason_resign' }).priorities.length).toBeGreaterThan(0);
+    expect(buildHqNextAction({ league: state }).title).toBe('Re-signing');
+  });
+
+  it.each([['free_agency', 'Open market board', 'Free Agency'], ['draft', 'Open Draft Room', 'Draft Room'], ['post_draft', 'Review Draft Class', '🎓 Draft'], ['draft_combine', 'Open Draft Combine', 'Draft']])('routes %s to its lifecycle surface', (phase, cta, destination) => {
+    const state = league({ phase, draftClass: [] });
+    const action = buildHqNextAction({ league: state });
+    expect(action).toMatchObject({ eyebrow: 'NEXT UP', cta, destination });
+    expect(action.advance).toBeUndefined();
+    render(<FranchiseHQ league={state} />);
+    expect(screen.queryByText(/ready for game day/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /play week/i })).toBeNull();
+  });
+
+  it('prioritizes preseason cutdown even with a scheduled game and weekly warnings', () => {
+    const state = league({ phase: 'preseason' });
+    state.teams[0] = { ...state.teams[0], capRoom: 20, roster: [...roster, ...specialists, ...Array.from({ length: 43 }, (_, i) => player(200 + i, `Backup ${i}`, 'WR', 60, 'WR', i + 10))] };
+    render(<FranchiseHQ league={state} />);
+    expect(screen.getByTestId('hq-next-action').textContent).toContain('Roster cutdown required (60/53)');
+    expect(screen.getByRole('button', { name: /run final cuts/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /play week/i })).toBeNull();
+  });
+
+  it('allows clean legal preseason to use the one game-day action', () => {
+    const state = league({ phase: 'preseason' });
+    state.teams[0] = { ...state.teams[0], capRoom: 20 };
+    const onAdvanceWeek = vi.fn();
+    render(<FranchiseHQ league={state} onAdvanceWeek={onAdvanceWeek} />);
+    expect(screen.getByText('READY FOR GAME DAY')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /play week/i })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: /play week/i }));
+    expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses truthful in-season bye copy', () => {
+    render(<FranchiseHQ league={league({ schedule: { weeks: [{ week: 4, games: [] }] } })} />);
+    expect(screen.getByText('READY TO ADVANCE')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /advance week/i })).toBeTruthy();
+    expect(screen.queryByText(/ready for game day|no game scheduled/i)).toBeNull();
+  });
+
+  it.each([[0, 1, 'AFC NORTH'], ['AFC', 'North', 'AFC NORTH'], ['nfc', 'west', 'NFC WEST'], ['AFC', 'AFC_NORTH', 'AFC NORTH']])('normalizes %s / %s and preserves canonical membership/order', (conf, div, title) => {
+    const state = league();
+    state.teams = state.teams.map((team) => team.id === 16 ? { ...team, conf: 3, div: 2 } : { ...team, conf, div });
+    const canonical = prepareStandingsView(state).divisions.find((row) => row.teams.some((team) => team.id === 7));
+    const snapshot = buildHqDivisionSnapshot(state);
+    expect(snapshot.title).toBe(title);
+    expect(snapshot.teams.map((team) => team.id)).toEqual(canonical.teams.map((team) => team.id));
+    expect(snapshot.teams).toHaveLength(4);
+    expect(snapshot.teams.find((team) => team.id === 7).divisionRecord).toBe('1-1');
+  });
+
+  it('respects configured conference/division names, including additional groups', () => {
+    const state = league({ settings: { conferenceNames: ['Alpha', 'Beta', 'Gamma'], divisionNames: ['Coastal', 'Central'] } });
+    expect(buildHqDivisionSnapshot(state).title).toBe('ALPHA CENTRAL');
+    state.teams = state.teams.map((team) => ({ ...team, conf: 2 }));
+    expect(buildHqDivisionSnapshot(state).title).toBe('GAMMA CENTRAL');
+  });
+
+  it('opens metric help on tap at 390px and closes with Escape, a second tap or outside tap', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    render(<FranchiseHQ league={league()} />);
+    const power = screen.getByRole('button', { name: /power rank help/i });
+    expect(power.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(power);
+    expect(power.getAttribute('aria-expanded')).toBe('true');
+    expect(document.getElementById(power.getAttribute('aria-controls')).textContent).toContain('Weekly team ranking');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByText(/weekly team ranking/i)).toBeNull();
+    expect(document.activeElement).toBe(power);
+    const div = screen.getByRole('button', { name: /division record help/i });
+    fireEvent.click(div);
+    expect(screen.getByText('Record against teams in your division.')).toBeTruthy();
+    fireEvent.click(div);
+    expect(screen.queryByText('Record against teams in your division.')).toBeNull();
+    fireEvent.click(power);
+    fireEvent.pointerDown(document.body);
+    expect(power.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('ignores a late leader response from the previous save generation', async () => {
+    let resolveOld;
+    const actions = { getDashboardLeaders: vi.fn().mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; })).mockResolvedValue({ team: {}, league: {} }) };
+    const view = render(<FranchiseHQ league={league()} actions={actions} />);
+    view.rerender(<FranchiseHQ league={league({ franchiseGenerationId: 'new' })} actions={actions} />);
+    resolveOld({ team: { passing: [{ name: 'Stale Leader', value: 999 }] } });
+    await waitFor(() => expect(actions.getDashboardLeaders).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText('S. Leader')).toBeNull();
+    expect(screen.getByText(/season leaders appear/i)).toBeTruthy();
   });
 });

@@ -234,6 +234,8 @@ function AppContent() {
   } = state;
 
   const [activeView, setActiveView] = useState('saves');
+  const [dashboardTab, setDashboardTab] = useState('HQ');
+  const hqOwnsProgression = ['HQ', 'Weekly Hub', 'Home'].includes(dashboardTab);
   const [activeSlot, setActiveSlot] = useState(() => readStoredActiveSlot());
   const [pendingNewSlot, setPendingNewSlot] = useState(null);
   const [watchMode, setWatchMode] = useState('watch');
@@ -687,7 +689,8 @@ function AppContent() {
 
       if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault();
-        if (typeof handleAdvanceWeek === 'function') handleAdvanceWeek();
+        if (hqOwnsProgression) document.querySelector('[data-testid="hq-next-action"] button')?.click();
+        else if (typeof handleAdvanceWeek === 'function') handleAdvanceWeek();
       } else if (e.key === 's' || e.key === 'S') {
         if (!busy && leagueReady) {
           if (activeSlot) actions.saveSlot(activeSlot);
@@ -698,7 +701,7 @@ function AppContent() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [league, busy, leagueReady, postGameResult, skipGameSummary, promptUserGame, userGameLogs, handleAdvanceWeek, actions, activeSlot]);
+  }, [league, busy, leagueReady, postGameResult, skipGameSummary, promptUserGame, userGameLogs, handleAdvanceWeek, actions, activeSlot, hqOwnsProgression]);
 
   // Expose state and actions to window for E2E testing
   useEffect(() => {
@@ -936,7 +939,7 @@ function AppContent() {
   const utilityActions = useMemo(() => {
     const items = [];
 
-    if (safePhase === 'regular') {
+    if (!hqOwnsProgression && safePhase === 'regular') {
       items.push({
         label: 'Sim to Offseason',
         title: 'Simulate through playoffs to offseason',
@@ -944,7 +947,7 @@ function AppContent() {
         disabled: !canUseTopActions,
       });
     }
-    if (safePhase && safePhase !== 'regular' && safePhase !== 'playoffs' && ['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(safePhase)) {
+    if (!hqOwnsProgression && safePhase && safePhase !== 'regular' && safePhase !== 'playoffs' && ['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(safePhase)) {
       items.push({
         label: 'Sim to Season',
         title: 'Simulate through offseason to next preseason',
@@ -960,7 +963,7 @@ function AppContent() {
     );
 
     return items;
-  }, [safePhase, canUseTopActions, activeSlot, actions, busy, isBatchSimBlocking, handleReset, handleRequestSimToPhase]);
+  }, [safePhase, canUseTopActions, activeSlot, actions, busy, isBatchSimBlocking, handleReset, handleRequestSimToPhase, hqOwnsProgression]);
 
   const simPhaseLabel = useMemo(() => {
     if (!league?.phase) return 'Initializing';
@@ -1226,7 +1229,7 @@ function AppContent() {
             {soundEnabled ? "🔊" : "🔇"}
           </button>
           <ThemeToggle compact />
-          <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+          {!hqOwnsProgression && <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
             <button
               className="btn btn-primary app-advance-btn app-action-primary"
               onClick={handleAdvanceWeek}
@@ -1247,7 +1250,7 @@ function AppContent() {
                 {topSecondaryAction.label}
               </button>
             )}
-          </div>
+          </div>}
           <details className="app-overflow-menu">
             <summary className="btn app-overflow-trigger" aria-label="Action menu">
               {ACTION_LABELS.more}
@@ -1581,6 +1584,7 @@ function AppContent() {
           simulating={simulating}
           actions={actions}
           onAdvanceWeek={handleAdvanceWeek}
+          onActiveTabChange={setDashboardTab}
           notifications={notifications}
           onDismissNotification={actions.dismissNotification}
           externalBoxScoreId={externalBoxScoreId}

@@ -7,21 +7,18 @@ import { buildGameDayReadinessModel } from '../utils/gameDayReadinessModel.js';
 import { buildHqDivisionSnapshot, buildHqNextAction, buildHqStrengthSnapshot, formatHqRecord } from '../utils/hqCommandCenterV2.js';
 import { EmptyState } from './ScreenSystem.jsx';
 import JobSecurityCard from './JobSecurityCard.jsx';
+import HqInfoPopover from './HqInfoPopover.jsx';
 
 const value = (number) => number == null ? '—' : number;
 const rank = (number) => number == null ? '—' : `#${number}`;
 
-function Info({ label, children }) {
-  return <span className="hq-v2-info" tabIndex={0} aria-label={`${label}: ${children}`} title={children}>?</span>;
-}
-
 function HqNextActionCard({ action, onNavigate, onAdvanceWeek, disabled }) {
-  const activate = () => action.advance ? onAdvanceWeek?.() : onNavigate?.(action.destination);
+  const activate = () => action.advance ? onAdvanceWeek?.() : action.destination && onNavigate?.(action.destination);
   return (
     <section className="hq-v2-card hq-v2-next" data-testid="hq-next-action">
       <p className="hq-v2-kicker">{action.eyebrow}</p>
       <strong className="hq-v2-next__title">{action.title}</strong>
-      <button type="button" className="hq-v2-primary" data-testid="advance-week-cta" disabled={disabled} onClick={activate}>{disabled ? 'Please wait…' : `${action.cta} →`}</button>
+      <button type="button" className="hq-v2-primary" data-testid="advance-week-cta" disabled={disabled || (!action.advance && !action.destination)} onClick={activate}>{disabled ? 'Please wait…' : `${action.cta} →`}</button>
     </section>
   );
 }
@@ -31,7 +28,7 @@ function HqDivisionCard({ division, onNavigate }) {
   return (
     <section className="hq-v2-card" data-testid="hq-division-card">
       <button className="hq-v2-heading-link" type="button" onClick={() => onNavigate?.('League:Standings')}><span>{division.title}</span><span>Standings →</span></button>
-      <div className="hq-v2-table-head"><span>TEAM</span><span>RECORD</span><span>DIV <Info label="Division record">Record against teams in your division.</Info></span></div>
+      <div className="hq-v2-table-head"><span>TEAM</span><span>RECORD</span><span>DIV <HqInfoPopover label="Division record">Record against teams in your division.</HqInfoPopover></span></div>
       {division.teams.map((team) => <div key={team.id} className={`hq-v2-division-row${team.isUser ? ' is-user' : ''}`} data-user-team={team.isUser ? 'true' : undefined}>
         <strong>{team.abbr}</strong><span>{team.record}</span><span>{team.divisionRecord}{team.isUser ? <small>YOU</small> : null}</span>
       </div>)}
@@ -46,9 +43,9 @@ function HqTeamStrength({ snapshot }) {
       <h2>TEAM STRENGTH</h2>
       <div className="hq-v2-ratings">{metrics.map(([label, score]) => <div key={label}><span>{label}</span><strong>{value(score)}</strong></div>)}</div>
       <div className="hq-v2-ranks">
-        <div><span>POWER <Info label="Power rank">Weekly team ranking based on current results, point differential, and recent form.</Info></span><strong>{rank(snapshot.powerRank)}</strong></div>
-        <div><span>OFFENSE <Info label="Offense rank">League rank by current offensive unit strength.</Info></span><strong>{rank(snapshot.offenseRank)}</strong></div>
-        <div><span>DEFENSE <Info label="Defense rank">League rank by current defensive unit strength.</Info></span><strong>{rank(snapshot.defenseRank)}</strong></div>
+        <div><span>POWER <HqInfoPopover label="Power rank">Weekly team ranking based on current results, point differential, and recent form.</HqInfoPopover></span><strong>{rank(snapshot.powerRank)}</strong></div>
+        <div><span>OFFENSE <HqInfoPopover label="Offense rank">League rank by current offensive unit strength.</HqInfoPopover></span><strong>{rank(snapshot.offenseRank)}</strong></div>
+        <div><span>DEFENSE <HqInfoPopover label="Defense rank">League rank by current defensive unit strength.</HqInfoPopover></span><strong>{rank(snapshot.defenseRank)}</strong></div>
       </div>
     </section>
   );
@@ -90,10 +87,10 @@ function HqYardageLeaders({ actions, saveKey, hasCompletedGames, onNavigate }) {
   </section>;
 }
 
-function HqNextGame({ nextGame, onAdvanceWeek, disabled }) {
+function HqNextGame({ nextGame }) {
   if (!nextGame) return null;
   const opponent = nextGame.opp;
-  return <section className="hq-v2-card hq-v2-game" data-testid="hq-next-game"><div><h2>NEXT GAME</h2><strong>{nextGame.isHome ? 'vs' : '@'} {opponent?.abbr ?? 'TBD'}</strong><p>{formatHqRecord(opponent)} · {value(opponent?.ovr ?? opponent?.overallRating)} OVR</p></div><button type="button" onClick={() => onAdvanceWeek?.()} disabled={disabled}>Play Week →</button></section>;
+  return <section className="hq-v2-card hq-v2-game" data-testid="hq-next-game"><div><h2>NEXT GAME</h2><strong>{nextGame.isHome ? 'vs' : '@'} {opponent?.abbr ?? 'TBD'}</strong><p>{formatHqRecord(opponent)} · {value(opponent?.ovr ?? opponent?.overallRating)} OVR</p></div></section>;
 }
 
 export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, simulating, actions }) {
@@ -116,7 +113,10 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
     {league?.userOwnerPressure ? <JobSecurityCard ownerProfile={league.userOwnerPressure} /> : null}
     <div className="hq-v2-pair"><HqDivisionCard division={division} onNavigate={onNavigate} /><HqTeamStrength snapshot={strength} /></div>
     <HqYardageLeaders actions={actions} saveKey={saveKey} hasCompletedGames={completedGames} onNavigate={onNavigate} />
-    <HqNextGame nextGame={command.nextGame} onAdvanceWeek={onAdvanceWeek} disabled={busy || simulating} />
-    <details className="hq-v2-more"><summary>More Prep</summary><div>{gate.riskItems?.length ? gate.riskItems.map((item) => <button type="button" key={item.id} onClick={() => onNavigate?.(item.id === 'depth-blocker' ? 'Team:Lineup' : item.fixDestination)}><span>{item.label}</span><b>{item.severity === 'info' ? 'Optional' : 'Review'}</b></button>) : <p>Lineup, game plan, scouting and training are ready.</p>}</div></details>
+    <HqNextGame nextGame={command.nextGame} />
+    <details className="hq-v2-more"><summary>More Prep</summary><div>{gate.riskItems?.length ? gate.riskItems.map((item) => {
+      const destination = item.id === 'depth-blocker' ? 'Team:Lineup' : item.fixDestination;
+      return <button type="button" key={item.id} disabled={!destination} onClick={() => destination && onNavigate?.(destination)}><span>{item.label}</span><b>{destination ? item.severity === 'info' ? 'Optional' : 'Review' : 'Status'}</b></button>;
+    }) : <p>Lineup, game plan, scouting and training are ready.</p>}</div></details>
   </main>;
 }

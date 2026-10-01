@@ -8,6 +8,27 @@ const CONFERENCES = ['AFC', 'NFC'];
 const DIVISIONS = ['EAST', 'NORTH', 'SOUTH', 'WEST'];
 const SEVERITY = { danger: 3, warning: 2, info: 1 };
 
+// Presentation matching only. Standings membership and order remain canonical.
+function normalizeGroup(value, names) {
+  const token = String(value ?? '').trim().toUpperCase();
+  if (/^\d+$/.test(token)) return Number(token);
+  const index = names.indexOf(token);
+  return index >= 0 ? index : token;
+}
+
+function normalizeConference(value) {
+  return normalizeGroup(value, CONFERENCES);
+}
+
+function normalizeDivision(value) {
+  // Legacy/imported identifiers also use AFC_EAST / NFC_NORTH.
+  return normalizeGroup(String(value ?? '').replace(/^(AFC|NFC)_/i, ''), DIVISIONS);
+}
+
+function groupName(value, configured, defaults, prefix) {
+  return String(configured?.[value] ?? defaults[value] ?? `${prefix} ${value}`).toUpperCase();
+}
+
 const validRating = (value) => {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? Math.round(number) : null;
@@ -22,12 +43,14 @@ export function buildHqDivisionSnapshot(league = {}) {
   const user = (league.teams ?? []).find((team) => String(team?.id) === String(league.userTeamId));
   if (!user) return null;
   const standings = prepareStandingsView(league);
-  const division = standings.divisions.find((row) => Number(row.conf) === Number(user.conf) && Number(row.div) === Number(user.div));
+  const conf = normalizeConference(user.conf);
+  const div = normalizeDivision(user.div);
+  const division = standings.divisions.find((row) => normalizeConference(row.conf) === conf && normalizeDivision(row.div) === div);
   const normalized = (Array.isArray(league.standings) && league.standings.length ? league.standings : league.teams ?? [])
-    .map((team) => ({ ...team, winPct: (() => { const games = Number(team.wins ?? 0) + Number(team.losses ?? 0) + Number(team.ties ?? 0); return games ? (Number(team.wins ?? 0) + Number(team.ties ?? 0) * .5) / games : 0; })() }));
+    .map((team) => ({ ...team, conf: normalizeConference(team.conf), div: normalizeDivision(team.div), winPct: (() => { const games = Number(team.wins ?? 0) + Number(team.losses ?? 0) + Number(team.ties ?? 0); return games ? (Number(team.wins ?? 0) + Number(team.ties ?? 0) * .5) / games : 0; })() }));
   const context = buildTiebreakContext(normalized, league.schedule);
   return {
-    title: `${CONFERENCES[Number(user.conf)] ?? `CONF ${user.conf}`} ${DIVISIONS[Number(user.div)] ?? `DIV ${user.div}`}`,
+    title: `${groupName(conf, league.settings?.conferenceNames, CONFERENCES, 'CONF')} ${groupName(div, league.settings?.divisionNames, DIVISIONS, 'DIV')}`,
     teams: (division?.teams ?? []).map((team) => {
       const record = context.get(Number(team.id));
       return {
@@ -89,10 +112,18 @@ export function buildHqStrengthSnapshot({ league = {}, team = {} } = {}) {
 
 export function buildHqNextAction({ league = {}, gate = {}, gameDayReadiness = {}, nextGame = null } = {}) {
   const phase = String(league.phase ?? 'regular');
-  if (['offseason_resign', 'free_agency', 'draft', 'post_draft'].includes(phase)) {
-    const center = buildOffseasonActionCenter(league);
+  if (phase === 'draft_combine') {
+    return { eyebrow: 'NEXT UP', title: 'Draft Combine', cta: 'Open Draft Combine', destination: 'Draft' };
+  }
+  const center = buildOffseasonActionCenter(phase === 'offseason' ? { ...league, phase: 'offseason_resign' } : league);
+  if (['offseason', 'offseason_resign', 'free_agency', 'trades', 'draft', 'post_draft'].includes(phase)) {
     const action = center.actions[0];
-    return { eyebrow: 'NEXT UP', title: center.blockers[0] ?? center.priorities[0] ?? center.phaseLabel, cta: action?.label ?? 'Continue Offseason', destination: action?.tab ?? 'Offseason' };
+    return { eyebrow: 'NEXT UP', title: center.blockers[0] ?? center.phaseLabel, cta: action?.label ?? 'Continue Offseason', destination: action?.tab ?? 'Offseason' };
+  }
+  if (phase === 'preseason' && center.blockers.length) {
+    const blocker = center.blockers[0];
+    const capBlocker = /cap room/i.test(blocker);
+    return { eyebrow: 'NEXT UP', title: blocker, cta: capBlocker ? 'Review Cap Outlook' : 'Run Final Cuts', destination: capBlocker ? 'Financials' : center.actions[0]?.tab };
   }
   if (phase === 'preseason' && !nextGame) return { eyebrow: 'NEXT UP', title: 'Set your preseason lineup', cta: 'Review Depth Chart', destination: 'Team:Lineup' };
   if (gameDayReadiness.blockingLineupIssue) {
@@ -110,7 +141,9 @@ export function buildHqNextAction({ league = {}, gate = {}, gameDayReadiness = {
         : [risk.label, risk.id === 'injuries-pending' ? 'Review Injuries' : 'Review'];
     return { eyebrow: 'NEXT UP', title: copy[0], cta: copy[1], destination };
   }
-  return { eyebrow: 'READY FOR GAME DAY', title: nextGame ? `${nextGame.isHome ? 'vs' : '@'} ${nextGame.opp?.abbr ?? 'Opponent'}` : 'No game scheduled', cta: 'Play Week', advance: true };
+  return nextGame
+    ? { eyebrow: 'READY FOR GAME DAY', title: `${nextGame.isHome ? 'vs' : '@'} ${nextGame.opp?.abbr ?? 'Opponent'}`, cta: 'Play Week', advance: true }
+    : { eyebrow: 'READY TO ADVANCE', title: 'No game this week', cta: 'Advance Week', advance: true };
 }
 
 export const HQ_SPECIALIST_ROWS = DEPTH_CHART_ROWS.filter((row) => row.group === 'SPECIAL').map((row) => row.key);
