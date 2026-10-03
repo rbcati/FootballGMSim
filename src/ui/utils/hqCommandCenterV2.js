@@ -3,7 +3,6 @@ import { DEPTH_CHART_ROWS } from '../../core/depthChart.js';
 import { deriveLineupRatingSnapshot, getPersistedDepthAssignment } from './lineupCommandCenter.js';
 import { buildPowerRankings } from './franchiseCommandCenter.js';
 import { buildOffseasonActionCenter } from './offseasonActionCenter.js';
-import { isCanonicalCompletedGame } from './canonicalCompletedGame.js';
 
 const CONFERENCES = ['AFC', 'NFC'];
 const DIVISIONS = ['EAST', 'NORTH', 'SOUTH', 'WEST'];
@@ -57,16 +56,7 @@ export function buildHqDivisionSnapshot(league = {}) {
   // The new preseason schedule belongs to a different season than archive
   // standings. Do not invent or mix division records across those seasons.
   const isArchived = league.standingsContext?.mode === 'archive';
-  // Initialized scores on an explicitly unplayed game are not a final result.
-  // Filter only the DIV record input; canonical standings ordering is unchanged.
-  const completedSchedule = {
-    ...league.schedule,
-    weeks: (league.schedule?.weeks ?? []).map((week) => ({
-      ...week,
-      games: (week.games ?? []).filter(isCanonicalCompletedGame),
-    })),
-  };
-  const context = isArchived ? null : buildTiebreakContext(normalized, completedSchedule);
+  const context = isArchived ? null : buildTiebreakContext(normalized, league.schedule);
   return {
     isArchived,
     title: `${groupName(conf, league.settings?.conferenceNames, CONFERENCES, 'CONF')} ${groupName(div, league.settings?.divisionNames, DIVISIONS, 'DIV')}`,

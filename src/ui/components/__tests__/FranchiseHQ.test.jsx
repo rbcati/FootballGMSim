@@ -206,6 +206,30 @@ describe('HQ Command Center V2', () => {
     expect(buildHqDivisionSnapshot(state).teams.find((team) => team.id === 7).divisionRecord).toBe('1-1-1');
   });
 
+  it('renders a 1-0 DIV record and the completed-game standings order with a future 0-0 matchup', () => {
+    const records = { 7: [1, 0, 24, 17], 4: [1, 0, 21, 17], 5: [0, 2, 34, 45] };
+    const state = league({
+      teams: league().teams.filter((team) => records[team.id]).map((team) => {
+        const [wins, losses, ptsFor, ptsAgainst] = records[team.id];
+        return { ...team, wins, losses, ptsFor, ptsAgainst };
+      }),
+      schedule: { weeks: [
+        { week: 1, games: [{ home: 7, away: 5, played: true, homeScore: 24, awayScore: 17 }] },
+        { week: 2, games: [{ home: 4, away: 5, played: true, homeScore: 21, awayScore: 17 }] },
+        { week: 4, games: [{ home: 7, away: 5, played: false, homeScore: 0, awayScore: 0 }] },
+      ] },
+    });
+    const snapshot = buildHqDivisionSnapshot(state);
+    const standings = prepareStandingsView(state).divisions[0];
+    expect(snapshot.teams.map((team) => team.id)).toEqual([7, 4, 5]);
+    expect(snapshot.teams.map((team) => team.id)).toEqual(standings.teams.map((team) => team.id));
+    expect(snapshot.teams.find((team) => team.id === 7).divisionRecord).toBe('1-0');
+    render(<FranchiseHQ league={state} />);
+    const card = screen.getByTestId('hq-division-card');
+    expect(card.querySelector('[data-user-team="true"]').lastElementChild.textContent).toBe('1-0YOU');
+    expect([...card.querySelectorAll('.hq-v2-division-row strong')].map((team) => team.textContent)).toEqual(['PIT', 'BAL', 'CIN']);
+  });
+
   it('uses truthful in-season bye copy', () => {
     render(<FranchiseHQ league={league({ schedule: { weeks: [{ week: 4, games: [] }] } })} />);
     expect(screen.getByText('READY TO ADVANCE')).toBeTruthy();

@@ -9,6 +9,70 @@ import {
 // Wave 4 Fix 5: standings apply the NFL tiebreaker chain (head-to-head,
 // division record, common games, conference record, SOS, seeded coin-flip).
 
+describe('shared standings completion authority', () => {
+  const teams = [
+    { id: 1, conf: 0, div: 0, winPct: 0.75 },
+    { id: 2, conf: 0, div: 0, winPct: 0.25 },
+  ];
+  const contextFor = (game) => buildTiebreakContext(teams, { weeks: [{ games: [{ home: 1, away: 2, ...game }] }] });
+
+  it.each([false, 0])('ignores explicitly unplayed %s games in every tiebreak record', (played) => {
+    const context = contextFor({ played, homeScore: 0, awayScore: 0 });
+    for (const record of context.values()) {
+      expect(record.h2h.size).toBe(0);
+      expect(record.opponents.size).toBe(0);
+      expect(record).toMatchObject({ divW: 0, divL: 0, divT: 0, confW: 0, confL: 0, confT: 0, sos: 0.5 });
+    }
+  });
+
+  it('counts a completed 0-0 tie in both teams’ records', () => {
+    const context = contextFor({ played: true, homeScore: 0, awayScore: 0 });
+    for (const [id, opponentId] of [[1, 2], [2, 1]]) {
+      const record = context.get(id);
+      expect(record.h2h.get(opponentId)).toEqual({ w: 0, l: 0, t: 1 });
+      expect(record.opponents.get(opponentId)).toEqual({ w: 0, l: 0, t: 1 });
+      expect(record).toMatchObject({ divW: 0, divL: 0, divT: 1, confW: 0, confL: 0, confT: 1 });
+    }
+    expect(context.get(1).sos).toBe(0.25);
+    expect(context.get(2).sos).toBe(0.75);
+  });
+
+  it.each([{ homeScore: 24, awayScore: 17 }, { scoreHome: '24', scoreAway: '17' }])('preserves legacy score-only finals: %j', (scores) => {
+    const context = contextFor(scores);
+    expect(context.get(1).h2h.get(2)).toEqual({ w: 1, l: 0, t: 0 });
+    expect(context.get(2).h2h.get(1)).toEqual({ w: 0, l: 1, t: 0 });
+    expect(context.get(1).opponents.get(2)).toEqual({ w: 1, l: 0, t: 0 });
+    expect(context.get(2).opponents.get(1)).toEqual({ w: 0, l: 1, t: 0 });
+    expect(context.get(1)).toMatchObject({ divW: 1, divL: 0, divT: 0, confW: 1, confL: 0, confT: 0 });
+    expect(context.get(2)).toMatchObject({ divW: 0, divL: 1, divT: 0, confW: 0, confL: 1, confT: 0 });
+  });
+
+  it.each([false, 0])('keeps division order and playoff seeds unchanged by an unplayed %s future tie', (played) => {
+    const teams = [
+      { id: 1, abbr: 'A', conf: 0, div: 0, wins: 1, losses: 0, ptsFor: 24, ptsAgainst: 17 },
+      { id: 2, abbr: 'B', conf: 0, div: 0, wins: 1, losses: 0, ptsFor: 21, ptsAgainst: 17 },
+      { id: 3, abbr: 'C', conf: 0, div: 0, wins: 0, losses: 2, ptsFor: 34, ptsAgainst: 45 },
+    ];
+    const completedWeeks = [
+      { games: [{ home: 1, away: 3, played: true, homeScore: 24, awayScore: 17 }] },
+      { games: [{ home: 2, away: 3, played: true, homeScore: 21, awayScore: 17 }] },
+    ];
+    const schedule = { weeks: [...completedWeeks, { games: [{ home: 1, away: 3, played, homeScore: 0, awayScore: 0 }] }] };
+    const league = { teams, schedule, globalSeed: 42 };
+    const before = JSON.stringify(league);
+    const view = prepareStandingsView(league);
+    // Both leaders are 1-0 in the division; A wins on point differential.
+    // Counting the future tie would lower A to .750 and incorrectly put B first.
+    expect(view.divisions[0].teams.map((team) => team.id)).toEqual([1, 2, 3]);
+    expect(view.conferences[0].teams.map((team) => team.id)).toEqual([1, 2, 3]);
+    expect(view.playoffPicture[0].seeds[0]).toMatchObject({ id: 1, seed: 1, clinchedDivision: true });
+    expect(view).toEqual(prepareStandingsView({ ...league, schedule: { weeks: completedWeeks } }));
+    const workerRows = teams.map((team) => ({ ...team, pct: team.wins / (team.wins + team.losses) }));
+    expect(sortStandingsRows(workerRows, schedule, 42).map((team) => team.id)).toEqual([1, 2, 3]);
+    expect(JSON.stringify(league)).toBe(before);
+  });
+});
+
 describe('standings NFL tiebreaker chain', () => {
   it('still orders strictly by win% when records differ', () => {
     const league = {
