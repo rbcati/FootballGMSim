@@ -20,6 +20,7 @@ import DragAndDropDepthChart from "./DragAndDropDepthChart.jsx";
 import Roster from "./Roster.jsx";
 import RosterHub from "./RosterHub.jsx";
 import FranchiseHQ from "./FranchiseHQ.jsx";
+import CombineDashboard from "./CombineDashboard.jsx";
 import FranchiseSummaryPanel from "./FranchiseSummaryPanel.jsx";
 import Draft from "./Draft.jsx";
 import RookieDraft from "./RookieDraft.jsx";
@@ -634,12 +635,14 @@ export default function LeagueDashboard({
   externalDestination,
   onConsumeExternalDestination,
   onDashboardNavigation,
+  onActiveTabChange,
   onGameDetailBack,
   onOpenSaves,
   advanceLabel = "Advance",
   advanceDisabled = false,
 }) {
   const [activeTab, setActiveTab] = useState("HQ");
+  useEffect(() => { onActiveTabChange?.(activeTab); }, [activeTab, onActiveTabChange]);
   const [weeklyResultsInitialWeek, setWeeklyResultsInitialWeek] = useState(null);
   const [selectedGameId, setSelectedGameId] = useState(null);
   const [lastGameTab, setLastGameTab] = useState("Schedule");
@@ -1391,13 +1394,16 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Draft" && (
           <TabErrorBoundary label="Draft" onNavigate={setActiveTab} fallbackTab="League">
-            <Draft
+            {league?.phase === 'draft_combine' ? <>
+              <CombineDashboard prospects={league.combineProspects ?? []} combineInvitesLeft={league.combineInvitesLeft ?? 0} actions={actions} />
+              <button type="button" className="btn" disabled={busy || simulating || typeof actions?.advanceCombineWeek !== 'function'} onClick={() => actions?.advanceCombineWeek?.()}>Continue to Draft →</button>
+            </> : <Draft
               league={league}
               actions={actions}
               busy={busy}
               onNavigate={setActiveTab}
               onPlayerSelect={handlePlayerSelect}
-            />
+            />}
           </TabErrorBoundary>
         )}
         {isInitialized && activeTab === "💰 Cap" && (

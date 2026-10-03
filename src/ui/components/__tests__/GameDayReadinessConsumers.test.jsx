@@ -2,7 +2,6 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import FranchiseHQ from '../FranchiseHQ.jsx';
 import TeamHub from '../TeamHub.jsx';
 
 function makeLeague(roster) {
@@ -31,18 +30,6 @@ const blockingRoster = [
 describe('shared game-day readiness consumers', () => {
   afterEach(cleanup);
 
-  it('keeps Franchise HQ compact and exposes the existing lineup destination when blocking', () => {
-    const onNavigate = vi.fn();
-    render(<FranchiseHQ league={makeLeague(blockingRoster)} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} />);
-    const readiness = screen.getByTestId('hq-actions-required');
-    expect(readiness.textContent).toContain('1 available');
-    expect(readiness.textContent).toContain('2 unavailable');
-    expect(readiness.textContent).toContain('2 starter unavailable');
-    fireEvent.click(readiness);
-    expect(onNavigate).toHaveBeenCalledWith('Team:Lineup');
-    expect(screen.getByTestId('advance-week-cta').getAttribute('aria-label')).toMatch(/^Resolve \d+ blockers? before advancing$/);
-  });
-
   it('shows the same counts and readable unavailable starters in Team Hub', () => {
     render(<TeamHub league={makeLeague(blockingRoster)} actions={{}} />);
     const readiness = screen.getByTestId('team-hub-gameday-readiness');
@@ -53,34 +40,23 @@ describe('shared game-day readiness consumers', () => {
     expect(screen.queryByText('Weekly lineup decisions')).toBeNull();
   });
 
-  it('reports nonblocking availability as ready without routing it as a blocker', () => {
-    const onNavigate = vi.fn();
+  it('keeps an unavailable backup out of starter blockers', () => {
     const roster = [
       { id: 1, teamId: 1, name: 'QB One', pos: 'QB', depthChart: { rowKey: 'QB', order: 1 } },
-      { id: 2, teamId: 1, name: 'Backup', pos: 'WR', holdout: { active: true }, depthChart: { rowKey: 'WR', order: 2 } },
+      { id: 2, teamId: 1, name: 'Backup', pos: 'QB', holdout: { active: true }, depthChart: { rowKey: 'QB', order: 2 } },
     ];
-    render(<FranchiseHQ league={makeLeague(roster)} onNavigate={onNavigate} onAdvanceWeek={vi.fn()} />);
-    fireEvent.click(screen.getByTestId('hq-actions-required'));
-    expect(screen.getByTestId('hq-actions-required').textContent).toContain('No blockers');
-    expect(onNavigate).not.toHaveBeenCalled();
+    render(<TeamHub league={makeLeague(roster)} actions={{}} />);
+    const readiness = screen.getByTestId('team-hub-gameday-readiness');
+    expect(readiness.textContent).toContain('1 available · 1 unavailable');
+    expect(readiness.textContent).not.toContain('Lineup action required');
+    expect(readiness.textContent).not.toContain('starters unavailable');
   });
 
-  it('keeps optional prep recommendations out of blocker copy and opens the gate from progression', () => {
+  it('renders valid healthy readiness in TeamHub', () => {
     const healthy = [{ id: 1, teamId: 1, name: 'QB One', pos: 'QB', depthChart: { rowKey: 'QB', order: 1 } }];
-    render(<FranchiseHQ league={makeLeague(healthy)} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} />);
-    const row = screen.getByTestId('hq-actions-required');
-    expect(row.textContent).toContain('No blockers');
-    expect(row.getAttribute('aria-label')).toMatch(/No actions required/i);
-    fireEvent.click(screen.getByTestId('advance-week-cta'));
-    expect(screen.getByRole('dialog')).toBeTruthy();
-  });
-
-  it('renders a compact healthy state in both surfaces', () => {
-    const healthy = [{ id: 1, teamId: 1, name: 'QB One', pos: 'QB', depthOrder: 1 }];
-    const hq = render(<FranchiseHQ league={makeLeague(healthy)} onNavigate={vi.fn()} onAdvanceWeek={vi.fn()} />);
-    expect(screen.getByTestId('hq-actions-required').textContent).toContain('1 available · roster legal');
-    hq.unmount();
     render(<TeamHub league={makeLeague(healthy)} actions={{}} />);
-    expect(screen.getByTestId('team-hub-gameday-readiness').textContent).toContain('1 available · 0 unavailable');
+    const readiness = screen.getByTestId('team-hub-gameday-readiness');
+    expect(readiness.textContent).toContain('1 available · 0 unavailable');
+    expect(readiness.textContent).not.toContain('Lineup action required');
   });
 });
