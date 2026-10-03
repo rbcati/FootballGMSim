@@ -3,6 +3,7 @@ import { DEPTH_CHART_ROWS } from '../../core/depthChart.js';
 import { deriveLineupRatingSnapshot, getPersistedDepthAssignment } from './lineupCommandCenter.js';
 import { buildPowerRankings } from './franchiseCommandCenter.js';
 import { buildOffseasonActionCenter } from './offseasonActionCenter.js';
+import { isCanonicalCompletedGame } from './canonicalCompletedGame.js';
 
 const CONFERENCES = ['AFC', 'NFC'];
 const DIVISIONS = ['EAST', 'NORTH', 'SOUTH', 'WEST'];
@@ -56,7 +57,16 @@ export function buildHqDivisionSnapshot(league = {}) {
   // The new preseason schedule belongs to a different season than archive
   // standings. Do not invent or mix division records across those seasons.
   const isArchived = league.standingsContext?.mode === 'archive';
-  const context = isArchived ? null : buildTiebreakContext(normalized, league.schedule);
+  // Initialized scores on an explicitly unplayed game are not a final result.
+  // Filter only the DIV record input; canonical standings ordering is unchanged.
+  const completedSchedule = {
+    ...league.schedule,
+    weeks: (league.schedule?.weeks ?? []).map((week) => ({
+      ...week,
+      games: (week.games ?? []).filter(isCanonicalCompletedGame),
+    })),
+  };
+  const context = isArchived ? null : buildTiebreakContext(normalized, completedSchedule);
   return {
     isArchived,
     title: `${groupName(conf, league.settings?.conferenceNames, CONFERENCES, 'CONF')} ${groupName(div, league.settings?.divisionNames, DIVISIONS, 'DIV')}`,
@@ -130,7 +140,9 @@ export function buildHqNextAction({ league = {}, gate = {}, gameDayReadiness = {
     return { eyebrow: 'NEXT UP', title: center.blockers[0] ?? center.phaseLabel, cta: action?.label ?? 'Continue Offseason', destination: action?.tab ?? 'Offseason' };
   }
   if (phase === 'preseason' && center.blockers.length) {
-    const blocker = center.blockers[0];
+    // Mandatory roster cuts take priority over the action center's cap advice.
+    const blocker = center.blockers.find((item) => /Roster cutdown required/i.test(item))
+      ?? center.blockers[0];
     const capBlocker = /cap room/i.test(blocker);
     return { eyebrow: 'NEXT UP', title: blocker, cta: capBlocker ? 'Review Cap Outlook' : 'Run Final Cuts', destination: capBlocker ? 'Financials' : center.actions[0]?.tab };
   }

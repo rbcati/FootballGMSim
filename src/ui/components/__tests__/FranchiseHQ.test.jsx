@@ -169,12 +169,16 @@ describe('HQ Command Center V2', () => {
     expect(screen.queryByRole('button', { name: /play week/i })).toBeNull();
   });
 
-  it('prioritizes preseason cutdown even with a scheduled game and weekly warnings', () => {
+  it.each([20, 4, 0, -2])('prioritizes preseason cutdown with a scheduled game and cap room %s', (capRoom) => {
     const state = league({ phase: 'preseason' });
-    state.teams[0] = { ...state.teams[0], capRoom: 20, roster: [...roster, ...specialists, ...Array.from({ length: 43 }, (_, i) => player(200 + i, `Backup ${i}`, 'WR', 60, 'WR', i + 10))] };
-    render(<FranchiseHQ league={state} />);
+    state.teams[0] = { ...state.teams[0], capRoom, roster: [...roster, ...specialists, ...Array.from({ length: 43 }, (_, i) => player(200 + i, `Backup ${i}`, 'WR', 60, 'WR', i + 10))] };
+    const onNavigate = vi.fn();
+    const onAdvanceWeek = vi.fn();
+    render(<FranchiseHQ league={state} onNavigate={onNavigate} onAdvanceWeek={onAdvanceWeek} />);
     expect(screen.getByTestId('hq-next-action').textContent).toContain('Roster cutdown required (60/53)');
-    expect(screen.getByRole('button', { name: /run final cuts/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /run final cuts/i }));
+    expect(onNavigate).toHaveBeenCalledWith('Roster');
+    expect(onAdvanceWeek).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /play week/i })).toBeNull();
   });
 
@@ -187,6 +191,19 @@ describe('HQ Command Center V2', () => {
     expect(screen.getAllByRole('button', { name: /play week/i })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: /play week/i }));
     expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, 0])('excludes unplayed %s zero-score games from DIV while preserving real played ties', (played) => {
+    const state = league();
+    state.schedule.weeks[3].games[0] = { home: 7, away: 6, played, homeScore: 0, awayScore: 0 };
+    const before = JSON.stringify(state);
+    const snapshot = buildHqDivisionSnapshot(state);
+    expect(snapshot.teams.find((team) => team.id === 7).divisionRecord).toBe('1-1');
+    const canonical = prepareStandingsView(state).divisions.find((division) => division.teams.some((team) => team.id === 7));
+    expect(snapshot.teams.map((team) => team.id)).toEqual(canonical.teams.map((team) => team.id));
+    expect(JSON.stringify(state)).toBe(before);
+    state.schedule.weeks.push({ week: 5, games: [{ home: 7, away: 6, played: true, homeScore: 0, awayScore: 0 }] });
+    expect(buildHqDivisionSnapshot(state).teams.find((team) => team.id === 7).divisionRecord).toBe('1-1-1');
   });
 
   it('uses truthful in-season bye copy', () => {
