@@ -9,6 +9,7 @@ import { EmptyState } from './ScreenSystem.jsx';
 import JobSecurityCard from './JobSecurityCard.jsx';
 import HqInfoPopover from './HqInfoPopover.jsx';
 import { getUserScheduleGames } from '../utils/userWeeklyGames.js';
+import { isCanonicalCompletedGame } from '../utils/canonicalCompletedGame.js';
 
 const value = (number) => number == null ? '—' : number;
 const rank = (number) => number == null ? '—' : `#${number}`;
@@ -68,18 +69,18 @@ function LeaderGroup({ title, data }) {
   })}</div>;
 }
 
-function HqYardageLeaders({ actions, saveKey, hasCompletedGames, onNavigate }) {
-  const [state, setState] = useState({ key: saveKey, data: null });
+function HqYardageLeaders({ actions, leaderRequestKey, hasCompletedGames, onNavigate }) {
+  const [state, setState] = useState({ key: leaderRequestKey, data: null });
   useEffect(() => {
     let current = true;
-    setState({ key: saveKey, data: null });
+    setState({ key: leaderRequestKey, data: null });
     if (!hasCompletedGames || typeof actions?.getDashboardLeaders !== 'function') return () => { current = false; };
     actions.getDashboardLeaders().then((response) => {
-      if (current) setState({ key: saveKey, data: response?.payload ?? response });
-    }).catch(() => { if (current) setState({ key: saveKey, data: null }); });
+      if (current) setState({ key: leaderRequestKey, data: response?.payload ?? response });
+    }).catch(() => { if (current) setState({ key: leaderRequestKey, data: null }); });
     return () => { current = false; };
-  }, [actions, hasCompletedGames, saveKey]);
-  const data = state.key === saveKey ? state.data : null;
+  }, [actions, hasCompletedGames, leaderRequestKey]);
+  const data = state.key === leaderRequestKey ? state.data : null;
   const hasLeaders = ['team', 'league'].some((scope) => ['passing', 'rushing', 'receiving'].some((category) => data?.[scope]?.[category]?.[0]));
   return <section className="hq-v2-card hq-v2-leaders" data-testid="hq-yardage-leaders">
     {hasLeaders ? <div className="hq-v2-leaders-grid"><LeaderGroup title="TEAM LEADERS" data={data?.team} /><LeaderGroup title="LEAGUE LEADERS" data={data?.league} /></div>
@@ -108,15 +109,16 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
   const strength = useMemo(() => buildHqStrengthSnapshot({ league, team }), [league, team]);
   const action = useMemo(() => buildHqNextAction({ league, gate, gameDayReadiness: readiness, nextGame: currentGame }), [league, gate, readiness, currentGame]);
   if (command.readyState !== 'ready' || !team) return <EmptyState title="HQ loading" body="Team context is still loading or this save is missing team ownership metadata." />;
-  const completedGames = (league?.schedule?.weeks ?? []).flatMap((week) => week?.games ?? []).some((game) => game?.played || (Number.isFinite(Number(game?.homeScore ?? game?.scoreHome)) && Number.isFinite(Number(game?.awayScore ?? game?.scoreAway))));
+  const completedGames = (league?.schedule?.weeks ?? []).flatMap((week) => week?.games ?? []).some(isCanonicalCompletedGame);
   const saveKey = `${league?.activeLeagueId ?? league?.id ?? 'league'}:${league?.franchiseGenerationId ?? league?.seasonId ?? league?.year ?? 'season'}`;
+  const leaderRequestKey = `${saveKey}:${league?.phase ?? 'phase'}:${league?.week ?? 0}`;
   return <main className="hq-v2" data-testid="franchise-hq">
     <header className="hq-v2-identity"><h1>{String(team.city ?? team.name ?? team.abbr ?? 'FRANCHISE').toUpperCase()}</h1><p aria-label={`Week ${league?.week ?? 1}`}>{formatHqRecord(team)} · {division?.title ?? 'LEAGUE'} · WEEK {league?.week ?? 1}</p></header>
     <HqNextActionCard action={action} onNavigate={onNavigate} onAdvanceWeek={onAdvanceWeek} disabled={busy || simulating} />
     {league?.userFranchiseTerminated ? <section className="hq-v2-card" data-testid="franchise-terminated-notice"><h2>Franchise Dismissed</h2><p>Your ownership tenure has ended.</p></section> : null}
     {league?.userOwnerPressure ? <JobSecurityCard ownerProfile={league.userOwnerPressure} /> : null}
     <div className="hq-v2-pair"><HqDivisionCard division={division} onNavigate={onNavigate} /><HqTeamStrength snapshot={strength} /></div>
-    <HqYardageLeaders actions={actions} saveKey={saveKey} hasCompletedGames={completedGames} onNavigate={onNavigate} />
+    <HqYardageLeaders actions={actions} leaderRequestKey={leaderRequestKey} hasCompletedGames={completedGames} onNavigate={onNavigate} />
     <HqNextGame nextGame={command.nextGame} />
     <details className="hq-v2-more"><summary>More Prep</summary><div>{gate.riskItems?.length ? gate.riskItems.map((item) => {
       const destination = item.id === 'depth-blocker' ? 'Team:Lineup' : item.fixDestination;

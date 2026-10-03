@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import FranchiseHQ from '../FranchiseHQ.jsx';
 import { buildHqDivisionSnapshot, buildHqNextAction, buildHqStrengthSnapshot, deriveSpecialTeamsPresentationRating } from '../../utils/hqCommandCenterV2.js';
 import { prepareStandingsView } from '../../../views/standingsView.js';
@@ -112,6 +112,82 @@ describe('HQ Command Center V2', () => {
     await waitFor(() => expect(screen.getAllByText('T. Player')).toHaveLength(3));
     expect(screen.getAllByText(/Player$/)).toHaveLength(6);
     expect(screen.queryByText(/completion|fantasy|passing td|ppg/i)).toBeNull();
+  });
+
+  it('refreshes team and league leaders from week 4 to 5 with stable actions and save scope', async () => {
+    const data = (teamYards, leagueYards) => ({ team: { passing: [{ name: 'Team Passer', value: teamYards }] }, league: { passing: [{ name: 'League Passer', value: leagueYards }] } });
+    let resolveNext;
+    const actions = { getDashboardLeaders: vi.fn().mockResolvedValueOnce(data(1000, 1200)).mockImplementationOnce(() => new Promise((resolve) => { resolveNext = resolve; })) };
+    const state = league();
+    const view = render(<FranchiseHQ league={state} actions={actions} />);
+    await screen.findByText('1,000 yds');
+    expect(screen.getByText('1,200 yds')).toBeTruthy();
+    expect(actions.getDashboardLeaders).toHaveBeenCalledTimes(1);
+    view.rerender(<FranchiseHQ league={{ ...state, week: 5 }} actions={actions} />);
+    expect(actions.getDashboardLeaders).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('1,000 yds')).toBeNull();
+    expect(screen.queryByText('1,200 yds')).toBeNull();
+    await act(async () => resolveNext({ payload: data(1300, 1600) }));
+    expect(screen.getByText('1,300 yds')).toBeTruthy();
+    expect(screen.getByText('1,600 yds')).toBeTruthy();
+  });
+
+  it('does not refetch leaders for same-week presentation changes or help and More Prep interactions', async () => {
+    const actions = { getDashboardLeaders: vi.fn().mockResolvedValue({ team: { passing: [{ name: 'Current Passer', value: 1300 }] }, league: {} }) };
+    const state = league({ week: 5 });
+    const view = render(<FranchiseHQ league={state} actions={actions} />);
+    await screen.findByText('1,300 yds');
+    view.rerender(<FranchiseHQ league={{ ...state, teams: state.teams.map((team) => ({ ...team, city: 'Updated City' })) }} actions={actions} />);
+    fireEvent.click(screen.getByText('More Prep'));
+    fireEvent.click(screen.getByRole('button', { name: /power rank help/i }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(actions.getDashboardLeaders).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('1,300 yds')).toBeTruthy();
+  });
+
+  it('prevents a slow previous-week response from overwriting the current leaders', async () => {
+    let resolveOld;
+    let resolveNew;
+    const actions = { getDashboardLeaders: vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveNew = resolve; })) };
+    const state = league();
+    const view = render(<FranchiseHQ league={state} actions={actions} />);
+    view.rerender(<FranchiseHQ league={{ ...state, week: 5 }} actions={actions} />);
+    expect(actions.getDashboardLeaders).toHaveBeenCalledTimes(2);
+    await act(async () => resolveNew({ team: { passing: [{ name: 'New Leader', value: 1300 }] }, league: {} }));
+    expect(screen.getByText('N. Leader')).toBeTruthy();
+    await act(async () => resolveOld({ team: { passing: [{ name: 'Old Leader', value: 1000 }] }, league: {} }));
+    expect(screen.getByText('N. Leader')).toBeTruthy();
+    expect(screen.queryByText('O. Leader')).toBeNull();
+    expect(screen.queryByText('1,000 yds')).toBeNull();
+  });
+
+  it('clears displayed leaders immediately when switching to another save generation', async () => {
+    let resolveNew;
+    const actions = { getDashboardLeaders: vi.fn()
+      .mockResolvedValueOnce({ team: { passing: [{ name: 'Old Leader', value: 1000 }] }, league: {} })
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveNew = resolve; })) };
+    const view = render(<FranchiseHQ league={league()} actions={actions} />);
+    await screen.findByText('O. Leader');
+    view.rerender(<FranchiseHQ league={league({ id: 'save-b', franchiseGenerationId: 'b' })} actions={actions} />);
+    expect(screen.queryByText('O. Leader')).toBeNull();
+    expect(actions.getDashboardLeaders).toHaveBeenCalledTimes(2);
+    await act(async () => resolveNew({ team: { passing: [{ name: 'New Leader', value: 300 }] }, league: {} }));
+    expect(screen.getByText('N. Leader')).toBeTruthy();
+    expect(screen.queryByText('O. Leader')).toBeNull();
+  });
+
+  it.each([
+    { played: false },
+    { played: false, homeScore: 0, awayScore: 0 },
+    { played: 0, homeScore: 0, awayScore: 0 },
+  ])('does not request leaders for a fresh Week 1 with unplayed game %j', (game) => {
+    const actions = { getDashboardLeaders: vi.fn().mockResolvedValue({ team: {}, league: {} }) };
+    const state = league({ week: 1, schedule: { weeks: [{ week: 1, games: [{ home: 7, away: 6, ...game }] }] } });
+    render(<FranchiseHQ league={state} actions={actions} />);
+    expect(actions.getDashboardLeaders).not.toHaveBeenCalled();
+    expect(screen.getByText('Season leaders appear after games are played.')).toBeTruthy();
   });
 
   it('keeps fresh saves truthful and clears leaders across save generations', async () => {
