@@ -35,6 +35,11 @@ function league(overrides = {}) {
   return { id: 'save-a', franchiseGenerationId: 'a', year: 2026, seasonId: 's1', week: 4, phase: 'regular', userTeamId: 7, teams, weeklyPrep: { lineupChecked: true, planReviewed: true, opponentScouted: true }, schedule: { weeks: [{ week: 1, games: [{ home: 7, away: 4, homeScore: 24, awayScore: 17, played: true }] }, { week: 2, games: [{ home: 5, away: 7, homeScore: 21, awayScore: 17, played: true }] }, { week: 3, games: [{ home: 7, away: 16, homeScore: 28, awayScore: 14, played: true }] }, { week: 4, games: [{ home: 7, away: 6, played: false }] }] }, ...overrides };
 }
 
+function preseasonRoster(count) {
+  const ready = league().teams[0].roster;
+  return [...ready, ...Array.from({ length: count - ready.length }, (_, i) => player(900 + i, `Reserve ${i}`, 'WR', 60, 'WR', i + 20))];
+}
+
 describe('HQ Command Center V2', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -260,13 +265,45 @@ describe('HQ Command Center V2', () => {
 
   it('allows clean legal preseason to use the one game-day action', () => {
     const state = league({ phase: 'preseason' });
-    state.teams[0] = { ...state.teams[0], capRoom: 20 };
+    state.teams[0] = { ...state.teams[0], capRoom: 20, roster: preseasonRoster(53) };
     const onAdvanceWeek = vi.fn();
     render(<FranchiseHQ league={state} onAdvanceWeek={onAdvanceWeek} />);
     expect(screen.getByText('READY FOR GAME DAY')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /play week/i })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: /play week/i }));
     expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([true, false])('routes an underfilled preseason roster to sign players (matchup: %s)', (hasMatchup) => {
+    const state = league({ phase: 'preseason', ...(hasMatchup ? {} : { schedule: { weeks: [] } }) });
+    state.teams[0] = { ...state.teams[0], capRoom: 20, roster: preseasonRoster(52) };
+    const onNavigate = vi.fn();
+    const onAdvanceWeek = vi.fn();
+    render(<FranchiseHQ league={state} onNavigate={onNavigate} onAdvanceWeek={onAdvanceWeek} />);
+    expect(screen.getByTestId('hq-next-action').textContent).toContain('Roster minimum not met (52/53)');
+    expect(screen.queryByRole('button', { name: /play week|advance preseason/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /sign players/i }));
+    expect(onNavigate).toHaveBeenCalledWith('Free Agency');
+    expect(onAdvanceWeek).not.toHaveBeenCalled();
+  });
+
+  it.each(['ready', 'lineup', 'cutdown'])('handles preseason without a matchup: %s', (condition) => {
+    const state = league({ phase: 'preseason', schedule: { weeks: [] } });
+    state.teams[0] = { ...state.teams[0], capRoom: condition === 'cutdown' ? 0 : 20, roster: preseasonRoster(condition === 'cutdown' ? 60 : 53) };
+    if (condition === 'lineup') state.teams[0].roster = state.teams[0].roster.map((member) => [1, 3].includes(member.id) ? { ...member, injured: true, injuryWeeksRemaining: 2 } : member);
+    const onNavigate = vi.fn();
+    const onAdvanceWeek = vi.fn();
+    render(<FranchiseHQ league={state} onNavigate={onNavigate} onAdvanceWeek={onAdvanceWeek} />);
+    if (condition === 'ready') {
+      expect(screen.getByText('READY TO ADVANCE')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /advance preseason/i }));
+      expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
+    } else {
+      fireEvent.click(screen.getByRole('button', { name: condition === 'lineup' ? /review depth chart/i : /run final cuts/i }));
+      expect(onNavigate).toHaveBeenCalledWith(condition === 'lineup' ? 'Team:Lineup' : 'Roster');
+      expect(onAdvanceWeek).not.toHaveBeenCalled();
+      expect(screen.queryByRole('button', { name: /advance preseason|play week/i })).toBeNull();
+    }
   });
 
   it.each([false, 0])('excludes unplayed %s zero-score games from DIV while preserving real played ties', (played) => {

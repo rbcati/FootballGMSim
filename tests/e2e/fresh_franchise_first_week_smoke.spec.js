@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { launchFranchise, goToTab, ensureLeagueLoaded } from './helpers/franchise.js';
+import { launchFranchise, goToTab } from './helpers/franchise.js';
 
 const SMOKE_TIMEOUT = 90000;
 
@@ -232,9 +232,20 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await expect(page.locator('.hq-v2-more')).not.toHaveAttribute('open', '');
 
   // Reload retains the canonical result on Weekly Results and Game Book.
+  const savedFranchise = await page.evaluate(() => ({
+    activeLeagueId: window.state?.league?.activeLeagueId,
+    franchiseGenerationId: window.state?.league?.franchiseGenerationId,
+  }));
+  expect(savedFranchise.activeLeagueId).toBeTruthy();
+  expect(savedFranchise.franchiseGenerationId).toBeTruthy();
   await page.reload();
-  await ensureLeagueLoaded(page);
-  await page.waitForFunction(() => window.state?.isHydrated && !window.state?.busy && !window.state?.simulating, null, { timeout: SMOKE_TIMEOUT });
+  // Wait for this save to restore. The fresh-start helper can click an empty
+  // slot while the saved franchise is still loading and create a new league.
+  await page.waitForFunction(({ activeLeagueId, franchiseGenerationId }) => (
+    window.state?.isHydrated && !window.state?.busy && !window.state?.simulating
+    && window.state?.league?.activeLeagueId === activeLeagueId
+    && window.state?.league?.franchiseGenerationId === franchiseGenerationId
+  ), savedFranchise, { timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await goToTab(page, 'weekly-results');

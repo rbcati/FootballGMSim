@@ -1,3 +1,5 @@
+import { Constants } from '../../core/constants.js';
+
 const PHASE_SEQUENCE = ['offseason_resign', 'free_agency', 'trades', 'draft', 'post_draft', 'preseason'];
 
 const PHASE_LABELS = {
@@ -128,9 +130,13 @@ export function buildOffseasonActionCenter(league) {
   if (phase === 'draft' && !Array.isArray(league?.draftClass)) {
     blockers.push('Draft board is not hydrated yet.');
   }
-  if (phase === 'preseason' && rosterCount > 53) {
-    blockers.push(`Roster cutdown required (${rosterCount}/53).`);
-  }
+  // Present the same regular-season roster requirement enforced at transition.
+  const rosterLimit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
+  const preseasonRosterAction = phase !== 'preseason' || rosterCount === rosterLimit ? null
+    : rosterCount > rosterLimit
+      ? { title: `Roster cutdown required (${rosterCount}/${rosterLimit}).`, label: 'Run Final Cuts', tab: PHASE_ACTIONS.preseason[0].tab }
+      : { title: `Roster minimum not met (${rosterCount}/${rosterLimit}).`, label: 'Sign Players', tab: PHASE_ACTIONS.free_agency[0].tab };
+  if (preseasonRosterAction) blockers.push(preseasonRosterAction.title);
 
   if (phase === 'offseason_resign') {
     const premiumShortages = ['QB', 'LT', 'EDGE', 'CB'].filter((pos) => !expiring.some((p) => String(p?.pos ?? '').toUpperCase() === pos && ['extended', 'tagged', 'deferred', 'pending'].includes(String(p?.extensionDecision ?? 'pending'))) && !(userTeam?.roster ?? []).some((p) => String(p?.pos ?? '').toUpperCase() === pos && toNumber(p?.contract?.years, 0) > 1));
@@ -177,7 +183,8 @@ export function buildOffseasonActionCenter(league) {
       draftPickCount,
       expiringContracts: expiringPriority.total,
     },
-    actions: PHASE_ACTIONS[phase] ?? [],
+    preseasonRosterAction,
+    actions: preseasonRosterAction ? [preseasonRosterAction, ...PHASE_ACTIONS.preseason.slice(1)] : PHASE_ACTIONS[phase] ?? [],
     canSkipPhase: blockers.length === 0,
     nextPhaseLabel: PHASE_LABELS[PHASE_SEQUENCE[phaseIndex + 1]] ?? 'Regular Season',
   };

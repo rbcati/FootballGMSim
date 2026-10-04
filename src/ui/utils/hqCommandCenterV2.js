@@ -129,14 +129,13 @@ export function buildHqNextAction({ league = {}, gate = {}, gameDayReadiness = {
     const action = center.actions[0];
     return { eyebrow: 'NEXT UP', title: center.blockers[0] ?? center.phaseLabel, cta: action?.label ?? 'Continue Offseason', destination: action?.tab ?? 'Offseason' };
   }
-  if (phase === 'preseason' && center.blockers.length) {
-    // Mandatory roster cuts take priority over the action center's cap advice.
-    const blocker = center.blockers.find((item) => /Roster cutdown required/i.test(item))
-      ?? center.blockers[0];
-    const capBlocker = /cap room/i.test(blocker);
-    return { eyebrow: 'NEXT UP', title: blocker, cta: capBlocker ? 'Review Cap Outlook' : 'Run Final Cuts', destination: capBlocker ? 'Financials' : center.actions[0]?.tab };
+  if (phase === 'preseason' && center.preseasonRosterAction) {
+    const action = center.preseasonRosterAction;
+    return { eyebrow: 'NEXT UP', title: action.title, cta: action.label, destination: action.tab };
   }
-  if (phase === 'preseason' && !nextGame) return { eyebrow: 'NEXT UP', title: 'Set your preseason lineup', cta: 'Review Depth Chart', destination: 'Team:Lineup' };
+  if (phase === 'preseason' && center.blockers.length) {
+    return { eyebrow: 'NEXT UP', title: center.blockers[0], cta: 'Review Cap Outlook', destination: 'Financials' };
+  }
   if (gameDayReadiness.blockingLineupIssue) {
     const count = Math.max(1, Number(gameDayReadiness.unavailableStarterCount ?? 0));
     return { eyebrow: 'NEXT UP', title: `${count} lineup issue${count === 1 ? '' : 's'} need attention`, cta: 'Review Depth Chart', destination: 'Team:Lineup' };
@@ -155,7 +154,7 @@ export function buildHqNextAction({ league = {}, gate = {}, gameDayReadiness = {
   }
   return nextGame
     ? { eyebrow: 'READY FOR GAME DAY', title: `${nextGame.isHome ? 'vs' : '@'} ${nextGame.opp?.abbr ?? 'Opponent'}`, cta: 'Play Week', advance: true }
-    : { eyebrow: 'READY TO ADVANCE', title: 'No game this week', cta: 'Advance Week', advance: true };
+    : { eyebrow: 'READY TO ADVANCE', title: 'No game this week', cta: phase === 'preseason' ? 'Advance Preseason' : 'Advance Week', advance: true };
 }
 
 export const HQ_SPECIALIST_ROWS = DEPTH_CHART_ROWS.filter((row) => row.group === 'SPECIAL').map((row) => row.key);
