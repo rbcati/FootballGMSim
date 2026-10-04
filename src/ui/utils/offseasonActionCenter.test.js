@@ -19,6 +19,16 @@ describe('buildOffseasonActionCenter', () => {
     }
   });
 
+  it('keeps the preseason cap cushion advisory without changing other offseason phases', () => {
+    const league = { phase: 'preseason', userTeamId: 1, teams: [{ id: 1, capRoom: 4, roster: Array.from({ length: 53 }, (_, id) => makePlayer(id, { baseAnnual: 1 })) }] };
+    const advice = 'Cap room is below safe operating threshold ($5M).';
+    const preseason = buildOffseasonActionCenter(league);
+    expect(preseason.priorities).toContain(advice);
+    expect(preseason.blockers).not.toContain(advice);
+    expect(preseason.canSkipPhase).toBe(true);
+    expect(buildOffseasonActionCenter({ ...league, phase: 'free_agency' }).blockers).toContain(advice);
+  });
+
   it('guides the full season-end to preseason management loop with updated cap and roster context', () => {
     const team = {
       id: 1,

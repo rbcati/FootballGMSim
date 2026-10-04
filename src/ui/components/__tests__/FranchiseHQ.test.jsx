@@ -8,6 +8,7 @@ import { prepareStandingsView } from '../../../views/standingsView.js';
 import { buildPowerRankings } from '../../utils/franchiseCommandCenter.js';
 import { markWeeklyPrepStep } from '../../utils/weeklyPrep.js';
 import { buildOffseasonActionCenter } from '../../utils/offseasonActionCenter.js';
+import { validateLeagueTeamLegality } from '../../../core/teamValidation.js';
 import { DEPTH_CHART_ROWS } from '../../../core/depthChart.js';
 
 const player = (id, name, pos, ovr, rowKey, order = 1) => ({ id, teamId: 7, name, pos, ovr, depthChart: { rowKey, order } });
@@ -303,6 +304,42 @@ describe('HQ Command Center V2', () => {
       expect(onNavigate).toHaveBeenCalledWith(condition === 'lineup' ? 'Team:Lineup' : 'Roster');
       expect(onAdvanceWeek).not.toHaveBeenCalled();
       expect(screen.queryByRole('button', { name: /advance preseason|play week/i })).toBeNull();
+    }
+  });
+
+  it.each([
+    [52, 4, true, false, 'Sign Players'],
+    [53, 4, true, false, 'Play Week'],
+    [53, 4, false, false, 'Advance Preseason'],
+    [53, 4, true, true, 'Review Cap Outlook'],
+    [53, 4, false, true, 'Review Cap Outlook'],
+    [60, 4, true, false, 'Run Final Cuts'],
+    [53, 5, true, false, 'Play Week'],
+    [53, 20, true, false, 'Play Week'],
+  ])('preseason roster %s, room %s, matchup %s, illegal %s → %s', (count, capRoom, hasMatchup, illegal, cta) => {
+    const hardCap = 360;
+    const state = league({ phase: 'preseason', economy: { currentSalaryCap: hardCap }, settings: { salaryCap: 300 }, ...(hasMatchup ? {} : { schedule: { weeks: [] } }) });
+    const team = state.teams[0] = { ...state.teams[0], capRoom, deadCap: hardCap - count * 5 + (illegal ? 1 : -capRoom), roster: preseasonRoster(count).map((member) => ({ ...member, contract: { baseAnnual: 5, years: 1, yearsTotal: 1, signingBonus: 0 } })) };
+    const capIssues = validateLeagueTeamLegality({ teams: [team], players: team.roster, phase: 'preseason', hardCap }).issues.filter((issue) => issue.code === 'cap_limit');
+    expect(capIssues.length > 0).toBe(illegal);
+    const center = buildOffseasonActionCenter(state);
+    if (capRoom < 5) {
+      expect(center.priorities).toContain('Cap room is below safe operating threshold ($5M).');
+      expect(center.blockers).not.toContain('Cap room is below safe operating threshold ($5M).');
+    }
+    const onAdvanceWeek = vi.fn();
+    const onNavigate = vi.fn();
+    render(<FranchiseHQ league={state} onAdvanceWeek={onAdvanceWeek} onNavigate={onNavigate} />);
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${cta}`) }));
+    if (cta === 'Play Week' || cta === 'Advance Preseason') {
+      expect(screen.getByText(hasMatchup ? 'READY FOR GAME DAY' : 'READY TO ADVANCE')).toBeTruthy();
+      expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('button', { name: /review cap outlook/i })).toBeNull();
+    } else {
+      expect(onNavigate).toHaveBeenCalledWith(illegal ? 'Financials' : count < 53 ? 'Free Agency' : 'Roster');
+      expect(onAdvanceWeek).not.toHaveBeenCalled();
+      expect(screen.queryByRole('button', { name: /play week|advance preseason/i })).toBeNull();
+      if (illegal) expect(screen.getByTestId('hq-next-action').textContent).toContain(capIssues[0].message);
     }
   });
 

@@ -1,4 +1,7 @@
 import { Constants } from '../../core/constants.js';
+import { normalizeLeagueEconomy } from '../../core/economy.js';
+import { normalizeLeagueSettings } from '../../core/leagueSettings.js';
+import { validateLeagueTeamLegality } from '../../core/teamValidation.js';
 
 const PHASE_SEQUENCE = ['offseason_resign', 'free_agency', 'trades', 'draft', 'post_draft', 'preseason'];
 
@@ -125,7 +128,18 @@ export function buildOffseasonActionCenter(league) {
     blockers.push('No cap room remaining for competitive offers.');
   }
   if (capRoom < 5) {
-    blockers.push('Cap room is below safe operating threshold ($5M).');
+    const capAdvice = 'Cap room is below safe operating threshold ($5M).';
+    (phase === 'preseason' ? priorities : blockers).push(capAdvice);
+  }
+  if (phase === 'preseason') {
+    // Match the worker's live economy/settings normalization and cap validator.
+    // Display capRoom is advice only; contracts and dead money determine legality.
+    const economy = normalizeLeagueEconomy(league?.economy ?? {}, { year: league?.year });
+    const settings = normalizeLeagueSettings({ ...league?.settings, salaryCap: economy.currentSalaryCap });
+    const capIssues = validateLeagueTeamLegality({
+      teams: [userTeam], players: userTeam.roster ?? [], phase, hardCap: settings.salaryCap,
+    }).issues.filter((issue) => issue.code === 'cap_limit' && issue.severity === 'error');
+    blockers.push(...capIssues.map((issue) => issue.message));
   }
   if (phase === 'draft' && !Array.isArray(league?.draftClass)) {
     blockers.push('Draft board is not hydrated yet.');
