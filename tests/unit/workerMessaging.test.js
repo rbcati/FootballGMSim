@@ -245,6 +245,15 @@ describe('binary buffer transferability', () => {
 // ── 5. serializeLeagueDelta ───────────────────────────────────────────────────
 
 describe('serializeLeagueDelta', () => {
+  it('transmits dead-cap-only changes without relying on display payroll changes', () => {
+    const prev = makeViewState();
+    prev.teams[0].deadCap = 91;
+    const curr = { ...prev, teams: prev.teams.map((team, index) => index === 0 ? { ...team, deadCap: 96 } : team) };
+    const { delta } = serializeLeagueDelta(curr, prev);
+    expect(delta.teams[0].deadCap).toBe(96);
+    expect(applyLeagueDelta(prev, delta).teams[0].deadCap).toBe(96);
+  });
+
   it('marks the output as a delta', () => {
     const { delta } = serializeLeagueDelta(makeViewState(), null);
     expect(delta._isDelta).toBe(true);

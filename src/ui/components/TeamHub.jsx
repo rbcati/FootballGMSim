@@ -13,7 +13,6 @@ import { buildStaffPhilosophySummary } from '../../core/staff/staffPhilosophy.js
 import { buildGameDayReadinessModel } from '../utils/gameDayReadinessModel.js';
 import { getNextUserGame, getPreviousUserGame } from '../utils/userWeeklyGames.js';
 import FranchiseLegacyView from './FranchiseLegacyView.jsx';
-import { toWorker } from '../../worker/protocol.js';
 
 export const TEAM_SECTIONS = ['Lineup', 'Overview', 'Roster / Depth', 'Contracts', 'Development', 'Injuries'];
 const CRITICAL_POSITION_MIN = { QB: 2, RB: 3, WR: 5, TE: 3, OL: 8, DL: 8, LB: 6, CB: 5, S: 4, K: 1, P: 1 };
@@ -234,8 +233,8 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
               retiredNumbers={league?.retiredNumbers ?? []}
               retiredNumberDisplay={league?.retiredNumberDisplay ?? []}
               awardHistory={league?.awardHistory ?? []}
-              onInduct={(playerId, teamId) => actions?.send?.(toWorker.INDUCT_PLAYER_TO_ROH, { playerId, teamId })}
-              onRetireNumber={(playerId) => actions?.send?.(toWorker.RETIRE_JERSEY_NUMBER, { teamId: team?.id, playerId })}
+              onInduct={(playerId, teamId) => actions?.inductRingOfHonor?.({ playerId, teamId })}
+              onRetireNumber={(playerId) => actions?.retireJerseyNumber?.({ teamId: team?.id, playerId })}
             />
           </details>
         </div>

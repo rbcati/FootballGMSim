@@ -3,7 +3,6 @@ import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import LeagueDashboard from '../LeagueDashboard.jsx';
-import { toWorker } from '../../../worker/protocol.js';
 
 beforeEach(() => {
   window.matchMedia = () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() });
@@ -29,7 +28,7 @@ it('routes pending trade requests from collapsed More Prep to existing Team Over
 });
 
 it('restores induction and number retirement through Team Overview without mounting legacy stats on HQ', async () => {
-  const actions = { send: vi.fn() };
+  const actions = { inductRingOfHonor: vi.fn(), retireJerseyNumber: vi.fn() };
   const onAdvanceWeek = vi.fn();
   const league = { ...base, pendingRohCandidates: [{ playerId: 50, teamId: 1, title: 'Candidate Legend', body: 'Eligible for induction.' }], ringOfHonor: [{ id: 51, name: 'Existing Legend', position: 'QB', jerseyNumber: 12, totalPassingYards: 20000, inductionYear: 2025 }] };
   render(<LeagueDashboard league={league} actions={actions} onAdvanceWeek={onAdvanceWeek} />);
@@ -40,10 +39,9 @@ it('restores induction and number retirement through Team Overview without mount
   expect(summary.closest('details').open).toBe(false);
   fireEvent.click(summary);
   fireEvent.click(screen.getByTestId('induct-roh-button'));
-  expect(actions.send).toHaveBeenCalledWith(toWorker.INDUCT_PLAYER_TO_ROH, { playerId: 50, teamId: 1 });
+  expect(actions.inductRingOfHonor).toHaveBeenCalledExactlyOnceWith({ playerId: 50, teamId: 1 });
   fireEvent.click(screen.getByTestId('leaderboard-row-passing-yards-0'));
   fireEvent.click(screen.getByTestId('retire-number-button'));
-  expect(actions.send).toHaveBeenCalledWith(toWorker.RETIRE_JERSEY_NUMBER, { playerId: 51, teamId: 1 });
-  expect(actions.send).toHaveBeenCalledTimes(2);
+  expect(actions.retireJerseyNumber).toHaveBeenCalledExactlyOnceWith({ playerId: 51, teamId: 1 });
   expect(onAdvanceWeek).not.toHaveBeenCalled();
 });
