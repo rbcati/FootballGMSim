@@ -84,6 +84,9 @@ export function buildTiebreakContext(teams, schedule) {
 
   for (const week of (schedule?.weeks ?? [])) {
     for (const game of (week?.games ?? [])) {
+      // Future games may carry initialized scores. Preserve score-only legacy
+      // finals, but never count games explicitly marked unplayed.
+      if (game?.played === false || game?.played === 0) continue;
       const homeId = readId(game?.home ?? game?.homeId);
       const awayId = readId(game?.away ?? game?.awayId);
       const hs = Number(game?.homeScore ?? game?.scoreHome);

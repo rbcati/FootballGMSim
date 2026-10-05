@@ -6,6 +6,29 @@ function makePlayer(id, { pos = 'WR', ovr = 70, years = 1, decision = 'pending',
 }
 
 describe('buildOffseasonActionCenter', () => {
+  it.each([52, 53, 60])('presents the preseason transition roster requirement for %s players', (count) => {
+    const center = buildOffseasonActionCenter({ phase: 'preseason', userTeamId: 1, teams: [{ id: 1, capRoom: 20, roster: Array.from({ length: count }, (_, id) => makePlayer(id)) }] });
+    if (count === 53) {
+      expect(center.preseasonRosterAction).toBeNull();
+      expect(center.blockers).toEqual([]);
+    } else {
+      expect(center.preseasonRosterAction).toMatchObject({ label: count < 53 ? 'Sign Players' : 'Run Final Cuts', tab: count < 53 ? 'Free Agency' : 'Roster' });
+      expect(center.blockers).toContain(center.preseasonRosterAction.title);
+      expect(center.actions[0]).toEqual(center.preseasonRosterAction);
+      expect(center.canSkipPhase).toBe(false);
+    }
+  });
+
+  it('keeps the preseason cap cushion advisory without changing other offseason phases', () => {
+    const league = { phase: 'preseason', userTeamId: 1, teams: [{ id: 1, capRoom: 4, roster: Array.from({ length: 53 }, (_, id) => makePlayer(id, { baseAnnual: 1 })) }] };
+    const advice = 'Cap room is below safe operating threshold ($5M).';
+    const preseason = buildOffseasonActionCenter(league);
+    expect(preseason.priorities).toContain(advice);
+    expect(preseason.blockers).not.toContain(advice);
+    expect(preseason.canSkipPhase).toBe(true);
+    expect(buildOffseasonActionCenter({ ...league, phase: 'free_agency' }).blockers).toContain(advice);
+  });
+
   it('guides the full season-end to preseason management loop with updated cap and roster context', () => {
     const team = {
       id: 1,

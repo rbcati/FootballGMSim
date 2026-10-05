@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { launchFranchise, goToTab, ensureLeagueLoaded } from './helpers/franchise.js';
+import { launchFranchise, goToTab } from './helpers/franchise.js';
 
 const SMOKE_TIMEOUT = 90000;
 
@@ -66,6 +66,29 @@ async function revealLatestUserGameResult(page, fallbackWeek) {
   return latestCompletedWeek;
 }
 
+async function openUserResultGameBook(page) {
+  const link = page.getByTestId('user-game-result-card').getByTestId('game-book-primary-cta');
+  await expect(link).toBeVisible();
+  await expect(link).toBeEnabled();
+  // The app uses smooth document scrolling. Settle the result's position
+  // before a real pointer click, including after reload scroll restoration.
+  await link.evaluate((button) => button.scrollIntoView({ behavior: 'instant', block: 'center' }));
+  await expect(link).toBeInViewport();
+  try {
+    await link.click({ timeout: 15000 });
+  } catch (error) {
+    console.log('Game Book navigation state', await page.evaluate(() => ({
+      hydrated: window.state?.isHydrated,
+      busy: window.state?.busy,
+      week: window.state?.league?.week,
+      phase: window.state?.league?.phase,
+      resultsVisible: Boolean(document.querySelector('[data-testid="weekly-results"]')),
+      hqVisible: Boolean(document.querySelector('[data-testid="franchise-hq"]')),
+    })));
+    throw error;
+  }
+}
+
 test('fresh franchise first week smoke', async ({ page, context }) => {
   const consoleErrors = [];
   page.on('pageerror', (err) => consoleErrors.push(String(err)));
@@ -95,42 +118,23 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await expect(advanceBtn).toBeVisible();
   const startWeek = await page.evaluate(() => window?.state?.league?.week ?? 1);
 
-  // Fresh franchises disable the advance button when weekly-prep items are
-  // outstanding (game plan not reviewed, etc.).  Mark them complete via
-  // localStorage so the button becomes enabled before we click it.
-  // This mirrors what the user would do by visiting the Game Plan screen.
-  await page.evaluate(() => {
-    try {
-      const PREP_KEY = 'footballgm_weekly_prep_v1';
-      const league = window?.state?.league ?? {};
-      const seasonId = league?.seasonId ?? league?.year ?? 'season';
-      const week = league?.week ?? 1;
-      const userTeamId = league?.userTeamId ?? 'user';
-      const slotKey = `${seasonId}:${week}:${userTeamId}`;
-      const stored = JSON.parse(window.localStorage.getItem(PREP_KEY) ?? '{}');
-      stored[slotKey] = {
-        lineupChecked: true,
-        injuriesReviewed: true,
-        opponentScouted: true,
-        planReviewed: true,
-        ...(stored[slotKey] ?? {}),
-        planReviewed: true,  // ensure game-plan gate is cleared
-      };
-      window.localStorage.setItem(PREP_KEY, JSON.stringify(stored));
-    } catch (_e) { /* non-fatal */ }
-  });
-
-  // Wait for React to re-render with updated prep state (gate clears → button enabled).
-  await expect(advanceBtn).toBeEnabled({ timeout: 8000 });
+  // NEXT UP owns readiness and progression. Complete prep through the live routes.
+  await expect(page.locator('.app-advance-btn')).toHaveCount(0);
+  await expect(page.getByTestId('hq-next-game').getByRole('button')).toHaveCount(0);
+  await expect(advanceBtn).toHaveText(/Review Game Plan/);
   await advanceBtn.click();
-  // In case a soft readiness gate dialog still shows, dismiss it.
-  const gateAdvanceBtn = page.getByTestId('gate-advance-anyway-btn');
-  try {
-    await gateAdvanceBtn.waitFor({ state: 'visible', timeout: 2000 });
-    await gateAdvanceBtn.click();
-  } catch (err) {
-    if (err.name !== 'TimeoutError') throw err;
-  }
+  await expect(page.getByRole('button', { name: 'Save Game Plan', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to HQ', exact: true }).click();
+  await expect(advanceBtn).toHaveText(/Play Week/);
+  await page.getByText('More Prep', { exact: true }).click();
+  const optionalScout = page.locator('.hq-v2-more button').filter({ hasText: 'Opponent has not been scouted.' });
+  await expect(optionalScout).toContainText('Optional');
+  await optionalScout.click();
+  await expect(page.getByTestId('weekly-prep-scout-summary')).toBeVisible();
+  await page.getByRole('button', { name: 'Back to HQ', exact: true }).click();
+  await expect(page.getByTestId('hq-next-action')).toContainText('READY FOR GAME DAY');
+  await expect(page.getByRole('button', { name: /Play Week/ })).toHaveCount(1);
+  await advanceBtn.click();
   // The skip-presentation prompt is REQUIRED in this flow (fresh franchise, the
   // user always has a Week 1 game). Assert it appears and is clickable rather
   // than swallowing a missing button — a vanished prompt is a real defect.
@@ -186,9 +190,7 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   const weeklyScoreMatch = weeklyResultText.match(/(\d+)\s*[-–]\s*(\d+)/);
   const weeklyScore = weeklyScoreMatch ? `${weeklyScoreMatch[1]}-${weeklyScoreMatch[2]}` : null;
 
-  const completedGameLink = page.getByTestId('game-book-primary-cta').first();
-  await expect(completedGameLink).toBeVisible({ timeout: SMOKE_TIMEOUT });
-  await completedGameLink.click();
+  await openUserResultGameBook(page);
 
   // ── Game book shows the correct final score ─────────────────────────────────
   await expect(page.getByTestId('game-book')).toBeVisible({ timeout: SMOKE_TIMEOUT });
@@ -224,77 +226,75 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await expect(page.getByTestId('weekly-results')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await page.getByRole('button', { name: /^Back to HQ$/i }).click();
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
-  // hq-last-result now lives inside the collapsed "Season Pulse & More" drawer
-  // (twin-grid dashboard restructure) and is hidden until that <details> is
-  // opened; hq-last-result-card is the always-visible canonical result entry
-  // point rendered directly on HQ, so assert against that instead.
-  await page.getByTestId('hq-more-drawer').click();
-  await expect(page.getByTestId('hq-last-result-card')).toBeVisible({ timeout: SMOKE_TIMEOUT });
-  // hq-next-action may be absent in newer twin-grid layout (removed in dashboard
-  // restructure); skip the mandatory check and search for its content flexibly.
-  let hqNextActionPresent = false;
-  try {
-    await page.getByTestId('hq-next-action').waitFor({ state: "visible", timeout: 3000 });
-    hqNextActionPresent = true;
-  } catch (err) {
-    if (err.name !== "TimeoutError") throw err;
-  }
+  await expect(page.getByTestId('hq-next-action')).toBeVisible();
+  await expect(page.getByTestId('hq-next-game').getByRole('button')).toHaveCount(0);
+  await expect(page.getByText('More Prep', { exact: true })).toBeVisible();
+  await expect(page.locator('.hq-v2-more')).not.toHaveAttribute('open', '');
 
-  // Last Result card should NOT show placeholder opponent (TBD) or zero score
-  const lastResultCard = page.getByTestId('hq-last-result-card');
-  await expect(lastResultCard).toBeVisible();
-  const lastResultText = await lastResultCard.textContent();
-  // Score should contain a real score pattern like "W · 24-17" or "L · 14-21"
-  expect(lastResultText).toMatch(/[WLT].*\d+[-–]\d+/);
-  // Opponent should NOT be TBD (that would mean team lookup failed)
-  expect(lastResultText).not.toMatch(/\bTBD\b/);
-
-  // If we captured a weekly score, verify the HQ shows the same numbers
-  if (weeklyScore) {
-    const [s1, s2] = weeklyScore.split('-');
-    const hqText = lastResultText;
-    // Both score numbers should appear somewhere in the last result line
-    const hasScore = hqText.includes(s1) || hqText.includes(s2);
-    expect(hasScore).toBe(true);
-  }
-
-  // Season Pulse momentum should update after the game
-  await page.getByTestId('hq-more-drawer').click();
-  const seasonPulse = page.getByTestId('season-pulse');
-  await expect(seasonPulse).toBeVisible({ timeout: SMOKE_TIMEOUT });
-
-  // Look for "Review Game Book" CTA in hq-next-action if present, or anywhere on HQ.
-  const reviewGameBookCta = hqNextActionPresent
-    ? page.getByTestId('hq-next-action').getByRole('button', { name: /Review Game Book/i })
-    : page.getByRole('button', { name: /Review Game Book/i }).first();
-  let reviewVisible = false;
-  try {
-    await reviewGameBookCta.waitFor({ state: "visible", timeout: 1000 });
-    reviewVisible = true;
-  } catch (err) {
-    if (err.name !== "TimeoutError") throw err;
-  }
-  if (reviewVisible) {
-    await reviewGameBookCta.click();
-    await expect(page.getByTestId('game-book')).toBeVisible({ timeout: SMOKE_TIMEOUT });
-    await expect(page.getByTestId('game-book-final-score')).toBeVisible({ timeout: SMOKE_TIMEOUT });
-    await page.getByTestId('game-book-return').click();
-    await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
-  }
-
-  // ── Reload: HQ should persist Last Result from IndexedDB ────────────────────
+  // Reload retains the canonical result on Weekly Results and Game Book.
+  const savedFranchise = await page.evaluate(() => ({
+    activeLeagueId: window.state?.league?.activeLeagueId,
+    franchiseGenerationId: window.state?.league?.franchiseGenerationId,
+  }));
+  expect(savedFranchise.activeLeagueId).toBeTruthy();
+  expect(savedFranchise.franchiseGenerationId).toBeTruthy();
   await page.reload();
-  await ensureLeagueLoaded(page);
-  await expect(page.getByTestId('app-bootstrap-loading')).toBeHidden({ timeout: SMOKE_TIMEOUT });
+  // Wait for this save to restore. The fresh-start helper can click an empty
+  // slot while the saved franchise is still loading and create a new league.
+  await page.waitForFunction(({ activeLeagueId, franchiseGenerationId }) => (
+    window.state?.isHydrated && !window.state?.busy && !window.state?.simulating
+    && window.state?.league?.activeLeagueId === activeLeagueId
+    && window.state?.league?.franchiseGenerationId === franchiseGenerationId
+  ), savedFranchise, { timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
-  await page.getByTestId('hq-more-drawer').click();
-  await expect(page.getByTestId('hq-last-result-card')).toBeVisible({ timeout: SMOKE_TIMEOUT });
-
-  // After reload, Last Result should still show real opponent and score
-  const reloadedLastResult = await page.getByTestId('hq-last-result-card').textContent();
-  expect(reloadedLastResult).toMatch(/[WLT].*\d+[-–]\d+/);
-  expect(reloadedLastResult).not.toMatch(/\bTBD\b/);
-
+  await goToTab(page, 'weekly-results');
+  await revealLatestUserGameResult(page, startWeek);
+  const reloadedResult = await page.getByTestId('user-game-result-card').textContent();
+  expect(reloadedResult).toMatch(/\b\d+\s*-\s*\d+\b/);
+  if (weeklyScore) expect(reloadedResult.replace(/\s/g, '')).toContain(weeklyScore);
+  await openUserResultGameBook(page);
+  await expect(page.getByTestId('game-book-final-score')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   expect(consoleErrors.join('\n')).not.toMatch(/Uncaught|TypeError|ReferenceError/);
+});
+
+// Run touch acceptance in the existing first-session CI job.
+test.describe('HQ mobile acceptance', () => {
+test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+test('390px HQ exposes one readiness owner and touch help', async ({ page }) => {
+  await launchFranchise(page);
+  const changelog = page.getByLabel('Close changelog');
+  if (await changelog.isVisible()) await changelog.click();
+  const hq = page.getByTestId('franchise-hq');
+  await expect(hq).toBeVisible();
+  await expect(page.locator('.app-advance-btn')).toHaveCount(0);
+  await expect(hq.locator('.hq-v2-primary')).toHaveCount(1);
+  await expect(page.getByTestId('hq-next-game').getByRole('button')).toHaveCount(0);
+  await expect(page.locator('.hq-v2-more')).not.toHaveAttribute('open', '');
+  const power = page.getByRole('button', { name: 'Power rank help', exact: true });
+  await power.tap();
+  await expect(power).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByText('Weekly team ranking based on current results, point differential, and recent form.')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(power).toHaveAttribute('aria-expanded', 'false');
+  const div = page.getByRole('button', { name: 'Division record help', exact: true });
+  await div.tap();
+  await expect(page.getByText('Record against teams in your division.')).toBeVisible();
+  const triggerBounds = await div.boundingBox();
+  const helpBounds = await page.getByText('Record against teams in your division.').boundingBox();
+  expect(helpBounds.y).toBeGreaterThanOrEqual(triggerBounds.y + triggerBounds.height);
+  await div.tap();
+  await expect(page.getByText('Record against teams in your division.')).toHaveCount(0);
+  const week = await page.evaluate(() => window.state.league.week);
+  await expect(page.getByTestId('advance-week-cta')).toHaveText(/Review Game Plan/);
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button', { name: 'Save Game Plan', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.state.league.week)).toBe(week);
+  await page.getByRole('button', { name: 'Back to HQ', exact: true }).click();
+  await expect(page.locator('.app-advance-btn')).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath('hq-390.png'), fullPage: true });
+});
+
 });

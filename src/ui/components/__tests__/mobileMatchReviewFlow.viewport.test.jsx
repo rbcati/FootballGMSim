@@ -10,14 +10,13 @@
  * jsdom does not compute real layout, so these assert the structural
  * invariants that keep the result, score, and return action reachable without
  * scrolling and prevent the bottom nav from overlapping Game Book content:
- *   - HQ shows one canonical result, not a full Weekly Results center.
- *   - The Game Book exposes a sticky header (final score + return action).
+ * *   - The Game Book exposes a sticky header (final score + return action).
  *   - The mobile bottom nav intentionally remains available during review.
  *   - The desktop quick-jump FAB is never mounted at mobile widths.
  */
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import LeagueDashboard from '../LeagueDashboard.jsx';
 
 const baseLeague = {
@@ -63,11 +62,12 @@ describe('mobile Match Review flow — viewport assertions', () => {
     cleanup();
   });
 
-  it.each(VIEWPORTS)('keeps result, sticky Game Book header, and uncluttered HQ at $label', async ({ width, height }) => {
+  it.each(VIEWPORTS)('keeps sticky Game Book return and mobile navigation at $label', async ({ width, height }) => {
     setViewport(width, height);
     render(
       <LeagueDashboard
         league={baseLeague}
+        externalBoxScoreId="g-9"
         actions={{ getDashboardLeaders: vi.fn(() => Promise.resolve({ league: {}, team: {} })), getBoxScore: vi.fn() }}
         busy={false}
         simulating={false}
@@ -76,21 +76,6 @@ describe('mobile Match Review flow — viewport assertions', () => {
     );
 
     const bottomBar = () => document.querySelector('.mobile-bottom-bar');
-
-    // HQ is not dominated by stacked notices: one canonical result entry,
-    // no duplicate post-sim strip, and no embedded Weekly Results center.
-    expect(screen.getAllByTestId('hq-last-result-card')).toHaveLength(1);
-    expect(screen.queryByTestId('hq-postsim-status-strip')).toBeNull();
-    expect(screen.queryByTestId('weekly-results')).toBeNull();
-    expect(document.querySelector('.quick-jump-fab')).toBeNull();
-    // Bottom nav present and not overlapping (not collapsed) on HQ.
-    expect(bottomBar()).not.toBeNull();
-    expect(bottomBar().classList.contains('is-collapsed')).toBe(false);
-    expect(document.querySelector('.quick-jump-fab')).toBeNull();
-
-    // Open the Game Book from the last result affordance / film room.
-    const seasonPulse = screen.getByTestId('season-pulse');
-    fireEvent.click(within(seasonPulse).getByRole('button', { name: /view game book/i }));
 
     // Route chrome owns one return action; BoxScore owns the sole score identity.
     expect(await screen.findByTestId('game-book-return-bar')).toBeTruthy();

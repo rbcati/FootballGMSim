@@ -138,6 +138,7 @@ const DELTA_ARRAY_FIELDS = [
   'leagueHistory', 'franchiseChronicle', 'franchiseSeasonReviews',
   'hallOfFameClasses', 'weeklyHeadlines', 'commissionerLog',
   'seasonStorylines',
+  'ringOfHonor', 'pendingRohCandidates', 'retiredNumbers', 'retiredNumberDisplay',
 ];
 
 /**
@@ -219,6 +220,7 @@ export function serializeLeagueDelta(fullState, previousState) {
         t.losses !== pt.losses ||
         t.ties !== pt.ties ||
         t.capUsed !== pt.capUsed ||
+        t.deadCap !== pt.deadCap ||
         t.ovr !== pt.ovr ||
         t.fanApproval !== pt.fanApproval ||
         t.rosterCount !== pt.rosterCount ||

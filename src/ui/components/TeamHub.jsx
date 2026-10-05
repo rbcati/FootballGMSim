@@ -12,6 +12,7 @@ import { TeamIdentityBadge } from './HQVisuals.jsx';
 import { buildStaffPhilosophySummary } from '../../core/staff/staffPhilosophy.js';
 import { buildGameDayReadinessModel } from '../utils/gameDayReadinessModel.js';
 import { getNextUserGame, getPreviousUserGame } from '../utils/userWeeklyGames.js';
+import FranchiseLegacyView from './FranchiseLegacyView.jsx';
 
 export const TEAM_SECTIONS = ['Lineup', 'Overview', 'Roster / Depth', 'Contracts', 'Development', 'Injuries'];
 const CRITICAL_POSITION_MIN = { QB: 2, RB: 3, WR: 5, TE: 3, OL: 8, DL: 8, LB: 6, CB: 5, S: 4, K: 1, P: 1 };
@@ -66,6 +67,7 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
   const [rosterMode, setRosterMode] = useState('roster');
   const team = useMemo(() => (league?.teams ?? []).find((t) => Number(t.id) === Number(league?.userTeamId)) ?? null, [league]);
   const roster = Array.isArray(team?.roster) ? team.roster : [];
+  const tradeRequests = Array.isArray(team?.tradeRequestAlerts) ? team.tradeRequestAlerts : [];
   const capSnapshot = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
 
   const expiringPlayers = useMemo(() => roster.filter((p) => Number(derivePlayerContractFinancials(p).yearsRemaining ?? 0) <= 1), [roster]);
@@ -171,6 +173,19 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
             )) : <CompactInsightCard title="No urgent team issues" subtitle="Use this week to improve depth and scouting." tone="info" ctaLabel="Open Roster" onCta={() => setSubtab('Roster / Depth')} />}
           </SectionCard>
 
+          {tradeRequests.length > 0 && <SectionCard title="Player trade requests" subtitle="Respond to pending player decisions." variant="compact">
+            {tradeRequests.map((request) => <article key={request.playerId} data-testid={`trade-request-alert-${request.playerId}`} className="app-row-stack">
+              <strong>{request.playerName} · {request.pos} · {request.ovr} OVR</strong>
+              <p>Reason: {String(request.reason ?? 'undisclosed').replaceAll('_', ' ')}{request.stonewalledWeeks > 0 ? ` · ${request.stonewalledWeeks} weeks unresolved` : ''}</p>
+              {request.stonewalledWeeks >= 4 && <StatusChip label="Locker room morale at risk" tone="warning" />}
+              <CtaRow actions={[
+                { label: 'Honor — List on Block', compact: true, disabled: typeof actions?.honorTradeRequest !== 'function', onClick: () => actions?.honorTradeRequest?.(request.playerId) },
+                { label: 'Offer Extension', compact: true, disabled: typeof actions?.offerExtensionToWithdraw !== 'function', onClick: () => actions?.offerExtensionToWithdraw?.(request.playerId) },
+                { label: 'Stonewall', compact: true, disabled: typeof actions?.stonewallTradeRequest !== 'function', onClick: () => actions?.stonewallTradeRequest?.(request.playerId) },
+              ]} />
+            </article>)}
+          </SectionCard>}
+
           <SectionCard title="Position pressure" subtitle="Where your depth chart is currently stressed." variant="compact">
             <div className="app-row-stack">
               {pressureGroups.length === 0 ? <CompactInsightCard title="No major weak spots" subtitle="Current healthy depth clears critical thresholds." tone="ok" /> : pressureGroups.map((group) => (
@@ -209,6 +224,19 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
               { label: 'Free Agency', compact: true, onClick: () => onNavigate?.('Free Agency') },
             ]} />
           </SectionCard>
+          <details>
+            <summary>Franchise Legacy</summary>
+            <FranchiseLegacyView
+              ringOfHonor={league?.ringOfHonor ?? []}
+              allTimeLeaders={league?.allTimeLeaders}
+              pendingRohCandidates={league?.pendingRohCandidates ?? []}
+              retiredNumbers={league?.retiredNumbers ?? []}
+              retiredNumberDisplay={league?.retiredNumberDisplay ?? []}
+              awardHistory={league?.awardHistory ?? []}
+              onInduct={(playerId, teamId) => actions?.inductRingOfHonor?.({ playerId, teamId })}
+              onRetireNumber={(playerId) => actions?.retireJerseyNumber?.({ teamId: team?.id, playerId })}
+            />
+          </details>
         </div>
       )}
 

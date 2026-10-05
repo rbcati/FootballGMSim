@@ -28,6 +28,8 @@ export async function ensureLeagueLoaded(page) {
     return selectors.some((selector) => document.querySelector(selector));
   }, { timeout: 60000 });
 
+  // Presence can precede visibility while the worker and save hub hydrate.
+  await expect.poll(() => detectBootstrapState(page), { timeout: 60000 }).not.toBe('unknown');
   let state = await detectBootstrapState(page);
   if (state === 'app_ready') {
     await expect(page.locator(APP_READY)).toBeVisible();
@@ -36,6 +38,10 @@ export async function ensureLeagueLoaded(page) {
 
   if (state === 'save_hub') {
     await page.locator(SAVE_HUB_CTA).first().click();
+    await expect.poll(async () => {
+      const next = await detectBootstrapState(page);
+      return next !== 'unknown' && next !== 'save_hub';
+    }, { timeout: 60000 }).toBe(true);
     state = await detectBootstrapState(page);
   }
 

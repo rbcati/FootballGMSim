@@ -8,6 +8,7 @@ import './styles/style.css';
 import './styles/layout.css';
 import './styles/components.css';
 import './styles/hub.css';
+import './styles/hq-command-center-v2.css';
 import './styles/mobile.css';
 import './styles/app-mobile.css';
 import './styles/screen-system.css';

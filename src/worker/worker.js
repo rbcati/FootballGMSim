@@ -1094,6 +1094,7 @@ function buildViewState() {
     ties:      t.ties      ?? 0,
     ptsFor:    t.ptsFor    ?? 0,
     ptsAgainst:t.ptsAgainst?? 0,
+    deadCap:   t.deadCap   ?? 0,
     capUsed:   t.capUsed   ?? 0,
     capRoom:   t.capRoom   ?? 0,
     capTotal:  t.capTotal  ?? Constants.SALARY_CAP.HARD_CAP,
