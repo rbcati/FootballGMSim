@@ -11,6 +11,13 @@
 .league-leaders-filters :is(select, button) { min-height: 32px; }
 
 .app-hq-menu-utilities { display: none; }
+/* HQ cards keep a dark surface in every theme; their text must follow it. */
+.hq-v2-card, .hq-v2-more {
+  --text-primary: #f4f7fb;
+  --text-muted: rgba(244, 247, 251, .76);
+  --text-subtle: rgba(244, 247, 251, .66);
+  color: var(--text-primary);
+}
 .guided-detail { min-width: 0; }
 .guided-detail > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--text-muted); font-size: var(--text-sm); }
 .guided-detail > summary::before { content: '+ '; margin-right: 8px; }
