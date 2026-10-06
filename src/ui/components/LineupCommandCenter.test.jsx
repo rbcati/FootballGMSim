@@ -41,6 +41,19 @@ describe('LineupCommandCenter', () => {
     expect(onNavigate).toHaveBeenCalledWith('Depth Chart');
   });
 
+  it.each([{ injuryWeeksRemaining: 2 }, { injury: { weeksRemaining: 2 } }, { status: 'injured' }])('surfaces existing readiness health concerns without redefining eligibility: %j', (injury) => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: { rowKey: row.key, order: index + 1 } })));
+    complete[0] = { ...complete[0], ...injury };
+    const onNavigate = vi.fn();
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{}} onNavigate={onNavigate} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('Starter health needs review');
+    expect(view.getByTestId('lineup-what-matters').textContent).not.toContain('Starting lineup is ready');
+    expect(view.getByText('QB · Ready')).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Review starter health' }));
+    expect(onNavigate).toHaveBeenCalledWith('Depth Chart');
+  });
+
   it('preserves player navigation and persists replacements through updateDepthChart', async () => {
     const onPlayerSelect = vi.fn();
     const updateDepthChart = vi.fn(async () => ({}));

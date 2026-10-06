@@ -84,11 +84,13 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
       <strong>{availability.unavailableStarterCount
         ? `${availability.unavailableStarterCount} starter${availability.unavailableStarterCount === 1 ? ' needs' : 's need'} attention`
         : readiness.missingStarterCount ? `${readiness.missingStarterCount} depth group${readiness.missingStarterCount === 1 ? ' needs' : 's need'} a starter`
+        : readiness.injuryReplacementConcerns > 0 ? 'Starter health needs review'
         : snapshot.offensePlayers.length > 0 && snapshot.offensiveSchemeFit < 40 ? 'Starting lineup is ready · poor offensive scheme fit'
         : snapshot.defensePlayers.length > 0 && snapshot.defensiveSchemeFit < 40 ? 'Starting lineup is ready · poor defensive scheme fit'
         : '✓ Starting lineup is ready'}</strong>
       {availability.unavailableStarterCount > 0 && <p>{availability.unavailableStarters.map((player) => `${player.position} ${player.name}`).join(', ')} unavailable. Use Change to review healthy backups.</p>}
-      {readiness.missingStarterCount > 0 && <button className="btn btn-secondary" onClick={() => onNavigate?.('Depth Chart')}>Fill empty depth assignments</button>}
+      {!availability.unavailableStarterCount && readiness.injuryReplacementConcerns > 0 && <p>Check starter injuries and healthy backups before game day.</p>}
+      {(readiness.missingStarterCount > 0 || readiness.injuryReplacementConcerns > 0) && <button className="btn btn-secondary" onClick={() => onNavigate?.('Depth Chart')}>{readiness.missingStarterCount > 0 ? 'Fill empty depth assignments' : availability.unavailableStarterCount > 0 ? 'Review depth assignments' : 'Review starter health'}</button>}
     </section>
     <section className="lineup-summary" aria-label="Starting lineup strength">
       <div><small>{team?.abbr ?? team?.name ?? 'TEAM'}</small><strong>{snapshot.overall}</strong><span>TEAM</span></div>
