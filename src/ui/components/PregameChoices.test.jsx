@@ -19,7 +19,7 @@ describe('guided pregame choices', () => {
     expect(onWatch).toHaveBeenLastCalledWith('instant');
     container.querySelector('details').open = true;
     for (const [name, mode] of [['Watch (Broadcast Pace)', 'watch'], ['Fast Watch (Condensed)', 'fast'], ['Sim to End (Instant Recap)', 'instant']]) {
-      fireEvent.click(screen.getByRole('button', { name: new RegExp(name.replace(/[()]/g, '\\$&')) }));
+      fireEvent.click(screen.getByRole('button', { name: (label) => label.startsWith(name) }));
       expect(onWatch).toHaveBeenLastCalledWith(mode);
     }
     fireEvent.click(screen.getByRole('button', { name: /^Simulate Week/ }));
