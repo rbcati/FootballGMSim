@@ -157,6 +157,9 @@ export default function NotificationCenter({ notifications = [], onDismiss, onDi
       {open && (
         <div
           ref={panelRef}
+          className="notification-center-panel"
+          role="region"
+          aria-label="Notifications"
           style={{
             position: "absolute", top: "calc(100% + 8px)", right: 0,
             width: 320, maxWidth: "90vw",

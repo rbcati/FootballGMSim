@@ -57,6 +57,13 @@ for (const width of [390, 430, 1280]) {
     await page.getByLabel('Action menu', { exact: true }).click();
     await page.getByRole('button', { name: /^Notifications/ }).click();
     await expect(page.getByText('Notifications', { exact: true })).toBeVisible();
+    if (mobile) {
+      const notifications = page.getByRole('region', { name: 'Notifications', exact: true });
+      const bounds = await notifications.boundingBox();
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+      await noOverflow(page);
+    }
     await page.getByRole('button', { name: /^Notifications/ }).click();
     await noOverflow(page);
 
