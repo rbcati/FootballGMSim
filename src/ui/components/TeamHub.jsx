@@ -111,8 +111,8 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
   const blockingIssues = useMemo(() => pressureGroups.filter((group) => group.severity >= 2), [pressureGroups]);
 
   return (
-    <div className="app-screen-stack team-hub-mobile-surface pfgm-density-surface">
-      <HeroCard
+    <div className={`app-screen-stack team-hub-mobile-surface pfgm-density-surface ${subtab === 'Lineup' ? 'team-hub--lineup' : ''}`}>
+      {subtab !== 'Lineup' && <HeroCard
         eyebrow={`${league?.year ?? 'Season'} · Week ${league?.week ?? '—'} · ${league?.phase ?? 'regular'}`}
         title="Lineup Check Before Kickoff"
         subtitle={`${team?.name ?? 'Team'} · ${team?.wins ?? 0}-${team?.losses ?? 0}${team?.ties ? `-${team.ties}` : ''}`}
@@ -136,8 +136,9 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
           <div><span>Last game</span><strong>{latestGame ? makeMatchupLabel(latestGame, team, league?.year) : 'No completed game yet'}</strong></div>
           <div><span>Next game</span><strong>{upcomingGame ? makeMatchupLabel(upcomingGame, team, league?.year) : 'No upcoming matchup'}</strong></div>
         </div>
-      </HeroCard>
+      </HeroCard>}
 
+      {subtab === 'Lineup' && <SectionHeader title={`${team?.name ?? 'Team'} · Lineup`} subtitle={`Week ${league?.week ?? '—'} · ${upcomingGame ? makeMatchupLabel(upcomingGame, team, league?.year) : 'Set your starters'}`} />}
       <SectionSubnav items={TEAM_SECTIONS} activeItem={subtab} onChange={setSubtab} sticky />
 
       {subtab === 'Lineup' && (

@@ -31,12 +31,14 @@ describe('shared game-day readiness consumers', () => {
   afterEach(cleanup);
 
   it('shows the same counts and readable unavailable starters in Team Hub', () => {
-    render(<TeamHub league={makeLeague(blockingRoster)} actions={{}} />);
+    render(<TeamHub league={makeLeague(blockingRoster)} actions={{}} initialSection="Overview" />);
     const readiness = screen.getByTestId('team-hub-gameday-readiness');
     expect(within(readiness).getByText('Lineup action required')).toBeTruthy();
     expect(readiness.textContent).toContain('2 starters unavailable: QB QB One, WR Wide One');
     fireEvent.click(within(readiness).getByRole('button', { name: /review lineup/i }));
     expect(screen.getByTestId('lineup-command-center')).toBeTruthy();
+    expect(screen.getByTestId('lineup-what-matters').textContent).toContain('2 starters need attention');
+    expect(screen.getByTestId('lineup-what-matters').textContent).toContain('QB QB One, WR Wide One unavailable');
     expect(screen.queryByText('Weekly lineup decisions')).toBeNull();
   });
 
@@ -45,7 +47,7 @@ describe('shared game-day readiness consumers', () => {
       { id: 1, teamId: 1, name: 'QB One', pos: 'QB', depthChart: { rowKey: 'QB', order: 1 } },
       { id: 2, teamId: 1, name: 'Backup', pos: 'QB', holdout: { active: true }, depthChart: { rowKey: 'QB', order: 2 } },
     ];
-    render(<TeamHub league={makeLeague(roster)} actions={{}} />);
+    render(<TeamHub league={makeLeague(roster)} actions={{}} initialSection="Overview" />);
     const readiness = screen.getByTestId('team-hub-gameday-readiness');
     expect(readiness.textContent).toContain('1 available · 1 unavailable');
     expect(readiness.textContent).not.toContain('Lineup action required');
@@ -54,7 +56,7 @@ describe('shared game-day readiness consumers', () => {
 
   it('renders valid healthy readiness in TeamHub', () => {
     const healthy = [{ id: 1, teamId: 1, name: 'QB One', pos: 'QB', depthChart: { rowKey: 'QB', order: 1 } }];
-    render(<TeamHub league={makeLeague(healthy)} actions={{}} />);
+    render(<TeamHub league={makeLeague(healthy)} actions={{}} initialSection="Overview" />);
     const readiness = screen.getByTestId('team-hub-gameday-readiness');
     expect(readiness.textContent).toContain('1 available · 0 unavailable');
     expect(readiness.textContent).not.toContain('Lineup action required');

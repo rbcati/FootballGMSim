@@ -2,6 +2,7 @@
 import React from 'react';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEPTH_CHART_ROWS } from '../../core/depthChart.js';
 import LineupCommandCenter from './LineupCommandCenter.jsx';
 
 const attrs = (n) => ({ throwAccuracyShort: n, throwAccuracyDeep: n, throwPower: n, release: n, routeRunning: n, separation: n, catchInTraffic: n, ballTracking: n, decisionMaking: n, pocketPresence: n, passBlockFootwork: n, passBlockStrength: n, passRush: n, pressCoverage: n, zoneCoverage: n });
@@ -12,6 +13,34 @@ const team = { id: 1, name: 'Test', strategies: { offSchemeId: 'VERTICAL', defSc
 afterEach(cleanup);
 
 describe('LineupCommandCenter', () => {
+  it('uses canonical availability for actionable starter guidance', () => {
+    const view = render(<LineupCommandCenter team={team} roster={[{ ...roster[0], injured: true }, roster[1]]} actions={{}} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('1 starter needs attention');
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('QB Current QB unavailable');
+    expect(view.getByTestId('offense-lineup').textContent).toContain('55');
+    expect(view.getByTestId('offense-lineup').textContent).toContain('Unavailable');
+  });
+
+  it('uses calm copy when every canonical depth group has an available starter', () => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: { rowKey: row.key, order: index + 1 } })));
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{}} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('Starting lineup is ready');
+    const help = view.getByText('Why scheme fit matters').closest('details');
+    expect(help.open).toBe(false);
+    expect(help.textContent).toContain('does not promise a fixed ratings bonus');
+    expect(help.textContent).not.toMatch(/\d+%/);
+    expect(view.getByText('Compare scheme fits').closest('details').open).toBe(false);
+  });
+
+  it('routes empty persisted assignments to the existing depth editor', () => {
+    const onNavigate = vi.fn();
+    const view = render(<LineupCommandCenter team={team} roster={[]} actions={{}} onNavigate={onNavigate} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('depth groups need a starter');
+    fireEvent.click(view.getByRole('button', { name: 'Fill empty depth assignments' }));
+    expect(onNavigate).toHaveBeenCalledWith('Depth Chart');
+  });
+
   it('preserves player navigation and persists replacements through updateDepthChart', async () => {
     const onPlayerSelect = vi.fn();
     const updateDepthChart = vi.fn(async () => ({}));
@@ -53,8 +82,8 @@ describe('LineupCommandCenter', () => {
   it('shows active non-default schemes and routes to the existing Game Plan tab', () => {
     const onNavigate = vi.fn();
     const view = render(<LineupCommandCenter team={team} roster={roster} actions={{}} onNavigate={onNavigate} />);
-    expect(view.getByText(/Vertical \/ Air Raid · \d+% fit/)).toBeTruthy();
-    expect(view.getByText(/Man Coverage · \d+% fit/)).toBeTruthy();
+    expect(view.getByText(/Vertical \/ Air Raid · (Good|Average|Poor) fit/)).toBeTruthy();
+    expect(view.getByText(/Man Coverage · (Good|Average|Poor) fit/)).toBeTruthy();
     fireEvent.click(view.getByRole('button', { name: 'Review Game Plan' }));
     expect(onNavigate).toHaveBeenCalledWith('Game Plan');
   });

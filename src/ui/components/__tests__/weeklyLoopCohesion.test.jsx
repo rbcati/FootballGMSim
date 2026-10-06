@@ -63,7 +63,7 @@ const actions = { send: vi.fn() };
 describe('weekly loop cohesion surfaces', () => {
   it('renders TeamHub lineup framing safely', () => {
     const html = renderToString(<TeamHub league={league} actions={actions} onNavigate={() => {}} onPlayerSelect={() => {}} />);
-    expect(html).toContain('Lineup Check Before Kickoff');
+    expect(html).toContain('What Matters This Week');
     expect(html).toContain('Roster / Depth');
   });
 

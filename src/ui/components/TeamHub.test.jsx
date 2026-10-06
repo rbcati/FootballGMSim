@@ -42,7 +42,7 @@ describe('TeamHub', () => {
       />,
     );
 
-    expect(html).toContain('Lineup Check Before Kickoff');
+    expect(html).toContain('What Matters This Week');
     expect(html).toContain('lineup-command-center');
     expect(html).not.toContain('Position pressure');
     const sectionIndexes = ['Lineup', 'Overview', 'Roster / Depth', 'Contracts', 'Development', 'Injuries']
@@ -84,7 +84,7 @@ describe('TeamHub', () => {
       ] },
       gameById: { g1: { id: 'g1', homeId: 7, awayId: 10, homeScore: 24, awayScore: 17 } },
     };
-    const html = renderToString(<TeamHub league={stale} actions={{}} />);
+    const html = renderToString(<TeamHub league={stale} actions={{}} initialSection="Overview" />);
     expect(html).toContain('vs LAR · Week 5');
     expect(html).toContain('@ SF · Week 6');
     expect(html).not.toContain('No upcoming matchup');

@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import LeagueDashboard from '../LeagueDashboard.jsx';
 
 const league = {
@@ -42,5 +42,22 @@ describe('LeagueDashboard + FranchiseHQ mobile shell', () => {
     for (const label of ['HQ', 'Team', 'League', 'News', 'More']) {
       expect(globalNavs[0].querySelectorAll(`button[aria-label="${label}"]`)).toHaveLength(1);
     }
+  });
+
+  it('preserves repair notifications and removes the HQ scope when navigating to Team', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    const onDismissNotification = vi.fn();
+    render(<LeagueDashboard league={league} actions={{ send: vi.fn() }} onAdvanceWeek={vi.fn()}
+      notifications={[{ id: 'repair', message: 'Repaired roster links', level: 'warn' }]} onDismissNotification={onDismissNotification} />);
+    expect(document.querySelector('.dashboard--hq')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Notifications (1)' }));
+    expect(screen.getByText('Repaired roster links')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss', exact: true }));
+    expect(onDismissNotification).toHaveBeenCalledWith('repair');
+    fireEvent.click(screen.getByRole('button', { name: 'Team', exact: true }));
+    expect(document.querySelector('.dashboard--hq')).toBeNull();
+    expect(document.querySelector('.team-summary-nav-card')).toBeTruthy();
+    expect(document.querySelector('[data-layout-owner="global-app-navigation"]')).toBeTruthy();
   });
 });

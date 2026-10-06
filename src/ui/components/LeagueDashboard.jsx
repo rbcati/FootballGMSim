@@ -861,10 +861,12 @@ export default function LeagueDashboard({
     setActiveTab(targetTab);
   };
 
+  const isHqDestination = ['HQ', 'Weekly Hub', 'Home'].includes(activeTab);
   const usesPfgmDensitySurface = ['HQ', 'Weekly Hub', 'Home', 'Team', 'League', 'News', 'Weekly Results'].includes(activeTab);
 
   return (
-    <div className={usesPfgmDensitySurface ? 'pfgm-density-surface' : undefined}>
+    <div className={`${usesPfgmDensitySurface ? 'pfgm-density-surface' : ''} ${isHqDestination ? 'dashboard--hq' : ''}`}>
+
       {/* ── Franchise shell status bar ── */}
       <div className="franchise-status-bar">
         <button
