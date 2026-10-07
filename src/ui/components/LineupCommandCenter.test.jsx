@@ -59,6 +59,19 @@ describe('LineupCommandCenter', () => {
     expect(view.getByRole('button', { name: 'Review starter health' })).toBeTruthy();
   });
 
+  it.each(['QB', 'RS'])('retains inferred rows when only %s has persisted ownership', (persistedRow) => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: row.key === persistedRow ? { rowKey: row.key, order: index + 1 } : undefined })));
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{}} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('Starting lineup is ready');
+    expect(view.getByTestId('lineup-what-matters').textContent).not.toContain('depth groups need a starter');
+    expect(view.getByTestId('offense-lineup').textContent).toContain('Quarterback 1');
+    if (persistedRow === 'RS') {
+      fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));
+      expect(view.getByTestId('special-lineup').textContent).toContain('Return Specialist 1');
+    }
+  });
+
   it('routes empty persisted assignments to the existing depth editor', () => {
     const onNavigate = vi.fn();
     const view = render(<LineupCommandCenter team={team} roster={[]} actions={{}} onNavigate={onNavigate} />);

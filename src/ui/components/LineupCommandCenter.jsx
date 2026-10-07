@@ -38,13 +38,17 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
   const displayedStarterIds = new Set([...offensePlayers, ...defensePlayers, ...specialPlayers].map((player) => String(player.id)));
   const unavailableStarters = availability.unavailablePlayers.filter((player) => displayedStarterIds.has(String(player.id)));
   const readiness = useMemo(() => {
-    // Keep persisted row ownership (including returners) when present. Legacy
-    // rosters without row metadata use the readiness model's established fallback.
-    const assignments = displayedRoster.some((player) => getPersistedDepthAssignment(player))
-      ? Object.fromEntries(DEPTH_CHART_ROWS.map((row) => [row.key, displayedRoster
-        .filter((player) => getPersistedDepthAssignment(player)?.rowKey === row.key)
-        .sort((a, b) => getPersistedDepthAssignment(a).order - getPersistedDepthAssignment(b).order)
-        .map((player) => player.id)])) : null;
+    // Legacy rows retain the existing inferred chart. Persisted row ownership
+    // overrides only its own row, so editing one row cannot empty the others.
+    const fallback = deriveRosterReadinessModel({ league, team, roster: displayedRoster });
+    const persisted = Object.fromEntries(DEPTH_CHART_ROWS.map((row) => [row.key, displayedRoster
+      .filter((player) => getPersistedDepthAssignment(player)?.rowKey === row.key)
+      .sort((a, b) => getPersistedDepthAssignment(a).order - getPersistedDepthAssignment(b).order)
+      .map((player) => player.id)]));
+    if (!Object.values(persisted).some((ids) => ids.length)) return fallback;
+    const hasInferredPlayers = displayedRoster.some((player) => !getPersistedDepthAssignment(player));
+    const assignments = Object.fromEntries(DEPTH_CHART_ROWS.map((row) => [row.key,
+      persisted[row.key].length ? persisted[row.key] : hasInferredPlayers ? fallback.assignments[row.key] ?? [] : []]));
     return deriveRosterReadinessModel({ league, team, roster: displayedRoster, assignments });
   }, [league, team, displayedRoster]);
   const starterHealthNeedsReview = readiness.injuryReplacementConcerns > 0
