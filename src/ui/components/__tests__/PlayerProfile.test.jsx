@@ -79,6 +79,14 @@ describe('PlayerProfile', () => {
     { id: 9201, injuryWeeksRemaining: 3, expected: 'Out 3w' },
     { id: 9202, injured: true, expected: 'Unavailable' },
     { id: 9203, holdout: { active: true }, expected: 'Unavailable' },
+    { id: 9204, injury: { weeksRemaining: 2 }, expected: 'Out 2w' },
+    { id: 9205, injuredWeeks: 2, expected: 'Unavailable' },
+    { id: 9206, status: 'injured', expected: 'Unavailable' },
+    { id: 9207, status: 'ir', expected: 'Unavailable' },
+    { id: 9208, onIR: true, expected: 'Unavailable' },
+    { id: 9209, injury: { gamesRemaining: 2 }, expected: 'Out 2w' },
+    { id: 9210, injuryDuration: 2, expected: 'Unavailable' },
+    { id: 9211, injuryWeeksRemaining: 0, injury: { weeksRemaining: 3 }, expected: 'Out 3w' },
   ])('preserves injury and availability context in the initial summary: %j', async ({ expected, ...status }) => {
     const current = { ...player, ...status };
     render(<PlayerProfile playerId={current.id} onClose={vi.fn()} actions={{ ...actions, getPlayerCareer: vi.fn(async () => ({ payload: { player: current } })) }} teams={league.teams} league={league} />);

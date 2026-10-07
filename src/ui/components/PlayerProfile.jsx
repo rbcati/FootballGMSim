@@ -1,4 +1,6 @@
 import { isAvailableForGameDay } from '../../core/holdouts/holdoutEngine.js';
+import { hasReadinessInjury } from '../../core/gameDayAvailability.js';
+import { getInjuryWeeksRemaining, isPlayerInjured } from '../utils/injuryReadinessModel.js';
 /**
  * PlayerProfile.jsx
  *
@@ -319,6 +321,13 @@ function getSeasonProductionSummary(player) {
   return null;
 }
 
+function getPlayerAvailabilityLabel(player) {
+  const weeks = getInjuryWeeksRemaining(player);
+  if (weeks > 0) return `Out ${safeRound(weeks, 0)}w`;
+  if (hasReadinessInjury(player) || isPlayerInjured(player)) return "Unavailable";
+  return isAvailableForGameDay(player, { teamId: player?.teamId }) ? "Available" : "Unavailable";
+}
+
 function getPlayerSummaryChips(player, ringCount, nonRing) {
   const chips = [];
   const contractYears = toFiniteNumber(player?.contract?.years, null);
@@ -333,15 +342,8 @@ function getPlayerSummaryChips(player, ringCount, nonRing) {
     const devSignal = player.age <= 24 ? "Ascending" : player.age >= 30 ? "Veteran" : "Prime";
     chips.push({ label: "Development", value: `${player.age} · ${devSignal}` });
   }
-  if (player?.injuryWeeksRemaining > 0) {
-    chips.push({
-      label: "Durability",
-      value: `Out ${safeRound(player.injuryWeeksRemaining, 0)}w`,
-      tone: "warn",
-    });
-  } else {
-    chips.push({ label: "Durability", value: "Available" });
-  }
+  const availability = getPlayerAvailabilityLabel(player);
+  chips.push({ label: "Durability", value: availability, ...(availability !== "Available" ? { tone: "warn" } : {}) });
   const recent = getSeasonProductionSummary(player);
   if (recent) chips.push({ label: "Recent", value: recent });
   if (ringCount > 0 || nonRing.length > 0) {
@@ -1289,7 +1291,7 @@ export default function PlayerProfile({
 
                 <div style={{ marginTop: "var(--space-2)", display: "flex", gap: 6, flexWrap: "wrap", fontSize: "var(--text-xs)" }}>
                   <span className="status-chip info">Contract: {summaryChips.find((chip) => chip.label === "Contract")?.value ?? "Not available"}</span>
-                  <span className="status-chip muted">Status: {playerView.injuryWeeksRemaining > 0 ? `Out ${playerView.injuryWeeksRemaining}w` : isAvailableForGameDay(playerView, { teamId: playerView.teamId }) ? "Available" : "Unavailable"}</span>
+                  <span className="status-chip muted">Status: {getPlayerAvailabilityLabel(playerView)}</span>
                   {activeProfileTab === "Career" && (playerView.draftYear || playerView.draftRound || playerView.draftPick) ? <span className="status-chip muted">Draft: {playerView.draftYear ?? "—"} R{playerView.draftRound ?? "—"} P{playerView.draftPick ?? "—"}</span> : null}
                   {activeProfileTab === "Ratings" && quickTags.map((tag) => <span key={tag} className="status-chip success">{tag}</span>)}
                   {(player?.contract?.tag === 'franchise' || player?.isTagged) && (
