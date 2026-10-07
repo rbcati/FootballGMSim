@@ -321,10 +321,15 @@ function getSeasonProductionSummary(player) {
   return null;
 }
 
-function getPlayerAvailabilityLabel(player) {
+function getPlayerHealthLabel(player) {
   const weeks = getInjuryWeeksRemaining(player);
   if (weeks > 0) return `Out ${safeRound(weeks, 0)}w`;
-  if (hasReadinessInjury(player) || isPlayerInjured(player)) return "Unavailable";
+  return hasReadinessInjury(player) || isPlayerInjured(player) ? "Injured" : "Healthy";
+}
+
+function getPlayerAvailabilityLabel(player) {
+  const health = getPlayerHealthLabel(player);
+  if (health !== "Healthy") return health === "Injured" ? "Unavailable" : health;
   return isAvailableForGameDay(player, { teamId: player?.teamId }) ? "Available" : "Unavailable";
 }
 
@@ -342,8 +347,8 @@ function getPlayerSummaryChips(player, ringCount, nonRing) {
     const devSignal = player.age <= 24 ? "Ascending" : player.age >= 30 ? "Veteran" : "Prime";
     chips.push({ label: "Development", value: `${player.age} · ${devSignal}` });
   }
-  const availability = getPlayerAvailabilityLabel(player);
-  chips.push({ label: "Durability", value: availability, ...(availability !== "Available" ? { tone: "warn" } : {}) });
+  const health = getPlayerHealthLabel(player);
+  chips.push({ label: "Durability", value: health, ...(health !== "Healthy" ? { tone: "warn" } : {}) });
   const recent = getSeasonProductionSummary(player);
   if (recent) chips.push({ label: "Recent", value: recent });
   if (ringCount > 0 || nonRing.length > 0) {

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEPTH_CHART_ROWS } from '../../core/depthChart.js';
 import LineupCommandCenter from './LineupCommandCenter.jsx';
+import { resolveLineupAssignments } from '../utils/lineupCommandCenter.js';
 
 const attrs = (n) => ({ throwAccuracyShort: n, throwAccuracyDeep: n, throwPower: n, release: n, routeRunning: n, separation: n, catchInTraffic: n, ballTracking: n, decisionMaking: n, pocketPresence: n, passBlockFootwork: n, passBlockStrength: n, passRush: n, pressCoverage: n, zoneCoverage: n });
 const player = (id, name, order, ovr) => ({ id, name, pos: 'QB', teamId: 1, ovr, attributesV2: attrs(ovr), ratings: { throwPower: ovr, throwAccuracy: ovr, awareness: ovr, intelligence: ovr, speed: ovr }, depthChart: { rowKey: 'QB', order } });
@@ -70,6 +71,61 @@ describe('LineupCommandCenter', () => {
       fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));
       expect(view.getByTestId('special-lineup').textContent).toContain('Return Specialist 1');
     }
+  });
+
+  it.each([[], ['QB'], ['RS'], ['K']].map((persistedRows) => ({ persistedRows })))('displays the same resolved special starters for persisted rows $persistedRows', ({ persistedRows }) => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: persistedRows.includes(row.key) ? { rowKey: row.key, order: index + 1 } : undefined })));
+    const resolved = resolveLineupAssignments({ team, roster: complete });
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{}} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('Starting lineup is ready');
+    expect(view.getByTestId('offense-lineup').textContent).toContain('Quarterback 1');
+    fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));
+    for (const rowKey of ['K', 'P', 'RS']) {
+      const current = complete.find((entry) => entry.id === resolved[rowKey][0]);
+      const card = view.getByTestId('special-lineup').querySelector(`[data-player-id="${current.id}"]`);
+      expect(card).toBeTruthy();
+      expect(card.textContent).toContain(current.name);
+      expect(card.querySelector('.lineup-starter__role').textContent).toBe(rowKey);
+    }
+    expect(view.getByTestId('lineup-special-strength').textContent).toBe('78SPEC');
+    expect(complete.filter((entry) => entry.depthChart).every((entry) => persistedRows.includes(entry.depthChart.rowKey))).toBe(true);
+  });
+
+  it.each(['K', 'P', 'RS'])('changes an inferred %s through the existing canonical command', async (rowKey) => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: row.slots + (row.key === 'K' || row.key === 'P' ? 1 : 0) }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: undefined })));
+    const resolved = resolveLineupAssignments({ team, roster: complete });
+    const starterId = resolved[rowKey][0];
+    const starter = complete.find((entry) => entry.id === starterId);
+    const updateDepthChart = vi.fn(async () => ({}));
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{ updateDepthChart }} />);
+    fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));
+    const card = view.getByTestId('special-lineup').querySelector(`[data-player-id="${starterId}"]`);
+    fireEvent.click(within(card).getByRole('button', { name: 'Change' }));
+    const alternatives = view.getByLabelText(`Replace ${starter.name}`);
+    const choice = within(alternatives).getAllByRole('button')[0];
+    const replacement = complete.find((entry) => choice.textContent.includes(entry.name));
+    fireEvent.click(choice);
+    await waitFor(() => expect(updateDepthChart).toHaveBeenCalledTimes(1));
+    const updates = updateDepthChart.mock.calls[0][0];
+    expect(updates).toEqual(expect.arrayContaining([
+      { playerId: replacement.id, rowKey, newOrder: 1 },
+      { playerId: starterId, rowKey, newOrder: 2 },
+    ]));
+    expect(updates.every((update) => update.rowKey === rowKey)).toBe(true);
+    expect(complete.every((entry) => entry.depthChart === undefined)).toBe(true);
+  });
+
+  it('keeps an explicit empty special row empty instead of using inferred returners', () => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: undefined })));
+    const view = render(<LineupCommandCenter team={{ ...team, depthChart: { RS: [] } }} roster={complete} actions={{}} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('1 depth group needs a starter');
+    expect(view.getByTestId('lineup-special-strength').textContent).toBe('—SPEC');
+    fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));
+    expect(view.getByTestId('special-lineup').querySelectorAll('.lineup-starter__role').length).toBe(2);
+    expect(view.getByTestId('special-lineup').textContent).not.toContain('RS');
   });
 
   it('routes empty persisted assignments to the existing depth editor', () => {

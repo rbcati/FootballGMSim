@@ -94,6 +94,28 @@ describe('PlayerProfile', () => {
     expect(screen.getByRole('button', { name: 'Overview', exact: true }).getAttribute('aria-pressed')).toBe('true');
   });
 
+  it.each([
+    { id: 9301, expectedHealth: 'Healthy', expectedStatus: 'Available' },
+    { id: 9302, injuryWeeksRemaining: 3, expectedHealth: 'Out 3w', expectedStatus: 'Out 3w' },
+    { id: 9303, injured: true, expectedHealth: 'Injured', expectedStatus: 'Unavailable' },
+    { id: 9304, status: 'free_agent', teamId: null, contract: null, expectedHealth: 'Healthy', expectedStatus: 'Unavailable' },
+    { id: 9305, status: 'retired', retired: true, expectedHealth: 'Healthy', expectedStatus: 'Unavailable' },
+    { id: 9306, status: 'draft_eligible', teamId: null, expectedHealth: 'Healthy', expectedStatus: 'Unavailable' },
+    { id: 9307, status: 'practice_squad', expectedHealth: 'Healthy', expectedStatus: 'Unavailable' },
+    { id: 9308, holdout: { active: true }, expectedHealth: 'Healthy', expectedStatus: 'Unavailable' },
+    { id: 9309, injury: { weeksRemaining: 2 }, expectedHealth: 'Out 2w', expectedStatus: 'Out 2w' },
+  ])('keeps health-only durability separate from game-day status: %j', async ({ expectedHealth, expectedStatus, ...context }) => {
+    const current = { ...player, ...context };
+    render(<PlayerProfile playerId={current.id} onClose={vi.fn()} actions={{ ...actions, getPlayerCareer: vi.fn(async () => ({ payload: { player: current } })) }} teams={league.teams} league={league} />);
+    await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain(`Status: ${expectedStatus}`));
+    fireEvent.click(screen.getByRole('button', { name: 'Ratings', exact: true }));
+    const durability = screen.getByText('Durability').parentElement;
+    expect(within(durability).getByText(expectedHealth)).toBeTruthy();
+    expect(durability.textContent).not.toContain('Unavailable');
+    if (expectedHealth === 'Healthy') expect(durability.getAttribute('style')).not.toContain('rgba(255,159,10');
+    expect(screen.getByTestId('player-profile-summary').textContent).toContain(`Status: ${expectedStatus}`);
+  });
+
   it('preserves management actions in Contract and the draft action above the summary', async () => {
     const updatePlayerManagement = vi.fn(async () => ({}));
     const onDraftPlayer = vi.fn();

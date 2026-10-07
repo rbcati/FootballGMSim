@@ -4,6 +4,7 @@ import { getEffectivePlayerForRole } from '../../core/sim/positionalMultipliers.
 import { DEPTH_CHART_ROWS, getCanonicalDepthRow, getCanonicalScrimmageAssignment, getPlayerScrimmageUnitRow, getScrimmageDepthRow, isPlayerEligibleForDepthRow } from '../../core/depthChart.js';
 import { calculateOverallFromAttributesV2 } from '../../worker/playerDerivedRatings.js';
 import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES, calculatePlayerSchemeFit } from '../../core/scheme-core.js';
+import { deriveRosterReadinessModel } from './rosterReadinessModel.js';
 
 const average = (values, fallback = 0) => values.length
   ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
@@ -96,6 +97,31 @@ export function getPersistedDepthAssignment(player = {}) {
   const row = DEPTH_CHART_ROWS.find((entry) => entry.key === rowKey);
   if (!row || !Number.isFinite(order) || order <= 0 || !isPlayerEligibleForDepthRow(player, row)) return null;
   return { rowKey: row.key, order };
+}
+
+/** Share the existing readiness fallback and persisted row ownership across Lineup. */
+export function resolveLineupAssignments({ league, team, roster = [] } = {}) {
+  const fallback = deriveRosterReadinessModel({ league, team, roster }).assignments;
+  const persisted = Object.fromEntries(DEPTH_CHART_ROWS.map((row) => [row.key, roster
+    .filter((player) => getPersistedDepthAssignment(player)?.rowKey === row.key)
+    .sort((a, b) => getPersistedDepthAssignment(a).order - getPersistedDepthAssignment(b).order)
+    .map((player) => player.id)]));
+  const byId = new Map(roster.map((player) => [String(player.id), player]));
+  const hasPersistedRows = Object.values(persisted).some((ids) => ids.length);
+  const hasInferredPlayers = roster.some((player) => !getPersistedDepthAssignment(player));
+  return Object.fromEntries(DEPTH_CHART_ROWS.map((row) => {
+    // A team-level empty array is an explicit cleared row, not missing legacy metadata.
+    if (Array.isArray(team?.depthChart?.[row.key]) && team.depthChart[row.key].length === 0) return [row.key, []];
+    const ids = persisted[row.key].length ? persisted[row.key]
+      : !hasPersistedRows || hasInferredPlayers ? fallback[row.key] ?? [] : [];
+    // The generic fallback can fill empty rows out of position. Special Teams
+    // must use the existing row eligibility/ownership rules before certifying them.
+    return [row.key, row.group === 'SPECIAL' ? ids.filter((id) => {
+      const player = byId.get(String(id));
+      const ownedRow = getPersistedDepthAssignment(player)?.rowKey;
+      return isPlayerEligibleForDepthRow(player, row) && (!ownedRow || ownedRow === row.key);
+    }) : ids];
+  }));
 }
 
 export function buildReplacementUpdates(roster, starter, replacement, group) {

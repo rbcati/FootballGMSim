@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { DEPTH_CHART_ROWS, getPlayerScrimmageUnitRow, getScrimmageDepthRow, isPlayerEligibleForDepthRow } from '../../core/depthChart.js';
 import { calculatePlayerSchemeFit } from '../../core/scheme-core.js';
 import { isAvailableForGameDay } from '../../core/holdouts/holdoutEngine.js';
-import { buildReplacementUpdates, deriveEditableCanonicalLineup, deriveLineupRatingSnapshot, getPersistedDepthAssignment } from '../utils/lineupCommandCenter.js';
+import { buildReplacementUpdates, deriveEditableCanonicalLineup, deriveLineupRatingSnapshot, getPersistedDepthAssignment, resolveLineupAssignments } from '../utils/lineupCommandCenter.js';
 import { deriveRosterReadinessModel } from '../utils/rosterReadinessModel.js';
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
 import { deriveGameDayAvailability } from '../../core/gameDayAvailability.js';
@@ -19,15 +19,22 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
   const [projectedRoster, setProjectedRoster] = useState(null);
   const displayedRoster = projectedRoster ?? roster;
   const snapshot = useMemo(() => deriveLineupRatingSnapshot({ team, roster: displayedRoster }), [team, displayedRoster]);
-  const specialTeamsRating = useMemo(() => deriveSpecialTeamsPresentationRating({ ...team, roster: displayedRoster }), [team, displayedRoster]);
   const offensePlayers = useMemo(() => deriveEditableCanonicalLineup({ roster: displayedRoster, simulationStarterIds: snapshot.offenseStarterIds, group: 'OFFENSE' }), [displayedRoster, snapshot.offenseStarterIds]);
   const defensePlayers = useMemo(() => deriveEditableCanonicalLineup({ roster: displayedRoster, simulationStarterIds: snapshot.defenseStarterIds, group: 'DEFENSE' }), [displayedRoster, snapshot.defenseStarterIds]);
-  const specialPlayers = useMemo(() => DEPTH_CHART_ROWS
-    .filter((row) => row.group === 'SPECIAL')
-    .map((row) => displayedRoster
-      .filter((player) => player?.depthChart?.rowKey === row.key && isPlayerEligibleForDepthRow(player, row))
-      .sort((a, b) => Number(a?.depthChart?.order ?? a.depthOrder ?? 999) - Number(b?.depthChart?.order ?? b.depthOrder ?? 999))[0])
-    .filter(Boolean), [displayedRoster]);
+  const resolvedAssignments = useMemo(() => resolveLineupAssignments({ league, team, roster: displayedRoster }), [league, team, displayedRoster]);
+  const readiness = useMemo(() => deriveRosterReadinessModel({ league, team, roster: displayedRoster, assignments: resolvedAssignments }), [league, team, displayedRoster, resolvedAssignments]);
+  const specialEntries = useMemo(() => {
+    const byId = new Map(displayedRoster.map((player) => [String(player.id), player]));
+    return DEPTH_CHART_ROWS.filter((row) => row.group === 'SPECIAL')
+      .map((row) => ({ row, player: byId.get(String(resolvedAssignments[row.key]?.[0])) }))
+      .filter((entry) => entry.player);
+  }, [displayedRoster, resolvedAssignments]);
+  const specialPlayers = specialEntries.map((entry) => entry.player);
+  const specialRowFor = (player) => specialEntries.find((entry) => String(entry.player.id) === String(player.id))?.row;
+  // Adapt resolved row context to the existing rating helper; no rating formula changes.
+  const specialTeamsRating = useMemo(() => deriveSpecialTeamsPresentationRating({ ...team, roster: specialEntries.map(({ row, player }) => ({
+    ...player, depthChart: { ...(player.depthChart ?? {}), rowKey: row.key, order: 1 },
+  })) }), [team, specialEntries]);
   const players = unit === 'offense' ? offensePlayers : unit === 'defense' ? defensePlayers : specialPlayers;
   const group = unit.toUpperCase();
   const scheme = unit === 'offense' ? snapshot.schemes.offense : snapshot.schemes.defense;
@@ -37,20 +44,6 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
   // Availability still comes from the shared game-day authority.
   const displayedStarterIds = new Set([...offensePlayers, ...defensePlayers, ...specialPlayers].map((player) => String(player.id)));
   const unavailableStarters = availability.unavailablePlayers.filter((player) => displayedStarterIds.has(String(player.id)));
-  const readiness = useMemo(() => {
-    // Legacy rows retain the existing inferred chart. Persisted row ownership
-    // overrides only its own row, so editing one row cannot empty the others.
-    const fallback = deriveRosterReadinessModel({ league, team, roster: displayedRoster });
-    const persisted = Object.fromEntries(DEPTH_CHART_ROWS.map((row) => [row.key, displayedRoster
-      .filter((player) => getPersistedDepthAssignment(player)?.rowKey === row.key)
-      .sort((a, b) => getPersistedDepthAssignment(a).order - getPersistedDepthAssignment(b).order)
-      .map((player) => player.id)]));
-    if (!Object.values(persisted).some((ids) => ids.length)) return fallback;
-    const hasInferredPlayers = displayedRoster.some((player) => !getPersistedDepthAssignment(player));
-    const assignments = Object.fromEntries(DEPTH_CHART_ROWS.map((row) => [row.key,
-      persisted[row.key].length ? persisted[row.key] : hasInferredPlayers ? fallback.assignments[row.key] ?? [] : []]));
-    return deriveRosterReadinessModel({ league, team, roster: displayedRoster, assignments });
-  }, [league, team, displayedRoster]);
   const starterHealthNeedsReview = readiness.injuryReplacementConcerns > 0
     || availability.injuredPlayers.some((player) => displayedStarterIds.has(String(player.id)))
     || [...offensePlayers, ...defensePlayers, ...specialPlayers].some(isPlayerInjured);
@@ -58,7 +51,7 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
 
   const alternativesFor = (starter) => {
     const row = group === 'SPECIAL'
-      ? DEPTH_CHART_ROWS.find((entry) => entry.key === starter?.depthChart?.rowKey)
+      ? specialRowFor(starter)
       : getScrimmageDepthRow(starter, group) ?? getPlayerScrimmageUnitRow(starter, group);
     if (!row) return [];
     const starterIds = new Set([...offensePlayers, ...defensePlayers, ...specialPlayers].map((player) => String(player.id)));
@@ -70,7 +63,18 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
   };
 
   const replace = async (starter, replacement) => {
-    const updates = buildReplacementUpdates(roster, starter, replacement, group);
+    let replacementRoster = roster;
+    if (group === 'SPECIAL') {
+      const row = specialRowFor(starter);
+      if (!row) return;
+      const orders = new Map((resolvedAssignments[row.key] ?? []).map((id, index) => [String(id), index + 1]));
+      // Carry this resolved row into the existing command builder for inferred starters.
+      replacementRoster = roster.map((player) => orders.has(String(player.id)) ? {
+        ...player, depthChart: { ...(player.depthChart ?? {}), rowKey: row.key, order: orders.get(String(player.id)) },
+      } : player);
+    }
+    const replacementStarter = replacementRoster.find((player) => String(player.id) === String(starter.id));
+    const updates = buildReplacementUpdates(replacementRoster, replacementStarter, replacement, group);
     if (!updates.length) return;
     const updateById = new Map(updates.map((update) => [String(update.playerId), update]));
     const nextRoster = roster.map((player) => {
@@ -81,10 +85,7 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
     setChangingId(null);
     try {
       await actions?.updateDepthChart?.(updates);
-      const assignments = Object.fromEntries(DEPTH_CHART_ROWS.map((row) => [row.key, nextRoster
-        .filter((player) => player?.depthChart?.rowKey === row.key)
-        .sort((a, b) => Number(a?.depthChart?.order ?? a.depthOrder ?? 999) - Number(b?.depthChart?.order ?? b.depthOrder ?? 999))
-        .map((player) => player.id)]));
+      const assignments = resolveLineupAssignments({ league, team, roster: nextRoster });
       const readiness = deriveRosterReadinessModel({ league, team, roster: nextRoster, assignments, source: 'team-lineup' });
       if (readiness.safeToMarkLineupChecked) markWeeklyPrepStep(league, 'lineupChecked', true);
     } finally { setProjectedRoster(null); }
@@ -108,7 +109,7 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
       <div><small>{team?.abbr ?? team?.name ?? 'TEAM'}</small><strong>{snapshot.overall}</strong><span>TEAM</span></div>
       <div><strong>{snapshot.offense}</strong><span>OFF</span></div>
       <div><strong>{snapshot.defense}</strong><span>DEF</span></div>
-      <div><strong>{specialTeamsRating ?? '—'}</strong><span>SPEC</span></div>
+      <div data-testid="lineup-special-strength"><strong>{specialTeamsRating ?? '—'}</strong><span>SPEC</span></div>
       <div className="lineup-summary__schemes"><span>{snapshot.schemes.offense.name} · {fitLabel(snapshot.offensiveSchemeFit)}</span><span>{snapshot.schemes.defense.name} · {fitLabel(snapshot.defensiveSchemeFit)}</span></div>
     </section>
     <details className="guided-detail"><summary>Why scheme fit matters</summary><p>Scheme fit reflects how well your assigned starters’ strengths match the system you are running. Compare talent and availability alongside fit; this score does not promise a fixed ratings bonus.</p></details>
@@ -121,7 +122,7 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
 
     <div className="lineup-starters" data-testid={`${unit}-lineup`}>
       {players.map((player, playerIndex) => {
-        const row = unit === 'special' ? DEPTH_CHART_ROWS.find((item) => item.key === player?.depthChart?.rowKey) : getScrimmageDepthRow(player, group) ?? getPlayerScrimmageUnitRow(player, group);
+        const row = unit === 'special' ? specialRowFor(player) : getScrimmageDepthRow(player, group) ?? getPlayerScrimmageUnitRow(player, group);
         const fit = unit === 'special' ? null : calculatePlayerSchemeFit(player, scheme);
         const isChanging = changingId === player.id;
         const selectedIds = unit === 'offense' ? snapshot.offenseStarterIds : snapshot.defenseStarterIds;
