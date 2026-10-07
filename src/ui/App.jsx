@@ -1,3 +1,4 @@
+import PregameChoices from './components/PregameChoices.jsx';
 /**
  * App.jsx  —  Root UI component
  *
@@ -1164,7 +1165,7 @@ function AppContent() {
   }
 
   return (
-    <div className={`app-shell view-enter ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard" data-testid="app-shell-ready">
+    <div className={`app-shell view-enter ${isPostseason ? 'postseason' : ''} ${themeClass} ${hqOwnsProgression ? 'app-shell--hq' : ''}`} key="league_dashboard" data-testid="app-shell-ready">
 
       {/* Phase-based Theming */}
       <style>{`
@@ -1220,7 +1221,7 @@ function AppContent() {
 
         <div className="app-header-actions">
           <button
-            className="btn app-icon-btn"
+            className="btn app-icon-btn app-permanent-utility"
             onClick={() => updateSetting("soundEnabled", !soundEnabled)}
             title="Toggle sound effects"
             aria-label="Toggle sound effects"
@@ -1228,7 +1229,7 @@ function AppContent() {
           >
             {soundEnabled ? "🔊" : "🔇"}
           </button>
-          <ThemeToggle compact />
+          <span className="app-permanent-utility"><ThemeToggle compact /></span>
           {!hqOwnsProgression && <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
             <button
               className="btn btn-primary app-advance-btn app-action-primary"
@@ -1256,6 +1257,10 @@ function AppContent() {
               {ACTION_LABELS.more}
             </summary>
             <div className="app-overflow-list">
+              <div className="app-hq-menu-utilities">
+                <button className="btn" onClick={() => updateSetting('soundEnabled', !soundEnabled)} aria-label="Toggle sound effects">{soundEnabled ? '🔊 Sound on' : '🔇 Sound off'}</button>
+                <ThemeToggle compact />
+              </div>
               {utilityActions.map((item) => (
                 <button
                   key={item.label}
@@ -1661,8 +1666,9 @@ function AppContent() {
             pointerEvents: 'auto',
             touchAction: 'manipulation',
           }}>
-            <div style={{
+            <div role="dialog" aria-modal="true" aria-label="Play this week" style={{
               pointerEvents: 'auto',
+              maxHeight: '90dvh', overflowY: 'auto',
               background: 'var(--surface-strong, #1e1e2e)',
               border: '1px solid var(--hairline)',
               borderRadius: 'var(--radius-xl, 20px)',
@@ -1683,107 +1689,9 @@ function AppContent() {
               }}>
                 Week {league.week} {league.phase === 'playoffs' ? '· Playoffs' : '· Regular Season'}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', marginBottom: 2 }}>
-                  Choose presentation mode for this game.
-                </div>
-                {/* ── Tactical Tendency Selector ── */}
-                <div style={{ marginBottom: 4 }}>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-                    Coaching Tendency
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {[
-                      { key: 'CONSERVATIVE', label: 'Conservative', color: '#34C759' },
-                      { key: 'BALANCED',     label: 'Balanced',     color: '#0A84FF' },
-                      { key: 'AGGRESSIVE',   label: 'Aggressive',   color: '#FF453A' },
-                    ].map(({ key, label, color }) => (
-                      <button
-                        key={key}
-                        onClick={() => setUserTendency(key)}
-                        style={{
-                          flex: 1, padding: '7px 4px', borderRadius: 8, fontSize: 'var(--text-xs)', fontWeight: 700,
-                          border: `1.5px solid ${userTendency === key ? color : 'var(--hairline)'}`,
-                          background: userTendency === key ? `${color}22` : 'transparent',
-                          color: userTendency === key ? color : 'var(--text-muted)',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-subtle)', marginTop: 4, textAlign: 'center' }}>
-                    {userTendency === 'AGGRESSIVE' ? 'More deep passes & 4th-down attempts'
-                      : userTendency === 'CONSERVATIVE' ? 'More runs & safe punt decisions'
-                      : 'Baseline simulation behavior'}
-                  </div>
-                </div>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => {
-                    setWatchMode('watch');
-                    actions.watchGame(userTendency);
-                  }}
-                  disabled={busy}
-                  style={{
-                    width: '100%', minHeight: 52,
-                    fontSize: 'var(--text-base)', fontWeight: 800,
-                    cursor: 'pointer',
-                    borderRadius: 'var(--radius-md)',
-                  }}
-                >
-                  {busy ? 'Loading...' : '🏈 Watch (Broadcast Pace)'}
-                </button>
-                <button
-                  className="btn"
-                  onClick={() => {
-                    setWatchMode('fast');
-                    actions.watchGame(userTendency);
-                  }}
-                  disabled={busy}
-                  style={{
-                    width: '100%', minHeight: 48,
-                    fontSize: 'var(--text-sm)', fontWeight: 700,
-                    cursor: 'pointer',
-                    borderRadius: 'var(--radius-md)',
-                  }}
-                >
-                  ⚡ Fast Watch (Condensed)
-                </button>
-                <button
-                  className="btn"
-                  onClick={() => {
-                    setWatchMode('instant');
-                    actions.watchGame(userTendency);
-                  }}
-                  disabled={busy}
-                  style={{
-                    width: '100%', minHeight: 48,
-                    fontSize: 'var(--text-sm)', fontWeight: 700,
-                    cursor: 'pointer',
-                    borderRadius: 'var(--radius-md)',
-                  }}
-                >
-                  ⏭️ Sim to End (Instant Recap)
-                </button>
-                <button
-                  className="btn"
-                  onClick={() => {
-                    actions.clearUserGame();
-                    actions.advanceWeek({ skipUserGame: true });
-                  }}
-                  disabled={busy}
-                  style={{
-                    width: '100%', minHeight: 48,
-                    fontSize: 'var(--text-sm)', fontWeight: 600,
-                    cursor: 'pointer',
-                    borderRadius: 'var(--radius-md)',
-                  }}
-                >
-                  Simulate Week (Skip Presentation)
-                </button>
-              </div>
+              <PregameChoices busy={busy} tendency={userTendency} onTendencyChange={setUserTendency}
+                onWatch={(mode) => { setWatchMode(mode); actions.watchGame(userTendency); }}
+                onSimWeek={() => { actions.clearUserGame(); actions.advanceWeek({ skipUserGame: true }); }} />
             </div>
           </div>
         );

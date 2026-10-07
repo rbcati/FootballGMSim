@@ -2,11 +2,15 @@ import React, { useMemo, useState } from 'react';
 import { DEPTH_CHART_ROWS, getPlayerScrimmageUnitRow, getScrimmageDepthRow, isPlayerEligibleForDepthRow } from '../../core/depthChart.js';
 import { calculatePlayerSchemeFit } from '../../core/scheme-core.js';
 import { isAvailableForGameDay } from '../../core/holdouts/holdoutEngine.js';
-import { buildReplacementUpdates, deriveEditableCanonicalLineup, deriveLineupRatingSnapshot, getPersistedDepthAssignment } from '../utils/lineupCommandCenter.js';
+import { buildReplacementUpdates, deriveEditableCanonicalLineup, deriveLineupRatingSnapshot, getPersistedDepthAssignment, resolveLineupAssignments } from '../utils/lineupCommandCenter.js';
 import { deriveRosterReadinessModel } from '../utils/rosterReadinessModel.js';
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
+import { deriveGameDayAvailability } from '../../core/gameDayAvailability.js';
+import { isPlayerInjured } from '../utils/injuryReadinessModel.js';
+import { deriveSpecialTeamsPresentationRating } from '../utils/hqCommandCenterV2.js';
 
-const fitColor = (fit) => fit >= 80 ? 'var(--success)' : fit >= 65 ? 'var(--warning)' : 'var(--danger)';
+const fitColor = (fit) => fit >= 75 ? 'var(--success)' : fit >= 40 ? 'var(--warning)' : 'var(--danger)';
+const fitLabel = (fit) => fit >= 75 ? 'Good fit' : fit >= 40 ? 'Average fit' : 'Poor fit';
 const unavailable = (player, teamId) => !isAvailableForGameDay(player, { teamId });
 
 export default function LineupCommandCenter({ league, team, roster, actions, onPlayerSelect, onNavigate }) {
@@ -17,21 +21,37 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
   const snapshot = useMemo(() => deriveLineupRatingSnapshot({ team, roster: displayedRoster }), [team, displayedRoster]);
   const offensePlayers = useMemo(() => deriveEditableCanonicalLineup({ roster: displayedRoster, simulationStarterIds: snapshot.offenseStarterIds, group: 'OFFENSE' }), [displayedRoster, snapshot.offenseStarterIds]);
   const defensePlayers = useMemo(() => deriveEditableCanonicalLineup({ roster: displayedRoster, simulationStarterIds: snapshot.defenseStarterIds, group: 'DEFENSE' }), [displayedRoster, snapshot.defenseStarterIds]);
-  const specialPlayers = useMemo(() => DEPTH_CHART_ROWS
-    .filter((row) => row.group === 'SPECIAL')
-    .map((row) => displayedRoster
-      .filter((player) => player?.depthChart?.rowKey === row.key && isPlayerEligibleForDepthRow(player, row))
-      .sort((a, b) => Number(a?.depthChart?.order ?? a.depthOrder ?? 999) - Number(b?.depthChart?.order ?? b.depthOrder ?? 999))[0])
-    .filter(Boolean), [displayedRoster]);
+  const resolvedAssignments = useMemo(() => resolveLineupAssignments({ league, team, roster: displayedRoster }), [league, team, displayedRoster]);
+  const readiness = useMemo(() => deriveRosterReadinessModel({ league, team, roster: displayedRoster, assignments: resolvedAssignments }), [league, team, displayedRoster, resolvedAssignments]);
+  const specialEntries = useMemo(() => {
+    const byId = new Map(displayedRoster.map((player) => [String(player.id), player]));
+    return DEPTH_CHART_ROWS.filter((row) => row.group === 'SPECIAL')
+      .map((row) => ({ row, player: byId.get(String(resolvedAssignments[row.key]?.[0])) }))
+      .filter((entry) => entry.player);
+  }, [displayedRoster, resolvedAssignments]);
+  const specialPlayers = specialEntries.map((entry) => entry.player);
+  const specialRowFor = (player) => specialEntries.find((entry) => String(entry.player.id) === String(player.id))?.row;
+  // Adapt resolved row context to the existing rating helper; no rating formula changes.
+  const specialTeamsRating = useMemo(() => deriveSpecialTeamsPresentationRating({ ...team, roster: specialEntries.map(({ row, player }) => ({
+    ...player, depthChart: { ...(player.depthChart ?? {}), rowKey: row.key, order: 1 },
+  })) }), [team, specialEntries]);
   const players = unit === 'offense' ? offensePlayers : unit === 'defense' ? defensePlayers : specialPlayers;
   const group = unit.toUpperCase();
   const scheme = unit === 'offense' ? snapshot.schemes.offense : snapshot.schemes.defense;
   const comparison = unit === 'offense' ? snapshot.offenseComparison : snapshot.defenseComparison;
+  const availability = useMemo(() => deriveGameDayAvailability(displayedRoster, { teamId: team?.id }), [displayedRoster, team?.id]);
+  // Use the same canonical slots shown below, including multi-player units.
+  // Availability still comes from the shared game-day authority.
+  const displayedStarterIds = new Set([...offensePlayers, ...defensePlayers, ...specialPlayers].map((player) => String(player.id)));
+  const unavailableStarters = availability.unavailablePlayers.filter((player) => displayedStarterIds.has(String(player.id)));
+  const starterHealthNeedsReview = readiness.injuryReplacementConcerns > 0
+    || availability.injuredPlayers.some((player) => displayedStarterIds.has(String(player.id)))
+    || [...offensePlayers, ...defensePlayers, ...specialPlayers].some(isPlayerInjured);
   const weakest = unit === 'special' ? null : [...players].sort((a, b) => Number(a.ovr ?? 0) - Number(b.ovr ?? 0))[0];
 
   const alternativesFor = (starter) => {
     const row = group === 'SPECIAL'
-      ? DEPTH_CHART_ROWS.find((entry) => entry.key === starter?.depthChart?.rowKey)
+      ? specialRowFor(starter)
       : getScrimmageDepthRow(starter, group) ?? getPlayerScrimmageUnitRow(starter, group);
     if (!row) return [];
     const starterIds = new Set([...offensePlayers, ...defensePlayers, ...specialPlayers].map((player) => String(player.id)));
@@ -43,7 +63,18 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
   };
 
   const replace = async (starter, replacement) => {
-    const updates = buildReplacementUpdates(roster, starter, replacement, group);
+    let replacementRoster = roster;
+    if (group === 'SPECIAL') {
+      const row = specialRowFor(starter);
+      if (!row) return;
+      const orders = new Map((resolvedAssignments[row.key] ?? []).map((id, index) => [String(id), index + 1]));
+      // Carry this resolved row into the existing command builder for inferred starters.
+      replacementRoster = roster.map((player) => orders.has(String(player.id)) ? {
+        ...player, depthChart: { ...(player.depthChart ?? {}), rowKey: row.key, order: orders.get(String(player.id)) },
+      } : player);
+    }
+    const replacementStarter = replacementRoster.find((player) => String(player.id) === String(starter.id));
+    const updates = buildReplacementUpdates(replacementRoster, replacementStarter, replacement, group);
     if (!updates.length) return;
     const updateById = new Map(updates.map((update) => [String(update.playerId), update]));
     const nextRoster = roster.map((player) => {
@@ -54,32 +85,44 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
     setChangingId(null);
     try {
       await actions?.updateDepthChart?.(updates);
-      const assignments = Object.fromEntries(DEPTH_CHART_ROWS.map((row) => [row.key, nextRoster
-        .filter((player) => player?.depthChart?.rowKey === row.key)
-        .sort((a, b) => Number(a?.depthChart?.order ?? a.depthOrder ?? 999) - Number(b?.depthChart?.order ?? b.depthOrder ?? 999))
-        .map((player) => player.id)]));
+      const assignments = resolveLineupAssignments({ league, team, roster: nextRoster });
       const readiness = deriveRosterReadinessModel({ league, team, roster: nextRoster, assignments, source: 'team-lineup' });
       if (readiness.safeToMarkLineupChecked) markWeeklyPrepStep(league, 'lineupChecked', true);
     } finally { setProjectedRoster(null); }
   };
 
   return <div className="lineup-command-center" data-testid="lineup-command-center">
+    <section className="guided-week-summary" data-testid="lineup-what-matters" aria-label="What Matters This Week">
+      <small>What Matters This Week</small>
+      <strong>{unavailableStarters.length
+        ? `${unavailableStarters.length} starter${unavailableStarters.length === 1 ? ' needs' : 's need'} attention`
+        : readiness.missingStarterCount ? `${readiness.missingStarterCount} depth group${readiness.missingStarterCount === 1 ? ' needs' : 's need'} a starter`
+        : starterHealthNeedsReview ? 'Starter health needs review'
+        : snapshot.offensePlayers.length > 0 && snapshot.offensiveSchemeFit < 40 ? 'Starting lineup is ready · poor offensive scheme fit'
+        : snapshot.defensePlayers.length > 0 && snapshot.defensiveSchemeFit < 40 ? 'Starting lineup is ready · poor defensive scheme fit'
+        : '✓ Starting lineup is ready'}</strong>
+      {unavailableStarters.length > 0 && <p>{unavailableStarters.map((player) => `${player.pos ?? player.position ?? "Player"} ${player.name ?? "Unnamed player"}`).join(', ')} unavailable. Use Change to review healthy backups.</p>}
+      {!unavailableStarters.length && starterHealthNeedsReview && <p>Check starter injuries and healthy backups before game day.</p>}
+      {(unavailableStarters.length > 0 || readiness.missingStarterCount > 0 || starterHealthNeedsReview) && <button className="btn btn-secondary" onClick={() => onNavigate?.('Depth Chart')}>{readiness.missingStarterCount > 0 ? 'Fill empty depth assignments' : unavailableStarters.length > 0 ? 'Review depth assignments' : 'Review starter health'}</button>}
+    </section>
     <section className="lineup-summary" aria-label="Starting lineup strength">
       <div><small>{team?.abbr ?? team?.name ?? 'TEAM'}</small><strong>{snapshot.overall}</strong><span>TEAM</span></div>
       <div><strong>{snapshot.offense}</strong><span>OFF</span></div>
       <div><strong>{snapshot.defense}</strong><span>DEF</span></div>
-      <div className="lineup-summary__schemes"><span>{snapshot.schemes.offense.name} · {snapshot.offensiveSchemeFit}% fit</span><span>{snapshot.schemes.defense.name} · {snapshot.defensiveSchemeFit}% fit</span></div>
+      <div data-testid="lineup-special-strength"><strong>{specialTeamsRating ?? '—'}</strong><span>SPEC</span></div>
+      <div className="lineup-summary__schemes"><span>{snapshot.schemes.offense.name} · {fitLabel(snapshot.offensiveSchemeFit)}</span><span>{snapshot.schemes.defense.name} · {fitLabel(snapshot.defensiveSchemeFit)}</span></div>
     </section>
+    <details className="guided-detail"><summary>Why scheme fit matters</summary><p>Scheme fit reflects how well your assigned starters’ strengths match the system you are running. Compare talent and availability alongside fit; this score does not promise a fixed ratings bonus.</p></details>
 
     <div className="lineup-unit-tabs" role="tablist" aria-label="Lineup unit">
       {['offense', 'defense', 'special'].map((key) => <button key={key} role="tab" aria-selected={unit === key} onClick={() => { setUnit(key); setChangingId(null); }}>{key === 'special' ? 'Special Teams' : key}</button>)}
     </div>
 
-    {weakest && <div className="lineup-insight"><span>Weakest starter</span><strong>{getScrimmageDepthRow(weakest, group)?.key ?? weakest.pos} · {weakest.name} · {weakest.ovr ?? '—'} OVR</strong></div>}
+    {weakest && <details className="guided-detail"><summary>Unit detail</summary><div className="lineup-insight"><span>Lowest starter OVR</span><strong>{getScrimmageDepthRow(weakest, group)?.key ?? weakest.pos} · {weakest.name} · {weakest.ovr ?? '—'} OVR</strong></div></details>}
 
     <div className="lineup-starters" data-testid={`${unit}-lineup`}>
       {players.map((player, playerIndex) => {
-        const row = unit === 'special' ? DEPTH_CHART_ROWS.find((item) => item.key === player?.depthChart?.rowKey) : getScrimmageDepthRow(player, group) ?? getPlayerScrimmageUnitRow(player, group);
+        const row = unit === 'special' ? specialRowFor(player) : getScrimmageDepthRow(player, group) ?? getPlayerScrimmageUnitRow(player, group);
         const fit = unit === 'special' ? null : calculatePlayerSchemeFit(player, scheme);
         const isChanging = changingId === player.id;
         const selectedIds = unit === 'offense' ? snapshot.offenseStarterIds : snapshot.defenseStarterIds;
@@ -93,18 +136,18 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
             <span className="lineup-starter__role">{row?.key ?? player.pos}</span>
             <span className="lineup-starter__identity"><strong>{player.name ?? `Player #${player.id}`}</strong><small>{player.pos ?? '—'}{unavailable(player, team?.id) ? ' · Unavailable' : ' · Ready'}</small></span>
             <strong className="lineup-starter__ovr">{player.ovr ?? '—'}<small>OVR</small></strong>
-            {fit != null && <strong className="lineup-starter__fit" style={{ color: fitColor(fit) }}>{fit}%<small>FIT</small></strong>}
+            {fit != null && <strong className="lineup-starter__fit" style={{ color: fitColor(fit) }}>{fitLabel(fit)}</strong>}
           </button>
           {fallback && <small className="lineup-starter__fallback">Game-day fallback: {fallback.name ?? `Player #${fallback.id}`}</small>}
           <button className="lineup-change" onClick={() => setChangingId(isChanging ? null : player.id)}>Change</button>
           {isChanging && <div className="lineup-alternatives" aria-label={`Replace ${player.name}`}>
-            {alternativesFor(player).map((candidate) => <button key={candidate.id} onClick={() => replace(player, candidate)}><span><strong>{candidate.name}</strong><small>{candidate.pos} · Ready</small></span><span>{candidate.ovr ?? '—'} OVR{unit === 'special' ? ' · Ready' : ` · ${calculatePlayerSchemeFit(candidate, scheme)}% FIT`}</span></button>)}
+            {alternativesFor(player).map((candidate) => <button key={candidate.id} onClick={() => replace(player, candidate)}><span><strong>{candidate.name}</strong><small>{candidate.pos} · Ready</small></span><span>{candidate.ovr ?? '—'} OVR{unit === 'special' ? ' · Ready' : ` · ${fitLabel(calculatePlayerSchemeFit(candidate, scheme))}`}</span></button>)}
             {!alternativesFor(player).length && <p>No eligible available alternatives.</p>}
           </div>}
         </div>;
       })}
     </div>
 
-    {unit !== 'special' && <section className="scheme-comparison"><div><small>CURRENT</small><strong>{scheme.name} — {comparison.find((item) => item.id === scheme.id)?.fit ?? 50}%</strong></div>{comparison.filter((item) => item.id !== scheme.id).map((item, index) => <div key={item.id}><small>{index === 0 && item.fit > (comparison.find((entry) => entry.id === scheme.id)?.fit ?? 0) ? 'BEST PERSONNEL FIT' : 'OTHER FIT'}</small><strong>{item.name} — {item.fit}%</strong></div>)}<button onClick={() => onNavigate?.('Game Plan')}>Review Game Plan</button></section>}
+    {unit !== 'special' && <details className="guided-detail"><summary>Compare scheme fits</summary><section className="scheme-comparison"><div><small>CURRENT · FIT SCORE / 100</small><strong>{scheme.name} — {comparison.find((item) => item.id === scheme.id)?.fit ?? 50}</strong></div>{comparison.filter((item) => item.id !== scheme.id).map((item, index) => <div key={item.id}><small>{index === 0 && item.fit > (comparison.find((entry) => entry.id === scheme.id)?.fit ?? 0) ? 'BEST PERSONNEL FIT' : 'OTHER FIT'}</small><strong>{item.name} — {item.fit}</strong></div>)}<button onClick={() => onNavigate?.('Game Plan')}>Review Game Plan</button></section></details>}
   </div>;
 }

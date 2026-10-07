@@ -4,10 +4,13 @@ import { launchFranchise } from './helpers/franchise.js';
 test.use({ viewport: { width: 390, height: 844 } });
 test.setTimeout(120000);
 
-const FLOATING_HELP_SELECTOR = '.quick-jump-fab, .quick-jump-fab-btn, [aria-label="Help"], [aria-label*="help" i], [data-testid*="help-fab" i]';
+const FLOATING_HELP_SELECTOR = '.quick-jump-fab, .quick-jump-fab-btn, [aria-label="Help"], [aria-label*="help" i]:not(.hq-v2-info), [data-testid*="help-fab" i]';
 
 async function expectTargetCenterUnobstructed(target) {
   await expect(target).toBeVisible();
+  await expect(target).toBeEnabled({ timeout: 90000 });
+  await target.scrollIntoViewIfNeeded();
+  await expect(target).toBeInViewport();
   expect(await target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const x = Math.min(window.innerWidth - 1, Math.max(0, rect.left + rect.width / 2));
@@ -18,6 +21,11 @@ async function expectTargetCenterUnobstructed(target) {
 }
 
 async function expectNoFloatingHelp(page) {
+  // #1798 added contextual ? controls inside HQ cards. They are not floating
+  // app-shell help; keep proving their placement as well as banning the FABs.
+  for (const help of await page.locator('.hq-v2-info').all()) {
+    expect(await help.evaluate((el) => Boolean(el.closest('.hq-v2-card')) && getComputedStyle(el).position !== 'fixed')).toBe(true);
+  }
   await expect(page.locator(FLOATING_HELP_SELECTOR)).toHaveCount(0);
 }
 
@@ -54,6 +62,9 @@ test('mobile weekly-result navigation and Game Book remain single-owner', async 
   await expect(page.getByRole('navigation', { name: 'More navigation' })).toBeVisible();
   await expectNoFloatingHelp(page);
   await expectTargetCenterUnobstructed(page.getByRole('button', { name: 'Saves', exact: true }));
+  // The existing drawer intentionally covers the bottom bar while open.
+  await page.locator('.mobile-nav-backdrop').click({ position: { x: 10, y: 10 } });
+  await expect(page.getByRole('navigation', { name: 'More navigation' })).toBeHidden();
   await expectTargetCenterUnobstructed(page.getByRole('button', { name: 'More', exact: true }));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });

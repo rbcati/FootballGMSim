@@ -85,6 +85,15 @@ export async function goToTab(page, name) {
     return;
   }
 
+  if (tab === 'weekly-results' && await page.locator('.premium-bottom-nav').isVisible()) {
+    await page.getByRole('button', { name: 'More', exact: true }).click();
+    const menu = page.getByRole('navigation', { name: 'More navigation' });
+    await expect(menu).toBeVisible();
+    await menu.getByRole('button', { name: 'Weekly Results', exact: true }).click();
+    await expect(page.getByTestId('weekly-results')).toBeVisible();
+    return;
+  }
+
   const sectionByTab = {
     team: 'team',
     roster: 'team',
@@ -272,6 +281,8 @@ export async function simulateSingleWeek(page, options = {}) {
   }
   const skipPromptBtn = page.getByRole('button', { name: /Simulate Week \(Skip Presentation\)/i });
   try {
+    await page.getByText('More Options', { exact: true }).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByText('More Options', { exact: true }).click();
     await skipPromptBtn.waitFor({ state: 'visible', timeout: 10000 });
     await expect(skipPromptBtn).toBeEnabled({ timeout: 5000 });
     await skipPromptBtn.click();

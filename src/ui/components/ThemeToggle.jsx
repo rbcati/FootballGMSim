@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useEffect, useCallback } from "react";
 import { useSettings } from "../context/SettingsContext.jsx";
 
 /**
  * ThemeToggle — Dark/Light/System theme switcher
  *
- * Stores preference in localStorage as "theme" key.
+ * Reads and updates the shared, persisted settings preference.
  * Applies .force-dark or body.theme-light class to work
  * with the existing CSS custom properties system.
  */
@@ -19,13 +19,7 @@ const THEMES = {
 export default function ThemeToggle({ compact = false }) {
   const { settings, updateSetting } = useSettings();
   const savedTheme = settings?.theme ?? "system";
-  const [theme, setTheme] = useState(() => {
-    return savedTheme || "system";
-  });
-
-  useEffect(() => {
-    setTheme(savedTheme || "system");
-  }, [savedTheme]);
+  const theme = savedTheme || "system";
 
   const applyTheme = useCallback((t) => {
     const root = document.documentElement;
@@ -48,19 +42,12 @@ export default function ThemeToggle({ compact = false }) {
 
   useEffect(() => {
     applyTheme(theme);
-    // Only persist a real change — unconditionally writing on mount re-ran
-    // this effect through the settings context on every render pass.
-    if (theme !== savedTheme) updateSetting?.("theme", theme);
-  }, [theme, savedTheme, applyTheme, updateSetting]);
+  }, [theme, applyTheme]);
 
   const cycle = useCallback(() => {
-    setTheme(prev => {
-      if (prev === "system") return "dark";
-      if (prev === "dark") return "light";
-      if (prev === "light") return "high";
-      return "system";
-    });
-  }, []);
+    const next = { system: "dark", dark: "light", light: "high", high: "system" };
+    updateSetting?.("theme", next[theme] || "system");
+  }, [theme, updateSetting]);
 
   const IconComponent = THEMES[theme]?.icon || SunMoonIcon;
 
@@ -88,7 +75,7 @@ export default function ThemeToggle({ compact = false }) {
       {Object.entries(THEMES).map(([key, { label, icon: Icon }]) => (
         <button
           key={key}
-          onClick={() => setTheme(key)}
+          onClick={() => updateSetting?.("theme", key)}
           title={label}
           aria-label={`${label} theme`}
           style={{

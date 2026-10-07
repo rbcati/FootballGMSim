@@ -43,6 +43,91 @@ describe('PlayerProfile', () => {
     global.IntersectionObserver = vi.fn(function () { return { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() }; });
   });
   afterEach(() => cleanup());
+  it('starts with football identity and keeps deep information in reachable sections', async () => {
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={league} />);
+    await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Avery Fields'));
+    const summary = screen.getByTestId('player-profile-summary').textContent;
+    expect(summary).toContain('OVR');
+    expect(summary).toContain('Age');
+    expect(summary).toContain('Contract:');
+    expect(summary).not.toMatch(/Staff mod|Dev path|Ceiling band|Recommendation tier/);
+    expect(screen.getByRole('button', { name: 'Overview', exact: true }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByText('Core Attributes')).toBeNull();
+    expect(screen.queryByText('Contract Read')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ratings', exact: true }));
+    await waitFor(() => expect(screen.getByText('Core Attributes')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Contract', exact: true }));
+    await waitFor(() => expect(screen.getByText('Contract Read')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Development', exact: true }));
+    await waitFor(() => expect(screen.getByText('Progression history')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
+    expect(screen.getByTestId('player-profile-career-timeline')).toBeTruthy();
+    const careerStats = screen.getByRole('button', { name: 'Career Stats' });
+    expect(careerStats.getAttribute('aria-pressed')).toBe('true');
+    const timeline = screen.getByTestId('player-profile-career-timeline');
+    expect(careerStats.closest('.profile-career-subnav').compareDocumentPosition(timeline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Game Log' }));
+    expect(screen.getByTestId('player-profile-game-logs')).toBeTruthy();
+    expect(screen.queryByTestId('player-profile-career-timeline')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Career Stats', exact: true })).toBeNull();
+    fireEvent.click(careerStats);
+    expect(screen.getByTestId('player-profile-career-timeline')).toBeTruthy();
+    expect(screen.getByText('Season-by-season stat detail').closest('details').open).toBe(false);
+  }, 15000);
+
+  it.each([
+    { id: 9201, injuryWeeksRemaining: 3, expected: 'Out 3w' },
+    { id: 9202, injured: true, expected: 'Unavailable' },
+    { id: 9203, holdout: { active: true }, expected: 'Unavailable' },
+    { id: 9204, injury: { weeksRemaining: 2 }, expected: 'Out 2w' },
+    { id: 9205, injuredWeeks: 2, expected: 'Unavailable' },
+    { id: 9206, status: 'injured', expected: 'Unavailable' },
+    { id: 9207, status: 'ir', expected: 'Unavailable' },
+    { id: 9208, onIR: true, expected: 'Unavailable' },
+    { id: 9209, injury: { gamesRemaining: 2 }, expected: 'Out 2w' },
+    { id: 9210, injuryDuration: 2, expected: 'Unavailable' },
+    { id: 9211, injuryWeeksRemaining: 0, injury: { weeksRemaining: 3 }, expected: 'Out 3w' },
+  ])('preserves injury and availability context in the initial summary: %j', async ({ expected, ...status }) => {
+    const current = { ...player, ...status };
+    render(<PlayerProfile playerId={current.id} onClose={vi.fn()} actions={{ ...actions, getPlayerCareer: vi.fn(async () => ({ payload: { player: current } })) }} teams={league.teams} league={league} />);
+    await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain(`Status: ${expected}`));
+    expect(screen.getByRole('button', { name: 'Overview', exact: true }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it.each([
+    { id: 9301, expectedHealth: 'Healthy', expectedStatus: 'Available' },
+    { id: 9302, injuryWeeksRemaining: 3, expectedHealth: 'Out 3w', expectedStatus: 'Out 3w' },
+    { id: 9303, injured: true, expectedHealth: 'Injured', expectedStatus: 'Unavailable' },
+    { id: 9304, status: 'free_agent', teamId: null, contract: null, expectedHealth: 'Healthy', expectedStatus: 'Unavailable' },
+    { id: 9305, status: 'retired', retired: true, expectedHealth: 'Healthy', expectedStatus: 'Unavailable' },
+    { id: 9306, status: 'draft_eligible', teamId: null, expectedHealth: 'Healthy', expectedStatus: 'Unavailable' },
+    { id: 9307, status: 'practice_squad', expectedHealth: 'Healthy', expectedStatus: 'Unavailable' },
+    { id: 9308, holdout: { active: true }, expectedHealth: 'Healthy', expectedStatus: 'Unavailable' },
+    { id: 9309, injury: { weeksRemaining: 2 }, expectedHealth: 'Out 2w', expectedStatus: 'Out 2w' },
+  ])('keeps health-only durability separate from game-day status: %j', async ({ expectedHealth, expectedStatus, ...context }) => {
+    const current = { ...player, ...context };
+    render(<PlayerProfile playerId={current.id} onClose={vi.fn()} actions={{ ...actions, getPlayerCareer: vi.fn(async () => ({ payload: { player: current } })) }} teams={league.teams} league={league} />);
+    await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain(`Status: ${expectedStatus}`));
+    fireEvent.click(screen.getByRole('button', { name: 'Ratings', exact: true }));
+    const durability = screen.getByText('Durability').parentElement;
+    expect(within(durability).getByText(expectedHealth)).toBeTruthy();
+    expect(durability.textContent).not.toContain('Unavailable');
+    if (expectedHealth === 'Healthy') expect(durability.getAttribute('style')).not.toContain('rgba(255,159,10');
+    expect(screen.getByTestId('player-profile-summary').textContent).toContain(`Status: ${expectedStatus}`);
+  });
+
+  it('preserves management actions in Contract and the draft action above the summary', async () => {
+    const updatePlayerManagement = vi.fn(async () => ({}));
+    const onDraftPlayer = vi.fn();
+    render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={{ ...actions, updatePlayerManagement }} teams={league.teams} league={league} isUserOnClock onDraftPlayer={onDraftPlayer} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Draft This Player' }));
+    expect(onDraftPlayer).toHaveBeenCalledWith(11);
+    fireEvent.click(screen.getByRole('button', { name: 'Contract', exact: true }));
+    await waitFor(() => expect(screen.getByLabelText('Trade posture')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Trade posture'), { target: { value: 'actively_shopping' } });
+    await waitFor(() => expect(updatePlayerManagement).toHaveBeenCalledWith(11, 1, { tradeStatus: 'actively_shopping' }));
+  });
+
   it('renders safe unavailable state when no player id is provided', () => {
     const html = renderToString(
       <PlayerProfile
@@ -71,7 +156,9 @@ describe('PlayerProfile', () => {
     expect(screen.getByTestId('player-decision-card').textContent).toContain('Starter');
     expect(screen.getByTestId('player-decision-recommendation').textContent).toMatch(/Build around|Explore extension|Start/);
     expect(screen.getByTestId('player-profile-season-stats').textContent).toContain('Season stats will appear after this player records tracked stats.');
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
     expect(screen.getByTestId('player-profile-career-timeline').textContent).toContain('No career timeline recorded yet.');
+    fireEvent.click(screen.getByRole('button', { name: 'Contract', exact: true }));
     await waitFor(() => expect(screen.getByText('Contract Read')).toBeTruthy());
     expect(screen.getByText('Market tier')).toBeTruthy();
   });
@@ -100,6 +187,7 @@ describe('PlayerProfile', () => {
     };
     render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={timelineActions} teams={league.teams} league={league} />);
 
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
     await waitFor(() => expect(screen.getByTestId('player-profile-career-timeline').textContent).toContain('DAL signed Avery Fields in free agency'));
     expect(screen.getByTestId('player-profile-acquisition-summary').textContent).toContain('Signed in free agency');
     expect(screen.getAllByTestId('player-profile-career-timeline-row')[0].textContent).toContain('Signing');
@@ -107,6 +195,7 @@ describe('PlayerProfile', () => {
 
   it('shows career arc snapshot for active players', async () => {
     render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={league} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Development', exact: true }));
     await waitFor(() => expect(screen.getByTestId('player-profile-dev-arc')).toBeTruthy());
     expect(screen.getByTestId('player-profile-dev-arc').textContent).toMatch(/Career arc snapshot/i);
   });
@@ -141,6 +230,7 @@ describe('PlayerProfile', () => {
     render(
       <PlayerProfile playerId={55} onClose={vi.fn()} actions={prospectActions} teams={prospectLeague.teams} league={prospectLeague} />,
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Ratings', exact: true }));
     await waitFor(() => expect(screen.getByTestId('player-profile-scouting-report')).toBeTruthy());
     expect(screen.getByTestId('player-profile-scouting-report').textContent).toMatch(/Scouting snapshot/i);
   });
@@ -158,6 +248,7 @@ describe('PlayerProfile', () => {
     );
 
     expect(screen.getByTestId('player-profile-game-impact').textContent).toContain('244 pass yds');
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: 'Game Log' }));
     expect(screen.getByTestId('player-profile-game-logs').textContent).toContain('Game logs will appear after this player records tracked stats.');
   });
@@ -212,6 +303,7 @@ describe('PlayerProfile', () => {
     );
 
     // Navigate to Game Log tab
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: 'Game Log' }));
     expect(screen.getByTestId('player-profile-game-logs').textContent).toContain('W1');
     expect(screen.getByTestId('player-profile-game-logs').textContent).toContain('NYG');
@@ -315,8 +407,9 @@ describe('PlayerProfile', () => {
       getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
     };
     render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={logActions} teams={league.teams} league={league} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
     await waitFor(() => expect(screen.getByText('Season Log')).toBeTruthy());
-    expect(screen.getByText('4,100')).toBeTruthy();
+    expect(within(screen.getByText('Season Log').closest('section')).getByText('4,100')).toBeTruthy();
   });
 
   it('supports season log search, sort, and reset controls', async () => {
@@ -384,6 +477,7 @@ describe('PlayerProfile', () => {
       getRecords: vi.fn(async () => ({ payload: { recordBook: null } })),
     };
     render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={seasonLogActions} teams={league.teams} league={league} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
 
     await waitFor(() => {
       expect(screen.getByTestId('player-profile-season-log-showing').textContent).toContain('Showing 2 of 2 seasons');
@@ -407,6 +501,7 @@ describe('PlayerProfile', () => {
 
   it('shows honest empty award timeline when no honors exist', async () => {
     render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={league} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
     await waitFor(() => expect(screen.getByTestId('player-profile-award-timeline')).toBeTruthy());
     expect(screen.getByTestId('player-profile-award-timeline').textContent).toMatch(/No archived awards yet/i);
   });
@@ -437,6 +532,7 @@ describe('PlayerProfile', () => {
       })),
     };
     render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={careerActions} teams={league.teams} league={league} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
     await waitFor(() => expect(screen.getByTestId('player-profile-award-timeline').textContent).toMatch(/Most Valuable Player/i));
     const block = screen.getByTestId('player-profile-award-timeline').textContent;
     expect((block.match(/Most Valuable Player/g) ?? []).length).toBe(1);
@@ -463,6 +559,7 @@ describe('PlayerProfile', () => {
       })),
     };
     render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={recordActions} teams={league.teams} league={league} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
     await waitFor(() => expect(screen.getByTestId('player-profile-record-book')).toBeTruthy());
     expect(screen.getByTestId('player-profile-record-book').textContent).toMatch(/Single-season passing yards record/i);
     expect(screen.getByTestId('player-profile-record-book').textContent).toMatch(/Career passing yards leader/i);
@@ -538,6 +635,7 @@ describe('PlayerProfile', () => {
       <PlayerProfile playerId={88} onClose={vi.fn()} actions={bareActions} teams={teams} league={{ ...league, teams }} />,
     );
     await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Ghost Legend'));
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
     await waitFor(() => expect(screen.getByTestId('player-profile-legacy-watch')).toBeTruthy());
     expect(screen.getByText(/Hall of Fame inductee/i)).toBeTruthy();
   });
@@ -575,6 +673,7 @@ describe('PlayerProfile', () => {
     render(<PlayerProfile playerId="11" onClose={vi.fn()} actions={actions} teams={advancedLeague.teams} league={advancedLeague} />);
     await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Avery Fields'));
 
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: 'Career Stats' }));
 
     const section = screen.getByTestId('player-profile-advanced-analytics');
@@ -599,6 +698,7 @@ describe('PlayerProfile', () => {
     render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={{ ...league, playerSeasonStatsArchive: {} }} />);
     await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Avery Fields'));
 
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: 'Career Stats' }));
 
     expect(screen.getByTestId('player-profile-advanced-empty').textContent).toContain('Advanced tracking begins with newly simulated rich games.');
@@ -651,6 +751,7 @@ describe('PlayerProfile', () => {
         age: 23,
         ovrHistory: [{ season: 2030, ovr: 80, age: 22 }],
       });
+      fireEvent.click(screen.getByRole('button', { name: 'Ratings', exact: true }));
       await waitFor(() => expect(screen.getByTestId('player-profile-dev-trait')).toBeTruthy());
       const row = screen.getByTestId('player-profile-dev-trait');
       expect(row.textContent).toContain('Development');
@@ -671,12 +772,14 @@ describe('PlayerProfile', () => {
           { season: 2031, ovr: 82, age: 23 },
         ],
       });
+      fireEvent.click(screen.getByRole('button', { name: 'Ratings', exact: true }));
       await waitFor(() => expect(screen.getByTestId('player-profile-dev-trait')).toBeTruthy());
       expect(screen.getByTestId('player-profile-dev-trait').textContent).toContain(label);
     });
 
     it('defaults to "Hidden" when age and season context are both missing', async () => {
       renderProfile({ hiddenDevTrait: 'bust', age: null, ovrHistory: undefined });
+      fireEvent.click(screen.getByRole('button', { name: 'Ratings', exact: true }));
       await waitFor(() => expect(screen.getByTestId('player-profile-dev-trait')).toBeTruthy());
       expect(screen.getByTestId('player-profile-dev-trait').textContent).toContain('Hidden');
     });
@@ -690,9 +793,13 @@ describe('PlayerProfile', () => {
           { season: 2031, ovr: 82, age: 23 },
         ],
       });
+      fireEvent.click(screen.getByRole('button', { name: 'Ratings', exact: true }));
       await waitFor(() => expect(screen.getByTestId('player-profile-dev-trait')).toBeTruthy());
-      expect(document.body.textContent).not.toContain('977');
-      expect(document.body.innerHTML).not.toContain('hiddenTrueOvr');
+      for (const tab of ['Overview', 'Ratings', 'Contract', 'Development', 'Career']) {
+        fireEvent.click(screen.getByRole('button', { name: tab, exact: true }));
+        expect(document.body.textContent).not.toContain('977');
+        expect(document.body.innerHTML).not.toContain('hiddenTrueOvr');
+      }
     });
   });
 
@@ -728,6 +835,7 @@ describe('PlayerProfile', () => {
         league={{ ...league, teams: teamsWithStar }}
       />,
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Career', exact: true }));
     await waitFor(() => expect(screen.getByTestId('player-profile-legacy-watch')).toBeTruthy());
     expect(screen.getByText(/Legacy score/i)).toBeTruthy();
   });

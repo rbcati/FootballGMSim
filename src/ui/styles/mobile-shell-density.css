@@ -10,7 +10,67 @@
 .league-leaders-filters input { flex: 1 1 180px; min-width: 0; }
 .league-leaders-filters :is(select, button) { min-height: 32px; }
 
+.app-hq-menu-utilities { display: none; }
+/* HQ cards keep a dark surface in every theme; their text must follow it. */
+.hq-v2-card, .hq-v2-more {
+  --text-primary: #f4f7fb;
+  --text-muted: rgba(244, 247, 251, .76);
+  --text-subtle: rgba(244, 247, 251, .66);
+  color: var(--text-primary);
+}
+.guided-detail { min-width: 0; }
+.guided-detail > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--text-muted); font-size: var(--text-sm); }
+.guided-detail > summary::before { content: '+ '; margin-right: 8px; }
+.guided-detail[open] > summary::before { content: '− '; }
+.guided-detail p { color: var(--text-muted); font-size: var(--text-sm); line-height: 1.5; }
+.guided-week-summary { display: grid; gap: 8px; padding: 12px; background: var(--surface); border-left: 3px solid var(--accent); }
+.guided-week-summary > small { color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.guided-week-summary > strong { font-size: var(--text-lg); }
+.guided-week-summary p { margin: 0; font-size: var(--text-sm); }
+.guided-player-role { margin-top: 6px; font-weight: 700; }
+.lineup-command-center .lineup-summary { grid-template-columns: repeat(4, minmax(45px, 64px)) minmax(0, 1fr); }
+.pregame-choices, .pregame-advanced { display: grid; gap: 10px; min-width: 0; }
+.pregame-choices .btn { display: grid; gap: 5px; min-height: 56px; padding: 10px; white-space: normal; }
+.pregame-choices .btn small { font-weight: 400; font-size: var(--text-xs); }
+.pregame-tendencies { display: flex; gap: 4px; }
+.pregame-tendencies .btn { flex: 1; min-width: 0; font-size: 11px; text-transform: capitalize; }
+.pregame-tendencies [aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.pregame-advanced fieldset { min-width: 0; padding: 8px; border: 1px solid var(--hairline); }
+.profile-career-subnav { display: flex; gap: 8px; flex-wrap: wrap; }
+.player-profile-shell > div { min-width: 0; }
+.player-profile-shell .card-enter { min-width: 0; }
+
 @media (max-width: 767px) {
+  .dashboard--hq,
+  .team-hub--lineup {
+    --text: #f4f7fb;
+    --text-muted: rgba(244, 247, 251, .76);
+    --text-subtle: rgba(244, 247, 251, .66);
+    --surface: #11161d;
+    --surface-strong: #171c24;
+    --hairline: rgba(255, 255, 255, .14);
+    color: var(--text);
+  }
+  /* HQ owns football identity. Keep existing utilities in the existing More menu. */
+  .app-shell--hq .app-header-left,
+  .app-shell--hq .app-permanent-utility,
+  .dashboard--hq .team-summary-nav-card,
+  .dashboard--hq .franchise-status-pill-row { display: none; }
+  .app-shell--hq .app-header { padding: env(safe-area-inset-top, 0px) 12px 0; min-height: 44px; }
+  .app-shell--hq .app-header-actions { width: auto; margin-left: auto; }
+  .app-shell--hq .app-hq-menu-utilities { display: flex; gap: 8px; align-items: center; }
+  .app-shell--hq .app-hq-menu-utilities .theme-toggle { min-width: 44px; min-height: 44px; }
+  .dashboard--hq .franchise-status-bar { position: relative; height: 0; min-height: 0; padding: 0; margin: 0; border: 0; background: transparent; display: flex; }
+  .dashboard--hq .franchise-status-bar > div:not(.franchise-status-pill-row) { position: absolute; top: -44px; left: 12px; z-index: 30; }
+  .dashboard--hq .notification-center-panel { left: 0; right: auto !important; }
+  .lineup-starter__profile { grid-template-columns: 30px minmax(0, 1fr) 30px 44px; gap: 4px; }
+  .lineup-command-center .lineup-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .lineup-starter__fit { font-size: .65rem; }
+  .lineup-change { min-height: 44px; top: 4px; }
+  .lineup-alternatives button { flex-wrap: wrap; }
+  .guided-week-summary p { overflow-wrap: anywhere; }
+  .player-profile-shell .profile-tab-row { flex-wrap: wrap !important; overflow: visible; }
+  .player-profile-shell .profile-tab-row .standings-tab { flex: 1 0 auto; }
   :root {
     --mobile-shell-navy: #0d1522;
     --mobile-content-black: #07090d;

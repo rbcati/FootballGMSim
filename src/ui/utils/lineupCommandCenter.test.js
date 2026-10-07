@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { DEPTH_CHART_ROWS } from '../../core/depthChart.js';
+import { deriveRosterReadinessModel } from './rosterReadinessModel.js';
 import { calculatePlayerSchemeFit, DEFENSIVE_SCHEMES, OFFENSIVE_SCHEMES } from '../../core/scheme-core.js';
-import { buildReplacementUpdates, deriveEditableCanonicalLineup, deriveLineupRatingSnapshot, getPersistedDepthAssignment } from './lineupCommandCenter.js';
+import { buildReplacementUpdates, deriveEditableCanonicalLineup, deriveLineupRatingSnapshot, getPersistedDepthAssignment, resolveLineupAssignments } from './lineupCommandCenter.js';
 
 const attributes = (rating) => ({ throwAccuracyShort: rating, throwAccuracyDeep: rating, throwPower: rating, release: rating, routeRunning: rating, separation: rating, catchInTraffic: rating, ballTracking: rating, decisionMaking: rating, pocketPresence: rating, passBlockFootwork: rating, passBlockStrength: rating, passRush: rating, pressCoverage: rating, zoneCoverage: rating });
 const make = (id, pos, rowKey, order, rating, extra = {}) => ({ id, name: `P${id}`, pos, ovr: rating, teamId: 1, attributesV2: attributes(rating), ratings: { throwPower: rating, throwAccuracy: rating, awareness: rating, speed: rating, acceleration: rating, catching: rating, catchInTraffic: rating, passBlock: rating, runBlock: rating, runStop: rating, passRushPower: rating, passRushSpeed: rating, coverage: rating, intelligence: rating }, depthChart: { rowKey, order }, ...extra });
@@ -82,5 +84,37 @@ describe('lineup command center derivation', () => {
       { playerId: 'K-2', rowKey: 'K', newOrder: 1 },
       { playerId: 'K-1', rowKey: 'K', newOrder: 2 },
     ]);
+  });
+});
+
+
+describe('resolved lineup assignments', () => {
+  const complete = DEPTH_CHART_ROWS.flatMap((row, rowIndex) => Array.from({ length: row.slots }, (_, index) => make(rowIndex * 100 + index + 1, row.match[0], row.key, index + 1, 78)));
+
+  it('reuses the existing full legacy fallback without writing player metadata', () => {
+    const legacy = complete.map((entry) => ({ ...entry, depthChart: undefined }));
+    expect(resolveLineupAssignments({ team, roster: legacy })).toEqual(deriveRosterReadinessModel({ team, roster: legacy }).assignments);
+    expect(legacy.every((entry) => entry.depthChart === undefined)).toBe(true);
+  });
+
+  it('preserves explicit empty team rows even when a legacy fallback could fill them', () => {
+    const legacy = complete.map((entry) => ({ ...entry, depthChart: undefined }));
+    const resolved = resolveLineupAssignments({ team: { ...team, depthChart: { RS: [] } }, roster: legacy });
+    expect(resolved.RS).toEqual([]);
+    expect(resolved.K).toHaveLength(1);
+    expect(resolved.P).toHaveLength(1);
+  });
+
+  it('does not certify a kicker backup as an inferred punter or returner', () => {
+    const legacy = [make(1, 'K', 'K', 1, 78), make(2, 'K', 'K', 2, 76)].map((entry) => ({ ...entry, depthChart: undefined }));
+    const resolved = resolveLineupAssignments({ team, roster: legacy });
+    expect(resolved.K).toEqual([1]);
+    expect(resolved.P).toEqual([]);
+    expect(resolved.RS).toEqual([]);
+  });
+
+  it('keeps a missing row empty on a fully persisted roster', () => {
+    const noReturners = complete.filter((entry) => entry.depthChart.rowKey !== 'RS');
+    expect(resolveLineupAssignments({ team, roster: noReturners }).RS).toEqual([]);
   });
 });

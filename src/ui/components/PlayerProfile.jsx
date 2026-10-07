@@ -1,3 +1,6 @@
+import { isAvailableForGameDay } from '../../core/holdouts/holdoutEngine.js';
+import { hasReadinessInjury } from '../../core/gameDayAvailability.js';
+import { getInjuryWeeksRemaining, isPlayerInjured } from '../utils/injuryReadinessModel.js';
 /**
  * PlayerProfile.jsx
  *
@@ -318,6 +321,18 @@ function getSeasonProductionSummary(player) {
   return null;
 }
 
+function getPlayerHealthLabel(player) {
+  const weeks = getInjuryWeeksRemaining(player);
+  if (weeks > 0) return `Out ${safeRound(weeks, 0)}w`;
+  return hasReadinessInjury(player) || isPlayerInjured(player) ? "Injured" : "Healthy";
+}
+
+function getPlayerAvailabilityLabel(player) {
+  const health = getPlayerHealthLabel(player);
+  if (health !== "Healthy") return health === "Injured" ? "Unavailable" : health;
+  return isAvailableForGameDay(player, { teamId: player?.teamId }) ? "Available" : "Unavailable";
+}
+
 function getPlayerSummaryChips(player, ringCount, nonRing) {
   const chips = [];
   const contractYears = toFiniteNumber(player?.contract?.years, null);
@@ -332,15 +347,8 @@ function getPlayerSummaryChips(player, ringCount, nonRing) {
     const devSignal = player.age <= 24 ? "Ascending" : player.age >= 30 ? "Veteran" : "Prime";
     chips.push({ label: "Development", value: `${player.age} · ${devSignal}` });
   }
-  if (player?.injuryWeeksRemaining > 0) {
-    chips.push({
-      label: "Durability",
-      value: `Out ${safeRound(player.injuryWeeksRemaining, 0)}w`,
-      tone: "warn",
-    });
-  } else {
-    chips.push({ label: "Durability", value: "Available" });
-  }
+  const health = getPlayerHealthLabel(player);
+  chips.push({ label: "Durability", value: health, ...(health !== "Healthy" ? { tone: "warn" } : {}) });
   const recent = getSeasonProductionSummary(player);
   if (recent) chips.push({ label: "Recent", value: recent });
   if (ringCount > 0 || nonRing.length > 0) {
@@ -600,6 +608,7 @@ export default function PlayerProfile({
   const [extending, setExtending] = useState(false);
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
+  const [activeCareerView, setActiveCareerView] = useState("Career Stats");
   const [draftContext, setDraftContext] = useState(null);
   const [seasonLogSearch, setSeasonLogSearch] = useState("");
   const [seasonLogTeamFilter, setSeasonLogTeamFilter] = useState("all");
@@ -720,6 +729,8 @@ export default function PlayerProfile({
 
   useEffect(() => {
     setShowAllCareerTimeline(false);
+    setActiveProfileTab("Overview");
+    setActiveCareerView("Career Stats");
   }, [playerId]);
 
   const fetchedPlayer = data?.player;
@@ -1216,7 +1227,7 @@ export default function PlayerProfile({
                 display: "flex",
                 gap: "var(--space-4)",
                 alignItems: "flex-start",
-                flex: 1,
+                flex: 1, minWidth: 0,
               }}
             >
               {/* Avatar */}
@@ -1250,7 +1261,8 @@ export default function PlayerProfile({
                     : playerView.status === "retired" ? "Retired" : "Team unavailable"}
                 </div>
 
-                {/* OVR + progression delta + potential */}
+                <div className="guided-player-role">Depth status: {playerDecisionPresentation?.role?.label ?? 'Role unavailable'}</div>
+                {/* OVR + recorded progression delta */}
                 <div
                   style={{
                     marginTop: "var(--space-2)",
@@ -1279,25 +1291,14 @@ export default function PlayerProfile({
                         {playerView.progressionDelta})
                       </span>
                     )}
-                  {playerView.potential != null && (
-                    <span
-                      style={{
-                        color: "var(--text-muted)",
-                        fontSize: "var(--text-sm)",
-                        fontWeight: 700,
-                      }}
-                    >
-                      Pot: {playerView.potential}
-                    </span>
-                  )}
                 </div>
 
 
                 <div style={{ marginTop: "var(--space-2)", display: "flex", gap: 6, flexWrap: "wrap", fontSize: "var(--text-xs)" }}>
                   <span className="status-chip info">Contract: {summaryChips.find((chip) => chip.label === "Contract")?.value ?? "Not available"}</span>
-                  <span className="status-chip muted">Status: {playerView.injuryWeeksRemaining > 0 ? `Out ${playerView.injuryWeeksRemaining}w` : "Available"}</span>
-                  {playerView.draftYear || playerView.draftRound || playerView.draftPick ? <span className="status-chip muted">Draft: {playerView.draftYear ?? "—"} R{playerView.draftRound ?? "—"} P{playerView.draftPick ?? "—"}</span> : null}
-                  {quickTags.map((tag) => <span key={tag} className="status-chip success">{tag}</span>)}
+                  <span className="status-chip muted">Status: {getPlayerAvailabilityLabel(playerView)}</span>
+                  {activeProfileTab === "Career" && (playerView.draftYear || playerView.draftRound || playerView.draftPick) ? <span className="status-chip muted">Draft: {playerView.draftYear ?? "—"} R{playerView.draftRound ?? "—"} P{playerView.draftPick ?? "—"}</span> : null}
+                  {activeProfileTab === "Ratings" && quickTags.map((tag) => <span key={tag} className="status-chip success">{tag}</span>)}
                   {(player?.contract?.tag === 'franchise' || player?.isTagged) && (
                     <span className="status-chip warning" title="Franchise Tagged — player is locked to this team for the season.">Franchise Tagged</span>
                   )}
@@ -1308,61 +1309,9 @@ export default function PlayerProfile({
                   )}
                 </div>
 
-                {draftContext?.known ? (
-                  <div
-                    style={{
-                      marginTop: "var(--space-2)",
-                      padding: "var(--space-3)",
-                      borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--hairline)",
-                      background: "var(--surface-strong)",
-                      fontSize: "var(--text-xs)",
-                    }}
-                    data-testid="player-profile-draft-memory"
-                  >
-                    <div style={sectionLabelStyle}>Draft memory</div>
-                    <div style={{ color: "var(--text-muted)", lineHeight: 1.5 }}>
-                      {draftContext.draftedByAbbr ? (
-                        <span>
-                          Drafted by <strong style={{ color: "var(--text)" }}>{draftContext.draftedByAbbr}</strong>
-                          {draftContext.draftYear != null ? ` · ${draftContext.draftYear}` : ""}
-                          {draftContext.round != null ? ` · R${draftContext.round}` : ""}
-                          {draftContext.pickInRound != null ? ` pick ${draftContext.pickInRound}` : ""}
-                          {draftContext.overall != null ? ` (#${draftContext.overall})` : ""}
-                        </span>
-                      ) : (
-                        <span>Draft origin partially logged.</span>
-                      )}
-                    </div>
-                    {draftContext.redraftRank != null ? (
-                      <div style={{ marginTop: 6, color: "var(--text)" }}>
-                        Redraft rank (class): <strong>#{draftContext.redraftRank}</strong>
-                        {draftContext.outcomeLabel ? <span style={{ color: "var(--text-muted)" }}> · {draftContext.outcomeLabel}</span> : null}
-                      </div>
-                    ) : null}
-                    {draftContext.stealBustNote ? (
-                      <div style={{ marginTop: 6, color: "var(--text-subtle)" }}>{draftContext.stealBustNote}</div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {playerView.developmentContext && (
-                  <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
-                    Dev path: {playerView.developmentContext.baseAgeCurve} · Focus {String(playerView.developmentContext.trainingFocus || 'balanced').replace('_', ' ')} · Staff mod {playerView.developmentContext.staffDevelopmentModifier >= 0 ? '+' : ''}{playerView.developmentContext.staffDevelopmentModifier}% · {playerView.developmentContext.playingTimeModifier}
-                  </div>
-                )}
-                <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
-                  Trend: {developmentSignal.label} · Readiness: {readinessSignal.label} · Scheme: {fitSignal.label}
-                </div>
-                <DevelopmentSignalRow
-                  items={[
-                    { label: developmentSignal.label, tone: developmentSignal.tone },
-                    { label: readinessSignal.label, tone: readinessSignal.tone },
-                    { label: `${fitSignal.label} (${player?.schemeFit ?? 50})`, tone: fitSignal.tone },
-                    { label: ageCurve.label, tone: ageCurve.tone },
-                  ]}
-                />
-
+                {playerView.holdout?.active && <p className="text-warning">Holding out · contract decision needed</p>}
+                {playerView.tradeRequest && <p className="text-warning">Trade requested</p>}
+                <details className="guided-detail"><summary>Current player context</summary>
                 {/* ── Morale Indicator ── */}
                 {playerView && (() => {
                   const moraleSummary = getPlayerMoraleSummary(playerView);
@@ -1401,6 +1350,210 @@ export default function PlayerProfile({
                     </div>
                   );
                 })()}
+
+                {/* ── Holdout Status ── */}
+                {playerView?.holdout?.active && (
+                  <div
+                    data-testid="player-profile-holdout"
+                    style={{
+                      marginTop: 'var(--space-2)',
+                      padding: 'var(--space-3)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid #FF9F0A44',
+                      background: '#FF9F0A0E',
+                      fontSize: 'var(--text-xs)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontWeight: 900, color: '#FF9F0A', textTransform: 'uppercase', letterSpacing: '.07em', fontSize: 'var(--text-xs)' }}>On Holdout</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>— {playerView.holdout.reason?.replace(/_/g, ' ') ?? 'contract dispute'}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      <span style={{ color: 'var(--text-subtle)' }}>Started Week {playerView.holdout.startWeek}</span>
+                      <span style={{ color: '#FF9F0A', fontWeight: 700 }}>+{Math.round((playerView.holdout.demandPremium ?? 0) * 100)}% demand premium</span>
+                    </div>
+                    <div style={{ marginTop: 4, color: 'var(--text-muted)' }}>Resolve by signing, trading, or releasing this player.</div>
+                  </div>
+                )}
+
+                {/* ── Trade Request Status ── */}
+                {playerView?.tradeRequest && (
+                  <div
+                    data-testid="player-profile-trade-request"
+                    style={{
+                      marginTop: 'var(--space-2)',
+                      padding: 'var(--space-3)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid #FF9F0A44',
+                      background: '#FF9F0A0E',
+                      fontSize: 'var(--text-xs)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontWeight: 900, color: '#FF9F0A', textTransform: 'uppercase', letterSpacing: '.07em', fontSize: 'var(--text-xs)' }}>
+                        Trade Requested
+                      </span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
+                        — {playerView.tradeRequest.reason?.replace(/_/g, ' ') ?? 'undisclosed'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      <span style={{ color: 'var(--text-subtle)' }}>Status: {playerView.tradeRequest.status}</span>
+                      {(playerView.tradeRequest.stonewalledWeeks ?? 0) > 0 && (
+                        <span style={{ color: '#FF9F0A', fontWeight: 700 }}>{playerView.tradeRequest.stonewalledWeeks}w unresolved</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── On Trade Block Badge ── */}
+                {playerView?.onTradeBlock && (
+                  <div
+                    data-testid="player-profile-trade-block"
+                    style={{
+                      marginTop: 'var(--space-2)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '3px 10px',
+                      borderRadius: 'var(--radius-pill)',
+                      background: '#0A84FF22',
+                      border: '1px solid #0A84FF55',
+                      color: '#0A84FF',
+                      fontWeight: 700,
+                      fontSize: 'var(--text-xs)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '.07em',
+                    }}
+                  >
+                    On Trade Block
+                  </div>
+                )}
+
+                </details>
+              </div>
+            </div>
+          ) : (
+            <div data-testid="player-profile-unavailable" style={{ color: "var(--text-muted)", display: "grid", gap: 6 }}><strong>Player unavailable</strong><span>This player reference is no longer available in the loaded franchise data.</span></div>
+          )}
+
+          <Button
+            className="btn"
+            onClick={onClose}
+            aria-label="Close player profile"
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+            fontSize: "1.2rem",
+            lineHeight: 1,
+            color: "var(--text-muted)",
+            padding: "4px 8px",
+            marginLeft: "var(--space-2)",
+            borderRadius: "999px",
+            minWidth: 44,
+            minHeight: 44,
+            width: 44, flex: "0 0 44px",
+          }}
+        >
+          ×
+        </Button>
+        </div>
+
+        {/* ── Body ── */}
+        <div style={{ padding: "var(--space-4)", flex: 1, display: "grid", gap: "var(--space-4)" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {profileContext?.source === 'game-book' || profileContext?.returnTo === 'game-book' ? (
+              <Button size="sm" variant="outline" data-testid="player-profile-return-to-game-book" onClick={() => { if (profileContext?.gameId) onOpenBoxScore?.(profileContext.gameId); onClose?.(); }}>Return to Game Book</Button>
+            ) : null}
+            {profileContext?.source === 'weekly-results' || profileContext?.returnTo === 'weekly-results' ? (
+              <Button size="sm" variant="outline" onClick={() => { onNavigate?.('Weekly Results'); onClose?.(); }}>Return to Weekly Results</Button>
+            ) : null}
+            <Button size="sm" variant="outline" onClick={() => { onNavigate?.('HQ'); onClose?.(); }}>Return to HQ</Button>
+          </div>
+          <div className="standings-tabs profile-tab-row" aria-label="Player profile sections" style={{ gap: 6, flexWrap: "nowrap" }}>
+            {["Overview", "Ratings", "Contract", "Development", "Career"].map((tab) => (
+              <button
+                key={tab}
+                className={`standings-tab${activeProfileTab === tab ? " active" : ""}`}
+                aria-pressed={activeProfileTab === tab}
+                onClick={() => setActiveProfileTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+          {activeProfileTab === "Career" && <div className="profile-career-subnav" aria-label="Career views">
+            {["Career Stats", "Game Log"].map((tab) => <button className="btn" key={tab} aria-pressed={activeCareerView === tab} onClick={() => setActiveCareerView(tab)}>{tab}</button>)}
+          </div>}
+          {activeProfileTab === "Overview" && (<>
+          {!loading && playerView && (
+            <section className="guided-what-to-know">
+              <h3 style={sectionLabelStyle}>What to know</h3>
+              <p>{playerDecisionPresentation?.recommendation?.action ?? 'Review his current role and production.'}</p>
+              {playerDecisionPresentation?.recommendation?.reasons?.[0] && <small>{playerDecisionPresentation.recommendation.reasons[0]}</small>}
+              <details className="guided-detail"><summary>Decision detail · why this matters</summary><PlayerDecisionCard presentation={playerDecisionPresentation} onNavigate={onNavigate} /></details>
+            </section>
+          )}
+          {hasThisWeekContext && (
+            <section className="card-enter" data-testid="player-profile-game-impact">
+              <h3 style={sectionLabelStyle}>This Week / Game Impact</h3>
+              <div style={{ fontSize: "var(--text-sm)", fontWeight: 800 }}>{profileContext?.role ?? (profileContext?.source === 'weekly-results' ? 'From Weekly Results' : 'From Game Book')}</div>
+              <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", marginTop: 4 }}>
+                {profileContext?.week ? `From Week ${profileContext.week} ${profileContext?.source === 'game-book' ? 'Game Book' : 'Weekly Results'}` : 'From recent game context'}
+              </div>
+              <p style={{ marginTop: 8 }}>{thisWeekSummary}</p>
+              {thisWeekLine ? <div className="stat-box" style={{ padding: 8 }}>{thisWeekLine}</div> : null}
+            </section>
+          )}
+          <section className="card-enter" data-testid="player-profile-season-stats">
+            <h3 style={sectionLabelStyle}>Season Stats</h3>
+            {seasonStatsRecorded ? (
+              <div className="stat-box" style={{ padding: 8 }}>{summarizeTrackedStats(primarySeasonTotals, player?.pos ?? player?.position) ?? 'Tracked season totals are available.'}</div>
+            ) : (
+              <p style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>No tracked season stats yet. Season stats will appear after this player records tracked stats.</p>
+            )}
+          </section>
+          </>)}
+          {activeProfileTab === "Career" && activeCareerView === "Career Stats" && (<>
+          {!loading && playerView && (<>
+                {draftContext?.known ? (
+                  <div
+                    style={{
+                      marginTop: "var(--space-2)",
+                      padding: "var(--space-3)",
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--hairline)",
+                      background: "var(--surface-strong)",
+                      fontSize: "var(--text-xs)",
+                    }}
+                    data-testid="player-profile-draft-memory"
+                  >
+                    <div style={sectionLabelStyle}>Draft memory</div>
+                    <div style={{ color: "var(--text-muted)", lineHeight: 1.5 }}>
+                      {draftContext.draftedByAbbr ? (
+                        <span>
+                          Drafted by <strong style={{ color: "var(--text)" }}>{draftContext.draftedByAbbr}</strong>
+                          {draftContext.draftYear != null ? ` · ${draftContext.draftYear}` : ""}
+                          {draftContext.round != null ? ` · R${draftContext.round}` : ""}
+                          {draftContext.pickInRound != null ? ` pick ${draftContext.pickInRound}` : ""}
+                          {draftContext.overall != null ? ` (#${draftContext.overall})` : ""}
+                        </span>
+                      ) : (
+                        <span>Draft origin partially logged.</span>
+                      )}
+                    </div>
+                    {draftContext.redraftRank != null ? (
+                      <div style={{ marginTop: 6, color: "var(--text)" }}>
+                        Redraft rank (class): <strong>#{draftContext.redraftRank}</strong>
+                        {draftContext.outcomeLabel ? <span style={{ color: "var(--text-muted)" }}> · {draftContext.outcomeLabel}</span> : null}
+                      </div>
+                    ) : null}
+                    {draftContext.stealBustNote ? (
+                      <div style={{ marginTop: 6, color: "var(--text-subtle)" }}>{draftContext.stealBustNote}</div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {/* ── Career Awards Trophy Shelf ── */}
                 {playerView && (() => {
@@ -1488,47 +1641,6 @@ export default function PlayerProfile({
                   );
                 })()}
 
-                {/* ── Negotiation Profile ── */}
-                {playerView && (() => {
-                  const moraleSummary = getPlayerMoraleSummary(playerView);
-                  const awardSummary = getPlayerAwardSummary(playerView);
-                  const currentSeason = Number(data?.meta?.season ?? 0);
-                  const userTeamId = Number(data?.meta?.userTeamId ?? 0);
-                  const negCtx = getNegotiationContext(playerView, data?.meta ?? {}, { moraleSummary, awardSummary, currentSeason, userTeamId });
-                  if (!negCtx.feedbackLine && negCtx.leverageLabel === 'Standard') return null;
-                  const leverageColor = negCtx.leverageLabel === 'High Leverage' ? 'var(--warning)'
-                                       : negCtx.leverageLabel === 'Discount' ? 'var(--success)'
-                                       : 'var(--text-muted)';
-                  return (
-                    <div
-                      data-testid="player-profile-negotiation"
-                      style={{
-                        marginTop: 'var(--space-2)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Negotiation</span>
-                      <span
-                        data-testid="player-profile-leverage-label"
-                        style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: leverageColor }}
-                      >
-                        {negCtx.leverageLabel}
-                      </span>
-                      {negCtx.feedbackLine && (
-                        <span
-                          data-testid="player-profile-negotiation-reason"
-                          style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontStyle: 'italic' }}
-                        >
-                          · {negCtx.feedbackLine}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })()}
-
                 {/* ── All-Time Rank ── */}
                 {playerView && league?.allTimeLeaderboards && (() => {
                   const pid = String(playerView.id ?? '');
@@ -1559,140 +1671,6 @@ export default function PlayerProfile({
                     </div>
                   );
                 })()}
-
-                {/* ── Holdout Status ── */}
-                {playerView?.holdout?.active && (
-                  <div
-                    data-testid="player-profile-holdout"
-                    style={{
-                      marginTop: 'var(--space-2)',
-                      padding: 'var(--space-3)',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px solid #FF9F0A44',
-                      background: '#FF9F0A0E',
-                      fontSize: 'var(--text-xs)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <span style={{ fontWeight: 900, color: '#FF9F0A', textTransform: 'uppercase', letterSpacing: '.07em', fontSize: 'var(--text-xs)' }}>On Holdout</span>
-                      <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>— {playerView.holdout.reason?.replace(/_/g, ' ') ?? 'contract dispute'}</span>
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      <span style={{ color: 'var(--text-subtle)' }}>Started Week {playerView.holdout.startWeek}</span>
-                      <span style={{ color: '#FF9F0A', fontWeight: 700 }}>+{Math.round((playerView.holdout.demandPremium ?? 0) * 100)}% demand premium</span>
-                    </div>
-                    <div style={{ marginTop: 4, color: 'var(--text-muted)' }}>Resolve by signing, trading, or releasing this player.</div>
-                  </div>
-                )}
-
-                {/* ── Trade Request Status ── */}
-                {playerView?.tradeRequest && (
-                  <div
-                    data-testid="player-profile-trade-request"
-                    style={{
-                      marginTop: 'var(--space-2)',
-                      padding: 'var(--space-3)',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px solid #FF9F0A44',
-                      background: '#FF9F0A0E',
-                      fontSize: 'var(--text-xs)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <span style={{ fontWeight: 900, color: '#FF9F0A', textTransform: 'uppercase', letterSpacing: '.07em', fontSize: 'var(--text-xs)' }}>
-                        Trade Requested
-                      </span>
-                      <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
-                        — {playerView.tradeRequest.reason?.replace(/_/g, ' ') ?? 'undisclosed'}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      <span style={{ color: 'var(--text-subtle)' }}>Status: {playerView.tradeRequest.status}</span>
-                      {(playerView.tradeRequest.stonewalledWeeks ?? 0) > 0 && (
-                        <span style={{ color: '#FF9F0A', fontWeight: 700 }}>{playerView.tradeRequest.stonewalledWeeks}w unresolved</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── On Trade Block Badge ── */}
-                {playerView?.onTradeBlock && (
-                  <div
-                    data-testid="player-profile-trade-block"
-                    style={{
-                      marginTop: 'var(--space-2)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      padding: '3px 10px',
-                      borderRadius: 'var(--radius-pill)',
-                      background: '#0A84FF22',
-                      border: '1px solid #0A84FF55',
-                      color: '#0A84FF',
-                      fontWeight: 700,
-                      fontSize: 'var(--text-xs)',
-                      textTransform: 'uppercase',
-                      letterSpacing: '.07em',
-                    }}
-                  >
-                    On Trade Block
-                  </div>
-                )}
-
-                {!isProspect && playerView && (
-                  <div
-                    data-testid="player-profile-dev-arc"
-                    style={{
-                      marginTop: "var(--space-2)",
-                      padding: "var(--space-3)",
-                      borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--hairline)",
-                      background: "var(--surface-strong)",
-                      fontSize: "var(--text-xs)",
-                    }}
-                  >
-                    <div style={{ ...sectionLabelStyle, marginBottom: 6 }}>Career arc snapshot</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
-                      <span className="status-chip info">{developmentArcModel.devStage.replace(/_/g, " ")}</span>
-                      <span className="status-chip muted">{developmentArcModel.arcType.replace(/_/g, " ")}</span>
-                      <span className="status-chip muted">Trend: {developmentArcModel.devTrend}</span>
-                      <span className="status-chip muted">Confidence: {developmentArcModel.confidence}</span>
-                    </div>
-                    <div style={{ color: "var(--text-muted)", lineHeight: 1.45, marginBottom: 6 }}>
-                      Ceiling band ~{developmentArcModel.ceilingBand} · Floor band ~{developmentArcModel.floorBand}
-                    </div>
-                    <div style={{ color: "var(--text)", fontWeight: 600, marginBottom: 4 }}>{developmentArcModel.summary}</div>
-                    {developmentArcModel.growthSignals[0] ? (
-                      <div style={{ color: "var(--text-subtle)" }}>↑ {developmentArcModel.growthSignals[0]}</div>
-                    ) : null}
-                    {developmentArcModel.regressionRisks[0] ? (
-                      <div style={{ color: "var(--text-subtle)" }}>↓ {developmentArcModel.regressionRisks[0]}</div>
-                    ) : null}
-                    <div style={{ marginTop: 6, color: "var(--text-subtle)", fontSize: "var(--text-xs)" }}>
-                      {developmentArcModel.staffImpact}
-                      {" · "}
-                      {developmentArcModel.trainingImpact}
-                      {" · "}
-                      {developmentArcModel.playingTimeImpact}
-                    </div>
-                  </div>
-                )}
-
-                {/* Traits */}
-                {player.traits?.length > 0 && (
-                  <div
-                    style={{
-                      marginTop: "var(--space-2)",
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: 4,
-                    }}
-                  >
-                    {player.traits.map((t) => (
-                      <TraitBadge key={t} traitId={t} />
-                    ))}
-                  </div>
-                )}
 
                 {/* ── Accolades / Legacy ── */}
                 {(ringCount > 0 || nonRing.length > 0 || awardHeaderBadges.length > 0) && (
@@ -1733,118 +1711,7 @@ export default function PlayerProfile({
                   </div>
                 )}
 
-                {/* Extension button */}
-                {playerView.status === "active" && player.contract?.years === 1 && (
-                  <div style={{ marginTop: "var(--space-3)" }}>
-                    <Button
-                      className="btn"
-                      onClick={() => setExtending(true)}
-                      style={{
-                        fontSize: "var(--text-xs)",
-                        padding: "4px 12px",
-                        border: "1px solid var(--accent)",
-                        color: "var(--accent)",
-                      }}
-                    >
-                      Negotiate Extension
-                    </Button>
-                  </div>
-                )}
-                {playerView.status === "active" && player?.teamId != null && (
-                  <div style={{ marginTop: 'var(--space-3)', display: 'grid', gap: 6, maxWidth: 360 }}>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Trade posture</div>
-                    <select
-                      value={management.tradeStatus}
-                      onChange={(e) => updateManagement({ tradeStatus: e.target.value })}
-                      style={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)', padding: '4px 6px', background: 'var(--surface)' }}
-                      title={TRADE_STATUS_TOOLTIPS[management.tradeStatus]}
-                    >
-                      {TRADE_STATUSES.map((status) => (
-                        <option key={status} value={status}>{TRADE_STATUS_LABELS[status]}</option>
-                      ))}
-                    </select>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {CONTRACT_PLAN_FLAGS.map((flag) => (
-                        <Button key={flag} size="sm" variant="outline" onClick={() => updateManagement({ contractPlan: toggleContractPlan(player, flag) })} style={{ opacity: management.contractPlan.includes(flag) ? 1 : 0.7 }}>
-                          {management.contractPlan.includes(flag) ? '✓ ' : ''}{CONTRACT_PLAN_LABELS[flag]}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div data-testid="player-profile-unavailable" style={{ color: "var(--text-muted)", display: "grid", gap: 6 }}><strong>Player unavailable</strong><span>This player reference is no longer available in the loaded franchise data.</span></div>
-          )}
-
-          <Button
-            className="btn"
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-            fontSize: "1.2rem",
-            lineHeight: 1,
-            color: "var(--text-muted)",
-            padding: "4px 8px",
-            marginLeft: "var(--space-2)",
-            borderRadius: "999px",
-            minWidth: 34,
-            minHeight: 34,
-          }}
-        >
-          ×
-        </Button>
-        </div>
-
-        {/* ── Body ── */}
-        <div style={{ padding: "var(--space-4)", flex: 1, display: "grid", gap: "var(--space-4)" }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {profileContext?.source === 'game-book' || profileContext?.returnTo === 'game-book' ? (
-              <Button size="sm" variant="outline" data-testid="player-profile-return-to-game-book" onClick={() => { if (profileContext?.gameId) onOpenBoxScore?.(profileContext.gameId); onClose?.(); }}>Return to Game Book</Button>
-            ) : null}
-            {profileContext?.source === 'weekly-results' || profileContext?.returnTo === 'weekly-results' ? (
-              <Button size="sm" variant="outline" onClick={() => { onNavigate?.('Weekly Results'); onClose?.(); }}>Return to Weekly Results</Button>
-            ) : null}
-            <Button size="sm" variant="outline" onClick={() => { onNavigate?.('HQ'); onClose?.(); }}>Return to HQ</Button>
-          </div>
-          <div className="standings-tabs profile-tab-row" style={{ gap: 6, flexWrap: "nowrap" }}>
-            {["Overview", "Career Stats", "Game Log"].map((tab) => (
-              <button
-                key={tab}
-                className={`standings-tab${activeProfileTab === tab ? " active" : ""}`}
-                onClick={() => setActiveProfileTab(tab)}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-          {activeProfileTab === "Overview" && (
-            <>
-          {!loading && playerView && (
-            <PlayerDecisionCard presentation={playerDecisionPresentation} onNavigate={onNavigate} />
-          )}
-          {hasThisWeekContext && (
-            <section className="card-enter" data-testid="player-profile-game-impact">
-              <h3 style={sectionLabelStyle}>This Week / Game Impact</h3>
-              <div style={{ fontSize: "var(--text-sm)", fontWeight: 800 }}>{profileContext?.role ?? (profileContext?.source === 'weekly-results' ? 'From Weekly Results' : 'From Game Book')}</div>
-              <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", marginTop: 4 }}>
-                {profileContext?.week ? `From Week ${profileContext.week} ${profileContext?.source === 'game-book' ? 'Game Book' : 'Weekly Results'}` : 'From recent game context'}
-              </div>
-              <p style={{ marginTop: 8 }}>{thisWeekSummary}</p>
-              {thisWeekLine ? <div className="stat-box" style={{ padding: 8 }}>{thisWeekLine}</div> : null}
-            </section>
-          )}
-          <section className="card-enter" data-testid="player-profile-season-stats">
-            <h3 style={sectionLabelStyle}>Season Stats</h3>
-            {seasonStatsRecorded ? (
-              <div className="stat-box" style={{ padding: 8 }}>{summarizeTrackedStats(primarySeasonTotals, player?.pos ?? player?.position) ?? 'Tracked season totals are available.'}</div>
-            ) : (
-              <EmptyState icon="📊" title="No tracked season stats yet" subtitle="Season stats will appear after this player records tracked stats." />
-            )}
-          </section>
+          </>)}
           {!loading && playerView && (
             <section className="card-enter" data-testid="player-profile-career-timeline">
               <h3 style={sectionLabelStyle}>Career Timeline</h3>
@@ -1901,6 +1768,37 @@ export default function PlayerProfile({
               )}
             </section>
           )}
+          </>)}
+          {activeProfileTab === "Ratings" && (<>
+          {!loading && playerView && (<>
+                  {playerView.potential != null && (
+                    <span
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "var(--text-sm)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Pot: {playerView.potential}
+                    </span>
+                  )}
+                {/* Traits */}
+                {player.traits?.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: "var(--space-2)",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 4,
+                    }}
+                  >
+                    {player.traits.map((t) => (
+                      <TraitBadge key={t} traitId={t} />
+                    ))}
+                  </div>
+                )}
+
+          </>)}
           {!loading && hasGmContext && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Why this player?</h3>
@@ -1917,11 +1815,71 @@ export default function PlayerProfile({
               {gmContext.recommendation ? <div style={{ fontSize: 12 }}>{gmContext.recommendation}</div> : null}
             </section>
           )}
+          </>)}
+          {activeProfileTab === "Development" && (<>
+          {!loading && playerView && (<>
+                {playerView.developmentContext && (
+                  <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
+                    Dev path: {playerView.developmentContext.baseAgeCurve} · Focus {String(playerView.developmentContext.trainingFocus || 'balanced').replace('_', ' ')} · Staff mod {playerView.developmentContext.staffDevelopmentModifier >= 0 ? '+' : ''}{playerView.developmentContext.staffDevelopmentModifier}% · {playerView.developmentContext.playingTimeModifier}
+                  </div>
+                )}
+                <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
+                  Trend: {developmentSignal.label} · Readiness: {readinessSignal.label} · Scheme: {fitSignal.label}
+                </div>
+                <DevelopmentSignalRow
+                  items={[
+                    { label: developmentSignal.label, tone: developmentSignal.tone },
+                    { label: readinessSignal.label, tone: readinessSignal.tone },
+                    { label: `${fitSignal.label} (${player?.schemeFit ?? 50})`, tone: fitSignal.tone },
+                    { label: ageCurve.label, tone: ageCurve.tone },
+                  ]}
+                />
+
+                {!isProspect && playerView && (
+                  <div
+                    data-testid="player-profile-dev-arc"
+                    style={{
+                      marginTop: "var(--space-2)",
+                      padding: "var(--space-3)",
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--hairline)",
+                      background: "var(--surface-strong)",
+                      fontSize: "var(--text-xs)",
+                    }}
+                  >
+                    <div style={{ ...sectionLabelStyle, marginBottom: 6 }}>Career arc snapshot</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+                      <span className="status-chip info">{developmentArcModel.devStage.replace(/_/g, " ")}</span>
+                      <span className="status-chip muted">{developmentArcModel.arcType.replace(/_/g, " ")}</span>
+                      <span className="status-chip muted">Trend: {developmentArcModel.devTrend}</span>
+                      <span className="status-chip muted">Confidence: {developmentArcModel.confidence}</span>
+                    </div>
+                    <div style={{ color: "var(--text-muted)", lineHeight: 1.45, marginBottom: 6 }}>
+                      Ceiling band ~{developmentArcModel.ceilingBand} · Floor band ~{developmentArcModel.floorBand}
+                    </div>
+                    <div style={{ color: "var(--text)", fontWeight: 600, marginBottom: 4 }}>{developmentArcModel.summary}</div>
+                    {developmentArcModel.growthSignals[0] ? (
+                      <div style={{ color: "var(--text-subtle)" }}>↑ {developmentArcModel.growthSignals[0]}</div>
+                    ) : null}
+                    {developmentArcModel.regressionRisks[0] ? (
+                      <div style={{ color: "var(--text-subtle)" }}>↓ {developmentArcModel.regressionRisks[0]}</div>
+                    ) : null}
+                    <div style={{ marginTop: 6, color: "var(--text-subtle)", fontSize: "var(--text-xs)" }}>
+                      {developmentArcModel.staffImpact}
+                      {" · "}
+                      {developmentArcModel.trainingImpact}
+                      {" · "}
+                      {developmentArcModel.playingTimeImpact}
+                    </div>
+                  </div>
+                )}
+
+          </>)}
           {!loading && playerView && (
             <section className="card-enter">
-              <h3 style={sectionLabelStyle}>Development Tab</h3>
+              <h3 style={sectionLabelStyle}>Progression history</h3>
               <div style={{ display: 'grid', gap: 10 }}>
-                {devHistory.length > 0 ? <Line data={devChartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: 'var(--text-muted)' } } } }} height={220} /> : <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No preseason development snapshots yet.</div>}
+                {devHistory.length > 0 ? <div style={{ height: 220, minWidth: 0 }}><Line data={devChartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: 'var(--text-muted)' } } } }} height={220} /></div> : <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No preseason development snapshots yet.</div>}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {canShowProjectionToggle && <Button size="sm" variant="outline" onClick={() => setShowProjections((v) => !v)}>{showProjections ? 'Hide' : 'Show'} projections</Button>}
                   <span style={{ fontSize: 11, color: 'var(--text-subtle)' }}>Updates after each preseason progression run.</span>
@@ -1937,7 +1895,7 @@ export default function PlayerProfile({
                 {player?.teamId != null && mentorCandidates.length > 0 && actions?.assignMentor && Number(player?.age ?? 0) <= 25 && (
                   <div style={{ display: 'grid', gap: 6, maxWidth: 360 }}>
                     <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Assign mentor</label>
-                    <select value={player?.mentorship?.mentorId ?? ''} onChange={(e) => actions.assignMentor(e.target.value, player.id, player.teamId).then(fetchProfile)} style={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)', padding: '5px 8px', background: 'var(--surface)' }}>
+                    <select aria-label="Assign mentor" value={player?.mentorship?.mentorId ?? ''} onChange={(e) => actions.assignMentor(e.target.value, player.id, player.teamId).then(fetchProfile)} style={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)', padding: '5px 8px', background: 'var(--surface)' }}>
                       <option value="">No mentor</option>
                       {mentorCandidates.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.pos})</option>)}
                     </select>
@@ -1946,6 +1904,8 @@ export default function PlayerProfile({
               </div>
             </section>
           )}
+          </>)}
+          {activeProfileTab === "Ratings" && (<>
           {!loading && player && summaryChips.length > 0 && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Quick Read</h3>
@@ -1980,7 +1940,7 @@ export default function PlayerProfile({
               <AttrRow label="OVR" value={player?.ovr ?? 0} />
               <AttrRow label="Potential" value={player?.potential ?? player?.ovr ?? 0} />
               <AttrRow label="Morale" value={player?.morale ?? 0} />
-              <AttrRow label="Scheme Fit" value={player?.schemeFit ?? 50} />
+              <div><strong>{fitSignal.label}</strong><details className="guided-detail"><summary>Why scheme fit matters</summary><p>Fit describes how a player’s strengths match his team’s system. Consider his overall talent, role and availability too; fit is not a guaranteed ratings bonus.</p><AttrRow label="Scheme fit score / 100" value={player?.schemeFit ?? 50} /></details></div>
               {hiddenDevTraitLabel != null && (
                 <AttrRow
                   label="Development"
@@ -2050,6 +2010,8 @@ export default function PlayerProfile({
           )}
 
 
+          </>)}
+          {activeProfileTab === "Development" && (<>
           {!loading && playerView && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Development Intelligence</h3>
@@ -2105,6 +2067,8 @@ export default function PlayerProfile({
             </section>
           )}
 
+          </>)}
+          {activeProfileTab === "Overview" && (<details className="guided-detail"><summary>Morale and team context</summary>
           {!loading && playerView && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Morale & Role Context</h3>
@@ -2130,6 +2094,91 @@ export default function PlayerProfile({
           )}
 
 
+          </details>)}
+          {activeProfileTab === "Contract" && (<>
+          {!loading && playerView && (<>
+                {/* ── Negotiation Profile ── */}
+                {playerView && (() => {
+                  const moraleSummary = getPlayerMoraleSummary(playerView);
+                  const awardSummary = getPlayerAwardSummary(playerView);
+                  const currentSeason = Number(data?.meta?.season ?? 0);
+                  const userTeamId = Number(data?.meta?.userTeamId ?? 0);
+                  const negCtx = getNegotiationContext(playerView, data?.meta ?? {}, { moraleSummary, awardSummary, currentSeason, userTeamId });
+                  if (!negCtx.feedbackLine && negCtx.leverageLabel === 'Standard') return null;
+                  const leverageColor = negCtx.leverageLabel === 'High Leverage' ? 'var(--warning)'
+                                       : negCtx.leverageLabel === 'Discount' ? 'var(--success)'
+                                       : 'var(--text-muted)';
+                  return (
+                    <div
+                      data-testid="player-profile-negotiation"
+                      style={{
+                        marginTop: 'var(--space-2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Negotiation</span>
+                      <span
+                        data-testid="player-profile-leverage-label"
+                        style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: leverageColor }}
+                      >
+                        {negCtx.leverageLabel}
+                      </span>
+                      {negCtx.feedbackLine && (
+                        <span
+                          data-testid="player-profile-negotiation-reason"
+                          style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontStyle: 'italic' }}
+                        >
+                          · {negCtx.feedbackLine}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Extension button */}
+                {playerView.status === "active" && player.contract?.years === 1 && (
+                  <div style={{ marginTop: "var(--space-3)" }}>
+                    <Button
+                      className="btn"
+                      onClick={() => setExtending(true)}
+                      style={{
+                        fontSize: "var(--text-xs)",
+                        padding: "4px 12px",
+                        border: "1px solid var(--accent)",
+                        color: "var(--accent)",
+                      }}
+                    >
+                      Negotiate Extension
+                    </Button>
+                  </div>
+                )}
+                {playerView.status === "active" && player?.teamId != null && (
+                  <div style={{ marginTop: 'var(--space-3)', display: 'grid', gap: 6, maxWidth: 360 }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Trade posture</div>
+                    <select
+                      aria-label="Trade posture"
+                      value={management.tradeStatus}
+                      onChange={(e) => updateManagement({ tradeStatus: e.target.value })}
+                      style={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)', padding: '4px 6px', background: 'var(--surface)' }}
+                      title={TRADE_STATUS_TOOLTIPS[management.tradeStatus]}
+                    >
+                      {TRADE_STATUSES.map((status) => (
+                        <option key={status} value={status}>{TRADE_STATUS_LABELS[status]}</option>
+                      ))}
+                    </select>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {CONTRACT_PLAN_FLAGS.map((flag) => (
+                        <Button key={flag} size="sm" variant="outline" onClick={() => updateManagement({ contractPlan: toggleContractPlan(player, flag) })} style={{ opacity: management.contractPlan.includes(flag) ? 1 : 0.7 }}>
+                          {management.contractPlan.includes(flag) ? '✓ ' : ''}{CONTRACT_PLAN_LABELS[flag]}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+          </>)}
           {!loading && player && player?.motivationProfile && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Motivation & Contract Outlook</h3>
@@ -2173,9 +2222,9 @@ export default function PlayerProfile({
                   <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginTop: 2 }}>{contractMarketRead.annualValueLabel} · {contractMarketRead.termLabel}</div>
                 </div>
                 <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
-                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Risk tags</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Contract concerns</div>
                   <div style={{ marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    {(contractMarketRead.riskTags.length ? contractMarketRead.riskTags : ["No major model risk tags"]).slice(0, 4).map((tag) => (
+                    {(contractMarketRead.riskTags.length ? contractMarketRead.riskTags : ["No major contract concerns"]).slice(0, 4).map((tag) => (
                       <span key={`profile-contract-${tag}`} style={{ fontSize: 11, border: "1px solid var(--hairline)", borderRadius: 999, padding: "2px 8px", color: "var(--text-subtle)" }}>{tag}</span>
                     ))}
                   </div>
@@ -2194,7 +2243,7 @@ export default function PlayerProfile({
 
           {!loading && playerView && (
             <section className="card-enter">
-              <h3 style={sectionLabelStyle}>Contract Retention Panel</h3>
+              <h3 style={sectionLabelStyle}>Keep or replace?</h3>
               {(() => {
                 const userTeam = teams.find((t) => Number(t.id) === Number(player?.teamId)) || {};
                 const leagueCtx = { players: [], week: 1, phase: '' };
@@ -2238,6 +2287,8 @@ export default function PlayerProfile({
           )}
 
 
+          </>)}
+          {activeProfileTab === "Career" && activeCareerView === "Career Stats" && (<>
           {!loading && playerView && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Current vs Peak Context</h3>
@@ -2815,9 +2866,8 @@ export default function PlayerProfile({
               </p>
             </section>
           )}
-            </>
-          )}
-          {activeProfileTab === "Game Log" && (
+          </>)}
+          {activeProfileTab === "Career" && activeCareerView === "Game Log" && (
             <section className="card-enter" data-testid="player-profile-game-logs">
               <h3 style={sectionLabelStyle}>Game Log</h3>
               {playerGameLogs.length === 0 ? (
@@ -2844,9 +2894,10 @@ export default function PlayerProfile({
               )}
             </section>
           )}
-          {activeProfileTab === "Career Stats" && (
+          {activeProfileTab === "Career" && activeCareerView === "Career Stats" && (
             <>
             <AdvancedAnalyticsSection advancedView={playerAdvancedStatsView} player={player} />
+            <details className="guided-detail"><summary>Season-by-season stat detail</summary>
             <section className="card-enter">
               {careerRows.length === 0 ? (
                 <EmptyState
@@ -2897,6 +2948,7 @@ export default function PlayerProfile({
                 </div>
               )}
             </section>
+            </details>
             </>
           )}
         </div>

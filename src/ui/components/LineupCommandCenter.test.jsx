@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEPTH_CHART_ROWS } from '../../core/depthChart.js';
 import LineupCommandCenter from './LineupCommandCenter.jsx';
+import { resolveLineupAssignments } from '../utils/lineupCommandCenter.js';
 
 const attrs = (n) => ({ throwAccuracyShort: n, throwAccuracyDeep: n, throwPower: n, release: n, routeRunning: n, separation: n, catchInTraffic: n, ballTracking: n, decisionMaking: n, pocketPresence: n, passBlockFootwork: n, passBlockStrength: n, passRush: n, pressCoverage: n, zoneCoverage: n });
 const player = (id, name, order, ovr) => ({ id, name, pos: 'QB', teamId: 1, ovr, attributesV2: attrs(ovr), ratings: { throwPower: ovr, throwAccuracy: ovr, awareness: ovr, intelligence: ovr, speed: ovr }, depthChart: { rowKey: 'QB', order } });
@@ -12,6 +14,141 @@ const team = { id: 1, name: 'Test', strategies: { offSchemeId: 'VERTICAL', defSc
 afterEach(cleanup);
 
 describe('LineupCommandCenter', () => {
+  it('uses canonical availability for actionable starter guidance', () => {
+    const view = render(<LineupCommandCenter team={team} roster={[{ ...roster[0], injured: true }, roster[1]]} actions={{}} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('1 starter needs attention');
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('QB Current QB unavailable');
+    expect(view.getByTestId('offense-lineup').textContent).toContain('55');
+    expect(view.getByTestId('offense-lineup').textContent).toContain('Unavailable');
+  });
+
+  it('uses calm copy when every canonical depth group has an available starter', () => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: { rowKey: row.key, order: index + 1 } })));
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{}} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('Starting lineup is ready');
+    const help = view.getByText('Why scheme fit matters').closest('details');
+    expect(help.open).toBe(false);
+    expect(help.textContent).toContain('does not promise a fixed ratings bonus');
+    expect(help.textContent).not.toMatch(/\d+%/);
+    expect(view.getByText('Compare scheme fits').closest('details').open).toBe(false);
+  });
+
+  it.each([['WR', 2], ['OL', 3], ['CB', 2]])('counts unavailable displayed %s starter at order %s', (rowKey, order) => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: ({ QB: 1, RB: 1, WR: 3, TE: 1 })[row.key] ?? row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: { rowKey: row.key, order: index + 1 } })));
+    const starter = complete.find((entry) => entry.depthChart.rowKey === rowKey && entry.depthChart.order === order);
+    starter.injured = true;
+    const onNavigate = vi.fn();
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{}} onNavigate={onNavigate} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('1 starter needs attention');
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain(`${starter.pos} ${starter.name} unavailable`);
+    expect(view.getByTestId('lineup-what-matters').textContent).not.toContain('Starting lineup is ready');
+    if (rowKey === 'CB') fireEvent.click(view.getByRole('tab', { name: 'defense' }));
+    expect(view.container.querySelector(`[data-player-id="${starter.id}"]`).textContent).toContain('Unavailable');
+    fireEvent.click(view.getByRole('button', { name: 'Review depth assignments' }));
+    expect(onNavigate).toHaveBeenCalledWith('Depth Chart');
+  });
+
+  it.each([['WR', 2, { injury: { weeksRemaining: 2 } }], ['OL', 3, { injuredWeeks: 2 }], ['CB', 2, { status: 'injured' }]])('reviews shared health context for displayed %s starter at order %s', (rowKey, order, injury) => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: ({ QB: 1, RB: 1, WR: 3, TE: 1 })[row.key] ?? row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: { rowKey: row.key, order: index + 1 } })));
+    Object.assign(complete.find((entry) => entry.depthChart.rowKey === rowKey && entry.depthChart.order === order), injury);
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{}} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('Starter health needs review');
+    expect(view.getByTestId('lineup-what-matters').textContent).not.toContain('Starting lineup is ready');
+    expect(view.getByRole('button', { name: 'Review starter health' })).toBeTruthy();
+  });
+
+  it.each(['QB', 'RS'])('retains inferred rows when only %s has persisted ownership', (persistedRow) => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: row.key === persistedRow ? { rowKey: row.key, order: index + 1 } : undefined })));
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{}} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('Starting lineup is ready');
+    expect(view.getByTestId('lineup-what-matters').textContent).not.toContain('depth groups need a starter');
+    expect(view.getByTestId('offense-lineup').textContent).toContain('Quarterback 1');
+    if (persistedRow === 'RS') {
+      fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));
+      expect(view.getByTestId('special-lineup').textContent).toContain('Return Specialist 1');
+    }
+  });
+
+  it.each([[], ['QB'], ['RS'], ['K']].map((persistedRows) => ({ persistedRows })))('displays the same resolved special starters for persisted rows $persistedRows', ({ persistedRows }) => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: persistedRows.includes(row.key) ? { rowKey: row.key, order: index + 1 } : undefined })));
+    const resolved = resolveLineupAssignments({ team, roster: complete });
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{}} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('Starting lineup is ready');
+    expect(view.getByTestId('offense-lineup').textContent).toContain('Quarterback 1');
+    fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));
+    for (const rowKey of ['K', 'P', 'RS']) {
+      const current = complete.find((entry) => entry.id === resolved[rowKey][0]);
+      const card = view.getByTestId('special-lineup').querySelector(`[data-player-id="${current.id}"]`);
+      expect(card).toBeTruthy();
+      expect(card.textContent).toContain(current.name);
+      expect(card.querySelector('.lineup-starter__role').textContent).toBe(rowKey);
+    }
+    expect(view.getByTestId('lineup-special-strength').textContent).toBe('78SPEC');
+    expect(complete.filter((entry) => entry.depthChart).every((entry) => persistedRows.includes(entry.depthChart.rowKey))).toBe(true);
+  });
+
+  it.each(['K', 'P', 'RS'])('changes an inferred %s through the existing canonical command', async (rowKey) => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: row.slots + (row.key === 'K' || row.key === 'P' ? 1 : 0) }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: undefined })));
+    const resolved = resolveLineupAssignments({ team, roster: complete });
+    const starterId = resolved[rowKey][0];
+    const starter = complete.find((entry) => entry.id === starterId);
+    const updateDepthChart = vi.fn(async () => ({}));
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{ updateDepthChart }} />);
+    fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));
+    const card = view.getByTestId('special-lineup').querySelector(`[data-player-id="${starterId}"]`);
+    fireEvent.click(within(card).getByRole('button', { name: 'Change' }));
+    const alternatives = view.getByLabelText(`Replace ${starter.name}`);
+    const choice = within(alternatives).getAllByRole('button')[0];
+    const replacement = complete.find((entry) => choice.textContent.includes(entry.name));
+    fireEvent.click(choice);
+    await waitFor(() => expect(updateDepthChart).toHaveBeenCalledTimes(1));
+    const updates = updateDepthChart.mock.calls[0][0];
+    expect(updates).toEqual(expect.arrayContaining([
+      { playerId: replacement.id, rowKey, newOrder: 1 },
+      { playerId: starterId, rowKey, newOrder: 2 },
+    ]));
+    expect(updates.every((update) => update.rowKey === rowKey)).toBe(true);
+    expect(complete.every((entry) => entry.depthChart === undefined)).toBe(true);
+  });
+
+  it('keeps an explicit empty special row empty instead of using inferred returners', () => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: undefined })));
+    const view = render(<LineupCommandCenter team={{ ...team, depthChart: { RS: [] } }} roster={complete} actions={{}} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('1 depth group needs a starter');
+    expect(view.getByTestId('lineup-special-strength').textContent).toBe('—SPEC');
+    fireEvent.click(view.getByRole('tab', { name: 'Special Teams' }));
+    expect(view.getByTestId('special-lineup').querySelectorAll('.lineup-starter__role').length).toBe(2);
+    expect(view.getByTestId('special-lineup').textContent).not.toContain('RS');
+  });
+
+  it('routes empty persisted assignments to the existing depth editor', () => {
+    const onNavigate = vi.fn();
+    const view = render(<LineupCommandCenter team={team} roster={[]} actions={{}} onNavigate={onNavigate} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('depth groups need a starter');
+    fireEvent.click(view.getByRole('button', { name: 'Fill empty depth assignments' }));
+    expect(onNavigate).toHaveBeenCalledWith('Depth Chart');
+  });
+
+  it.each([{ injuryWeeksRemaining: 2 }, { injury: { weeksRemaining: 2 } }, { status: 'injured' }])('surfaces existing readiness health concerns without redefining eligibility: %j', (injury) => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: { rowKey: row.key, order: index + 1 } })));
+    complete[0] = { ...complete[0], ...injury };
+    const onNavigate = vi.fn();
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{}} onNavigate={onNavigate} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('Starter health needs review');
+    expect(view.getByTestId('lineup-what-matters').textContent).not.toContain('Starting lineup is ready');
+    expect(view.getByText('QB · Ready')).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Review starter health' }));
+    expect(onNavigate).toHaveBeenCalledWith('Depth Chart');
+  });
+
   it('preserves player navigation and persists replacements through updateDepthChart', async () => {
     const onPlayerSelect = vi.fn();
     const updateDepthChart = vi.fn(async () => ({}));
@@ -53,8 +190,8 @@ describe('LineupCommandCenter', () => {
   it('shows active non-default schemes and routes to the existing Game Plan tab', () => {
     const onNavigate = vi.fn();
     const view = render(<LineupCommandCenter team={team} roster={roster} actions={{}} onNavigate={onNavigate} />);
-    expect(view.getByText(/Vertical \/ Air Raid · \d+% fit/)).toBeTruthy();
-    expect(view.getByText(/Man Coverage · \d+% fit/)).toBeTruthy();
+    expect(view.getByText(/Vertical \/ Air Raid · (Good|Average|Poor) fit/)).toBeTruthy();
+    expect(view.getByText(/Man Coverage · (Good|Average|Poor) fit/)).toBeTruthy();
     fireEvent.click(view.getByRole('button', { name: 'Review Game Plan' }));
     expect(onNavigate).toHaveBeenCalledWith('Game Plan');
   });

@@ -105,8 +105,8 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
 
-  await expect(page.getByText(/Week\s+\d+/i).first()).toBeVisible();
-  await expect(page.getByText(/\b[A-Z]{2,4}\s*\(\d+-\d+\)/).first()).toBeVisible();
+  await expect(page.getByTestId('franchise-hq').getByText(/Week\s+\d+/i).first()).toBeVisible();
+  await expect(page.getByTestId('franchise-hq').getByText(/\b\d+-\d+\b/).first()).toBeVisible();
 
   const closeChangelog = page.getByLabel('Close changelog');
   if (await closeChangelog.isVisible().catch(() => false)) {
@@ -138,6 +138,11 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   // The skip-presentation prompt is REQUIRED in this flow (fresh franchise, the
   // user always has a Week 1 game). Assert it appears and is clickable rather
   // than swallowing a missing button — a vanished prompt is a real defect.
+  await expect(page.getByRole('button', { name: /^Watch Game/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Quick Sim/ })).toBeVisible();
+  const options = page.getByText('More Options', { exact: true });
+  await expect(options.locator('..')).not.toHaveAttribute('open', '');
+  await options.click();
   const skipPrompt = page.getByRole('button', { name: /Simulate Week \(Skip Presentation\)/i });
   await expect(skipPrompt).toBeVisible({ timeout: 10000 });
   await expect(skipPrompt).toBeEnabled();
@@ -210,7 +215,8 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
     await expect(page.getByTestId('player-profile')).toBeVisible({ timeout: SMOKE_TIMEOUT });
     await expect(page.getByTestId('player-profile-summary')).toBeVisible({ timeout: SMOKE_TIMEOUT });
     await expect(page.getByTestId('player-profile-game-impact')).toBeVisible({ timeout: SMOKE_TIMEOUT });
-    await page.getByRole('button', { name: /^Career Stats$/i }).click();
+    await page.locator('.player-profile-shell').getByRole('button', { name: 'Career', exact: true }).click();
+    await page.locator('.player-profile-shell').getByRole('button', { name: 'Career Stats', exact: true }).click();
     await expect(page.getByTestId('player-profile-advanced-analytics')).toBeVisible({ timeout: SMOKE_TIMEOUT });
     await expect(page.getByTestId('player-profile-advanced-analytics')).toContainText(/Advanced Analytics/i);
     await page.getByTestId('player-profile-return-to-game-book').click();
