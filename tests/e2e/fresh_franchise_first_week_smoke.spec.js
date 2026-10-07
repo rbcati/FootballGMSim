@@ -215,7 +215,6 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
     await expect(page.getByTestId('player-profile')).toBeVisible({ timeout: SMOKE_TIMEOUT });
     await expect(page.getByTestId('player-profile-summary')).toBeVisible({ timeout: SMOKE_TIMEOUT });
     await expect(page.getByTestId('player-profile-game-impact')).toBeVisible({ timeout: SMOKE_TIMEOUT });
-    await page.getByRole('button', { name: /^Career Stats$/i }).click();
     await page.locator('.player-profile-shell').getByRole('button', { name: 'Career', exact: true }).click();
     await page.locator('.player-profile-shell').getByRole('button', { name: 'Career Stats', exact: true }).click();
     await expect(page.getByTestId('player-profile-advanced-analytics')).toBeVisible({ timeout: SMOKE_TIMEOUT });

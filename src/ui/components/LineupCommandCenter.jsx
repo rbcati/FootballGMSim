@@ -5,7 +5,8 @@ import { isAvailableForGameDay } from '../../core/holdouts/holdoutEngine.js';
 import { buildReplacementUpdates, deriveEditableCanonicalLineup, deriveLineupRatingSnapshot, getPersistedDepthAssignment } from '../utils/lineupCommandCenter.js';
 import { deriveRosterReadinessModel } from '../utils/rosterReadinessModel.js';
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
-import { buildGameDayReadinessModel } from '../utils/gameDayReadinessModel.js';
+import { deriveGameDayAvailability } from '../../core/gameDayAvailability.js';
+import { isPlayerInjured } from '../utils/injuryReadinessModel.js';
 import { deriveSpecialTeamsPresentationRating } from '../utils/hqCommandCenterV2.js';
 
 const fitColor = (fit) => fit >= 75 ? 'var(--success)' : fit >= 40 ? 'var(--warning)' : 'var(--danger)';
@@ -31,7 +32,11 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
   const group = unit.toUpperCase();
   const scheme = unit === 'offense' ? snapshot.schemes.offense : snapshot.schemes.defense;
   const comparison = unit === 'offense' ? snapshot.offenseComparison : snapshot.defenseComparison;
-  const availability = useMemo(() => buildGameDayReadinessModel({ roster: displayedRoster, teamId: team?.id }), [displayedRoster, team?.id]);
+  const availability = useMemo(() => deriveGameDayAvailability(displayedRoster, { teamId: team?.id }), [displayedRoster, team?.id]);
+  // Use the same canonical slots shown below, including multi-player units.
+  // Availability still comes from the shared game-day authority.
+  const displayedStarterIds = new Set([...offensePlayers, ...defensePlayers, ...specialPlayers].map((player) => String(player.id)));
+  const unavailableStarters = availability.unavailablePlayers.filter((player) => displayedStarterIds.has(String(player.id)));
   const readiness = useMemo(() => {
     // Keep persisted row ownership (including returners) when present. Legacy
     // rosters without row metadata use the readiness model's established fallback.
@@ -42,6 +47,9 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
         .map((player) => player.id)])) : null;
     return deriveRosterReadinessModel({ league, team, roster: displayedRoster, assignments });
   }, [league, team, displayedRoster]);
+  const starterHealthNeedsReview = readiness.injuryReplacementConcerns > 0
+    || availability.injuredPlayers.some((player) => displayedStarterIds.has(String(player.id)))
+    || [...offensePlayers, ...defensePlayers, ...specialPlayers].some(isPlayerInjured);
   const weakest = unit === 'special' ? null : [...players].sort((a, b) => Number(a.ovr ?? 0) - Number(b.ovr ?? 0))[0];
 
   const alternativesFor = (starter) => {
@@ -81,16 +89,16 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
   return <div className="lineup-command-center" data-testid="lineup-command-center">
     <section className="guided-week-summary" data-testid="lineup-what-matters" aria-label="What Matters This Week">
       <small>What Matters This Week</small>
-      <strong>{availability.unavailableStarterCount
-        ? `${availability.unavailableStarterCount} starter${availability.unavailableStarterCount === 1 ? ' needs' : 's need'} attention`
+      <strong>{unavailableStarters.length
+        ? `${unavailableStarters.length} starter${unavailableStarters.length === 1 ? ' needs' : 's need'} attention`
         : readiness.missingStarterCount ? `${readiness.missingStarterCount} depth group${readiness.missingStarterCount === 1 ? ' needs' : 's need'} a starter`
-        : readiness.injuryReplacementConcerns > 0 ? 'Starter health needs review'
+        : starterHealthNeedsReview ? 'Starter health needs review'
         : snapshot.offensePlayers.length > 0 && snapshot.offensiveSchemeFit < 40 ? 'Starting lineup is ready · poor offensive scheme fit'
         : snapshot.defensePlayers.length > 0 && snapshot.defensiveSchemeFit < 40 ? 'Starting lineup is ready · poor defensive scheme fit'
         : '✓ Starting lineup is ready'}</strong>
-      {availability.unavailableStarterCount > 0 && <p>{availability.unavailableStarters.map((player) => `${player.position} ${player.name}`).join(', ')} unavailable. Use Change to review healthy backups.</p>}
-      {!availability.unavailableStarterCount && readiness.injuryReplacementConcerns > 0 && <p>Check starter injuries and healthy backups before game day.</p>}
-      {(readiness.missingStarterCount > 0 || readiness.injuryReplacementConcerns > 0) && <button className="btn btn-secondary" onClick={() => onNavigate?.('Depth Chart')}>{readiness.missingStarterCount > 0 ? 'Fill empty depth assignments' : availability.unavailableStarterCount > 0 ? 'Review depth assignments' : 'Review starter health'}</button>}
+      {unavailableStarters.length > 0 && <p>{unavailableStarters.map((player) => `${player.pos ?? player.position ?? "Player"} ${player.name ?? "Unnamed player"}`).join(', ')} unavailable. Use Change to review healthy backups.</p>}
+      {!unavailableStarters.length && starterHealthNeedsReview && <p>Check starter injuries and healthy backups before game day.</p>}
+      {(unavailableStarters.length > 0 || readiness.missingStarterCount > 0 || starterHealthNeedsReview) && <button className="btn btn-secondary" onClick={() => onNavigate?.('Depth Chart')}>{readiness.missingStarterCount > 0 ? 'Fill empty depth assignments' : unavailableStarters.length > 0 ? 'Review depth assignments' : 'Review starter health'}</button>}
     </section>
     <section className="lineup-summary" aria-label="Starting lineup strength">
       <div><small>{team?.abbr ?? team?.name ?? 'TEAM'}</small><strong>{snapshot.overall}</strong><span>TEAM</span></div>

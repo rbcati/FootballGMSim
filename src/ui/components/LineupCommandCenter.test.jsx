@@ -33,6 +33,32 @@ describe('LineupCommandCenter', () => {
     expect(view.getByText('Compare scheme fits').closest('details').open).toBe(false);
   });
 
+  it.each([['WR', 2], ['OL', 3], ['CB', 2]])('counts unavailable displayed %s starter at order %s', (rowKey, order) => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: ({ QB: 1, RB: 1, WR: 3, TE: 1 })[row.key] ?? row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: { rowKey: row.key, order: index + 1 } })));
+    const starter = complete.find((entry) => entry.depthChart.rowKey === rowKey && entry.depthChart.order === order);
+    starter.injured = true;
+    const onNavigate = vi.fn();
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{}} onNavigate={onNavigate} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('1 starter needs attention');
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain(`${starter.pos} ${starter.name} unavailable`);
+    expect(view.getByTestId('lineup-what-matters').textContent).not.toContain('Starting lineup is ready');
+    if (rowKey === 'CB') fireEvent.click(view.getByRole('tab', { name: 'defense' }));
+    expect(view.container.querySelector(`[data-player-id="${starter.id}"]`).textContent).toContain('Unavailable');
+    fireEvent.click(view.getByRole('button', { name: 'Review depth assignments' }));
+    expect(onNavigate).toHaveBeenCalledWith('Depth Chart');
+  });
+
+  it.each([['WR', 2, { injury: { weeksRemaining: 2 } }], ['OL', 3, { injuredWeeks: 2 }], ['CB', 2, { status: 'injured' }]])('reviews shared health context for displayed %s starter at order %s', (rowKey, order, injury) => {
+    let id = 0;
+    const complete = DEPTH_CHART_ROWS.flatMap((row) => Array.from({ length: ({ QB: 1, RB: 1, WR: 3, TE: 1 })[row.key] ?? row.slots }, (_, index) => ({ ...player(++id, `${row.label} ${index + 1}`, index + 1, 78), pos: row.match[0], depthChart: { rowKey: row.key, order: index + 1 } })));
+    Object.assign(complete.find((entry) => entry.depthChart.rowKey === rowKey && entry.depthChart.order === order), injury);
+    const view = render(<LineupCommandCenter team={team} roster={complete} actions={{}} />);
+    expect(view.getByTestId('lineup-what-matters').textContent).toContain('Starter health needs review');
+    expect(view.getByTestId('lineup-what-matters').textContent).not.toContain('Starting lineup is ready');
+    expect(view.getByRole('button', { name: 'Review starter health' })).toBeTruthy();
+  });
+
   it('routes empty persisted assignments to the existing depth editor', () => {
     const onNavigate = vi.fn();
     const view = render(<LineupCommandCenter team={team} roster={[]} actions={{}} onNavigate={onNavigate} />);
