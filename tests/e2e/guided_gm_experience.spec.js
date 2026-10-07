@@ -84,6 +84,15 @@ for (const width of [390, 430, 1280]) {
       await profile.getByRole('button', { name: tab, exact: true }).click();
       await expect(profile.getByRole('button', { name: tab, exact: true })).toHaveAttribute('aria-pressed', 'true');
       await noOverflow(page, profile);
+      if (tab === 'Career') {
+        await expect(profile.getByRole('button', { name: 'Career Stats', exact: true })).toHaveAttribute('aria-pressed', 'true');
+        await page.screenshot({ path: testInfo.outputPath('profile-career-stats.png') });
+        await profile.getByRole('button', { name: 'Game Log', exact: true }).click();
+        await expect(profile.getByTestId('player-profile-game-logs')).toBeVisible();
+        await expect(profile.getByTestId('player-profile-career-timeline')).toHaveCount(0);
+        await noOverflow(page, profile);
+        await page.screenshot({ path: testInfo.outputPath('profile-game-log.png') });
+      }
     }
     await profile.getByRole('button', { name: 'Return to HQ', exact: true }).click();
     await action.click();

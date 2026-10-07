@@ -601,7 +601,7 @@ export default function PlayerProfile({
   const [extending, setExtending] = useState(false);
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
-  const [activeCareerView, setActiveCareerView] = useState("Game Log");
+  const [activeCareerView, setActiveCareerView] = useState("Career Stats");
   const [draftContext, setDraftContext] = useState(null);
   const [seasonLogSearch, setSeasonLogSearch] = useState("");
   const [seasonLogTeamFilter, setSeasonLogTeamFilter] = useState("all");
@@ -723,7 +723,7 @@ export default function PlayerProfile({
   useEffect(() => {
     setShowAllCareerTimeline(false);
     setActiveProfileTab("Overview");
-    setActiveCareerView("Game Log");
+    setActiveCareerView("Career Stats");
   }, [playerId]);
 
   const fetchedPlayer = data?.player;
@@ -1289,7 +1289,7 @@ export default function PlayerProfile({
 
                 <div style={{ marginTop: "var(--space-2)", display: "flex", gap: 6, flexWrap: "wrap", fontSize: "var(--text-xs)" }}>
                   <span className="status-chip info">Contract: {summaryChips.find((chip) => chip.label === "Contract")?.value ?? "Not available"}</span>
-                  <span className="status-chip muted">Status: {isAvailableForGameDay(playerView, { teamId: playerView.teamId }) ? "Available" : "Unavailable"}</span>
+                  <span className="status-chip muted">Status: {playerView.injuryWeeksRemaining > 0 ? `Out ${playerView.injuryWeeksRemaining}w` : isAvailableForGameDay(playerView, { teamId: playerView.teamId }) ? "Available" : "Unavailable"}</span>
                   {activeProfileTab === "Career" && (playerView.draftYear || playerView.draftRound || playerView.draftPick) ? <span className="status-chip muted">Draft: {playerView.draftYear ?? "—"} R{playerView.draftRound ?? "—"} P{playerView.draftPick ?? "—"}</span> : null}
                   {activeProfileTab === "Ratings" && quickTags.map((tag) => <span key={tag} className="status-chip success">{tag}</span>)}
                   {(player?.contract?.tag === 'franchise' || player?.isTagged) && (
@@ -1476,6 +1476,9 @@ export default function PlayerProfile({
               </button>
             ))}
           </div>
+          {activeProfileTab === "Career" && <div className="profile-career-subnav" aria-label="Career views">
+            {["Career Stats", "Game Log"].map((tab) => <button className="btn" key={tab} aria-pressed={activeCareerView === tab} onClick={() => setActiveCareerView(tab)}>{tab}</button>)}
+          </div>}
           {activeProfileTab === "Overview" && (<>
           {!loading && playerView && (
             <section className="guided-what-to-know">
@@ -1505,7 +1508,7 @@ export default function PlayerProfile({
             )}
           </section>
           </>)}
-          {activeProfileTab === "Career" && (<>
+          {activeProfileTab === "Career" && activeCareerView === "Career Stats" && (<>
           {!loading && playerView && (<>
                 {draftContext?.known ? (
                   <div
@@ -2278,7 +2281,7 @@ export default function PlayerProfile({
 
 
           </>)}
-          {activeProfileTab === "Career" && (<>
+          {activeProfileTab === "Career" && activeCareerView === "Career Stats" && (<>
           {!loading && playerView && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Current vs Peak Context</h3>
@@ -2857,9 +2860,6 @@ export default function PlayerProfile({
             </section>
           )}
           </>)}
-          {activeProfileTab === "Career" && <div className="profile-career-subnav" aria-label="Career views">
-            {["Career Stats", "Game Log"].map((tab) => <button className="btn" key={tab} aria-pressed={activeCareerView === tab} onClick={() => setActiveCareerView(tab)}>{tab}</button>)}
-          </div>}
           {activeProfileTab === "Career" && activeCareerView === "Game Log" && (
             <section className="card-enter" data-testid="player-profile-game-logs">
               <h3 style={sectionLabelStyle}>Game Log</h3>
@@ -2890,6 +2890,7 @@ export default function PlayerProfile({
           {activeProfileTab === "Career" && activeCareerView === "Career Stats" && (
             <>
             <AdvancedAnalyticsSection advancedView={playerAdvancedStatsView} player={player} />
+            <details className="guided-detail"><summary>Season-by-season stat detail</summary>
             <section className="card-enter">
               {careerRows.length === 0 ? (
                 <EmptyState
@@ -2940,6 +2941,7 @@ export default function PlayerProfile({
                 </div>
               )}
             </section>
+            </details>
             </>
           )}
         </div>
