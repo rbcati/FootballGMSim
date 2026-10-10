@@ -2,7 +2,7 @@ const TRANSACTION_VIEWS = new Set(["Finder", "Builder", "Offers", "Block", "Summ
 const ROSTER_VIEWS = new Set(["table", "cards", "depth"]);
 const ROSTER_FILTERS = new Set(["ALL", "EXPIRING", "STARTERS", "DEPTH", "INJURED", "DEVELOPMENT"]);
 const STAT_FAMILIES = new Set(["passing", "rushing", "receiving", "defense"]);
-const LEAGUE_SECTIONS = new Set(["Overview", "Results", "Standings", "News", "Leaders"]);
+const LEAGUE_SECTIONS = new Set(["Overview", "Results", "Standings", "News", "Leaders", "Stats", "Schedule", "Schedule / Results", "Coaching"]);
 const TEAM_SECTIONS = new Set(["Lineup", "Overview", "Roster / Depth", "Contracts", "Development", "Injuries"]);
 
 

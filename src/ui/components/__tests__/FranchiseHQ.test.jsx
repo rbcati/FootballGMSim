@@ -11,7 +11,7 @@ import { buildOffseasonActionCenter } from '../../utils/offseasonActionCenter.js
 import { validateLeagueTeamLegality } from '../../../core/teamValidation.js';
 import { DEPTH_CHART_ROWS } from '../../../core/depthChart.js';
 
-const player = (id, name, pos, ovr, rowKey, order = 1) => ({ id, teamId: 7, name, pos, ovr, depthChart: { rowKey, order } });
+const player = (id, name, pos, ovr, rowKey, order = 1) => ({ id, teamId: 7, name, pos, ovr, contract: { baseAnnual: 1, years: 3 }, depthChart: { rowKey, order } });
 const roster = [
   player(1, 'Justin Fields', 'QB', 78, 'QB'), player(2, 'Runner One', 'RB', 76, 'RB'),
   player(3, 'Wide One', 'WR', 80, 'WR'), player(4, 'Tight One', 'TE', 77, 'TE'),
@@ -57,13 +57,13 @@ describe('HQ Command Center V2', () => {
     expect(screen.getByTestId('hq-next-action').compareDocumentPosition(screen.getByTestId('hq-division-card')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /review depth chart/i }));
     expect(onNavigate).toHaveBeenCalledWith('Team:Lineup');
-    expect(screen.queryByRole('button', { name: /play week|advance week/i })).toBeNull();
+    expect(screen.getByTestId('advance-week-cta').disabled).toBe(false);
     const game = screen.getByTestId('hq-next-game');
     expect(game.textContent).toContain('vs CLE');
     expect(game.textContent).toContain('3-0 · 82 OVR');
     expect(within(game).queryAllByRole('button')).toHaveLength(0);
     for (const element of [game, ...game.querySelectorAll('*')]) fireEvent.click(element);
-    for (const button of screen.getAllByRole('button')) fireEvent.click(button);
+    // Availability guidance is advisory; only canonical legality errors block progression.
     expect(onAdvanceWeek).not.toHaveBeenCalled();
   });
 
@@ -80,7 +80,7 @@ describe('HQ Command Center V2', () => {
     render(<FranchiseHQ league={league()} actions={{ getDashboardLeaders: vi.fn().mockResolvedValue({ team: {}, league: {} }) }} onAdvanceWeek={onAdvanceWeek} />);
     const advance = screen.getAllByRole('button', { name: /play week|advance week/i });
     expect(advance).toHaveLength(1);
-    expect(within(screen.getByTestId('hq-next-action')).getByRole('button', { name: /play week/i })).toBe(advance[0]);
+    expect(within(screen.getByTestId('hq-week-control')).getByRole('button', { name: /play week/i })).toBe(advance[0]);
     fireEvent.click(advance[0]);
     expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
   });
@@ -188,26 +188,26 @@ describe('HQ Command Center V2', () => {
     { played: false },
     { played: false, homeScore: 0, awayScore: 0 },
     { played: 0, homeScore: 0, awayScore: 0 },
-  ])('does not request leaders for a fresh Week 1 with unplayed game %j', (game) => {
+  ])('asks stats authority for a fresh Week 1 with unplayed game %j', async (game) => {
     const actions = { getDashboardLeaders: vi.fn().mockResolvedValue({ team: {}, league: {} }) };
     const state = league({ week: 1, schedule: { weeks: [{ week: 1, games: [{ home: 7, away: 6, ...game }] }] } });
     render(<FranchiseHQ league={state} actions={actions} />);
-    expect(actions.getDashboardLeaders).not.toHaveBeenCalled();
-    expect(screen.getByText('Season leaders appear after games are played.')).toBeTruthy();
+    expect(actions.getDashboardLeaders).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('No season stats yet.')).toBeTruthy();
   });
 
   it('keeps fresh saves truthful and clears leaders across save generations', async () => {
-    const actions = { getDashboardLeaders: vi.fn().mockResolvedValue({ team: { passing: [{ name: 'Old Leader', value: 10 }] }, league: {} }) };
+    const actions = { getDashboardLeaders: vi.fn().mockResolvedValueOnce({ team: { passing: [{ name: 'Old Leader', value: 10 }] }, league: {} }).mockResolvedValue({ team: {}, league: {} }) };
     const view = render(<FranchiseHQ league={league()} actions={actions} />);
     await screen.findByText('O. Leader');
     const fresh = league({ franchiseGenerationId: 'b', week: 1, teams: league().teams.map((team) => ({ ...team, wins: 0, losses: 0, ties: 0 })), schedule: { weeks: [{ week: 1, games: [{ home: 7, away: 6, played: false }] }] } });
     view.rerender(<FranchiseHQ league={fresh} actions={actions} />);
     expect(screen.queryByText('O. Leader')).toBeNull();
-    expect(screen.getByText(/season leaders appear after games are played/i)).toBeTruthy();
+    expect(await screen.findByText('No season stats yet.')).toBeTruthy();
     expect(within(screen.getByTestId('hq-division-card')).getAllByText('0-0').length).toBeGreaterThan(0);
   });
 
-  it('cannot bypass a game-plan warning through Next Game', () => {
+  it('keeps Play Week enabled independently of game-plan guidance', () => {
     markWeeklyPrepStep(league(), 'planReviewed', false);
     const onAdvanceWeek = vi.fn();
     const onNavigate = vi.fn();
@@ -216,8 +216,10 @@ describe('HQ Command Center V2', () => {
     fireEvent.click(screen.getByRole('button', { name: /review game plan/i }));
     expect(onNavigate).toHaveBeenCalledWith('Game Plan');
     for (const element of screen.getByTestId('hq-next-game').querySelectorAll('*')) fireEvent.click(element);
-    expect(screen.queryByRole('button', { name: /play week/i })).toBeNull();
+    expect(screen.getByTestId('advance-week-cta').disabled).toBe(false);
     expect(onAdvanceWeek).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('advance-week-cta'));
+    expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
   });
 
   it.each(['offseason_resign', 'offseason'])('uses re-signing authority without mutating phase %s', (phase) => {
@@ -269,9 +271,9 @@ describe('HQ Command Center V2', () => {
     state.teams[0] = { ...state.teams[0], capRoom: 20, roster: preseasonRoster(53) };
     const onAdvanceWeek = vi.fn();
     render(<FranchiseHQ league={state} onAdvanceWeek={onAdvanceWeek} />);
-    expect(screen.getByText('READY FOR GAME DAY')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /play week/i })).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: /play week/i }));
+    expect(screen.getByText('Ready for game day.')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /start season/i })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: /start season/i }));
     expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
   });
 
@@ -296,8 +298,8 @@ describe('HQ Command Center V2', () => {
     const onAdvanceWeek = vi.fn();
     render(<FranchiseHQ league={state} onNavigate={onNavigate} onAdvanceWeek={onAdvanceWeek} />);
     if (condition === 'ready') {
-      expect(screen.getByText('READY TO ADVANCE')).toBeTruthy();
-      fireEvent.click(screen.getByRole('button', { name: /advance preseason/i }));
+      expect(screen.getByText('Ready to advance.')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /start season/i }));
       expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
     } else {
       fireEvent.click(screen.getByRole('button', { name: condition === 'lineup' ? /review depth chart/i : /run final cuts/i }));
@@ -309,13 +311,13 @@ describe('HQ Command Center V2', () => {
 
   it.each([
     [52, 4, true, false, 'Sign Players'],
-    [53, 4, true, false, 'Play Week'],
-    [53, 4, false, false, 'Advance Preseason'],
+    [53, 4, true, false, 'Start Season'],
+    [53, 4, false, false, 'Start Season'],
     [53, 4, true, true, 'Review Cap Outlook'],
     [53, 4, false, true, 'Review Cap Outlook'],
     [60, 4, true, false, 'Run Final Cuts'],
-    [53, 5, true, false, 'Play Week'],
-    [53, 20, true, false, 'Play Week'],
+    [53, 5, true, false, 'Start Season'],
+    [53, 20, true, false, 'Start Season'],
   ])('preseason roster %s, room %s, matchup %s, illegal %s → %s', (count, capRoom, hasMatchup, illegal, cta) => {
     const hardCap = 360;
     const state = league({ phase: 'preseason', economy: { currentSalaryCap: hardCap }, settings: { salaryCap: 300 }, ...(hasMatchup ? {} : { schedule: { weeks: [] } }) });
@@ -331,8 +333,8 @@ describe('HQ Command Center V2', () => {
     const onNavigate = vi.fn();
     render(<FranchiseHQ league={state} onAdvanceWeek={onAdvanceWeek} onNavigate={onNavigate} />);
     fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${cta}`) }));
-    if (cta === 'Play Week' || cta === 'Advance Preseason') {
-      expect(screen.getByText(hasMatchup ? 'READY FOR GAME DAY' : 'READY TO ADVANCE')).toBeTruthy();
+    if (cta === 'Start Season' || cta === 'Start Season') {
+      expect(screen.getByText(hasMatchup ? 'Ready for game day.' : 'Ready to advance.')).toBeTruthy();
       expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
       expect(screen.queryByRole('button', { name: /review cap outlook/i })).toBeNull();
     } else {
@@ -382,7 +384,7 @@ describe('HQ Command Center V2', () => {
 
   it('uses truthful in-season bye copy', () => {
     render(<FranchiseHQ league={league({ schedule: { weeks: [{ week: 4, games: [] }] } })} />);
-    expect(screen.getByText('READY TO ADVANCE')).toBeTruthy();
+    expect(screen.getByText('Ready to advance.')).toBeTruthy();
     expect(screen.getByRole('button', { name: /advance week/i })).toBeTruthy();
     expect(screen.queryByText(/ready for game day|no game scheduled/i)).toBeNull();
   });
@@ -392,14 +394,14 @@ describe('HQ Command Center V2', () => {
     const state = league({ schedule: { weeks: [{ week: 4, games: [] }, { week: 5, games: [{ home: 7, away: 6, played: false }] }] } });
     const onAdvanceWeek = vi.fn();
     const view = render(<FranchiseHQ league={state} onAdvanceWeek={onAdvanceWeek} />);
-    expect(screen.getByText('READY TO ADVANCE')).toBeTruthy();
+    expect(screen.getByText('Ready to advance.')).toBeTruthy();
     expect(screen.getByTestId('hq-next-game').textContent).toContain('vs CLE');
     expect(screen.queryByRole('button', { name: /review game plan|scout|play week/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /advance week/i }));
     expect(onAdvanceWeek).toHaveBeenCalledTimes(1);
     view.rerender(<FranchiseHQ league={{ ...state, week: 5 }} onAdvanceWeek={onAdvanceWeek} />);
     expect(screen.getByRole('button', { name: /review game plan/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /play week/i })).toBeNull();
+    expect(screen.getByTestId('advance-week-cta').disabled).toBe(false);
   });
 
   it('keeps informational scouting optional in More Prep while allowing the one progression action', () => {
@@ -409,7 +411,7 @@ describe('HQ Command Center V2', () => {
     const info = { id: 'opponent-not-scouted', severity: 'info', fixDestination: 'Weekly Prep' };
     expect(buildHqNextAction({ league: league(), gate: { riskItems: [info] }, nextGame: { isHome: true, opp: { abbr: 'CLE' } } })).toMatchObject({ advance: true, cta: 'Play Week' });
     render(<FranchiseHQ league={league()} onAdvanceWeek={onAdvanceWeek} onNavigate={onNavigate} />);
-    expect(screen.getByText('READY FOR GAME DAY')).toBeTruthy();
+    expect(screen.getByText('Ready for game day.')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /play week/i })).toHaveLength(1);
     const more = screen.getByText('More Prep').closest('details');
     expect(more.hasAttribute('open')).toBe(false);
@@ -497,6 +499,6 @@ describe('HQ Command Center V2', () => {
     resolveOld({ team: { passing: [{ name: 'Stale Leader', value: 999 }] } });
     await waitFor(() => expect(actions.getDashboardLeaders).toHaveBeenCalledTimes(2));
     expect(screen.queryByText('S. Leader')).toBeNull();
-    expect(screen.getByText(/season leaders appear/i)).toBeTruthy();
+    expect(await screen.findByText('No season stats yet.')).toBeTruthy();
   });
 });

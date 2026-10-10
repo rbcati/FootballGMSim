@@ -12,6 +12,9 @@ describe('LeagueStats', () => {
     render(<LeagueStats league={league} />);
     expect(screen.getByRole('button', { name: 'Sort by Cmp' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sort by Rate' })).toBeTruthy();
+    const passingRow = screen.getByRole('table', { name: 'Player stat table' }).querySelector('tbody tr');
+    expect(passingRow.querySelector('[data-label="Team"]').textContent).toBe('AAA');
+    expect(passingRow.querySelector('[data-label="Pos"]').textContent).toBe('QB');
     fireEvent.change(screen.getByLabelText('Search player stats'), { target: { value: 'WR' } });
     expect(within(screen.getByRole('table', { name: 'Player stat table' })).queryByRole('button', { name: /^QB$/ })).toBeFalsy();
     expect(screen.getByRole('button', { name: 'passing' }).getAttribute('style')).toContain('font-weight: 700');

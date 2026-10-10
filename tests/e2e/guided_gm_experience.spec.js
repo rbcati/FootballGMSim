@@ -95,7 +95,7 @@ for (const width of [390, 430, 1280]) {
       }
     }
     await profile.getByRole('button', { name: 'Return to HQ', exact: true }).click();
-    await action.click();
+    await page.getByTestId('hq-next-action').getByRole('button', { name: /Review Game Plan/ }).click();
     await expect(page.getByRole('button', { name: 'Back to HQ', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Back to HQ', exact: true }).click();
     await expect(action).toHaveText(/Play Week/);

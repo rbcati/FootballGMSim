@@ -15,7 +15,7 @@ it('keeps a risk without a fix destination static in NEXT UP and collapsed More 
   render(<FranchiseHQ league={{ id: 'save', phase: 'regular', userTeamId: 1, teams: [{ id: 1, roster: [] }] }} onNavigate={onNavigate} onAdvanceWeek={onAdvanceWeek} />);
   const more = screen.getByText('More Prep').closest('details');
   expect(more.hasAttribute('open')).toBe(false);
-  fireEvent.click(screen.getByTestId('advance-week-cta'));
+  fireEvent.click(within(screen.getByTestId('hq-next-action')).getByRole('button'));
   fireEvent.click(screen.getByText('More Prep'));
   const status = within(more).getByRole('button');
   expect(status.disabled).toBe(true);

@@ -219,7 +219,7 @@ export default function StandingsCenter({ teams = [], userTeamId, onTeamSelect, 
                         <TeamLogo abbr={team.abbr} isUser={isUser} />
                         <div className="standings-center-row__team">
                           <strong>{team.name}</strong>
-                          <span>{team.abbr}</span>
+                          <span>{team.abbr}{isUser ? ' · YOU' : ''}</span>
                         </div>
                         <span>{team.wins}-{team.losses}{team.ties > 0 ? `-${team.ties}` : ""}</span>
                         <span>{winPct(team.wins, team.losses, team.ties)}</span>

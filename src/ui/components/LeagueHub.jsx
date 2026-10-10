@@ -9,10 +9,12 @@ import { CompactListRow, StatusChip, HeroCard, SectionCard, StatStrip, CompactIn
 import { buildTradeDeadlineContext } from '../../core/tradeDeadlineContext.js';
 import { GameEntityLink, PlayerEntityLink, TeamEntityLink } from './EntityLink.jsx';
 
-const LEAGUE_SECTIONS = ['Overview', 'Results', 'Standings', 'News', 'Leaders', 'Coaching'];
+const LEAGUE_SECTIONS = ['Standings', 'Stats', 'Schedule / Results', 'News', 'Overview', 'Coaching'];
 
 function normalizeSection(section) {
   if (typeof section !== 'string') return 'Overview';
+  if (section.toLowerCase() === 'leaders') return 'Stats';
+  if (['results', 'schedule'].includes(section.toLowerCase())) return 'Schedule / Results';
   return LEAGUE_SECTIONS.find((entry) => entry.toLowerCase() === section.toLowerCase()) ?? 'Overview';
 }
 
@@ -25,12 +27,15 @@ export default function LeagueHub({
   onTeamSelect,
   renderStandings,
   renderResults,
+  renderSchedule,
   onNavigateTrade,
 }) {
   const [section, setSection] = useState(() => normalizeSection(initialSection));
+  const [showRecap, setShowRecap] = useState(initialSection === 'Results');
 
   useEffect(() => {
     setSection(normalizeSection(initialSection));
+    setShowRecap(initialSection === 'Results');
   }, [initialSection]);
 
   const week = Number(league?.week ?? 1);
@@ -56,7 +61,7 @@ export default function LeagueHub({
 
   return (
     <div className="app-screen-stack league-hub-mobile-surface pfgm-density-surface">
-      <HeroCard
+      {section === 'Overview' && <HeroCard
         eyebrow={`${league?.year ?? 'Season'} · Week ${league?.week ?? 1}`}
         title="League Season Pulse"
         subtitle="What matters around the league right now."
@@ -68,7 +73,7 @@ export default function LeagueHub({
           { label: 'Signings', value: `${transactionRows.filter((row) => row?._txType === 'Signing').length}`, tone: 'neutral' },
           { label: 'Releases', value: `${transactionRows.filter((row) => row?._txType === 'Release').length}`, tone: transactionRows.some((row) => row?._txType === 'Release') ? 'warning' : 'neutral' },
         ]} />
-      </HeroCard>
+      </HeroCard>}
 
       <SectionSubnav items={LEAGUE_SECTIONS} activeItem={section} onChange={setSection} />
 
@@ -121,7 +126,10 @@ export default function LeagueHub({
         </div>
       )}
 
-      {section === 'Results' && renderResults?.('League')}
+      {section === 'Schedule / Results' && <>
+        <div className="league-schedule-switch"><button type="button" className="btn btn-sm" aria-pressed={!showRecap} onClick={() => setShowRecap(false)}>Schedule</button><button type="button" className="btn btn-sm" aria-pressed={showRecap} onClick={() => setShowRecap(true)}>Weekly Recap</button></div>
+        {showRecap || !renderSchedule ? renderResults?.('League') : renderSchedule('League')}
+      </>}
       {section === 'Standings' && renderStandings?.()}
 
       {section === 'News' && (
@@ -137,7 +145,7 @@ export default function LeagueHub({
         </div>
       )}
 
-      {section === 'Leaders' && (
+      {section === 'Stats' && (
         <div className="app-screen-stack">
           <SectionCard title="League leaders" subtitle="Season production and race snapshots." variant="compact" />
           <LeagueLeaders league={league} actions={actions} onPlayerSelect={onPlayerSelect} />
