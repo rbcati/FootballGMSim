@@ -230,7 +230,7 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
       } else if (isBlowout) {
         callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An emphatic'} performance under immense pressure. ${userAbbr} completely dismantled their opponent in a statement ${userScore}-${oppScore} blowout with everything on the line!`);
       } else if (isClose) {
-        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense playoff-caliber pressure. ${userAbbr} survived an absolute thriller to secure a massive ${userScore}-${oppScore} victory!`);
+        callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense playoff-caliber pressure. The fans were holding their breath until the final whistle, but ${userAbbr} survived an absolute thriller to secure a massive ${userScore}-${oppScore} victory!`);
       } else {
         callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} answered the bell and secured a critical ${userScore}-${oppScore} victory to keep their goals alive!`);
       }
