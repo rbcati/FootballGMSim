@@ -101,7 +101,7 @@ function LeaderboardSection({ label, entries, selectedId, onSelect }) {
               </span>
               <span
                 style={{
-                  fontFamily: 'var(--font-mono, monospace)',
+                  fontFamily: 'var(--font-mono)',
                   color: 'var(--text)',
                   fontWeight: 700,
                   minWidth: 48,
@@ -196,7 +196,7 @@ function LegendCard({ member, selected, onSelect, retiredNumbers = [], onRetireN
         {jerseyNumber != null && (
           <span
             style={{
-              fontFamily: 'var(--font-mono, monospace)',
+              fontFamily: 'var(--font-mono)',
               fontSize: 'var(--text-lg, 18px)',
               fontWeight: 800,
               color: 'var(--warning, #f59e0b)',
@@ -369,7 +369,7 @@ function MetricSheet({ metrics }) {
           </span>
           <span
             style={{
-              fontFamily: 'var(--font-mono, monospace)',
+              fontFamily: 'var(--font-mono)',
               fontWeight: 700,
               fontSize: 'var(--text-sm, 14px)',
               color: 'var(--text)',
@@ -548,7 +548,7 @@ function LegendProfile({ legend, honors }) {
             borderRadius: '50%',
             background: 'rgba(245,158,11,0.12)',
             border: '2px solid rgba(245,158,11,0.4)',
-            fontFamily: 'var(--font-mono, monospace)',
+            fontFamily: 'var(--font-mono)',
             fontWeight: 900,
             fontSize: 'var(--text-xl, 20px)',
             color: 'var(--warning, #f59e0b)',
