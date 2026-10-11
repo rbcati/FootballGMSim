@@ -169,7 +169,7 @@ export const HQ_SPECIALIST_ROWS = DEPTH_CHART_ROWS.filter((row) => row.group ===
 export function buildHqWeekControl({ league = {}, nextGame = null } = {}) {
   const phase = league.phase;
   const label = phase === 'preseason' ? 'Start Season'
-    : phase === 'playoffs' ? `Play ${({ 19: 'Wild Card', 20: 'Divisional', 21: 'Conference Championship', 22: 'Super Bowl' })[league.week] ?? 'Playoff Week'}`
+    : phase === 'playoffs' ? (nextGame ? `Play ${({ 19: 'Wild Card', 20: 'Divisional', 21: 'Conference Championship', 22: 'Super Bowl' })[league.week] ?? 'Playoff Week'}` : 'Advance Playoffs')
       : nextGame ? `Play Week ${league.week}` : 'Advance Week';
   const event = (league.pendingWeeklyEvents ?? []).find((row) => row?.state !== 'resolved');
   if (event) return { label, blocked: true, reason: 'A franchise event requires your decision.', repairLabel: 'Review Decision', reviewEvent: true };

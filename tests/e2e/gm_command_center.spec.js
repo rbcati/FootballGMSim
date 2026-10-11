@@ -67,6 +67,18 @@ for (const width of [390, 430, 1280]) {
     await page.screenshot({ path: testInfo.outputPath('stats-rows.png') });
     if (width < 768) {
       const row = page.locator('.league-stats-surface .app-mobile-data-row').first();
+      await page.getByLabel('Sort player stats', { exact: true }).selectOption('passTd:desc');
+      await expect(row.locator('strong')).toContainText('TD');
+      await expect(row.locator('details')).not.toHaveAttribute('open', '');
+      await noOverflow(page);
+      await page.screenshot({ path: testInfo.outputPath('stats-selected-td.png') });
+      await page.getByRole('button', { name: 'defense', exact: true }).click();
+      await page.getByLabel('Sort player stats', { exact: true }).selectOption('sack:desc');
+      await expect(row.locator('strong')).toContainText('Sack');
+      await expect(row.locator('strong')).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath('stats-selected-sacks.png') });
+      await page.getByLabel('Sort player stats', { exact: true }).selectOption('name:asc');
+      await expect(row.locator('strong')).toContainText('Tkl');
       await expect(row.locator('strong')).toBeVisible();
       await row.getByRole('button').click();
       await expect(page.getByTestId('player-profile-summary')).toBeVisible();

@@ -45,7 +45,8 @@ export default function LeagueStats({ league, onPlayerSelect, onTeamSelect }) {
   const setTabWithSort = (t) => { setTab(t); setSort({ key: defaultSort[t], dir: "desc" }); setPosFilter("ALL"); setTeamFilter("ALL"); };
   const clickSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" || key === "team" || key === "pos" ? "asc" : "desc" });
 
-  const primaryColumn = columns[tab].find(([, key]) => key === defaultSort[tab]) ?? columns[tab][3];
+  const primaryKey = ['name', 'team', 'pos'].includes(sort.key) ? defaultSort[tab] : sort.key;
+  const primaryColumn = columns[tab].find(([, key]) => key === primaryKey) ?? columns[tab][3];
 
   return <div className="league-stats-surface pfgm-density-surface" style={{ display: "grid", gap: 12 }}>
     <div className="card" style={{ padding: 12 }}>

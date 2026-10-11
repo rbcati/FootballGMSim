@@ -7,6 +7,23 @@ import { buildHqWeekControl } from '../../utils/hqCommandCenterV2.js';
 import { validateLeagueTeamLegality } from '../../../core/teamValidation.js';
 
 afterEach(cleanup);
+it.each([
+  ['Wild Card bye', 'playoffs', 19, false, 'Advance Playoffs'],
+  ['eliminated team', 'playoffs', 21, false, 'Advance Playoffs'],
+  ['Wild Card matchup', 'playoffs', 19, true, 'Play Wild Card'],
+  ['Divisional matchup', 'playoffs', 20, true, 'Play Divisional'],
+  ['regular matchup', 'regular', 2, true, 'Play Week 2'],
+  ['regular bye', 'regular', 2, false, 'Advance Week'],
+])('labels the actual current matchup for %s', (_, phase, week, hasMatchup, label) => {
+  const league = { ...state(), phase, week, schedule: { weeks: [{ week, games: hasMatchup ? [{ home: 1, away: 2, played: false }] : [] }] } };
+  const advance = vi.fn();
+  render(<FranchiseHQ league={league} onAdvanceWeek={advance} />);
+  const button = screen.getByTestId('advance-week-cta');
+  expect(button.textContent).toBe(`${label} →`);
+  expect(button.disabled).toBe(false);
+  fireEvent.click(button);
+  expect(advance).toHaveBeenCalledOnce();
+});
 const state = (count = 53) => ({ id: 's', year: 2026, seasonId: 'season', phase: 'regular', week: 2, userTeamId: 1,
   teams: [{ id: 1, name: 'Steelers', abbr: 'PIT', conf: 0, div: 1, roster: Array.from({ length: count }, (_, i) => ({ id: i + 1, teamId: 1, name: `Player ${i}`, pos: 'WR', contract: { baseAnnual: 1, years: 3 } })) }, { id: 2, abbr: 'CLE', roster: [] }],
   schedule: { weeks: [{ week: 2, games: [{ home: 1, away: 2, played: false }] }] } });
