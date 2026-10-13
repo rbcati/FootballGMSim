@@ -3,6 +3,12 @@ import { DEPTH_CHART_ROWS } from '../../core/depthChart.js';
 import { deriveLineupRatingSnapshot, getPersistedDepthAssignment } from './lineupCommandCenter.js';
 import { buildPowerRankings } from './franchiseCommandCenter.js';
 import { buildOffseasonActionCenter } from './offseasonActionCenter.js';
+import { validateLeagueTeamLegality } from '../../core/teamValidation.js';
+import { normalizeLeagueEconomy } from '../../core/economy.js';
+import { normalizeLeagueSettings } from '../../core/leagueSettings.js';
+import { getPreviousUserGame } from './userWeeklyGames.js';
+import { readStrictFinalScore } from '../../core/gameArchive.js';
+import { resolveCompletedGameId } from './gameResultIdentity.js';
 
 const CONFERENCES = ['AFC', 'NFC'];
 const DIVISIONS = ['EAST', 'NORTH', 'SOUTH', 'WEST'];
@@ -158,3 +164,37 @@ export function buildHqNextAction({ league = {}, gate = {}, gameDayReadiness = {
 }
 
 export const HQ_SPECIALIST_ROWS = DEPTH_CHART_ROWS.filter((row) => row.group === 'SPECIAL').map((row) => row.key);
+
+/** Read-only projection of ADVANCE_WEEK's pre-advance checks, never prep severity. */
+export function buildHqWeekControl({ league = {}, nextGame = null } = {}) {
+  const phase = league.phase;
+  const label = phase === 'preseason' ? 'Start Season'
+    : phase === 'playoffs' ? (nextGame ? `Play ${({ 19: 'Wild Card', 20: 'Divisional', 21: 'Conference Championship', 22: 'Super Bowl' })[league.week] ?? 'Playoff Week'}` : 'Advance Playoffs')
+      : nextGame ? `Play Week ${league.week}` : 'Advance Week';
+  const event = (league.pendingWeeklyEvents ?? []).find((row) => row?.state !== 'resolved');
+  if (event) return { label, blocked: true, reason: 'A franchise event requires your decision.', repairLabel: 'Review Decision', reviewEvent: true };
+  if (!['regular', 'playoffs', 'preseason'].includes(phase)) return null;
+  const center = buildOffseasonActionCenter(league);
+  if (phase === 'preseason' && center.preseasonRosterAction) {
+    const action = center.preseasonRosterAction;
+    return { label, blocked: true, reason: action.title, repairLabel: action.label, destination: action.tab };
+  }
+  const economy = normalizeLeagueEconomy(league.economy ?? {}, { year: league.year });
+  const settings = normalizeLeagueSettings({ ...league.settings, salaryCap: economy.currentSalaryCap });
+  // The worker repairs AI rosters before preseason validation. Only the user's
+  // cap can block that preparation; depth warnings are repaired, not blockers.
+  const teams = phase === 'preseason' ? (league.teams ?? []).filter((team) => String(team.id) === String(league.userTeamId)) : league.teams ?? [];
+  const issues = validateLeagueTeamLegality({ teams, players: teams.flatMap((team) => team.roster ?? []), phase, hardCap: settings.salaryCap }).issues;
+  const issue = issues.find((row) => row.severity === 'error' && (phase !== 'preseason' || row.code === 'cap_limit'));
+  const destination = issue?.code === 'cap_limit' ? 'Financials' : 'Team:Lineup';
+  return { label, blocked: !!issue, reason: issue?.message, destination, repairLabel: issue?.code === 'cap_limit' ? 'Review Cap' : 'Review Roster' };
+}
+
+export function buildHqLastResult(league, game = getPreviousUserGame(league)) {
+  const score = readStrictFinalScore(game);
+  if (!game || !score) return null;
+  const mine = game.isHome ? score.home : score.away;
+  const theirs = game.isHome ? score.away : score.home;
+  return { gameId: resolveCompletedGameId(game, { seasonId: league.seasonId, week: game.week }),
+    summary: `${mine === theirs ? 'T' : mine > theirs ? 'W' : 'L'} ${mine}–${theirs} ${game.isHome ? 'vs' : '@'} ${game.opp?.abbr ?? 'Opponent'}` };
+}

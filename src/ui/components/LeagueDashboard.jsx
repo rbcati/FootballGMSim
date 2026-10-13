@@ -865,7 +865,7 @@ export default function LeagueDashboard({
   const usesPfgmDensitySurface = ['HQ', 'Weekly Hub', 'Home', 'Team', 'League', 'News', 'Weekly Results'].includes(activeTab);
 
   return (
-    <div className={`${usesPfgmDensitySurface ? 'pfgm-density-surface' : ''} ${isHqDestination ? 'dashboard--hq' : ''}`}>
+    <div className={`${usesPfgmDensitySurface ? 'pfgm-density-surface' : ''} ${isHqDestination ? 'dashboard--hq' : ''} ${['League', 'Stats', 'League Leaders', 'Schedule', 'Standings'].includes(activeTab) ? 'dashboard--league-intelligence' : ''}`}>
 
       {/* ── Franchise shell status bar ── */}
       <div className="franchise-status-bar">
@@ -1048,6 +1048,8 @@ export default function LeagueDashboard({
                   setActiveTab(destination.tab && TABS.includes(destination.tab) ? destination.tab : "HQ");
                 }}
                 onAdvanceWeek={onAdvanceWeek}
+                advanceDisabled={advanceDisabled}
+                onPlayerSelect={handlePlayerSelect}
                 busy={busy}
                 simulating={simulating}
                 actions={actions}
@@ -1071,6 +1073,7 @@ export default function LeagueDashboard({
               statsInitialFamily={statsInitialFamily}
               renderSchedule={(sourceTab = "Team") => (
                 <ScheduleCenter
+                  actions={actions}
                   schedule={league.schedule}
                   teams={league.teams}
                   currentWeek={league.week}
@@ -1103,6 +1106,7 @@ export default function LeagueDashboard({
               initialSection={leagueInitialSection}
               renderSchedule={(sourceTab = "League") => (
                 <ScheduleCenter
+                  actions={actions}
                   schedule={league.schedule}
                   teams={league.teams}
                   currentWeek={league.week}
@@ -1270,6 +1274,7 @@ export default function LeagueDashboard({
         {activeTab === "Schedule" && (
           <TabErrorBoundary label="Schedule" onNavigate={setActiveTab}>
             <ScheduleCenter
+                  actions={actions}
               schedule={league.schedule}
               teams={league.teams}
               currentWeek={league.week}

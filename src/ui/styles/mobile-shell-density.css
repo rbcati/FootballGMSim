@@ -415,3 +415,36 @@
   .player-profile-shell .card-enter,
   .player-profile-shell .stat-box { background: var(--mobile-row-charcoal-alt); border-color: var(--mobile-divider); }
 }
+/* League content uses the existing dark mobile surfaces in both themes. */
+@media (max-width: 767px) {
+  .dashboard--league-intelligence, .league-hub-mobile-surface, .league-stats-surface, .league-leaders-surface, .schedule-center-screen, .standings-center-screen {
+    --text: #f4f7fb;
+    --text-primary: #f4f7fb;
+    --text-muted: #b9c1cd;
+    --text-subtle: #a5afbe;
+    --surface: #11161d;
+    --surface-strong: #171c24;
+    --surface-raised: #171c24;
+    --card-bg: #171c24;
+    --bg: #0b0f14;
+    --hairline: rgba(255,255,255,.16);
+    color: var(--text);
+  }
+  .league-stats-surface .card { background: var(--surface-strong); color: var(--text); }
+  .league-stats-surface :is(input,select), .league-leaders-surface :is(input,select), .schedule-center-screen select { background: var(--surface-strong); color: var(--text); border: 1px solid var(--hairline); min-height: 40px!important; max-width: 100%; }
+  .league-stats-surface .app-mobile-data-row__identity button { color: #8fc4ff; background: transparent; border: 0; min-height: 40px; text-align: left; font-weight: 700; }
+  .league-stats-surface .app-mobile-data-row__metrics { grid-column: 2; }
+  .league-stats-surface .app-mobile-data-row { background: var(--surface-strong); }
+}
+
+@media (max-width: 767px) {
+  .schedule-center-screen .app-sticky-subnav__content { display: grid; gap: 10px; min-width: 0; }
+  .schedule-center-screen .schedule-center-status-row { flex-wrap: nowrap; }
+  .schedule-center-screen .schedule-center-filter-row { display: grid; grid-template-columns: 1fr; }
+  .schedule-center-screen .schedule-center-filter-row select { width: 100%; }
+  .schedule-center-screen .league-week-stepper { display: grid; grid-template-columns: 1fr auto 1fr; }
+  .schedule-center-screen .league-week-stepper strong { white-space: nowrap; }
+  .schedule-center-screen .league-week-stepper button { white-space: nowrap; }
+  .schedule-center-screen .schedule-center-week-row { max-width: 100%; }
+  .schedule-center-screen .btn:not(.btn-primary) { background: var(--surface-strong); color: var(--text); border: 1px solid var(--hairline); }
+}

@@ -16,6 +16,7 @@ const columns = {
 
 function sourceBadge(source) { if (source === "seasonStats") return "Season totals"; if (source === "gameLogs") return "Aggregated from game logs"; if (source === "gameTeamStats") return "Aggregated from team stat logs"; if (source === "scoreOnly") return "Score-only standings data"; if (source === "partial") return "Partial data"; return "No stats recorded"; }
 const fmt = (k, v) => {
+  if (['name', 'team', 'pos'].includes(k)) return v == null || v === '' ? '—' : String(v);
   if (v == null || Number.isNaN(Number(v))) return '—';
   const n = Number(v);
   if (["passPct", "fgPct"].includes(k)) return Number.isFinite(n) ? `${n.toFixed(1)}%` : '—';
@@ -44,7 +45,8 @@ export default function LeagueStats({ league, onPlayerSelect, onTeamSelect }) {
   const setTabWithSort = (t) => { setTab(t); setSort({ key: defaultSort[t], dir: "desc" }); setPosFilter("ALL"); setTeamFilter("ALL"); };
   const clickSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" || key === "team" || key === "pos" ? "asc" : "desc" });
 
-  const primaryColumn = columns[tab].find(([, key]) => key === defaultSort[tab]) ?? columns[tab][3];
+  const primaryKey = ['name', 'team', 'pos'].includes(sort.key) ? defaultSort[tab] : sort.key;
+  const primaryColumn = columns[tab].find(([, key]) => key === primaryKey) ?? columns[tab][3];
 
   return <div className="league-stats-surface pfgm-density-surface" style={{ display: "grid", gap: 12 }}>
     <div className="card" style={{ padding: 12 }}>
@@ -53,9 +55,11 @@ export default function LeagueStats({ league, onPlayerSelect, onTeamSelect }) {
       <div style={{fontSize:12,color:'var(--text-muted)'}}>Team stats: {sourceBadge(model.statSources.teamStats)}</div>
       {model.warnings.map((w) => <div key={w} style={{ color: "var(--text-muted)", fontSize: 12 }}>{w}</div>)}
     </div>
+    <details className="guided-detail"><summary>Headline leaders</summary>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 8 }}>
       {leaderCards.map(([label, bucket, key]) => <div key={label} className="card" style={{ padding: 10 }}><div>{label}</div>{(model.playerLeaders[bucket] ?? []).map((r,i)=><button key={`${r.playerId}-${i}`} onClick={()=>onPlayerSelect?.(r.playerId)} style={{display:'flex',width:'100%',justifyContent:'space-between'}}><span>{r.name} ({r.team})</span><span>{fmt(key, r[key])}</span></button>)}</div>)}
     </div>
+    </details>
     <div className="card" style={{ padding: 10 }}>
       <div style={{ display:'grid', gap:8 }}>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
@@ -94,7 +98,7 @@ export default function LeagueStats({ league, onPlayerSelect, onTeamSelect }) {
             </div>
             <div className="app-mobile-data-row__metrics">
               <strong>{fmt(primaryColumn[1], r[primaryColumn[1]])} {primaryColumn[0]}</strong>
-              <span>{columns[tab].filter(([, key]) => !['name', 'team', 'pos', primaryColumn[1]].includes(key)).map(([label, key]) => `${fmt(key, r[key])} ${label}`).join(' · ')}</span>
+              <details><summary>Details</summary><span>{columns[tab].filter(([, key]) => !['name', 'team', 'pos', primaryColumn[1]].includes(key)).map(([label, key]) => `${fmt(key, r[key])} ${label}`).join(' · ')}</span></details>
             </div>
           </div>
         ))}

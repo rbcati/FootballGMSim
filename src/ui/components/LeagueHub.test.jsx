@@ -30,6 +30,13 @@ const league = {
 
 describe('LeagueHub', () => {
   afterEach(cleanup);
+  it('exposes the existing schedule and weekly recap in one section', () => {
+    render(<LeagueHub league={league} initialSection="Schedule" renderSchedule={() => <div>Schedule content</div>} renderResults={() => <div>Recap content</div>} />);
+    expect(screen.getByText('Schedule content')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Weekly Recap', exact: true }));
+    expect(screen.getByText('Recap content')).toBeTruthy();
+    expect(screen.queryByText('Schedule content')).toBeNull();
+  });
   it('renders command-center sections with overview as default', () => {
     const html = renderToString(
       <LeagueHub
@@ -47,7 +54,7 @@ describe('LeagueHub', () => {
     expect(html).toContain('Results');
     expect(html).toContain('Standings');
     expect(html).toContain('News');
-    expect(html).toContain('Leaders');
+    expect(html).toContain('Stats');
     expect(html).toContain('Around the League');
     expect(html).not.toContain('Weekly Results Stub');
   });

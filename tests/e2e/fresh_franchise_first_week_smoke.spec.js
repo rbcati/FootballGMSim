@@ -118,22 +118,12 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await expect(advanceBtn).toBeVisible();
   const startWeek = await page.evaluate(() => window?.state?.league?.week ?? 1);
 
-  // NEXT UP owns readiness and progression. Complete prep through the live routes.
+  // Prep remains optional beside the permanent progression control.
   await expect(page.locator('.app-advance-btn')).toHaveCount(0);
   await expect(page.getByTestId('hq-next-game').getByRole('button')).toHaveCount(0);
-  await expect(advanceBtn).toHaveText(/Review Game Plan/);
-  await advanceBtn.click();
-  await expect(page.getByRole('button', { name: 'Save Game Plan', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Back to HQ', exact: true }).click();
+  await expect(page.getByTestId('hq-next-action')).toContainText('Game plan not reviewed');
   await expect(advanceBtn).toHaveText(/Play Week/);
-  await page.getByText('More Prep', { exact: true }).click();
-  const optionalScout = page.locator('.hq-v2-more button').filter({ hasText: 'Opponent has not been scouted.' });
-  await expect(optionalScout).toContainText('Optional');
-  await optionalScout.click();
-  await expect(page.getByTestId('weekly-prep-scout-summary')).toBeVisible();
-  await page.getByRole('button', { name: 'Back to HQ', exact: true }).click();
-  await expect(page.getByTestId('hq-next-action')).toContainText('READY FOR GAME DAY');
-  await expect(page.getByRole('button', { name: /Play Week/ })).toHaveCount(1);
+  await expect(advanceBtn).toBeEnabled();
   await advanceBtn.click();
   // The skip-presentation prompt is REQUIRED in this flow (fresh franchise, the
   // user always has a Week 1 game). Assert it appears and is clickable rather
@@ -293,13 +283,13 @@ test('390px HQ exposes one readiness owner and touch help', async ({ page }) => 
   await div.tap();
   await expect(page.getByText('Record against teams in your division.')).toHaveCount(0);
   const week = await page.evaluate(() => window.state.league.week);
-  await expect(page.getByTestId('advance-week-cta')).toHaveText(/Review Game Plan/);
+  await expect(page.getByTestId('advance-week-cta')).toHaveText(/Play Week/);
   await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: 'Save Game Plan', exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Play this week' })).toBeVisible();
   expect(await page.evaluate(() => window.state.league.week)).toBe(week);
-  await page.getByRole('button', { name: 'Back to HQ', exact: true }).click();
-  await expect(page.locator('.app-advance-btn')).toHaveCount(0);
+  // Keyboard activation reaches the existing game choice; it does not simulate.
+  await expect(page.getByRole('dialog', { name: 'Play this week' }).getByRole('button', { name: /^Quick Sim/ })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('hq-390.png'), fullPage: true });
 });
 

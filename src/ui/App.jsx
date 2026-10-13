@@ -690,7 +690,7 @@ function AppContent() {
 
       if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault();
-        if (hqOwnsProgression) document.querySelector('[data-testid="hq-next-action"] button')?.click();
+        if (hqOwnsProgression) (document.querySelector('[data-testid="advance-week-cta"]') ?? document.querySelector('[data-testid="hq-next-action"] button'))?.click();
         else if (typeof handleAdvanceWeek === 'function') handleAdvanceWeek();
       } else if (e.key === 's' || e.key === 'S') {
         if (!busy && leagueReady) {
@@ -1513,7 +1513,7 @@ function AppContent() {
 
       {/* ── Live game viewer (visible during simulation + results) ────── */}
       {/* Hide when user game prompt is active to avoid stale empty state behind modal */}
-      {!state.promptUserGame && (
+      {!state.promptUserGame && (!hqOwnsProgression || simulating) && (
         <LiveGameErrorBoundary>
           <LiveGame
             simulating={simulating}

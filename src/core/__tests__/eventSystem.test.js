@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { generateDynamicEvents, calculateSeasonAwards } from '../events/eventSystem.js';
+
+afterEach(() => vi.restoreAllMocks());
 
 function makePlayer(overrides = {}) {
   return {
@@ -32,6 +34,8 @@ describe('eventSystem dynamic event generation', () => {
   });
 
   it('maps seeded event draws to canonical players independent of cache order', () => {
+    // Event presentation sorts by timestamp; isolate seeded selection from clock ticks.
+    vi.spyOn(Date, 'now').mockReturnValue(1700000000000);
     const players = [
       makePlayer({ id: 'z-player', name: 'Zed' }),
       makePlayer({ id: 'a-player', name: 'Alpha' }),

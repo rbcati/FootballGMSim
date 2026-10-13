@@ -275,7 +275,7 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
         setLeaderPayload({ categories: null, source: null, phase: null });
       });
     return () => { alive = false; };
-  }, [actions]);
+  }, [actions, league?.activeLeagueId, league?.id, league?.franchiseGenerationId, league?.seasonId, league?.phase, league?.week]);
 
   const model = useMemo(() => buildLeagueStatsHubModel(league ?? {}), [league]);
 

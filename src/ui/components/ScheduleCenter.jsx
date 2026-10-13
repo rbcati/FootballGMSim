@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { loadWeeklyStoryArchivedGame } from '../utils/weeklyStoryPresentation.js';
+import { resolveCanonicalCompletedGame } from '../utils/canonicalCompletedGame.js';
 import {
   CompactInsightCard,
   CompactListRow,
@@ -74,6 +76,7 @@ export default function ScheduleCenter({
   onTeamRoster,
   league,
   onPlayerSelect,
+  actions,
 }) {
   const initialFilters = useMemo(() => getScheduleFiltersState({
     selectedWeek: Number(currentWeek ?? 1),
@@ -86,6 +89,22 @@ export default function ScheduleCenter({
   const [viewMode, setViewMode] = useState(initialFilters.viewMode);
   const [selectedTeamId, setSelectedTeamId] = useState(initialFilters.selectedTeamId);
   const [statusFilter, setStatusFilter] = useState(initialFilters.statusFilter);
+  const [archiveState, setArchiveState] = useState(null);
+  const archiveRequest = useRef(actions?.getBoxScore);
+  archiveRequest.current = actions?.getBoxScore;
+  const canRequestArchive = typeof actions?.getBoxScore === 'function';
+  const archiveKey = `${league?.activeLeagueId ?? league?.id}:${league?.franchiseGenerationId}:${seasonId}:${currentWeek}:${selectedWeek}`;
+  useEffect(() => {
+    let current = true;
+    const games = schedule?.weeks?.find((row) => Number(row.week) === selectedWeek)?.games ?? [];
+    const completedCandidates = games.filter((game) => game.played || selectedWeek < Number(currentWeek));
+    if (canRequestArchive && completedCandidates.length) Promise.all(completedCandidates.map(async (game) => {
+      const gameId = resolveCompletedGameId(game, { seasonId, week: selectedWeek });
+      try { return [gameId, await loadWeeklyStoryArchivedGame({ getBoxScore: archiveRequest.current, gameId })]; }
+      catch { return [gameId, null]; }
+    })).then((rows) => { if (current) setArchiveState({ key: archiveKey, games: Object.fromEntries(rows) }); });
+    return () => { current = false; };
+  }, [archiveKey, canRequestArchive]);
 
   useEffect(() => {
     persistScheduleFiltersState({ selectedWeek, viewMode, selectedTeamId, statusFilter });
@@ -116,7 +135,10 @@ export default function ScheduleCenter({
 
   const totalWeeks = schedule?.weeks?.length ?? 0;
   const weekData = schedule?.weeks?.find((week) => week.week === selectedWeek);
-  const games = weekData?.games ?? [];
+  const games = (weekData?.games ?? []).map((game) => {
+    const gameId = resolveCompletedGameId(game, { seasonId, week: selectedWeek });
+    return resolveCanonicalCompletedGame({ league, gameId, scheduleGame: game, archivedGame: archiveState?.key === archiveKey ? archiveState.games[gameId] : null });
+  });
   const isPlayoffs = selectedWeek >= 19;
   const scheduleModel = getScheduleViewModel({ week: currentWeek, userTeamId, schedule }, {
     week: selectedWeek,
@@ -130,28 +152,16 @@ export default function ScheduleCenter({
     viewMode,
     userTeamId,
     selectedTeamId,
-    scheduleModelGames: scheduleModel.games,
+    scheduleModelGames: games.filter((game) => statusFilter === 'all' || (statusFilter === 'completed' ? game.played : !game.played)),
   });
 
-  const mergedVisibleGames = filteredGames.map((game) => {
+  const withArchive = (game) => {
     const gameId = resolveCompletedGameId(game, { seasonId, week: selectedWeek });
-    const archived = game?.played ? getArchivedGame(gameId) : null;
-    if (!archived) return game;
-    return {
-      ...game,
-      gameId,
-      homeScore: archived?.score?.home ?? game?.homeScore,
-      awayScore: archived?.score?.away ?? game?.awayScore,
-      homeAbbr: archived?.homeAbbr,
-      awayAbbr: archived?.awayAbbr,
-      teamStats: archived?.teamStats ?? game?.teamStats,
-      playerStats: archived?.playerStats ?? game?.playerStats,
-      scoringSummary: archived?.scoringSummary ?? game?.scoringSummary,
-      recap: archived?.recapText ?? game?.recap,
-      playLog: archived?.logs ?? game?.playLog,
-      summary: archived?.summary ?? game?.summary,
-    };
-  });
+    return resolveCanonicalCompletedGame({ league, gameId, scheduleGame: game,
+      archivedGame: archiveState?.key === archiveKey ? archiveState.games[gameId] : null,
+      localArchivedGame: game.played ? getArchivedGame(gameId) : null });
+  };
+  const mergedVisibleGames = filteredGames.map(withArchive);
 
   const weeklyHonors = useMemo(() => deriveWeeklyHonors(league), [league]);
 
@@ -159,20 +169,7 @@ export default function ScheduleCenter({
     games
       .filter((game) => game?.played)
       .map((game) => {
-        const gameId = resolveCompletedGameId(game, { seasonId, week: selectedWeek });
-        const archived = getArchivedGame(gameId);
-        const gameWithArchive = archived ? {
-          ...game,
-          gameId,
-          homeScore: archived?.score?.home ?? game?.homeScore,
-          awayScore: archived?.score?.away ?? game?.awayScore,
-          recap: archived?.recapText ?? game?.recap,
-          teamStats: archived?.teamStats ?? game?.teamStats,
-          playerStats: archived?.playerStats ?? game?.playerStats,
-          scoringSummary: archived?.scoringSummary ?? game?.scoringSummary,
-          playLog: archived?.logs ?? game?.playLog,
-          summary: archived?.summary ?? game?.summary,
-        } : game;
+        const gameWithArchive = withArchive(game);
         const home = teamById[game.home] ?? { abbr: "HOME" };
         const away = teamById[game.away] ?? { abbr: "AWAY" };
         const presentation = buildCompletedGamePresentation(gameWithArchive, { seasonId, week: selectedWeek, teamById, source: "schedule_recap" });
@@ -247,6 +244,7 @@ export default function ScheduleCenter({
             {(teams ?? []).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
           </select>
         </div>
+        <div className="league-week-stepper" aria-label="Browse schedule weeks"><button type="button" className="btn btn-sm" disabled={selectedWeek <= 1} onClick={() => setSelectedWeek((week) => week - 1)}>← Previous</button><strong>Week {selectedWeek}</strong><button type="button" className="btn btn-sm" disabled={selectedWeek >= totalWeeks} onClick={() => setSelectedWeek((week) => week + 1)}>Next →</button></div>
         <div className="schedule-center-week-row" role="tablist" aria-label="Week selector">
           {Array.from({ length: totalWeeks }, (_, index) => index + 1).map((week) => (
             <button
