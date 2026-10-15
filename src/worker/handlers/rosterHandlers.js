@@ -7,10 +7,7 @@
 import { toUI } from '../protocol.js';
 import { Constants } from '../../core/constants.js';
 import { calculateMorale } from '../../core/player.js';
-import {
-  calculateOffensiveSchemeFit,
-  calculateDefensiveSchemeFit,
-} from '../../core/scheme-core.js';
+import { computeTeamSchemeFits } from '../../core/scheme-core.js';
 import { buildRosterBuildingAnalysis } from '../../core/rosterBuildingAnalysis.js';
 
 // ── Handler: GET_ROSTER ───────────────────────────────────────────────────────
@@ -21,16 +18,13 @@ export async function handleGetRoster({ teamId }, id, ctx) {
   const team  = cache.getTeam(numId);
   if (!team) { post(toUI.ERROR, { message: `Team ${teamId} not found` }, id); return; }
 
-  const players = cache.getPlayersByTeam(numId).map(p => {
-      let fit = 50;
-      if (team && team.staff && team.staff.headCoach) {
-          const hc = team.staff.headCoach;
-          const isOff = ['QB','RB','WR','TE','OL','K'].includes(p.pos);
-          const isDef = ['DL','LB','CB','S','P'].includes(p.pos);
-
-          if (isOff) fit = calculateOffensiveSchemeFit(p, hc.offScheme || 'Balanced');
-          else if (isDef) fit = calculateDefensiveSchemeFit(p, hc.defScheme || '4-3');
-      }
+  const roster = cache.getPlayersByTeam(numId);
+  const fits = new Map(computeTeamSchemeFits(roster,
+    team.strategies?.offSchemeId ?? team.staff?.headCoach?.offScheme,
+    team.strategies?.defSchemeId ?? team.staff?.headCoach?.defScheme,
+  ).map((fit) => [fit.playerId, fit.schemeFit]));
+  const players = roster.map(p => {
+      const fit = fits.get(p.id) ?? 50;
 
       // Normalise contract: handle both nested p.contract and legacy flat fields.
       const contract = p.contract ?? (

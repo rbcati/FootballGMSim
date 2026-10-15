@@ -3,7 +3,7 @@ import { stableIdCompare } from './referenceIntegrity.js';
 import { Constants } from './constants.js';
 import { Transactions } from '../db/index.js';
 import { calculateExtensionDemand } from './player.js';
-import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from './scheme-core.js';
+import { calculateLegacyOffensiveSchemeFit as calculateOffensiveSchemeFit, calculateLegacyDefensiveSchemeFit as calculateDefensiveSchemeFit } from './scheme-core.js';
 import {
     buildContractProfile,
     buildDemandFromProfile,

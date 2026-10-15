@@ -279,3 +279,14 @@ describe('LineupCommandCenter', () => {
     expect(JSON.stringify(updateDepthChart.mock.calls)).not.toContain('"ST"');
   });
 });
+
+it('renders canonical ids and supported names with identical modern-player fit labels', () => {
+  const modern = roster.map(({ ratings, ...p }) => p);
+  const canonical = render(<LineupCommandCenter team={team} roster={modern} actions={{}} />);
+  const before = canonical.container.querySelector('.lineup-summary__schemes').textContent;
+  canonical.unmount();
+  const namedTeam = { ...team, strategies: { offSchemeId: 'Vertical', defSchemeId: 'Man Coverage' } };
+  const named = render(<LineupCommandCenter team={namedTeam} roster={modern} actions={{}} />);
+  expect(named.container.querySelector('.lineup-summary__schemes').textContent).toBe(before);
+  expect(named.getByTestId('offense-lineup').textContent).toContain('Average fit');
+});

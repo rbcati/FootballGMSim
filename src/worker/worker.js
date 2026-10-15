@@ -188,7 +188,7 @@ import {
   getAIFaTargets,
 } from '../core/freeAgency/aiFaEngine.js';
 import {
-  calculateOffensiveSchemeFit, calculateDefensiveSchemeFit,
+  calculateLegacyOffensiveSchemeFit as calculateOffensiveSchemeFit, calculateLegacyDefensiveSchemeFit as calculateDefensiveSchemeFit,
   computeTeamSchemeFits, schemeOvrBonus, recalcTeamSchemeFit,
   OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES,
 } from '../core/scheme-core.js';
@@ -1083,6 +1083,14 @@ function buildViewState() {
       ...player,
       depthChart: player.depthChart ? { ...player.depthChart } : player.depthChart,
     }) : player);
+    // Readout-only clones: never write corrected fit into simulation/valuation data.
+    const displayFits = new Map(computeTeamSchemeFits(roster,
+      t.strategies?.offSchemeId ?? t.staff?.headCoach?.offScheme,
+      t.strategies?.defSchemeId ?? t.staff?.headCoach?.defScheme,
+    ).map((fit) => [fit.playerId, fit.schemeFit]));
+    for (const player of roster) if (player && typeof player === 'object') {
+      player.schemeFit = displayFits.get(player.id) ?? 50;
+    }
     return ({
     id:        t.id,
     name:      t.name,
@@ -1106,8 +1114,8 @@ function buildViewState() {
     offOvr: t.offOvr ?? t.offenseRating ?? t.offRating ?? 0,
     defOvr: t.defOvr ?? t.defenseRating ?? t.defRating ?? 0,
     strategies: {
-      offSchemeId: t?.strategies?.offSchemeId ?? null,
-      defSchemeId: t?.strategies?.defSchemeId ?? null,
+      offSchemeId: t?.strategies?.offSchemeId ?? t?.staff?.headCoach?.offScheme ?? null,
+      defSchemeId: t?.strategies?.defSchemeId ?? t?.staff?.headCoach?.defScheme ?? null,
     },
     rosterCount: roster.length,
     roster,

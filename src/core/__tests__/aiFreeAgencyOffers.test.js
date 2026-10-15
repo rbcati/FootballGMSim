@@ -37,8 +37,8 @@ vi.mock('../news-engine.js', () => ({
   default: { logTransaction: vi.fn(), logNews: vi.fn() },
 }));
 vi.mock('../scheme-core.js', () => ({
-  calculateOffensiveSchemeFit: vi.fn(() => 60),
-  calculateDefensiveSchemeFit: vi.fn(() => 60),
+  calculateLegacyOffensiveSchemeFit: vi.fn(() => 60),
+  calculateLegacyDefensiveSchemeFit: vi.fn(() => 60),
 }));
 vi.mock('../contract-market.js', () => ({
   buildContractProfile: vi.fn(() => ({})),

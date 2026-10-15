@@ -13,13 +13,14 @@
  * on iOS Safari/mobile Chrome; scheme fit updates live and feels meaningful.
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   OFFENSIVE_PLANS,
   DEFENSIVE_PLANS,
   RISK_PROFILES,
 } from "../../core/strategy.js";
 import {
+  resolveOffensiveScheme, resolveDefensiveScheme,
   OFFENSIVE_SCHEMES,
   DEFENSIVE_SCHEMES,
 } from "../../core/scheme-core.js";
@@ -88,7 +89,7 @@ function StrategyCard({ title, options, selectedId, onChange, description }) {
 
 function SchemeCard({ title, schemes, selectedId, onChange }) {
   const schemeArr = Object.values(schemes);
-  const selected = schemes[selectedId] || schemeArr[0];
+  const selected = schemes === OFFENSIVE_SCHEMES ? resolveOffensiveScheme(selectedId) : resolveDefensiveScheme(selectedId);
 
   return (
     <div className="card" style={{ padding: "var(--space-4)" }}>
@@ -207,6 +208,10 @@ export default function StrategyPanel({ league, actions }) {
   const [star, setStar] = useState(strategies.starTargetId || null);
   const [roster, setRoster] = useState([]);
 
+  // Hydration/label normalization must never persist a tactical change.
+  const localChange = useRef(false);
+  const edit = (setter) => (value) => { localChange.current = true; setter(value); };
+
   // Scheme selections (new)
   const [offScheme, setOffScheme] = useState(strategies.offSchemeId || "WEST_COAST");
   const [defScheme, setDefScheme] = useState(strategies.defSchemeId || "COVER_2");
@@ -244,8 +249,8 @@ export default function StrategyPanel({ league, actions }) {
 
   // Auto-apply on any strategy change so scheme updates feel live with zero lag
   useEffect(() => {
-    // Only auto-save if user has already interacted (strategies exist)
-    if (strategies.offPlanId || strategies.offSchemeId) {
+    if (localChange.current) {
+      localChange.current = false;
       handleSave();
     }
   }, [offPlan, defPlan, risk, star, offScheme, defScheme]);
@@ -303,13 +308,13 @@ export default function StrategyPanel({ league, actions }) {
           title="Offensive Scheme"
           schemes={OFFENSIVE_SCHEMES}
           selectedId={offScheme}
-          onChange={setOffScheme}
+          onChange={edit(setOffScheme)}
         />
         <SchemeCard
           title="Defensive Scheme"
           schemes={DEFENSIVE_SCHEMES}
           selectedId={defScheme}
-          onChange={setDefScheme}
+          onChange={edit(setDefScheme)}
         />
       </div>
 
@@ -332,21 +337,21 @@ export default function StrategyPanel({ league, actions }) {
           title="Offensive Plan"
           options={OFFENSIVE_PLANS}
           selectedId={offPlan}
-          onChange={setOffPlan}
+          onChange={edit(setOffPlan)}
         />
         <StrategyCard
           title="Defensive Plan"
           options={DEFENSIVE_PLANS}
           selectedId={defPlan}
-          onChange={setDefPlan}
+          onChange={edit(setDefPlan)}
         />
         <StrategyCard
           title="Risk Profile"
           options={RISK_PROFILES}
           selectedId={risk}
-          onChange={setRisk}
+          onChange={edit(setRisk)}
         />
-        <StarSelector roster={roster} selectedId={star} onChange={setStar} />
+        <StarSelector roster={roster} selectedId={star} onChange={edit(setStar)} />
       </div>
     </div>
   );

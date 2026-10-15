@@ -126,3 +126,18 @@ describe('handleGetRoster', () => {
     ]);
   });
 });
+
+it('GET_ROSTER reads current selected scheme/roster without persisting readout fit', async () => {
+  const player = makeRosterPlayer({ pos: 'LT', ratings: { passBlock: 90, runBlock: 30 } });
+  const { cache, ctx } = setup({ players: [player] });
+  cache.updateTeam(3, { strategies: { offSchemeId: 'VERTICAL' } });
+  await handleGetRoster({ teamId: 3 }, 'first', ctx);
+  expect(ctx.posts.at(-1).payload.players[0].schemeFit).toBe(72);
+  cache.updateTeam(3, { strategies: { offSchemeId: 'Run Heavy' } });
+  await handleGetRoster({ teamId: 3 }, 'scheme-change', ctx);
+  expect(ctx.posts.at(-1).payload.players[0].schemeFit).toBe(48);
+  cache.updatePlayer(player.id, { ratings: { passBlock: 80, runBlock: 80 } });
+  await handleGetRoster({ teamId: 3 }, 'roster-change', ctx);
+  expect(ctx.posts.at(-1).payload.players[0].schemeFit).toBe(80);
+  expect(cache.getPlayersByTeam(3)[0].schemeFit).toBeUndefined();
+});

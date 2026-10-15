@@ -1,0 +1,361 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`scheme integrity simulation balance firewall > detailed seed 39 preserves scores, effects, stats and ledger 1`] = `
+{
+  "awayScore": 49,
+  "digest": "316c82d3f985b620a55c8b89d76e4fab9f0c2588eb086f1b898b42e84da5b1be",
+  "fit": [
+    {
+      "defense": 81,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 70,
+      "offense": 89,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 82,
+      "overall": 87,
+      "schemeFitBonus": 10.3,
+    },
+    {
+      "defense": 81,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 70,
+      "offense": 89,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 82,
+      "overall": 87,
+      "schemeFitBonus": 10.3,
+    },
+  ],
+  "homeScore": 22,
+}
+`;
+
+exports[`scheme integrity simulation balance firewall > detailed seed 777 preserves scores, effects, stats and ledger 1`] = `
+{
+  "awayScore": 39,
+  "digest": "608aeb030fb76a14d038d5780789d7f9a683e23660199867de4d97823c1a1b4c",
+  "fit": [
+    {
+      "defense": 81,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 70,
+      "offense": 89,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 82,
+      "overall": 87,
+      "schemeFitBonus": 10.3,
+    },
+    {
+      "defense": 81,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 70,
+      "offense": 89,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 82,
+      "overall": 87,
+      "schemeFitBonus": 10.3,
+    },
+  ],
+  "homeScore": 51,
+}
+`;
+
+exports[`scheme integrity simulation balance firewall > detailed seed 2026 preserves scores, effects, stats and ledger 1`] = `
+{
+  "awayScore": 33,
+  "digest": "d8248b1d46737cacc4da4f757c6247724b348fd3bd0d92817807bbd83fbe7f13",
+  "fit": [
+    {
+      "defense": 81,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 70,
+      "offense": 89,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 82,
+      "overall": 87,
+      "schemeFitBonus": 10.3,
+    },
+    {
+      "defense": 81,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 70,
+      "offense": 89,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 82,
+      "overall": 87,
+      "schemeFitBonus": 10.3,
+    },
+  ],
+  "homeScore": 29,
+}
+`;
+
+exports[`scheme integrity simulation balance firewall > legacy seed 39 preserves scores, effects, stats and ledger 1`] = `
+{
+  "awayScore": 49,
+  "digest": "2948a5e11639da047568daa03968ad31379a90a2e891ec4d9035d182f1acde16",
+  "fit": [
+    {
+      "defense": 83,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 75,
+      "offense": 88,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 81,
+      "overall": 88,
+      "schemeFitBonus": 11.2,
+    },
+    {
+      "defense": 83,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 75,
+      "offense": 88,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 81,
+      "overall": 88,
+      "schemeFitBonus": 11.2,
+    },
+  ],
+  "homeScore": 22,
+}
+`;
+
+exports[`scheme integrity simulation balance firewall > legacy seed 777 preserves scores, effects, stats and ledger 1`] = `
+{
+  "awayScore": 39,
+  "digest": "be9ce1f19f1fdd3e255cfe6fab6d12be34b6a7bd15e8fd4c7f134499c76fed54",
+  "fit": [
+    {
+      "defense": 83,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 75,
+      "offense": 88,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 81,
+      "overall": 88,
+      "schemeFitBonus": 11.2,
+    },
+    {
+      "defense": 83,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 75,
+      "offense": 88,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 81,
+      "overall": 88,
+      "schemeFitBonus": 11.2,
+    },
+  ],
+  "homeScore": 51,
+}
+`;
+
+exports[`scheme integrity simulation balance firewall > legacy seed 2026 preserves scores, effects, stats and ledger 1`] = `
+{
+  "awayScore": 33,
+  "digest": "d83f728b963c2e96d6993b3b7480ba9f41ca05a1389826f1480003870e75629c",
+  "fit": [
+    {
+      "defense": 83,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 75,
+      "offense": 88,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 81,
+      "overall": 88,
+      "schemeFitBonus": 11.2,
+    },
+    {
+      "defense": 83,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 75,
+      "offense": 88,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 81,
+      "overall": 88,
+      "schemeFitBonus": 11.2,
+    },
+  ],
+  "homeScore": 29,
+}
+`;
+
+exports[`scheme integrity simulation balance firewall > mixed seed 39 preserves scores, effects, stats and ledger 1`] = `
+{
+  "awayScore": 49,
+  "digest": "259855d2b586bd782ceed77b1437e4463bf832d2b93e97ba3f7fd208cecb8474",
+  "fit": [
+    {
+      "defense": 83,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 75,
+      "offense": 88,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 81,
+      "overall": 88,
+      "schemeFitBonus": 11.2,
+    },
+    {
+      "defense": 83,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 75,
+      "offense": 88,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 81,
+      "overall": 88,
+      "schemeFitBonus": 11.2,
+    },
+  ],
+  "homeScore": 22,
+}
+`;
+
+exports[`scheme integrity simulation balance firewall > mixed seed 777 preserves scores, effects, stats and ledger 1`] = `
+{
+  "awayScore": 39,
+  "digest": "88bff3c12a05026bad553794aeea59d46972ae70d7295559521ffc8874c25b90",
+  "fit": [
+    {
+      "defense": 83,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 75,
+      "offense": 88,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 81,
+      "overall": 88,
+      "schemeFitBonus": 11.2,
+    },
+    {
+      "defense": 83,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 75,
+      "offense": 88,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 81,
+      "overall": 88,
+      "schemeFitBonus": 11.2,
+    },
+  ],
+  "homeScore": 51,
+}
+`;
+
+exports[`scheme integrity simulation balance firewall > mixed seed 2026 preserves scores, effects, stats and ledger 1`] = `
+{
+  "awayScore": 33,
+  "digest": "5aa28115b76f581df6a1a07a8cbe8401034c2a4b6251f17a0cf6e6f012289ab0",
+  "fit": [
+    {
+      "defense": 83,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 75,
+      "offense": 88,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 81,
+      "overall": 88,
+      "schemeFitBonus": 11.2,
+    },
+    {
+      "defense": 83,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 75,
+      "offense": 88,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 81,
+      "overall": 88,
+      "schemeFitBonus": 11.2,
+    },
+  ],
+  "homeScore": 29,
+}
+`;
+
+exports[`scheme integrity simulation balance firewall > modern seed 39 preserves scores, effects, stats and ledger 1`] = `
+{
+  "awayScore": 49,
+  "digest": "01533f182a564ba67219fcd78965853f094ab787aa4a6f3194d3d79687c6b51c",
+  "fit": [
+    {
+      "defense": 76,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 50,
+      "offense": 78,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 50,
+      "overall": 69,
+      "schemeFitBonus": 0,
+    },
+    {
+      "defense": 76,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 50,
+      "offense": 78,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 50,
+      "overall": 69,
+      "schemeFitBonus": 0,
+    },
+  ],
+  "homeScore": 22,
+}
+`;
+
+exports[`scheme integrity simulation balance firewall > modern seed 777 preserves scores, effects, stats and ledger 1`] = `
+{
+  "awayScore": 38,
+  "digest": "c6c0ce120f155a04c309b86d1d9ffa38b39995707766ae238481a7073dcd78ba",
+  "fit": [
+    {
+      "defense": 76,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 50,
+      "offense": 78,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 50,
+      "overall": 69,
+      "schemeFitBonus": 0,
+    },
+    {
+      "defense": 76,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 50,
+      "offense": 78,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 50,
+      "overall": 69,
+      "schemeFitBonus": 0,
+    },
+  ],
+  "homeScore": 51,
+}
+`;
+
+exports[`scheme integrity simulation balance firewall > modern seed 2026 preserves scores, effects, stats and ledger 1`] = `
+{
+  "awayScore": 33,
+  "digest": "837facb698c8b804d67518ebb7c669ec6b74e2a6d1547f665e686d7830f42041",
+  "fit": [
+    {
+      "defense": 76,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 50,
+      "offense": 78,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 50,
+      "overall": 69,
+      "schemeFitBonus": 0,
+    },
+    {
+      "defense": 76,
+      "defensiveScheme": "BLITZ_34",
+      "defensiveSchemeFit": 50,
+      "offense": 78,
+      "offensiveScheme": "VERTICAL",
+      "offensiveSchemeFit": 50,
+      "overall": 69,
+      "schemeFitBonus": 0,
+    },
+  ],
+  "homeScore": 29,
+}
+`;

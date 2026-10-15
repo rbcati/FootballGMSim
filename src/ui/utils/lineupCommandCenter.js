@@ -3,25 +3,18 @@ import { ensureAttributesV2 } from '../../core/migration/attributeMigrator.ts';
 import { getEffectivePlayerForRole } from '../../core/sim/positionalMultipliers.js';
 import { DEPTH_CHART_ROWS, getCanonicalDepthRow, getCanonicalScrimmageAssignment, getPlayerScrimmageUnitRow, getScrimmageDepthRow, isPlayerEligibleForDepthRow } from '../../core/depthChart.js';
 import { calculateOverallFromAttributesV2 } from '../../worker/playerDerivedRatings.js';
-import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES, calculatePlayerSchemeFit } from '../../core/scheme-core.js';
+import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES, calculatePlayerSchemeFit, resolveOffensiveScheme, resolveDefensiveScheme } from '../../core/scheme-core.js';
 import { deriveRosterReadinessModel } from './rosterReadinessModel.js';
 
 const average = (values, fallback = 0) => values.length
   ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
   : fallback;
 
-function resolveScheme(collection, value, fallback) {
-  const normalized = String(value ?? '').toUpperCase().replace(/[\s/-]+/g, '_');
-  return collection[normalized]
-    ?? Object.values(collection).find((scheme) => scheme.id === value || scheme.name.toUpperCase() === String(value ?? '').toUpperCase())
-    ?? collection[fallback];
-}
-
 export function getTeamSchemes(team = {}) {
   const coach = team?.staff?.headCoach ?? {};
   return {
-    offense: resolveScheme(OFFENSIVE_SCHEMES, team?.strategies?.offSchemeId ?? coach.offScheme, 'WEST_COAST'),
-    defense: resolveScheme(DEFENSIVE_SCHEMES, team?.strategies?.defSchemeId ?? coach.defScheme, 'COVER_2'),
+    offense: resolveOffensiveScheme(team?.strategies?.offSchemeId ?? coach.offScheme),
+    defense: resolveDefensiveScheme(team?.strategies?.defSchemeId ?? coach.defScheme),
   };
 }
 

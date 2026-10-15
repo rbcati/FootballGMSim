@@ -13,11 +13,11 @@ describe('playerEvaluation', () => {
     expect(archetype.archetype).toBe('Deep Threat');
   });
 
-  it('scheme fit responds to team need and game plan tendencies', () => {
+  it('scheme fit remains an attribute evaluation regardless of need or tendencies', () => {
     const qb = { pos: 'QB', ovr: 80, schemeFit: 55, ratings: { throwAccuracy: 80, throwPower: 80 } };
     const fit = deriveSchemeFit(qb, { needsNow: [{ pos: 'QB' }] }, { passRate: 62 }, ['QB']);
-    expect(fit.score).toBeGreaterThan(65);
-    expect(['Strong', 'Excellent']).toContain(fit.tier);
+    expect(fit.score).toBe(55);
+    expect(fit.tier).toBe('Neutral');
   });
 
   it('role projection is safe for older save structures', () => {
@@ -32,4 +32,11 @@ describe('playerEvaluation', () => {
     expect(evalData.schemeFit.score).toBeGreaterThanOrEqual(0);
     expect(evalData.attributeBuckets.focus.length).toBeGreaterThan(0);
   });
+});
+
+it('player evaluation uses current scheme identity and V2 evidence over stale readout fit', () => {
+  const qb = Object.freeze({ pos: 'QB', schemeFit: 25, attributesV2: Object.freeze({ throwPower: 92 }) });
+  for (const offSchemeId of ['VERTICAL', 'Vertical']) {
+    expect(deriveSchemeFit(qb, { strategies: { offSchemeId } }, { passRate: 90 }, ['QB']).score).toBe(92);
+  }
 });

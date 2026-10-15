@@ -1,29 +1,19 @@
-import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES, computeTeamSchemeFits } from '../../core/scheme-core.js';
+import { computeTeamSchemeFits, normalizeSchemePosition, resolveOffensiveScheme, resolveDefensiveScheme } from '../../core/scheme-core.js';
 
 function safeNum(v, fallback = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
 
-function normalizePosition(pos) {
-  const p = String(pos ?? '').toUpperCase();
-  if (['HB', 'FB'].includes(p)) return 'RB';
-  if (['OT', 'LT', 'RT', 'OG', 'LG', 'RG', 'C'].includes(p)) return 'OL';
-  if (['DE', 'DT', 'NT', 'EDGE', 'IDL'].includes(p)) return 'DL';
-  if (['MLB', 'OLB', 'ILB'].includes(p)) return 'LB';
-  if (['FS', 'SS', 'DB'].includes(p)) return 'S';
-  return p;
-}
-
 function offenseLabel(id) {
-  const scheme = OFFENSIVE_SCHEMES[id] ?? OFFENSIVE_SCHEMES.WEST_COAST;
+  const scheme = resolveOffensiveScheme(id);
   if (scheme.id === 'VERTICAL') return 'Pass-heavy explosive offense';
   if (scheme.id === 'SMASHMOUTH') return 'Run-first / ball-control offense';
   return 'Timing-and-efficiency offense';
 }
 
 function defenseLabel(id) {
-  const scheme = DEFENSIVE_SCHEMES[id] ?? DEFENSIVE_SCHEMES.COVER_2;
+  const scheme = resolveDefensiveScheme(id);
   if (scheme.id === 'BLITZ_34') return 'Aggressive pressure defense';
   if (scheme.id === 'MAN_COVERAGE') return 'Press-man disruption defense';
   return 'Bend-don’t-break zone defense';
@@ -110,8 +100,9 @@ function getSchemeFitSummary(team) {
     if (fit.schemeFit >= 72) good += 1;
     if (fit.schemeFit <= 45) poor += 1;
     const p = roster.find((r) => r.id === fit.playerId);
-    const pos = normalizePosition(p?.pos);
-    if (!pos) continue;
+    const pos = normalizeSchemePosition(p?.pos);
+    // Specialists and unsupported positions have no system-fit weights.
+    if (!['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'].includes(pos)) continue;
     if (!posFit.has(pos)) posFit.set(pos, []);
     posFit.get(pos).push(fit.schemeFit);
   }
@@ -215,8 +206,8 @@ export function deriveTeamCoachingIdentity(team, { pressure = null, intel = null
     philosophy: {
       offense: offenseLabel(offSchemeId),
       defense: defenseLabel(defSchemeId),
-      offSchemeName: OFFENSIVE_SCHEMES[offSchemeId]?.name ?? offSchemeId,
-      defSchemeName: DEFENSIVE_SCHEMES[defSchemeId]?.name ?? defSchemeId,
+      offSchemeName: resolveOffensiveScheme(offSchemeId).name,
+      defSchemeName: resolveDefensiveScheme(defSchemeId).name,
     },
     rosterFitNotes: rosterFitNotes.slice(0, 4),
   };
