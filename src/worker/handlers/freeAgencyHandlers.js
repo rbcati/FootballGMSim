@@ -1,3 +1,4 @@
+import { computeTeamSchemeFits } from '../../core/scheme-core.js';
 /**
  * freeAgencyHandlers.js — GET_FREE_AGENTS, SUBMIT_OFFER, WITHDRAW_OFFER.
  *
@@ -59,6 +60,12 @@ export async function handleGetFreeAgents(payload, id, ctx) {
   // teamId means unsigned, so accepted players never linger in the FA pool.
   const allFreeAgents = cache.getAllPlayers().filter((p) => p.teamId == null || p.status === 'free_agent');
   const userTeam = cache.getTeam(userTeamId);
+  // Display-only evaluation before producing compact DTOs. Negotiation and
+  // valuation below continue to consume the original stored player data.
+  const displayFits = new Map(computeTeamSchemeFits(allFreeAgents,
+    userTeam?.strategies?.offSchemeId ?? userTeam?.staff?.headCoach?.offScheme,
+    userTeam?.strategies?.defSchemeId ?? userTeam?.staff?.headCoach?.defScheme,
+  ).map((fit) => [fit.playerId, fit.schemeFit]));
   const userDirection = inferTeamDirection(userTeam, Number(meta?.currentWeek ?? 1));
   const userWinPct = Math.max(0, Math.min(1, (() => {
     const wins = Number(userTeam?.wins ?? 0);
@@ -204,6 +211,7 @@ export async function handleGetFreeAgents(payload, id, ctx) {
           id:        p.id,
           name:      p.name,
           pos:       p.pos,
+          schemeFit: displayFits.get(p.id) ?? 50,
           age:       p.age,
           ovr:       p.ovr,
           hofStatus: p.hofStatus ?? 'none',

@@ -1,3 +1,4 @@
+import { deriveSchemeFit } from '../../../../src/core/playerEvaluation.js';
 /**
  * GET_ROSTER handler — extracted behavior parity.
  *
@@ -133,9 +134,11 @@ it('GET_ROSTER reads current selected scheme/roster without persisting readout f
   cache.updateTeam(3, { strategies: { offSchemeId: 'VERTICAL' } });
   await handleGetRoster({ teamId: 3 }, 'first', ctx);
   expect(ctx.posts.at(-1).payload.players[0].schemeFit).toBe(72);
+  expect(deriveSchemeFit(ctx.posts.at(-1).payload.players[0], cache.getTeam(3)).score).toBe(72);
   cache.updateTeam(3, { strategies: { offSchemeId: 'Run Heavy' } });
   await handleGetRoster({ teamId: 3 }, 'scheme-change', ctx);
   expect(ctx.posts.at(-1).payload.players[0].schemeFit).toBe(48);
+  expect(deriveSchemeFit(ctx.posts.at(-1).payload.players[0], cache.getTeam(3)).score).toBe(48);
   cache.updatePlayer(player.id, { ratings: { passBlock: 80, runBlock: 80 } });
   await handleGetRoster({ teamId: 3 }, 'roster-change', ctx);
   expect(ctx.posts.at(-1).payload.players[0].schemeFit).toBe(80);

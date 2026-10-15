@@ -40,3 +40,15 @@ it('player evaluation uses current scheme identity and V2 evidence over stale re
     expect(deriveSchemeFit(qb, { strategies: { offSchemeId } }, { passRate: 90 }, ['QB']).score).toBe(92);
   }
 });
+
+it('preserves worker-evaluated fit on compact DTOs without fabricating evidence', () => {
+  const context = { strategies: { offSchemeId: 'VERTICAL', defSchemeId: 'BLITZ_34' } };
+  expect(deriveSchemeFit({ id: 1, pos: 'QB', schemeFit: 88 }, context).score).toBe(88);
+  expect(deriveSchemeFit({ id: 2, pos: 'LT', schemeFit: 72 }, context).score).toBe(72);
+  expect(deriveSchemeFit({ id: 3, pos: 'CB', schemeFit: 42 }, context).score).toBe(42);
+  expect(deriveSchemeFit({ id: 4, pos: 'QB' }, context).score).toBe(50);
+  // A real modern model with no exact defensive evidence stays neutral even
+  // when it has a stale stored fit; this is not an attribute-stripped view.
+  expect(deriveSchemeFit({ pos: 'CB', schemeFit: 88, attributesV2: { zoneCoverage: 95 } }, context).score).toBe(50);
+  expect(deriveSchemeFit({ pos: 'K', schemeFit: 88 }, context).score).toBe(50);
+});

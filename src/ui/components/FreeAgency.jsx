@@ -921,6 +921,13 @@ export default function FreeAgency({
   const [showCapPreview, setShowCapPreview] = useState(false);
   const [viewMode, setViewMode] = useState("table");
 
+  const activeTeamId = userTeamId ?? league?.userTeamId ?? null;
+
+  const userTeam = useMemo(
+    () => league?.teams?.find((t) => t.id === activeTeamId),
+    [league, activeTeamId],
+  );
+
   // Keep ref to avoid stale closure during mount load
   const loadCountRef = useRef(0);
 
@@ -954,16 +961,11 @@ export default function FreeAgency({
     return () => {
       active = false;
     };
-  }, [actions, league?.week, league?.phase]);
+  }, [actions, league?.week, league?.phase, activeTeamId,
+    userTeam?.strategies?.offSchemeId, userTeam?.strategies?.defSchemeId,
+    userTeam?.staff?.headCoach?.offScheme, userTeam?.staff?.headCoach?.defScheme]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
-
-  const activeTeamId = userTeamId ?? league?.userTeamId ?? null;
-
-  const userTeam = useMemo(
-    () => league?.teams?.find((t) => t.id === activeTeamId),
-    [league, activeTeamId],
-  );
 
   const capTotal = userTeam?.capTotal ?? 255;
   const capUsed = userTeam?.capUsed ?? 0;

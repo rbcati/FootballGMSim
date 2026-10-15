@@ -178,6 +178,21 @@ fit labels, starter OVR and expanded 0–100 comparison scores remain readable.
 The first new mobile test used a shared desktop-only section-tab assumption;
 its navigation was corrected to use the actual Team control and rerun green.
 
+## Review regression: compact player views
+
+Live review identified that recomputing a compact worker DTO without attributes
+could overwrite a correctly computed supplied schemeFit with 50. Player evaluation
+now preserves supplied bounded fit for compact views with no weighted evidence;
+full player models still evaluate actual attributes, so unsupported V2-only
+coverage/rush data remains truthfully neutral. Specialists remain neutral.
+GET_FREE_AGENTS computes the user-team display fit before stripping attributes
+and forwards the existing schemeFit player field. Pricing, demands, offers,
+negotiation scores and stored player fit keep their original inputs. Handler-to-
+evaluator regressions cover both compact roster and FA views, modern data,
+roster/scheme refresh, exact pricing parity and no persisted score writes.
+Roster and FA screens reload their compact views on scalar scheme identity
+changes; equivalent team-object replacements do not trigger fetch cascades.
+
 ## Exact changed files
 
 * `docs/audits/pr-1801-scheme-fit-integrity.md`
@@ -192,9 +207,11 @@ its navigation was corrected to use the actual Team control and rerun green.
 * `src/ui/components/Roster.jsx`
 * `src/ui/components/StrategyPanel.jsx`
 * `src/ui/components/StrategyPanel.test.jsx`
+* `src/ui/components/__tests__/FreeAgencyUxStates.test.jsx`
 * `src/ui/utils/coachingIdentity.js`
 * `src/ui/utils/lineupCommandCenter.js`
 * `src/ui/utils/lineupCommandCenter.test.js`
+* `src/worker/handlers/freeAgencyHandlers.js`
 * `src/worker/handlers/rosterHandlers.js`
 * `src/worker/worker.js`
 * `tests/e2e/scheme_fit_integrity.spec.js`
@@ -204,4 +221,5 @@ its navigation was corrected to use the actual Team control and rerun green.
 * `tests/unit/coachingSchemeIntegrity.test.js`
 * `tests/unit/scheme-core.test.js`
 * `tests/unit/schemeSimulationParity.test.js`
+* `tests/unit/worker/handlers/freeAgencyHandlers.test.js`
 * `tests/unit/worker/handlers/rosterHandlers.test.js`

@@ -2538,6 +2538,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
     console.warn("[Roster] Ignored invalid player selection", { playerId, teamId });
   }, [rosterPlayerIds, teamId]);
 
+  const selectedTeamSchemes = league?.teams?.find((t) => String(t.id) === String(teamId))?.strategies;
   const fetchRoster = useCallback(async () => {
     if (teamId == null || !actions?.getRoster) return;
     setLoading(true);
@@ -2553,10 +2554,10 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
     } finally {
       setLoading(false);
     }
-  }, [teamId, actions]);
+  }, [teamId, actions, selectedTeamSchemes?.offSchemeId, selectedTeamSchemes?.defSchemeId]);
 
-  // Fetch on mount and whenever the user's team or week changes.
-  // fetchRoster is stable as long as teamId and actions don't change.
+  // Fetch on mount and when the selected team or scalar scheme ids change.
+  // Equivalent league/team object replacements keep fetchRoster stable.
   // Do NOT add league?.teams here — it's a new array reference on every
   // STATE_UPDATE dispatch and would cause a fetch cascade.
   // Post-release refreshes are handled by the explicit onRefetch() callback

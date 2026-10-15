@@ -1,3 +1,4 @@
+import { deriveSchemeFit } from '../../../../src/core/playerEvaluation.js';
 /**
  * GET_FREE_AGENTS / SUBMIT_OFFER / WITHDRAW_OFFER handlers — extracted
  * behavior parity.
@@ -210,4 +211,37 @@ describe('handleGetFreeAgents', () => {
     expect(fa.offers.userOffered).toBe(true);
     expect(fa.offers.count).toBe(2);
   });
+});
+
+it('evaluates fit before stripping FA attributes and preserves it through player evaluation without changing pricing', async () => {
+  const { cache, ctx } = setup({ playerOverrides: { pos: 'LT', ratings: { passBlock: 90, runBlock: 30 }, schemeFit: 17 } });
+  cache.updateTeam(USER_TEAM_ID, { strategies: { offSchemeId: 'VERTICAL' } });
+  await handleGetFreeAgents({}, 'vertical', ctx);
+  const first = postsOfType(ctx, toUI.FREE_AGENT_DATA).at(-1).payload.freeAgents[0];
+  expect(first.ratings).toBeUndefined();
+  expect(first.attributesV2).toBeUndefined();
+  expect(first.schemeFit).toBe(72);
+  expect(deriveSchemeFit(first, cache.getTeam(USER_TEAM_ID)).score).toBe(72);
+  cache.updateTeam(USER_TEAM_ID, { strategies: { offSchemeId: 'Run Heavy' } });
+  await handleGetFreeAgents({}, 'run-heavy', ctx);
+  const next = postsOfType(ctx, toUI.FREE_AGENT_DATA).at(-1).payload.freeAgents[0];
+  expect(next.schemeFit).toBe(48);
+  expect(deriveSchemeFit(next, cache.getTeam(USER_TEAM_ID)).score).toBe(48);
+  expect(next.market).toEqual(first.market);
+  expect(next.demandProfile).toEqual(first.demandProfile);
+  expect(next.offers).toEqual(first.offers);
+  expect(cache.getAllPlayers().find((p) => p.id === first.id).schemeFit).toBe(17);
+});
+
+it('refreshes real V2-only FA evidence on each readout without storing the display score', async () => {
+  const { cache, ctx } = setup({ playerOverrides: { pos: 'QB', attributesV2: { throwPower: 93 }, ratings: undefined, schemeFit: 17 } });
+  cache.updateTeam(USER_TEAM_ID, { strategies: { offSchemeId: 'Vertical' } });
+  await handleGetFreeAgents({}, 'modern', ctx);
+  const first = postsOfType(ctx, toUI.FREE_AGENT_DATA).at(-1).payload.freeAgents[0];
+  expect(deriveSchemeFit(first, cache.getTeam(USER_TEAM_ID)).score).toBe(93);
+  cache.updatePlayer(first.id, { attributesV2: { throwPower: 34 } });
+  await handleGetFreeAgents({}, 'modern-update', ctx);
+  const next = postsOfType(ctx, toUI.FREE_AGENT_DATA).at(-1).payload.freeAgents[0];
+  expect(deriveSchemeFit(next, cache.getTeam(USER_TEAM_ID)).score).toBe(34);
+  expect(cache.getAllPlayers().find((p) => p.id === first.id).schemeFit).toBe(17);
 });
