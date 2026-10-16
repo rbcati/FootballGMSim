@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, waitFor } from '@testing-library/react';
 import { resolveFreeAgencyLoadStatus } from '../../utils/freeAgencyLoadStatus.js';
 import StatusEmptyState from '../common/StatusEmptyState.jsx';
 import FreeAgency from '../FreeAgency.jsx';
@@ -103,4 +103,16 @@ describe('FreeAgency — live component loading state', () => {
     const el = getByTestId('fa-load-status');
     expect(el.getAttribute('data-state')).toBe('loading');
   });
+});
+
+it('refreshes compact FA fit views when scheme ids change without refetching on equivalent team objects', async () => {
+  const actions = { getFreeAgents: vi.fn(async () => ({ payload: { freeAgents: [], phase: 'free_agency' } })) };
+  const league = (offSchemeId) => ({ userTeamId: 0, week: 1, phase: 'free_agency', teams: [{ id: 0, roster: [], strategies: { offSchemeId, defSchemeId: 'COVER_2' } }] });
+  const view = render(<FreeAgency league={league('VERTICAL')} actions={actions} />);
+  await waitFor(() => expect(actions.getFreeAgents).toHaveBeenCalledTimes(1));
+  view.rerender(<FreeAgency league={league('Run Heavy')} actions={actions} />);
+  await waitFor(() => expect(actions.getFreeAgents).toHaveBeenCalledTimes(2));
+  view.rerender(<FreeAgency league={league('Run Heavy')} actions={actions} />);
+  expect(actions.getFreeAgents).toHaveBeenCalledTimes(2);
+  cleanup();
 });

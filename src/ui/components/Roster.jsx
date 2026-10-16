@@ -38,7 +38,7 @@ import ExtensionNegotiationModal from "./ExtensionNegotiationModal.jsx";
 import ReleasePreviewModal from "./ReleasePreviewModal.jsx";
 import BulkReleasePreviewModal from "./BulkReleasePreviewModal.jsx";
 import { teamColor } from "../../data/team-utils.js";
-import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES } from "../../core/scheme-core.js";
+import { resolveOffensiveScheme, resolveDefensiveScheme, normalizeSchemePosition } from "../../core/scheme-core.js";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -181,8 +181,8 @@ function SchemeFitIndicator({ fit, bonus, topAttr, schemeName }) {
 
   const attrName = ATTR_DISPLAY_NAMES[topAttr] || topAttr || '';
   const tipText = bonus !== 0 && attrName
-    ? `${label} OVR — ${attrName} ${bonus > 0 ? 'fits' : 'mismatches'} ${schemeName || 'scheme'}`
-    : `Neutral scheme fit`;
+    ? `${label} display OVR — ${attrName} ${bonus > 0 ? 'fits' : 'mismatches'} ${schemeName || 'scheme'}`
+    : `Scheme fit ${fit}/100 — personnel evaluation`;
 
   return (
     <div
@@ -1454,7 +1454,7 @@ function RosterTable({
                         padding: "0 var(--space-2)",
                       }}
                     >
-                      <SchemeFitIndicator fit={fit} bonus={player.schemeBonus ?? 0} topAttr={player.topAttr} schemeName={schemeName} />
+                      <SchemeFitIndicator fit={fit} bonus={player.schemeBonus ?? 0} topAttr={player.topAttr} schemeName={schemeName(player)} />
                     </TableCell>
                     {/* Morale */}
                     <TableCell
@@ -1753,7 +1753,7 @@ function DepthCard({ player, isStarter, schemeName, style = {}, dragHandleProps 
         <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
           Ag {player.age}
         </span>
-        <SchemeFitIndicator fit={fit} bonus={player.schemeBonus ?? 0} topAttr={player.topAttr} schemeName={schemeName} />
+        <SchemeFitIndicator fit={fit} bonus={player.schemeBonus ?? 0} topAttr={player.topAttr} schemeName={schemeName(player)} />
       </div>
     </div>
   );
@@ -2538,6 +2538,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
     console.warn("[Roster] Ignored invalid player selection", { playerId, teamId });
   }, [rosterPlayerIds, teamId]);
 
+  const selectedTeamSchemes = league?.teams?.find((t) => String(t.id) === String(teamId))?.strategies;
   const fetchRoster = useCallback(async () => {
     if (teamId == null || !actions?.getRoster) return;
     setLoading(true);
@@ -2553,10 +2554,10 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
     } finally {
       setLoading(false);
     }
-  }, [teamId, actions]);
+  }, [teamId, actions, selectedTeamSchemes?.offSchemeId, selectedTeamSchemes?.defSchemeId]);
 
-  // Fetch on mount and whenever the user's team or week changes.
-  // fetchRoster is stable as long as teamId and actions don't change.
+  // Fetch on mount and when the selected team or scalar scheme ids change.
+  // Equivalent league/team object replacements keep fetchRoster stable.
   // Do NOT add league?.teams here — it's a new array reference on every
   // STATE_UPDATE dispatch and would cause a fetch cascade.
   // Post-release refreshes are handled by the explicit onRefetch() callback
@@ -2674,7 +2675,10 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
     const ut = league?.teams?.find(t => t.id === league?.userTeamId);
     const offId = ut?.strategies?.offSchemeId;
     const defId = ut?.strategies?.defSchemeId;
-    return OFFENSIVE_SCHEMES[offId]?.name || DEFENSIVE_SCHEMES[defId]?.name || 'scheme';
+    const offense = resolveOffensiveScheme(offId);
+    const defense = resolveDefensiveScheme(defId);
+    return (player) => Object.hasOwn(offense.weights, normalizeSchemePosition(player?.pos))
+      ? offense.name : defense.name;
   }, [league]);
 
   // ── Auto-build depth chart callback ──────────────────────────────────────────

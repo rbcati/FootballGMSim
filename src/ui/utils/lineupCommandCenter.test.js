@@ -118,3 +118,15 @@ describe('resolved lineup assignments', () => {
     expect(resolveLineupAssignments({ team, roster: noReturners }).RS).toEqual([]);
   });
 });
+
+describe('scheme identity and evidence readout', () => {
+  it('matches supported display names and canonical ids for the same selected starters', () => {
+    const modern = roster.map(({ ratings, ...p }) => p);
+    const canonical = deriveLineupRatingSnapshot({ team: { ...team, strategies: { offSchemeId: 'VERTICAL', defSchemeId: 'BLITZ_34' } }, roster: modern });
+    const named = deriveLineupRatingSnapshot({ team: { ...team, strategies: { offSchemeId: 'Vertical', defSchemeId: '3-4 Blitz' } }, roster: modern });
+    expect(canonical).toEqual(named);
+    expect(canonical.schemes.offense.id).toBe('VERTICAL');
+    expect(canonical.schemes.defense.id).toBe('BLITZ_34');
+    expect(canonical.offensiveSchemeFit).toBe(Math.round(canonical.offensePlayers.reduce((sum, p) => sum + calculatePlayerSchemeFit(p, OFFENSIVE_SCHEMES.VERTICAL), 0) / canonical.offensePlayers.length));
+  });
+});

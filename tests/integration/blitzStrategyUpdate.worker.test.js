@@ -60,3 +60,18 @@ describe('UPDATE_STRATEGY blitzFrequency normalization', () => {
     expect(userTeam.strategies.gamePlan).toHaveProperty('blitzFrequency', expected);
   });
 });
+
+it('refreshes readout fits after strategy/roster changes without changing stored player fit', async () => {
+  const teamId = cache.getMeta().userTeamId;
+  const qb = cache.getPlayersByTeam(teamId).find((p) => p.pos === 'QB');
+  cache.updatePlayer(qb.id, { ratings: {}, attributesV2: { throwPower: 93 }, schemeFit: 17 });
+  const first = await send(toWorker.UPDATE_STRATEGY, { offSchemeId: 'VERTICAL', defSchemeId: 'BLITZ_34' });
+  const displayed = (response) => response.payload.teams.find((t) => t.id === teamId).roster.find((p) => p.id === qb.id);
+  expect(displayed(first).schemeFit).toBe(93);
+  expect(cache.getPlayer(qb.id).schemeFit).toBe(17);
+  cache.updatePlayer(qb.id, { attributesV2: { throwPower: 34 } });
+  const second = await send(toWorker.UPDATE_STRATEGY, { offSchemeId: 'Vertical', defSchemeId: '3-4 Blitz' });
+  expect(displayed(second).schemeFit).toBe(34);
+  expect(cache.getPlayer(qb.id).schemeFit).toBe(17);
+  expect(cache.getTeam(teamId).strategies.offSchemeId).toBe('Vertical');
+});

@@ -1,3 +1,5 @@
+import { computeTeamSchemeFits } from './scheme-core.js';
+
 const POSITION_ALIAS = {
   HB: 'RB', FB: 'RB', FL: 'WR', SE: 'WR',
   OT: 'OL', LT: 'OL', RT: 'OL', OG: 'OL', LG: 'OL', RG: 'OL', C: 'OL',
@@ -115,7 +117,18 @@ function fitTier(score) {
 export function deriveSchemeFit(player, teamContext = {}, gamePlan = {}, depthChartNeeds = []) {
   const position = canonicalPos(player);
   const group = getPositionGroup(position);
-  const baseFit = toNum(player?.schemeFit, 50);
+  const offScheme = teamContext?.strategies?.offSchemeId ?? teamContext?.staff?.headCoach?.offScheme;
+  const defScheme = teamContext?.strategies?.defSchemeId ?? teamContext?.staff?.headCoach?.defScheme;
+  const evaluated = offScheme != null || defScheme != null
+    ? computeTeamSchemeFits([player], offScheme, defScheme)[0]
+    : null;
+  // Compact worker views carry an already evaluated fit but no attributes.
+  // Full player models still use actual evidence (including truthful neutral).
+  const compactView = player?.ratings == null && player?.attributesV2 == null;
+  const suppliedFit = toNum(player?.schemeFit, 50);
+  const viewFit = suppliedFit >= 0 && suppliedFit <= 100 ? suppliedFit : 50;
+  const baseFit = group === 'GENERAL' ? 50
+    : evaluated && (evaluated.topAttr != null || !compactView) ? evaluated.schemeFit : viewFit;
   const tendencies = {
     passRate: toNum(gamePlan?.passRate ?? gamePlan?.passRatio ?? teamContext?.passRate, 50),
     runRate: toNum(gamePlan?.runRate ?? (100 - toNum(gamePlan?.passRate ?? gamePlan?.passRatio, 50)), 50),
@@ -124,15 +137,9 @@ export function deriveSchemeFit(player, teamContext = {}, gamePlan = {}, depthCh
   };
 
   const archetype = derivePlayerArchetype(player, group).archetype;
+  // Fit describes attributes against a system. Need and play-call tendencies
+  // remain useful context, but cannot inflate this score independently.
   let score = baseFit;
-  if (group === 'QB' || group === 'RECEIVER') score += tendencies.passRate >= 55 ? 8 : -2;
-  if (group === 'RB' || group === 'OL') score += tendencies.runRate >= 52 ? 7 : -2;
-  if (group === 'FRONT7') score += tendencies.blitzRate >= 55 ? 6 : 1;
-  if (group === 'SECONDARY') score += tendencies.manCoverageRate >= 55 ? 6 : 1;
-
-  if (Array.isArray(depthChartNeeds) && depthChartNeeds.includes(position)) score += 10;
-  const teamNeedList = teamContext?.needs ?? teamContext?.needsNow ?? [];
-  if (Array.isArray(teamNeedList) && teamNeedList.some((n) => (n?.pos ?? n) === position)) score += 8;
 
   const strengths = [];
   const weaknesses = [];

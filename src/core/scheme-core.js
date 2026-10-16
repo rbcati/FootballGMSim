@@ -1,3 +1,6 @@
+import { normalizePosition } from './sim/positionalMultipliers.js';
+import { calculateLegacyFamilyFit } from './schemeFitCompatibility.js';
+
 /**
  * scheme-core.js — Scheme & Chemistry Engine v1
  *
@@ -16,8 +19,8 @@
  *   2. 3-4 Blitz       — aggressive OLB blitzes; values pass rush & speed
  *   3. Man Coverage     — physical man-to-man; values coverage & speed from CBs/S
  *
- * Boosts are display-only runtime adjustments — base player stats in IndexedDB
- * are NEVER mutated.
+ * GM readouts are pure. The legacy team-rating/cache API remains simulation-
+ * authoritative and is frozen behind compatibility helpers (see audit).
  */
 
 // ── Scheme Definitions ───────────────────────────────────────────────────────
@@ -123,11 +126,9 @@ const DEF_POSITIONS = new Set(['DL', 'LB', 'CB', 'S', 'P']);
 
 /** Normalize detailed roster positions to the groups used by scheme weights. */
 export function normalizeSchemePosition(pos) {
-  const value = String(pos ?? '').toUpperCase();
-  if (['LT', 'LG', 'C', 'RG', 'RT', 'OT', 'OG'].includes(value)) return 'OL';
-  if (['DE', 'DT', 'NT', 'IDL', 'EDGE'].includes(value)) return 'DL';
-  if (['OLB', 'MLB', 'ILB'].includes(value)) return 'LB';
-  if (['FS', 'SS'].includes(value)) return 'S';
+  const value = normalizePosition(pos) ?? '';
+  if (['OT', 'OG', 'C'].includes(value)) return 'OL';
+  if (['EDGE', 'IDL'].includes(value)) return 'DL';
   return value;
 }
 
@@ -172,10 +173,41 @@ export function getTopSchemeAttribute(schemeId, pos) {
   return table?.[normalizeSchemePosition(pos)]?.topAttr || null;
 }
 
+/** Exact-key evidence only. Legacy wins per attribute, then flat data, then V2.
+ * Migration synthesizes V2 from overall; it is not a semantic legacy projection.
+ * Reject invalid evidence rather than converting it into a confident fit.
+ */
+export function resolveSchemeAttribute(player, attr) {
+  for (const value of [player?.ratings?.[attr], player?.[attr], player?.attributesV2?.[attr]]) {
+    if (Number.isFinite(value) && value > 0 && value <= 100) return value;
+  }
+  return undefined;
+}
+
+const schemeKey = (value) => String(value ?? '').trim().toUpperCase().replace(/[\s_-]+/g, '_');
+const OFF_ALIASES = {
+  'VERTICAL_/_AIR_RAID': 'VERTICAL', AIR_RAID: 'VERTICAL', PASS_HEAVY: 'VERTICAL',
+  RUN_HEAVY: 'SMASHMOUTH', BALANCED: 'WEST_COAST',
+};
+const DEF_ALIASES = {
+  '4_3_COVER_2': 'COVER_2', '4_3': 'COVER_2', '3_4_BLITZ': 'BLITZ_34',
+  '3_4': 'BLITZ_34', AGGRESSIVE: 'BLITZ_34', NICKEL: 'MAN_COVERAGE', CONSERVATIVE: 'COVER_2',
+};
+function resolveScheme(value, collection, aliases, fallback) {
+  const key = schemeKey(value);
+  return collection[key] ?? collection[aliases[key]] ?? collection[fallback];
+}
+export function resolveOffensiveScheme(value) {
+  return resolveScheme(value, OFFENSIVE_SCHEMES, OFF_ALIASES, 'WEST_COAST');
+}
+export function resolveDefensiveScheme(value) {
+  return resolveScheme(value, DEFENSIVE_SCHEMES, DEF_ALIASES, 'COVER_2');
+}
+
 /**
  * Calculate how well a single player fits a given scheme.
  *
- * @param {Object} player   — must have `pos`, `ratings` (or flat rating attrs)
+ * @param {Object} player   — pos plus legacy/flat/exact AttributesV2 evidence
  * @param {Object} scheme   — one of OFFENSIVE_SCHEMES / DEFENSIVE_SCHEMES values
  * @returns {number}        — fit score 0–100 (50 = neutral)
  */
@@ -188,15 +220,11 @@ export function calculatePlayerSchemeFit(player, scheme) {
   // Positions not in this scheme's weight table are unaffected
   if (!weights) return 50;
 
-  // Player ratings can be in player.ratings (nested) or flat on the player object
-  const r = player.ratings || player;
-
   let weightedSum = 0;
   let totalWeight = 0;
-
   for (const [attr, weight] of Object.entries(weights)) {
-    const val = r[attr];
-    if (typeof val === 'number' && val > 0) {
+    const val = resolveSchemeAttribute(player, attr);
+    if (val !== undefined) {
       weightedSum += val * weight;
       totalWeight += weight;
     }
@@ -238,6 +266,17 @@ export function schemeOvrBonus(fit) {
   return -3;
 }
 
+function topObservedAttribute(player, table) {
+  let attr = null, highest = 0;
+  for (const [key, weight] of table?.entries ?? []) {
+    if (weight > highest && resolveSchemeAttribute(player, key) !== undefined) {
+      attr = key;
+      highest = weight;
+    }
+  }
+  return attr;
+}
+
 /**
  * For a given team, compute every player's scheme fit and schemeAdjustedOVR.
  * Returns an array of { playerId, schemeFit, schemeBonus, schemeAdjustedOVR, topAttr }.
@@ -252,11 +291,11 @@ export function schemeOvrBonus(fit) {
  * @returns {Array<{playerId, schemeFit, schemeBonus, schemeAdjustedOVR, topAttr}>}
  */
 export function computeTeamSchemeFits(roster, offSchemeId, defSchemeId) {
-  const offScheme = OFFENSIVE_SCHEMES[offSchemeId] || OFFENSIVE_SCHEMES.WEST_COAST;
-  const defScheme = DEFENSIVE_SCHEMES[defSchemeId] || DEFENSIVE_SCHEMES.COVER_2;
+  const offScheme = resolveOffensiveScheme(offSchemeId);
+  const defScheme = resolveDefensiveScheme(defSchemeId);
   // v2: Pre-resolved lookup tables for zero-allocation inner loops
-  const offTable = _offWeightTables[offSchemeId] || _offWeightTables.WEST_COAST;
-  const defTable = _defWeightTables[defSchemeId] || _defWeightTables.COVER_2;
+  const offTable = _offWeightTables[offScheme.id];
+  const defTable = _defWeightTables[defScheme.id];
 
   return roster.map(player => {
     const pos = normalizeSchemePosition(player.pos);
@@ -265,10 +304,10 @@ export function computeTeamSchemeFits(roster, offSchemeId, defSchemeId) {
 
     if (OFF_POSITIONS.has(pos)) {
       fit = calculatePlayerSchemeFit(player, offScheme);
-      topAttr = offTable?.[pos]?.topAttr || null;
+      topAttr = topObservedAttribute(player, offTable?.[pos]);
     } else if (DEF_POSITIONS.has(pos)) {
       fit = calculatePlayerSchemeFit(player, defScheme);
-      topAttr = defTable?.[pos]?.topAttr || null;
+      topAttr = topObservedAttribute(player, defTable?.[pos]);
     } else {
       fit = 50; // unknown position
     }
@@ -293,42 +332,26 @@ export function computeTeamSchemeFits(roster, offSchemeId, defSchemeId) {
  * @deprecated Use calculatePlayerSchemeFit with the full scheme object instead.
  */
 export function calculateOffensiveSchemeFit(player, schemeName) {
-  // Map old scheme names to new scheme IDs
-  const mapping = {
-    'West Coast': OFFENSIVE_SCHEMES.WEST_COAST,
-    'Vertical':   OFFENSIVE_SCHEMES.VERTICAL,
-    'Pass Heavy': OFFENSIVE_SCHEMES.VERTICAL,
-    'Air Raid':   OFFENSIVE_SCHEMES.VERTICAL,
-    'Smashmouth': OFFENSIVE_SCHEMES.SMASHMOUTH,
-    'Run Heavy':  OFFENSIVE_SCHEMES.SMASHMOUTH,
-    'Balanced':   OFFENSIVE_SCHEMES.WEST_COAST,  // default fallback
-  };
-  const scheme = mapping[schemeName] || OFFENSIVE_SCHEMES.WEST_COAST;
-  return calculatePlayerSchemeFit(player, scheme);
+  return calculatePlayerSchemeFit(player, resolveOffensiveScheme(schemeName));
 }
 
-/**
- * @deprecated Use calculatePlayerSchemeFit with the full scheme object instead.
- */
 export function calculateDefensiveSchemeFit(player, schemeName) {
-  const mapping = {
-    '4-3 Cover 2':   DEFENSIVE_SCHEMES.COVER_2,
-    '4-3':           DEFENSIVE_SCHEMES.COVER_2,
-    'Cover 2':       DEFENSIVE_SCHEMES.COVER_2,
-    '3-4 Blitz':     DEFENSIVE_SCHEMES.BLITZ_34,
-    '3-4':           DEFENSIVE_SCHEMES.BLITZ_34,
-    'Aggressive':    DEFENSIVE_SCHEMES.BLITZ_34,
-    'Man Coverage':  DEFENSIVE_SCHEMES.MAN_COVERAGE,
-    'Nickel':        DEFENSIVE_SCHEMES.MAN_COVERAGE,
-    'Conservative':  DEFENSIVE_SCHEMES.COVER_2,
-  };
-  const scheme = mapping[schemeName] || DEFENSIVE_SCHEMES.COVER_2;
-  return calculatePlayerSchemeFit(player, scheme);
+  return calculatePlayerSchemeFit(player, resolveDefensiveScheme(schemeName));
+}
+
+// Explicit compatibility exports for simulation and valuation, not presentation.
+export function calculateLegacyOffensiveSchemeFit(player, schemeName) {
+  return calculateLegacyFamilyFit(player, schemeName, OFFENSIVE_SCHEMES);
+}
+export function calculateLegacyDefensiveSchemeFit(player, schemeName) {
+  return calculateLegacyFamilyFit(player, schemeName, DEFENSIVE_SCHEMES, true);
 }
 
 // ── Team rating with scheme fit (used by game-simulator.js) ─────────────────
 
 /**
+ * Legacy simulation/valuation authority, intentionally frozen before PR #1801.
+ * GM readouts use computeTeamSchemeFits / selected-starter player fit instead.
  * Calculates team overall rating based on scheme fit.
  * Used by game-simulator.js for simulation impact.
  * Cached per team per batch — never recalculated per play.
@@ -359,12 +382,12 @@ export function calculateTeamRatingWithSchemeFit(team) {
   team.roster.forEach(player => {
     const baseOvr = player.ovr || 50;
     if (OFF_POSITIONS.has(player.pos)) {
-      const fit = calculateOffensiveSchemeFit(player, offSchemeName);
+      const fit = calculateLegacyOffensiveSchemeFit(player, offSchemeName);
       offensiveRating += baseOvr + ((fit - 50) * 0.3);
       offensiveFitTotal += fit;
       offensiveCount++;
     } else if (DEF_POSITIONS.has(player.pos)) {
-      const fit = calculateDefensiveSchemeFit(player, defSchemeName);
+      const fit = calculateLegacyDefensiveSchemeFit(player, defSchemeName);
       defensiveRating += baseOvr + ((fit - 50) * 0.3);
       defensiveFitTotal += fit;
       defensiveCount++;
