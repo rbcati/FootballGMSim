@@ -78,4 +78,4 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run fresh franchise first-week smoke
-        run: npm run test -- tests/e2e/fresh_franchise_first_week_smoke.spec.js
+        run: npm run test -- tests/e2e/fresh_franchise_first_week_smoke.spec.js tests/e2e/nfl_schedule_bye.spec.js
