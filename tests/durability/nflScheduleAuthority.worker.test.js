@@ -219,6 +219,18 @@ describe('NFL scheduling through the production worker', () => {
     expect(await Meta.load()).toEqual(persisted);
     expect(await Seasons.loadAll()).toEqual(archives);
     expect(cache.getMeta().schedule.weeks[0].games[0]).toEqual(game);
+    // A legacy offseason save with only partial results must also fail before
+    // it can turn those interim records into next year's same-place opponents.
+    cache.setMeta({ completedSeasonSchedulingRanks: null });
+    await driver.save();
+    const partialBefore = copy(cache.getMeta());
+    const partialPersisted = copy(await Meta.load());
+    await expect(dispatchWorker(toWorker.START_NEW_SEASON)).rejects.toThrow(
+      /incomplete previous regular season/i
+    );
+    expect(cache.getMeta()).toEqual(partialBefore);
+    expect(await Meta.load()).toEqual(partialPersisted);
+    expect(cache.getMeta().schedule.weeks[0].games[0]).toEqual(game);
   }, 180000);
   it('rejects a bad new-franchise schedule before clearing the active save', async () => {
     const driver = new LifecycleDriver({ seed: 1803 });

@@ -305,6 +305,73 @@ describe('canonical NFL scheduling authority', () => {
     );
   });
 
+  it('rejects ranks from a partially played previous season', () => {
+    const s = generateNflSchedule(teams);
+    Object.assign(s.weeks[0].games[0], {
+      played: true,
+      homeScore: 24,
+      awayScore: 17,
+    });
+    expect(() => completedRegularDivisionRanks(teams, s, 0)).toThrow(
+      /incomplete previous regular season/i
+    );
+  });
+
+  it('rejects a nondivision Week 18 even with canonical IDs and valid annual obligations', () => {
+    const s = generateNflSchedule(teams);
+    const other = s.weeks.find(
+      (w) =>
+        w.week !== 18 &&
+        w.teamsWithBye.length === 0 &&
+        w.games.some(
+          (g) =>
+            teams[g.home].conf !== teams[g.away].conf ||
+            teams[g.home].div !== teams[g.away].div
+        )
+    );
+    const last = s.weeks[17];
+    [other.games, last.games] = [last.games, other.games];
+    for (const w of [other, last])
+      for (const g of w.games) {
+        g.week = w.week;
+        g.id = g.gameId = buildCanonicalGameId({
+          seasonId: g.seasonId,
+          week: w.week,
+          homeId: g.home,
+          awayId: g.away,
+        });
+      }
+    const result = validateNflSchedule(s, teams);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join('\n')).toMatch(/Week 18.*division/i);
+  });
+
+  it('recovers actual ranks from a fully completed legacy 18-game season', () => {
+    const ids = teams.map((t) => t.id);
+    const legacy = {
+      weeks: Array.from({ length: 18 }, (_, i) => {
+        const rotated = ids.slice(i).concat(ids.slice(0, i));
+        return {
+          week: i + 1,
+          games: Array.from({ length: 16 }, (_, j) => ({
+            home: rotated[j * 2],
+            away: rotated[j * 2 + 1],
+            played: true,
+            homeScore: 24,
+            awayScore: 17,
+          })),
+        };
+      }),
+    };
+    const ranks = completedRegularDivisionRanks(teams, legacy, 0);
+    expect(Object.keys(ranks)).toHaveLength(32);
+    const next = generateNflSchedule(teams, { year: 2027, priorRanks: ranks });
+    expect(validateNflSchedule(next, teams)).toEqual({
+      valid: true,
+      errors: [],
+    });
+  });
+
   it('rejects corruption with useful diagnostics and refuses invalid ranks without a fallback', () => {
     const base = generateNflSchedule(teams);
     const mutations = [

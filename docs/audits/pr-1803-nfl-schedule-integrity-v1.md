@@ -90,7 +90,10 @@ can change. Legacy seasons lacking that snapshot recover ranks from played
 weeks 1–18 (including archived Game Book scores if the schedule lacks scores)
 and the same comparator; playoff scores are excluded. Explicitly played games
 without recoverable scores fail with a diagnostic instead of fabricated ranks. A genuinely
-unplayed season uses the documented initial seed. The frozen ranks travel with
+unplayed season uses the documented initial seed. Once any results exist, all
+scheduled regular-season games must be complete for every team before ranks
+can be recovered. Partial legacy/offseason seasons are rejected transactionally;
+a fully played legacy 18-game season remains eligible for recovery. The frozen ranks travel with
 the new schedule and never read current-season standings.
 
 ## Home/away, placement and determinism
@@ -112,7 +115,7 @@ without compromising annual opponents. No bye is represented as a game.
 
 Hard rules: 18 weeks, 272 real games, 17 games and one bye per team, no double
 booking, valid references/IDs, exact annual opponent/home-away obligations.
-Week 18 is division-only by construction. No hard obligation is relaxed.
+Week 18 is division-only by construction and enforced by strict validation. No hard obligation is relaxed.
 
 Soft preferences: spread rivalry meetings, avoid immediate rematches, distribute
 rivalries over the year, minimize long home/away streaks. There are at most 32
@@ -205,3 +208,10 @@ records and invalid ranks. The remaining observed soft preferences are at most
 five consecutive home/away games and a minimum three-week rivalry gap; both
 relaxations are explicitly reported when their stricter targets are missed.
 Hosted current-head CI and review status are recorded in the PR/final handoff.
+
+Two automated review findings were reproduced with failing regressions and fixed:
+partial-season ranks cannot drive rollover, and swapping nondivision games into
+Week 18 is rejected even after rebuilding otherwise valid canonical IDs. A real
+worker regression checks that partial-season rejection leaves cache, DB and
+completed results unchanged; a separate case preserves completed legacy
+18-game season recovery.

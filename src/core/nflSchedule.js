@@ -135,6 +135,7 @@ export function completedRegularDivisionRanks(
   }));
   const byId = new Map(rows.map((t) => [t.id, t]));
   const archivedById = new Map(archivedGames.map((g) => [g.id ?? g.gameId, g]));
+  const scheduledCounts = new Map(rows.map((t) => [t.id, 0]));
   let played = 0;
   const regular = {
     weeks: (schedule?.weeks ?? [])
@@ -159,7 +160,10 @@ export function completedRegularDivisionRanks(
       const h = byId.get(g.home?.id ?? g.home),
         a = byId.get(g.away?.id ?? g.away);
       const archived = archivedById.get(g.id ?? g.gameId);
-      if (!h || !a || (g.played === false && !archived)) continue;
+      if (!h || !a) continue;
+      scheduledCounts.set(h.id, scheduledCounts.get(h.id) + 1);
+      scheduledCounts.set(a.id, scheduledCounts.get(a.id) + 1);
+      if (g.played === false && !archived) continue;
       const hs = g.homeScore ?? g.scoreHome ?? archived?.homeScore,
         as = g.awayScore ?? g.scoreAway ?? archived?.awayScore;
       if (!Number.isFinite(hs) || !Number.isFinite(as)) {
@@ -193,6 +197,21 @@ export function completedRegularDivisionRanks(
           ranks[identity(t)] = i + 1;
         });
     return ranks;
+  }
+  const incomplete = rows.filter((t) => {
+    const completed = t.wins + t.losses + t.ties;
+    return completed < 17 || completed !== scheduledCounts.get(t.id);
+  });
+  if (incomplete.length) {
+    const details = incomplete
+      .map(
+        (t) =>
+          `${t.abbr ?? t.id}: ${t.wins + t.losses + t.ties}/${scheduledCounts.get(t.id)} scheduled games completed`
+      )
+      .join('; ');
+    throw new Error(
+      `Incomplete previous regular season: ${details}. Complete all scheduled games before rollover (at least 17 per team).`
+    );
   }
   return previousDivisionRanks(rows, regular, seed);
 }
@@ -630,6 +649,7 @@ export function validateNflSchedule(
   }
   const { options } = expected;
   const ids = new Set(teams.map(identity));
+  const teamById = new Map(teams.map((t) => [identity(t), t]));
   const labels = new Map(
     teams.map((t) => [identity(t), t.abbr ?? identity(t)])
   );
@@ -682,6 +702,19 @@ export function validateNflSchedule(
             `Week ${week}: ${labels.get(id) ?? id} both playing and on bye`
           );
         seen.add(id);
+      }
+      const home = teamById.get(h),
+        away = teamById.get(a);
+      if (
+        week === 18 &&
+        home &&
+        away &&
+        (String(conf(home)) !== String(conf(away)) ||
+          String(div(home)) !== String(div(away)))
+      ) {
+        errors.push(
+          `Week 18 must contain division games only: ${labels.get(h)} vs ${labels.get(a)}`
+        );
       }
       const canonical = buildCanonicalGameId({
         seasonId: options.seasonId,
