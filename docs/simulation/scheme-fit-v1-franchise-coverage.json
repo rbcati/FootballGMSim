@@ -1,0 +1,150 @@
+{
+  "seed": 1802,
+  "games": 288,
+  "rows": [
+    {
+      "phase": "regular",
+      "week": 1,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 2,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 3,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 4,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 5,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 6,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 7,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 8,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 9,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 10,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 11,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 12,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 13,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 14,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 15,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 16,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 17,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    },
+    {
+      "phase": "regular",
+      "week": 18,
+      "offenseNonzero": 32,
+      "defenseNonzero": 32,
+      "maxOffense": 0.0005681818181818183,
+      "maxDefense": 0.0001704545454545454
+    }
+  ]
+}

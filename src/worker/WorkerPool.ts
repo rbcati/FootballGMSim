@@ -1,3 +1,4 @@
+import { type SchemeExecution } from '../core/sim/schemeExecution.ts';
 import type { AttributesV2 } from '../types/player.ts';
 import {
   simulateRichGame,
@@ -13,6 +14,8 @@ export interface Matchup {
   normalizationConstant?: number;
   homeTeamId: number;
   awayTeamId: number;
+  homeSchemeFit?: SchemeExecution;
+  awaySchemeFit?: SchemeExecution;
   homeOffense: AttributesV2;
   awayOffense: AttributesV2;
   homeDefense: AttributesV2;

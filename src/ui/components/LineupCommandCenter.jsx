@@ -112,7 +112,7 @@ export default function LineupCommandCenter({ league, team, roster, actions, onP
       <div data-testid="lineup-special-strength"><strong>{specialTeamsRating ?? '—'}</strong><span>SPEC</span></div>
       <div className="lineup-summary__schemes"><span>{snapshot.schemes.offense.name} · {fitLabel(snapshot.offensiveSchemeFit)}</span><span>{snapshot.schemes.defense.name} · {fitLabel(snapshot.defensiveSchemeFit)}</span></div>
     </section>
-    <details className="guided-detail"><summary>Why scheme fit matters</summary><p>Scheme fit reflects how well your assigned starters’ strengths match the system you are running. Compare talent and availability alongside fit; this score does not promise a fixed ratings bonus.</p></details>
+    <details className="guided-detail"><summary>Why scheme fit matters</summary><p>Scheme fit reflects how well your assigned starters’ strengths match the system you are running. Supported game-day strengths can provide a modest execution advantage in the modern simulation. Talent, availability, and Game Plan still matter. The displayed fit score uses exact observed ratings; modern execution compares supported strengths relative to other systems and does not promise a fixed ratings bonus.</p></details>
 
     <div className="lineup-unit-tabs" role="tablist" aria-label="Lineup unit">
       {['offense', 'defense', 'special'].map((key) => <button key={key} role="tab" aria-selected={unit === key} onClick={() => { setUnit(key); setChangingId(null); }}>{key === 'special' ? 'Special Teams' : key}</button>)}

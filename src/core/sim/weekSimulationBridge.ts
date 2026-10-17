@@ -1,3 +1,4 @@
+import { projectSchemeExecution, type SchemeContext, type SchemeExecution } from './schemeExecution.ts';
 import type { AttributesV2, Player } from '../../types/player.ts';
 import { ensureAttributesV2 } from '../migration/attributeMigrator.ts';
 import { getEffectivePlayerForRole } from './positionalMultipliers.js';
@@ -18,6 +19,7 @@ const DEFENSE_PRIORITY = DEPTH_CHART_ROWS
   .map((row) => row.key);
 
 export interface AggregatedTeamUnits {
+  schemeFit: SchemeExecution;
   offense: AttributesV2;
   defense: AttributesV2;
   migratedPlayers: Array<{ id: number | string; attributesV2: AttributesV2 }>;
@@ -130,7 +132,7 @@ function pickUnitPlayers(
   return picked.slice(0, targetSize);
 }
 
-export function aggregateTeamUnitsFromRoster(roster: Player[] = [], teamId?: number | string | null): AggregatedTeamUnits {
+export function aggregateTeamUnitsFromRoster(roster: Player[] = [], teamId?: number | string | null, schemes: SchemeContext = {}): AggregatedTeamUnits {
   const migratedPlayers: Array<{ id: number | string; attributesV2: AttributesV2 }> = [];
   const upgradedRoster = buildEligibleGameDayRoster(roster, teamId).map((player) => {
     const upgraded = ensureAttributesV2(player);
@@ -177,7 +179,21 @@ export function aggregateTeamUnitsFromRoster(roster: Player[] = [], teamId?: num
   const offensePlayers = applyGroupRole(selectedOffense, 'OFFENSE');
   const defensePlayers = applyGroupRole(selectedDefense, 'DEFENSE');
 
+  // Base unit migration/role normalization may synthesize, clamp or coerce data.
+  // Compatibility may use only originally valid V2 evidence, then the SAME
+  // effective role penalties as the game-day strengths. Keep missing seats neutral.
+  const originalAttributes = new Map(roster.map((player) => [String(player.id), player.attributesV2]));
+  const schemeEvidence = (players: typeof offensePlayers) => players.map((player) => ({
+    ...player,
+    attributesV2: Object.fromEntries(Object.keys(player.attributesV2).map((key) => {
+      const value = originalAttributes.get(String(player.id))?.[key as keyof AttributesV2];
+      return [key, Number.isFinite(value) && Number(value) >= 1 && Number(value) <= 100
+        ? player.attributesV2[key as keyof AttributesV2] : NaN];
+    })) as unknown as AttributesV2,
+  }));
+
   return {
+    schemeFit: projectSchemeExecution(schemeEvidence(offensePlayers), schemeEvidence(defensePlayers), schemes),
     offense: aggregateForKeys(offensePlayers, OFFENSE_KEYS),
     defense: aggregateForKeys(defensePlayers, DEFENSE_KEYS),
     migratedPlayers,
