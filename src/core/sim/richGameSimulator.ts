@@ -1,3 +1,4 @@
+import { schemeMatchupDelta, type SchemeExecution } from './schemeExecution.ts';
 import { resolveMatchup, DEFAULT_NORMALIZATION_CONSTANT } from './matchupEngine.ts';
 import type { AttributesV2 } from '../../types/player.ts';
 import type { DerivedGamePlanMultipliers } from './gamePlanMultipliers.ts';
@@ -157,6 +158,8 @@ export interface RichMatchupPayload {
   homeTeamId: number;
   awayTeamId: number;
   gameDayUnits?: RichGameSummary['gameDayUnits'];
+  homeSchemeFit?: SchemeExecution;
+  awaySchemeFit?: SchemeExecution;
   homeOffense: AttributesV2;
   awayOffense: AttributesV2;
   homeDefense: AttributesV2;
@@ -481,6 +484,8 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   const reasonMap = new Map<string, number>();
   const homePrep = payload.homePrepMultipliers ?? NEUTRAL_PREP;
   const awayPrep = payload.awayPrepMultipliers ?? NEUTRAL_PREP;
+  const homeSchemeDelta = schemeMatchupDelta(payload.homeSchemeFit, payload.awaySchemeFit);
+  const awaySchemeDelta = schemeMatchupDelta(payload.awaySchemeFit, payload.homeSchemeFit);
   const advancedAttribution = new Map<string, AdvancedGameStats>();
 
   const stats = {
@@ -645,6 +650,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       clockSec: state.clockSec,
       weather: payload.weather,
       normalizationConstant: state.normalizationConstant,
+      schemeExecutionDelta: state.possession === 'home' ? homeSchemeDelta : awaySchemeDelta,
       formBias: state.possession === 'home' ? homeFormBias : awayFormBias,
       fatigueFactor: clamp(fatigueBaseline - offensePrep.fatigueDisciplineDelta * 0.35, 0, 0.95),
       playType,

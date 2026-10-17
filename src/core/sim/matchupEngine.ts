@@ -1,3 +1,4 @@
+import { MAX_SCHEME_EXECUTION_DELTA } from './schemeExecution.ts';
 import type { AttributesV2 } from '../../types/player.ts';
 
 export interface PlayContext {
@@ -10,6 +11,8 @@ export interface PlayContext {
   fatigueFactor?: number;
   /** Per-game offensive "form" swing (hot/cold day), added to the success input. */
   formBias?: number;
+  /** Relative pass execution only; combined offense/defense context, applied once. */
+  schemeExecutionDelta?: number;
   normalizationConstant?: number;
   playType?: 'pass' | 'run';
   targetId?: string;
@@ -217,7 +220,9 @@ export function resolveMatchup(
     : 0;
   const coverageExposure = playType === 'pass' ? clamp(ctx.coverageExposureDelta ?? 0, -0.04, 0.12) : 0;
   const input = base + (matchupDelta * 2 * normalization) + (ctx.formBias ?? 0) - pressurePenalty - pressureOpportunity + coverageExposure - fatiguePenalty - downDistancePenalty + weatherAdjustment(ctx.weather);
-  const successProbability = clamp(sigmoid(input), 0.03, 0.97);
+  const schemeDelta = playType === 'pass' && Number.isFinite(ctx.schemeExecutionDelta)
+    ? clamp(ctx.schemeExecutionDelta ?? 0, -MAX_SCHEME_EXECUTION_DELTA, MAX_SCHEME_EXECUTION_DELTA) : 0;
+  const successProbability = clamp(sigmoid(input) * (1 + schemeDelta), 0.03, 0.97);
 
   const success = rng() <= successProbability;
   const sackProbability = playType === 'pass'

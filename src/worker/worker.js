@@ -4818,8 +4818,14 @@ function buildWeekMatchupsFromLeague(league, meta, week, opts = {}) {
     const homeAvailability = deriveGameDayAvailability(homeRoster, { teamId: game?.home?.id });
     const awayAvailability = deriveGameDayAvailability(awayRoster, { teamId: game?.away?.id });
 
-    const homeUnits = aggregateTeamUnitsFromRoster(homeRoster, game?.home?.id);
-    const awayUnits = aggregateTeamUnitsFromRoster(awayRoster, game?.away?.id);
+    const homeUnits = aggregateTeamUnitsFromRoster(homeRoster, game?.home?.id, {
+      offSchemeId: game?.home?.strategies?.offSchemeId || game?.home?.staff?.headCoach?.offScheme || 'WEST_COAST',
+      defSchemeId: game?.home?.strategies?.defSchemeId || game?.home?.staff?.headCoach?.defScheme || 'COVER_2',
+    });
+    const awayUnits = aggregateTeamUnitsFromRoster(awayRoster, game?.away?.id, {
+      offSchemeId: game?.away?.strategies?.offSchemeId || game?.away?.staff?.headCoach?.offScheme || 'WEST_COAST',
+      defSchemeId: game?.away?.strategies?.defSchemeId || game?.away?.staff?.headCoach?.defScheme || 'COVER_2',
+    });
     migratedPlayers.push(...homeUnits.migratedPlayers, ...awayUnits.migratedPlayers);
 
     const homePlan = game?.home?.strategies?.gamePlan ?? {};
@@ -4849,15 +4855,17 @@ function buildWeekMatchupsFromLeague(league, meta, week, opts = {}) {
 
     matchups.push({
       gameId: buildCanonicalGameId({
-        seasonId: Number(meta?.currentSeasonId ?? meta?.season ?? 1),
+        seasonId: meta?.currentSeasonId ?? meta?.season ?? 1,
         week: Number(week),
         homeId: Number(game?.home?.id),
         awayId: Number(game?.away?.id),
       }),
       homeTeamId: Number(game?.home?.id),
       awayTeamId: Number(game?.away?.id),
+      homeSchemeFit: homeUnits.schemeFit,
       homeOffense: homeUnits.offense,
       homeDefense: homeUnits.defense,
+      awaySchemeFit: awayUnits.schemeFit,
       awayOffense: awayUnits.offense,
       awayDefense: awayUnits.defense,
       gameDayUnits: {
