@@ -85,12 +85,13 @@ export async function goToTab(page, name) {
     return;
   }
 
-  if (tab === 'weekly-results' && await page.locator('.premium-bottom-nav').isVisible()) {
+  if (['weekly-results', 'schedule'].includes(tab) && await page.locator('.premium-bottom-nav').isVisible()) {
     await page.getByRole('button', { name: 'More', exact: true }).click();
     const menu = page.getByRole('navigation', { name: 'More navigation' });
     await expect(menu).toBeVisible();
-    await menu.getByRole('button', { name: 'Weekly Results', exact: true }).click();
-    await expect(page.getByTestId('weekly-results')).toBeVisible();
+    await menu.getByRole('button', { name: tab === 'schedule' ? 'Schedule' : 'Weekly Results', exact: true }).click();
+    if (tab === 'schedule') await expect(page.getByLabel('Schedule view mode')).toBeVisible();
+    else await expect(page.getByTestId('weekly-results')).toBeVisible();
     return;
   }
 

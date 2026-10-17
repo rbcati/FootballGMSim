@@ -460,11 +460,8 @@ function quality(weeks, ids) {
     const seen = new Map();
     for (const w of weeks) {
       const g = w.games.find((g) => g.home === id || g.away === id);
-      if (!g) {
-        side = null;
-        streak = 0;
-        continue;
-      }
+      // A bye does not end a run of consecutive home or away games.
+      if (!g) continue;
       const next = g.home === id ? 'H' : 'A';
       streak = side === next ? streak + 1 : 1;
       side = next;
@@ -592,10 +589,14 @@ export function generateNflSchedule(teams, input = {}) {
         totalNodes,
         improvementSteps: 1024,
         ...best.quality,
-        relaxedPreferences:
-          best.quality.maxHomeAwayStreak > 3
+        relaxedPreferences: [
+          ...(best.quality.maxHomeAwayStreak > 3
             ? ['home-away-streak-target-3']
-            : [],
+            : []),
+          ...(best.quality.minDivisionGap < 5
+            ? ['division-rematch-gap-target-5']
+            : []),
+        ],
       },
     },
   };

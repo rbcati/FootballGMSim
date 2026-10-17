@@ -78,6 +78,23 @@ describe('canonical NFL scheduling authority', () => {
         errors: [],
       });
       checkFormula(s, year, priorRanks);
+      const venueRuns = teams.map((t) => {
+        let last = null,
+          run = 0,
+          longest = 0;
+        for (const week of s.weeks) {
+          const g = week.games.find((g) => g.home === t.id || g.away === t.id);
+          if (!g) continue;
+          const home = g.home === t.id;
+          run = home === last ? run + 1 : 1;
+          last = home;
+          longest = Math.max(longest, run);
+        }
+        return longest;
+      });
+      expect(s.metadata.placement.maxHomeAwayStreak).toBe(
+        Math.max(...venueRuns)
+      );
       const divisionGames = s.weeks[17].games;
       expect(divisionGames).toHaveLength(16);
       expect(
