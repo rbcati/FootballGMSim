@@ -164,4 +164,44 @@ West; the specific teams depend on actual Season-1 divisional finishes.
 
 ## Validation evidence
 
-Results and measured timings are recorded below after the final validation run.
+Measured local validation follows.
+
+- Baseline corrected-behavior regressions: **3/3 failed before replacement**
+  (regression commit `7c60f1ba`), then passed against the shared authority.
+- Complete local unit suite on Node 22: **519 files / 6,397 tests passed**;
+  the subsequently added full-league tiebreak-context regression also passed
+  after reproducing the incorrect conference-tie ordering before its fix.
+- Independent formula oracle: 256 generated schedules over 24 years, varied
+  prior-rank permutations and seeds. This checks actual division/rank obligations
+  without trusting generated category labels. It also independently measures
+  venue streaks across bye weeks.
+- Standalone reproducible campaign: **336/336 valid schedules**, 320 seeds,
+  24 seasons and 16 paired fingerprints with reversed team-array order.
+  Run `node scripts/audit-nfl-schedules.mjs`; measured results, first-year/future-year
+  generation times, validation times, search counts and post-run process heap
+  are in [the benchmark JSON](pr-1803-schedule-benchmark.json). Heap is a process
+  sample after the run, not a peak-memory estimate.
+- Full durability suite passed (91 checks before the extra bootstrap-failure
+  regression). The production worker played two full regular seasons and
+  rolled into Season 3, checked 272 persisted regular-season games per year,
+  correct standings totals before playoffs, frozen ranks, save/reload and the
+  unchanged first Game Book. Explicit invalid-rank rollover and strict bootstrap
+  rejection tests preserve the prior cache/DB state and prevent fallback persistence.
+- Dynasty soak: 8 files / 103 tests passed. Simulation type checks passed.
+- Production build and offline Netlify production/deploy-preview parity passed.
+- Desktop and full 390px first-session smokes passed, including completed scores,
+  Game Book navigation and reload. Dedicated Pittsburgh schedule/bye browser
+  checks passed at 1280px and 390px, including no document overflow. Schedule/HQ/
+  archived-result component checks passed (61 tests).
+- Early overlapping validation saturated the local CPU and hit the existing
+  simulation soak's 30-second timeout. The complete unit run above passed without
+  changing simulation formulas or its timeout. Deploy checks reinstall dependencies,
+  so they are serialized with tests that use `node_modules`.
+
+No invalid fallback is persisted. Adversarial cases reject repeated nondivision
+opponents, wrong home/away obligations, missing weeks/byes, double booking,
+unknown/string-coerced IDs, duplicate IDs, fabricated bye games, malformed week
+records and invalid ranks. The remaining observed soft preferences are at most
+five consecutive home/away games and a minimum three-week rivalry gap; both
+relaxations are explicitly reported when their stricter targets are missed.
+Hosted current-head CI and review status are recorded in the PR/final handoff.

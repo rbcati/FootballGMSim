@@ -8,6 +8,8 @@ import {
 import { DEFAULT_TEAMS } from '../src/data/default-teams.js';
 
 const times = [],
+  initialTimes = [],
+  rolloverTimes = [],
   validationTimes = [],
   attempts = [],
   nodes = [],
@@ -33,7 +35,9 @@ for (let i = 0; i < 320; i++) {
   };
   let t = performance.now();
   const schedule = generateNflSchedule(DEFAULT_TEAMS, options);
-  times.push(performance.now() - t);
+  const generationMs = performance.now() - t;
+  times.push(generationMs);
+  (year === 2026 ? initialTimes : rolloverTimes).push(generationMs);
   t = performance.now();
   const result = validateNflSchedule(schedule, DEFAULT_TEAMS, options);
   validationTimes.push(performance.now() - t);
@@ -69,6 +73,8 @@ const report = {
   seeds: 320,
   deterministicPairs,
   generationMs: summary(times),
+  initialGenerationMs: summary(initialTimes),
+  rolloverGenerationMs: summary(rolloverTimes),
   validationMs: summary(validationTimes),
   placementAttempts: summary(attempts),
   exactCoverNodes: summary(nodes),

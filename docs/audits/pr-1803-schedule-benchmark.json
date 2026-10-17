@@ -6,23 +6,31 @@
   "seeds": 320,
   "deterministicPairs": 16,
   "generationMs": {
-    "mean": 105.156,
-    "max": 336.269
+    "mean": 132.487,
+    "max": 437.128
+  },
+  "initialGenerationMs": {
+    "mean": 170.375,
+    "max": 298.139
+  },
+  "rolloverGenerationMs": {
+    "mean": 130.753,
+    "max": 437.128
   },
   "validationMs": {
-    "mean": 0.861,
-    "max": 16.893
+    "mean": 1.418,
+    "max": 36.793
   },
   "placementAttempts": {
     "mean": 32,
     "max": 32
   },
   "exactCoverNodes": {
-    "mean": 32307.584,
-    "max": 121584
+    "mean": 23068.728,
+    "max": 103863
   },
   "maxHomeAwayStreak": 5,
   "minDivisionMeetingGap": 3,
-  "totalMs": 35314.2,
-  "heapUsedBytes": 24222664
+  "totalMs": 44312.6,
+  "heapUsedBytes": 20198840
 }
