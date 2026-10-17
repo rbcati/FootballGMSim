@@ -19,6 +19,10 @@ export interface SchemeContext {
 }
 type Evidence = Player & { attributesV2: AttributesV2 };
 type Bundle = ReadonlyArray<readonly [keyof AttributesV2, number]>;
+interface EvaluativeScheme {
+  id: string;
+  weights: Record<string, Record<string, number> | null>;
+}
 const DEEP: Bundle = [['throwPower', .5], ['throwAccuracyDeep', .5]];
 const QUICK: Bundle = [['throwAccuracyShort', .4], ['release', .3], ['decisionMaking', .3]];
 const VERTICAL_RECEIVER: Bundle = [['separation', .5], ['ballTracking', .5]];
@@ -50,8 +54,8 @@ function relativeEvidence(player: Evidence, preferred: Bundle, alternative: Bund
 function observedRelativeFit(player: Evidence, scheme: string, group: 'OFFENSE' | 'DEFENSE'): number | null {
   const row = getPlayerScrimmageUnitRow(player, group);
   if (!row) return null;
-  const position = normalizeSchemePosition(row.key);
-  const family = group === 'OFFENSE'
+  const position: string = normalizeSchemePosition(row.key);
+  const family: EvaluativeScheme[] = group === 'OFFENSE'
     ? [OFFENSIVE_SCHEMES.WEST_COAST, OFFENSIVE_SCHEMES.VERTICAL]
     : Object.values(DEFENSIVE_SCHEMES);
   const chosen = family.find((item) => item.id === scheme);
@@ -61,7 +65,8 @@ function observedRelativeFit(player: Evidence, scheme: string, group: 'OFFENSE' 
     const value = player.ratings?.[key];
     return !Number.isFinite(value) || Number(value) < 1 || Number(value) > 100;
   })) return null;
-  const assignedRole = getScrimmageDepthRow(player, group)?.key ?? player.pos;
+  const assignedRow = getScrimmageDepthRow(player);
+  const assignedRole = assignedRow?.group === group ? assignedRow.key : player.pos;
   const effective = getEffectivePlayerForRole({ ...player, ...player.ratings }, assignedRole);
   const observed = { pos: row.key, ratings: Object.fromEntries(keys.map((key) => [key, effective[key]])) };
   const fit = calculatePlayerSchemeFit(observed, chosen);
