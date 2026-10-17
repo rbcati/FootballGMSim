@@ -125,7 +125,9 @@ export async function goToTab(page, name) {
     return;
   }
 
-  if (tab === 'weekly-results' && (await page.getByTestId('completed-game-link').first().isVisible().catch(() => false) || await page.getByTestId('game-book-primary-cta').first().isVisible().catch(() => false))) {
+  // HQ also contains completed-game links. Wait for the actual results screen
+  // instead of treating those links as proof that navigation has completed.
+  if (tab === 'weekly-results' && await page.getByTestId('weekly-results').isVisible().catch(() => false)) {
     return;
   }
 

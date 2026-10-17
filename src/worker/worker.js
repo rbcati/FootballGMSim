@@ -84,6 +84,7 @@ import GameRunner         from '../core/game-runner.js';
 import { simulateBatch }  from '../core/game-simulator.js';
 import { Utils }          from '../core/utils.js';
 import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
+import { assertNflSchedule, isNflStructure, completedRegularDivisionRanks } from '../core/nflSchedule.js';
 import { makePlayer, generateDraftClass, calculateMorale, calculateExtensionDemand, buildPlayerGuid }  from '../core/player.js';
 import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
 import {
@@ -2563,17 +2564,9 @@ async function handleNewLeague(payload, id) {
     const targetLeagueSize = Math.max(4, Math.min(teamDefs.length, Number(resolvedSettings.leagueSize || teamDefs.length)));
     const configuredTeams = (teamDefs ?? []).slice(0, targetLeagueSize).map((team, idx) => ({
       ...team,
-      conf: Number.isFinite(Number(team?.conf)) ? Number(team.conf) : (idx % Math.max(1, Number(resolvedSettings.conferenceCount ?? 2))),
-      div: Number.isFinite(Number(team?.div)) ? Number(team.div) : (Math.floor(idx / Math.max(1, Number(resolvedSettings.conferenceCount ?? 2))) % Math.max(1, Number(resolvedSettings.divisionCountPerConference ?? 4))),
+      conf: Number.isFinite(Number(team?.conf ?? team?.cid)) ? Number(team.conf ?? team.cid) : (idx % Math.max(1, Number(resolvedSettings.conferenceCount ?? 2))),
+      div: Number.isFinite(Number(team?.div ?? team?.did)) ? Number(team.div ?? team.did) : (Math.floor(idx / Math.max(1, Number(resolvedSettings.conferenceCount ?? 2))) % Math.max(1, Number(resolvedSettings.divisionCountPerConference ?? 4))),
     }));
-
-    // Generate new League ID
-    const leagueId = await createUniqueLeagueId();
-    configureActiveLeague(leagueId);
-
-    // Wipe any existing data in this DB (defensive guard for unexpected ID collisions)
-    await clearAllData();
-    cache.reset();
 
     // Ensure we have a valid schedule generator
     // (Protects against module loading edge cases where named export might be undefined)
@@ -2600,6 +2593,17 @@ async function handleNewLeague(payload, id) {
     if (!isPlayableLeagueState(league)) {
       throw new Error('League generation failed: no playable league state available.');
     }
+
+    const initialSlimSchedule = slimifySchedule(league.schedule, league.teams, `s${league.season ?? 1}`);
+    if (isNflStructure(league.teams)) assertNflSchedule(initialSlimSchedule, league.teams, league.schedule.metadata);
+
+    // Generate new League ID
+    const leagueId = await createUniqueLeagueId();
+    configureActiveLeague(leagueId);
+
+    // Wipe any existing data in this DB (defensive guard for unexpected ID collisions)
+    await clearAllData();
+    cache.reset();
 
     const seasonId = `s${league.season ?? 1}`;
     const economy = normalizeLeagueEconomy({
@@ -2697,7 +2701,7 @@ async function handleNewLeague(payload, id) {
     }
 
     // Store schedule in meta (it's small: just matchup IDs, no objects)
-    const slimSchedule = slimifySchedule(league.schedule, league.teams, seasonId);
+    const slimSchedule = initialSlimSchedule;
     cache.setMeta({ schedule: slimSchedule });
 
     // Arm the flush guard — new league is now created and ready for writes.
@@ -2767,6 +2771,7 @@ async function handleNewLeague(payload, id) {
 function slimifySchedule(schedule, teams, seasonId = null) {
   if (!schedule?.weeks) return null;
   return {
+    ...(schedule.metadata ? { metadata: schedule.metadata } : {}),
     weeks: schedule.weeks.map(week => {
       const weekNum = week.week ?? week.weekNumber;
       const byeIds = new Set();
@@ -2877,8 +2882,10 @@ function validateSlimScheduleReferences(slimSchedule, teams) {
 function expandSchedule(slimSchedule) {
   if (!slimSchedule?.weeks) return null;
   return {
+    ...(slimSchedule.metadata ? { metadata: slimSchedule.metadata } : {}),
     weeks: slimSchedule.weeks.map(week => ({
       week:  week.week,
+      teamsWithBye: week.teamsWithBye ?? [],
       games: (week.games ?? []).map(g => ({
         id: g.id ?? g.gameId,
         gameId: g.gameId ?? g.id,
@@ -2908,12 +2915,15 @@ async function handleUseSafeStarterLeague(payload, id) {
       userTeamId: payload?.options?.userTeamId,
       name: payload?.options?.name ?? `Safe Starter ${slotKey?.split('_')?.[2] ?? '1'}`,
       year: payload?.options?.year,
+      scheduleSeed: payload?.options?.rngSeed ?? 0,
     });
     const validation = getPlayableLeagueValidation(safeLeague);
     if (!validation.valid) {
       throw new Error(`Safe starter failed validation: ${validation.reasons?.[0] ?? 'unknown error'}`);
     }
 
+    const initialSlimSchedule = slimifySchedule(safeLeague.schedule, safeLeague.teams, safeLeague.seasonId);
+    assertNflSchedule(initialSlimSchedule, safeLeague.teams, safeLeague.schedule.metadata);
     configureActiveLeague(slotKey);
     await clearAllData();
     cache.reset();
@@ -3006,7 +3016,7 @@ async function handleUseSafeStarterLeague(payload, id) {
     for (const team of cache.getAllTeams()) {
       recalculateTeamCap(team.id);
     }
-    cache.setMeta({ schedule: slimifySchedule(safeLeague.schedule, safeLeague.teams, seasonId) });
+    cache.setMeta({ schedule: initialSlimSchedule });
 
     _saveIsExplicitlyLoaded = true;
     await Meta.save(cache.getMeta());
@@ -3794,7 +3804,12 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
     const { week19Entry, playoffSeeds } = generatePlayoffWeek19();
     const sched = cache.getMeta().schedule ?? { weeks: [] };
     if (!sched.weeks.find(w => w.week === 19)) sched.weeks.push(week19Entry);
-    cache.setMeta({ currentWeek: 19, phase: 'playoffs', schedule: sched, playoffSeeds });
+    cache.setMeta({ currentWeek: 19, phase: 'playoffs', schedule: sched, playoffSeeds,
+      completedSeasonSchedulingRanks: isNflStructure(cache.getAllTeams()) ? {
+        seasonId: meta.currentSeasonId,
+        ranks: completedRegularDivisionRanks(cache.getAllTeams(), sched, meta.globalSeed ?? 0),
+      } : null,
+    });
     nextWeekNum = 19;
 
   } else if (isSuperbowl) {
@@ -13638,25 +13653,19 @@ async function handleStartNewSeason(payload, id) {
   const makeScheduleFn = makeAccurateSchedule || (Scheduler && Scheduler.makeAccurateSchedule);
   if (!makeScheduleFn) { post(toUI.ERROR, { message: 'Cannot generate schedule' }, id); return; }
   const teamDefs = cache.getAllTeams();
-  const rawSchedule = makeScheduleFn(teamDefs);
-  let slimSchedule = slimifySchedule(rawSchedule, teamDefs, newSeasonId);
-  let scheduleValidation = validateSlimScheduleReferences(slimSchedule, teamDefs);
-  if (!scheduleValidation.valid) {
-    console.error('[Worker] New-season schedule failed reference validation:',
-      scheduleValidation.errors.slice(0, 8));
-    const fallbackRaw = Scheduler.createSimpleSchedule(teamDefs);
-    const fallbackSlim = slimifySchedule(fallbackRaw, teamDefs, newSeasonId);
-    const fallbackValidation = validateSlimScheduleReferences(fallbackSlim, teamDefs);
-    if (!fallbackValidation.valid) {
-      post(toUI.ERROR, {
-        message: `Cannot generate a valid ${newSeasonId} schedule: ${scheduleValidation.errors[0] ?? 'unknown'}`,
-      }, id);
-      return;
-    }
-    slimSchedule = fallbackSlim;
-    scheduleValidation = fallbackValidation;
-    console.warn('[Worker] Recovered new-season schedule via simple validated fallback.');
-  }
+  // The regular-season snapshot precedes playoffs and every record reset. Legacy
+  // saves recover ranks from immutable regular-season scores using the same tiebreak authority.
+  const priorRanks = isNflStructure(teamDefs)
+    ? (meta.completedSeasonSchedulingRanks?.seasonId === meta.currentSeasonId
+      ? meta.completedSeasonSchedulingRanks.ranks
+      : completedRegularDivisionRanks(teamDefs, meta.schedule, meta.globalSeed ?? 0, await Games.bySeason(meta.currentSeasonId)))
+    : undefined;
+  const scheduleInputs = { year: newYear, season: newSeason, seasonId: newSeasonId, priorRanks, seed: meta.schedule?.metadata?.seed ?? 0 };
+  const rawSchedule = makeScheduleFn(teamDefs, scheduleInputs);
+  const slimSchedule = slimifySchedule(rawSchedule, teamDefs, newSeasonId);
+  const scheduleValidation = validateSlimScheduleReferences(slimSchedule, teamDefs);
+  if (!scheduleValidation.valid) throw new Error(`Cannot generate ${newSeasonId}: ${scheduleValidation.errors.join('; ')}`);
+  if (isNflStructure(teamDefs)) assertNflSchedule(slimSchedule, teamDefs, scheduleInputs);
 
   // Build archive rows and cache mutations now, but persist them only at the
   // final league commit point with rollover state and transactions.
@@ -13798,6 +13807,7 @@ async function handleStartNewSeason(payload, id) {
     currentWeek:             1,
     phase:                   'preseason',
     schedule:                slimSchedule,
+    completedSeasonSchedulingRanks: null,
     playoffSeeds:            null,
     draftState:              null,
     freeAgencyState:         null, // Reset FA state
@@ -13874,6 +13884,7 @@ async function handleStartNewSeason(payload, id) {
   // State and staged roster/cap transactions share one league-IDB transaction.
   // A failed commit therefore leaves neither half-advanced state nor orphan
   // transaction rows, and the in-memory snapshot remains safe to retry.
+  if (isNflStructure(teamDefs)) assertNflSchedule(cache.getMeta().schedule, teamDefs, scheduleInputs);
   await flushDirty(true, {
     transactions: rolloverTransactions,
     seasons: stagedArchive.seasons,

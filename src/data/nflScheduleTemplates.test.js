@@ -32,7 +32,7 @@ describe('nflScheduleTemplates', () => {
     const weeks = materializeTemplateSchedule(teams, 2026);
     expect(weeks).toHaveLength(18);
 
-    expect(() => validateMaterializedTemplateSchedule(weeks)).not.toThrow();
+    expect(() => validateMaterializedTemplateSchedule(weeks, teams, { season: 2026 })).not.toThrow();
   });
 
   it('rejects non-standard conference/division layouts', () => {

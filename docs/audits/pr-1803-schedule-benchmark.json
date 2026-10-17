@@ -1,0 +1,28 @@
+{
+  "node": "v22.23.3",
+  "instances": 336,
+  "passing": 336,
+  "seasons": 24,
+  "seeds": 320,
+  "deterministicPairs": 16,
+  "generationMs": {
+    "mean": 105.156,
+    "max": 336.269
+  },
+  "validationMs": {
+    "mean": 0.861,
+    "max": 16.893
+  },
+  "placementAttempts": {
+    "mean": 32,
+    "max": 32
+  },
+  "exactCoverNodes": {
+    "mean": 32307.584,
+    "max": 121584
+  },
+  "maxHomeAwayStreak": 5,
+  "minDivisionMeetingGap": 3,
+  "totalMs": 35314.2,
+  "heapUsedBytes": 24222664
+}
