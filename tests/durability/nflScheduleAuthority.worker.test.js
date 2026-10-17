@@ -52,7 +52,13 @@ describe('NFL scheduling through the production worker', () => {
     driver.view = boot.payload;
     assertLiveSchedule();
     const first = copy(regularSchedule());
-    const examples = [{ season: 1, rotation: first.metadata.rotation, pittsburgh: pittsburgh(first) }];
+    const examples = [
+      {
+        season: 1,
+        rotation: first.metadata.rotation,
+        pittsburgh: pittsburgh(first),
+      },
+    ];
     console.info('Pittsburgh Season 1', JSON.stringify(pittsburgh(first)));
     const generated = generateNflSchedule(cache.getAllTeams(), {
       year: 2026,
@@ -154,7 +160,12 @@ describe('NFL scheduling through the production worker', () => {
         true
       );
       const before = copy(cache.getMeta().schedule);
-      examples.push({ season: season + 1, rotation: before.metadata.rotation, priorRanks: before.metadata.priorRanks, pittsburgh: pittsburgh(before) });
+      examples.push({
+        season: season + 1,
+        rotation: before.metadata.rotation,
+        priorRanks: before.metadata.priorRanks,
+        pittsburgh: pittsburgh(before),
+      });
       await driver.save();
       await driver.reload();
       expect(cache.getMeta().schedule).toEqual(before);
@@ -165,7 +176,20 @@ describe('NFL scheduling through the production worker', () => {
     const txs = await Transactions.loadRecent(4000);
     expect(new Set(txs.map((t) => t.id)).size).toBe(txs.length);
     expect((await Meta.load()).schedule).toEqual(cache.getMeta().schedule);
-    if (process.env.NFL_SCHEDULE_WORKER_AUDIT) writeFileSync(process.env.NFL_SCHEDULE_WORKER_AUDIT, JSON.stringify({ seed: 1803, regularSeasonsPlayed: 2, regularGamesPersisted: 544, examples }, null, 2) + '\n');
+    if (process.env.NFL_SCHEDULE_WORKER_AUDIT)
+      writeFileSync(
+        process.env.NFL_SCHEDULE_WORKER_AUDIT,
+        JSON.stringify(
+          {
+            seed: 1803,
+            regularSeasonsPlayed: 2,
+            regularGamesPersisted: 544,
+            examples,
+          },
+          null,
+          2
+        ) + '\n'
+      );
   }, 600000);
   it('rejects a failed rollover before persistence and preserves an existing active schedule on reload', async () => {
     const driver = new LifecycleDriver({ seed: 1803 });

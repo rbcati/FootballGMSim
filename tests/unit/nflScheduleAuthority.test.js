@@ -205,6 +205,37 @@ describe('canonical NFL scheduling authority', () => {
     expect(a).toEqual(generateNflSchedule(teams, { seed: 1 }));
   });
 
+  it('retains conference-game context when breaking prior-year division ties', () => {
+    const records = teams.map((t) => ({
+      ...t,
+      wins: 8,
+      losses: 9,
+      ties: 0,
+      ptsFor: 0,
+      ptsAgainst: 0,
+    }));
+    const schedule = generateNflSchedule(records);
+    for (const [id, opp, won] of [
+      [0, 4, true],
+      [1, 5, false],
+    ]) {
+      const game = schedule.weeks
+        .flatMap((w) => w.games)
+        .find(
+          (g) => [g.home, g.away].includes(id) && [g.home, g.away].includes(opp)
+        );
+      Object.assign(game, {
+        played: true,
+        homeScore: (game.home === id) === won ? 17 : 7,
+        awayScore: (game.home === id) === won ? 7 : 17,
+      });
+    }
+    // Overall and division records tie. BUF's conference win must outrank
+    // MIA's conference loss before the seeded coin flip (which favors MIA).
+    const ranks = previousDivisionRanks(records, schedule, 1);
+    expect(ranks[0]).toBeLessThan(ranks[1]);
+  });
+
   it('uses previous regular-season results and the existing tiebreak authority, excluding playoffs', () => {
     const s = generateNflSchedule(teams);
     const records = teams.map((t) => ({

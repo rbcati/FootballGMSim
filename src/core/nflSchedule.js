@@ -82,22 +82,34 @@ export function scheduleOptions(input = {}) {
 
 /** Freeze before resetting records. Uses the existing standings comparator within each division. */
 export function previousDivisionRanks(teams, schedule, seed = 0) {
+  const structure = nflStructure(teams);
+  const rows = [...teams]
+    .sort((a, b) => identity(a) - identity(b))
+    .map((t) => {
+      const games = (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0);
+      const pct = games ? ((t.wins ?? 0) + (t.ties ?? 0) / 2) / games : 0;
+      return {
+        ...t,
+        id: identity(t),
+        conf: conf(t),
+        div: div(t),
+        pct,
+        winPct: pct,
+      };
+    });
+  // Match the worker's standings authority with all opponents present in the
+  // tiebreak context. Filtering before this call loses conference/common games
+  // and strength of schedule, changing divisional finishes on tied records.
+  const ordered = sortStandingsRows(rows, schedule, seed);
   const ranks = {};
-  for (const ds of nflStructure(teams))
-    for (const d of ds) {
-      const rows = d.teams.map((t) => {
-        const games = (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0);
-        return {
-          ...t,
-          id: identity(t),
-          conf: conf(t),
-          div: div(t),
-          pct: games ? ((t.wins ?? 0) + (t.ties ?? 0) / 2) / games : 0,
-        };
-      });
-      sortStandingsRows(rows, schedule, seed).forEach((t, i) => {
-        ranks[t.id] = i + 1;
-      });
+  for (const divisions of structure)
+    for (const division of divisions) {
+      const members = new Set(division.teams.map(identity));
+      ordered
+        .filter((t) => members.has(t.id))
+        .forEach((t, i) => {
+          ranks[t.id] = i + 1;
+        });
     }
   return ranks;
 }

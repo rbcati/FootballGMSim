@@ -83,8 +83,9 @@ array positions. For each conference its four divisions occupy indices 0–3.
 The initial-year ranks are explicitly **simulator scheduling seeds**: ascending
 canonical numeric team ID within each actual division. No historical win/loss
 records are invented. Later seasons use actual regular-season finishes with
-`sortStandingsRows`, the existing standings/tiebreak authority, applied within
-each division. Ranks are frozen at the Week-18 transition before playoff records
+`sortStandingsRows`, the existing standings/tiebreak authority, retaining full-league opponent
+context before partitioning the ordered rows into divisions. A regression proves
+that conference wins/losses resolve a division tie before the seeded coin flip. Ranks are frozen at the Week-18 transition before playoff records
 can change. Legacy seasons lacking that snapshot recover ranks from played
 weeks 1–18 (including archived Game Book scores if the schedule lacks scores)
 and the same comparator; playoff scores are excluded. Explicitly played games
