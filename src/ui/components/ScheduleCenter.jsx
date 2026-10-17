@@ -135,6 +135,9 @@ export default function ScheduleCenter({
 
   const totalWeeks = schedule?.weeks?.length ?? 0;
   const weekData = schedule?.weeks?.find((week) => week.week === selectedWeek);
+  const byeTeamIds = Array.isArray(weekData?.teamsWithBye) ? weekData.teamsWithBye : [];
+  const focusTeamId = viewMode === "selected_team" ? selectedTeamId : userTeamId;
+  const focusTeamOnBye = viewMode !== "all_week" && byeTeamIds.some((id) => Number(id) === Number(focusTeamId));
   const games = (weekData?.games ?? []).map((game) => {
     const gameId = resolveCompletedGameId(game, { seasonId, week: selectedWeek });
     return resolveCanonicalCompletedGame({ league, gameId, scheduleGame: game, archivedGame: archiveState?.key === archiveKey ? archiveState.games[gameId] : null });
@@ -260,6 +263,16 @@ export default function ScheduleCenter({
           ))}
         </div>
       </StickySubnav>
+
+      {byeTeamIds.length > 0 ? (
+        <CompactInsightCard
+          title={focusTeamOnBye ? `${teamById[focusTeamId]?.name ?? "Your team"} — Bye week` : "Teams on bye"}
+          subtitle={focusTeamOnBye
+            ? `No regular-season game in Week ${selectedWeek}.`
+            : byeTeamIds.map((id) => teamById[id]?.abbr ?? String(id)).join(", ")}
+          tone="info"
+        />
+      ) : null}
 
       {weekRecapItems.length > 0 ? (
         <SectionCard
