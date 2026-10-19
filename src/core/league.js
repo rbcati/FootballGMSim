@@ -200,7 +200,7 @@ function makeLeague(teams, options = {}, dependencies = {}) {
         league.teams = teams.map((teamData, index) => {
             const team = {
                 ...teamData,
-                id: index,
+                id: teamData.id ?? teamData.tid ?? index,
                 // Explicitly initialize standings properties
                 wins: 0,
                 losses: 0,
@@ -310,7 +310,7 @@ function makeLeague(teams, options = {}, dependencies = {}) {
 
         // Final Setup
         if (makeSchedule) {
-            league.schedule = makeSchedule(league.teams);
+            league.schedule = makeSchedule(league.teams, { year: league.year, season: league.season, seasonId: `s${league.season}`, seed: options.rngSeed ?? 0 });
         } else {
             console.warn('⚠️ makeSchedule not provided. Schedule is empty.');
         }

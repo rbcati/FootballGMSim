@@ -1,4 +1,5 @@
 import { DEFAULT_TEAMS } from './default-teams.js';
+import { generateNflSchedule } from '../core/nflSchedule.js';
 
 const TEAM_COUNT = 32;
 const START_YEAR = 2026;
@@ -170,34 +171,7 @@ function makeDraftPicks(teamId: number) {
   return picks;
 }
 
-function makeSchedule(teams: Array<{ id: number }>) {
-  const ids = teams.map((team) => team.id);
-  const weeks = [];
-  for (let week = 1; week <= 18; week += 1) {
-    const offset = (week - 1) % ids.length;
-    const rotated = ids.slice(offset).concat(ids.slice(0, offset));
-    const games = [];
-    for (let i = 0; i < rotated.length; i += 2) {
-      const away = rotated[i];
-      const home = rotated[i + 1];
-      if (home == null || away == null) continue;
-      const gameId = `${SEASON_ID}_w${week}_${home}_${away}`;
-      games.push({
-        id: gameId,
-        gameId,
-        seasonId: SEASON_ID,
-        week,
-        away,
-        home,
-        played: false,
-      });
-    }
-    weeks.push({ week, games });
-  }
-  return { weeks };
-}
-
-export function buildDefaultLeague(options: { userTeamId?: number; name?: string; year?: number } = {}) {
+export function buildDefaultLeague(options: { userTeamId?: number; name?: string; year?: number; scheduleSeed?: number } = {}) {
   const userTeamId = Number.isFinite(Number(options.userTeamId)) ? Number(options.userTeamId) : 0;
   const year = Number.isFinite(Number(options.year)) ? Number(options.year) : START_YEAR;
   const teams = DEFAULT_TEAMS.slice(0, TEAM_COUNT).map((team, idx) => {
@@ -236,7 +210,7 @@ export function buildDefaultLeague(options: { userTeamId?: number; name?: string
     };
   });
 
-  const schedule = makeSchedule(teams);
+  const schedule = generateNflSchedule(teams, { year, season: 1, seasonId: SEASON_ID, seed: options.scheduleSeed ?? 0 });
 
   return {
     id: 'fallback-league',

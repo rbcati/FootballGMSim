@@ -1,0 +1,36 @@
+{
+  "node": "v22.23.3",
+  "instances": 336,
+  "passing": 336,
+  "seasons": 24,
+  "seeds": 320,
+  "deterministicPairs": 16,
+  "generationMs": {
+    "mean": 72.109,
+    "max": 291.377
+  },
+  "initialGenerationMs": {
+    "mean": 98.588,
+    "max": 175.594
+  },
+  "rolloverGenerationMs": {
+    "mean": 70.898,
+    "max": 291.377
+  },
+  "validationMs": {
+    "mean": 0.757,
+    "max": 4.98
+  },
+  "placementAttempts": {
+    "mean": 32,
+    "max": 32
+  },
+  "exactCoverNodes": {
+    "mean": 23068.728,
+    "max": 103863
+  },
+  "maxHomeAwayStreak": 5,
+  "minDivisionMeetingGap": 3,
+  "totalMs": 24193.8,
+  "heapUsedBytes": 12575872
+}
