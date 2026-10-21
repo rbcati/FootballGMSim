@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getPlayerGameLogs } from './playerGameLogs.js';
+import { getPlayerGameLogs, recordedPlayerSeasonTotals } from './playerGameLogs.js';
 
 const league = {
   seasonId: '2026',
@@ -22,5 +22,21 @@ describe('getPlayerGameLogs', () => {
   it('extracts defense stats', () => {
     const logs = getPlayerGameLogs(league, { id: 44, teamId: 2, pos: 'LB' });
     expect(logs[0].stats.tackles).toBe(8);
+  });
+
+  it('retains the represented team after a trade and separates playoff log scope', () => {
+    const traded = getPlayerGameLogs(league, { id: 12, teamId: 3, pos: 'QB' });
+    expect(traded[0].opponentId).toBe(2);
+    expect(traded[0].result).toBe('W 24-17');
+    expect(traded[0].statScope).toBe('regular');
+    const playoffLeague = { ...league, schedule: { weeks: [{ ...league.schedule.weeks[0], week: 19 }] } };
+    expect(getPlayerGameLogs(playoffLeague, { id: 12, teamId: 1 })[0].statScope).toBe('playoffs');
+  });
+
+  it('uses the canonical current-season record ahead of partial logs or historical seasons', () => {
+    const rows = [{ seasonId: '2025', totals: { passYd: 1000 } }, { seasonId: '2026', totals: { passYd: 300 } }];
+    expect(recordedPlayerSeasonTotals(league, { seasonStats: { passYd: 10 } }, rows)).toBe(rows[1].totals);
+    expect(recordedPlayerSeasonTotals(league, { seasonStats: { passYd: 300 } })).toEqual({ passYd: 300 });
+    expect(recordedPlayerSeasonTotals(league, {}, [rows[0]])).toBeNull();
   });
 });

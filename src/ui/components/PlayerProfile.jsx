@@ -34,7 +34,7 @@ import { ToneChip, DevelopmentSignalRow, DevelopmentStatCard } from './PlayerDev
 import EmptyState from './EmptyState.jsx';
 import { buildRouteRequestKey, buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
-import { getPlayerGameLogs } from "../utils/playerGameLogs.js";
+import { getPlayerGameLogs, recordedPlayerSeasonTotals } from "../utils/playerGameLogs.js";
 import { buildShowingLabel, rowMatchesSearch, stableSortRows, uniqueFilterOptions } from "../utils/dataBrowser.js";
 import { buildMergedPlayerAwardTimeline, buildPlayerAwardHeaderBadges } from "../../core/playerAwardTimeline.js";
 import { buildPlayerRecordContext, mergePlayerProfileSeasonRows } from "../../core/recordBookV1.js";
@@ -1040,6 +1040,7 @@ export default function PlayerProfile({
       longestPunt: null,
     };
     for (const row of playerGameLogs) {
+      if (row.statScope === 'playoffs') continue;
       const gameKey = row.gameId ? String(row.gameId) : `w${row.week}`;
       if (seenGames.has(gameKey)) continue;
       seenGames.add(gameKey);
@@ -1075,7 +1076,8 @@ export default function PlayerProfile({
   const thisWeekLine = contextStatLine && hasRecordedStats(contextStatLine) ? summarizeTrackedStats(contextStatLine, player?.pos ?? player?.position) : null;
   const thisWeekSummary = hasThisWeekContext ? buildImpactSummary(player, profileContext, contextStatLine) : null;
   const quickTags = getQuickTags(player);
-  const primarySeasonTotals = (currentSeasonTotals && hasRecordedStats(currentSeasonTotals)) ? currentSeasonTotals : latestTotals;
+  const primarySeasonTotals = recordedPlayerSeasonTotals(league, effectivePlayer, stats)
+    ?? ((currentSeasonTotals && hasRecordedStats(currentSeasonTotals)) ? currentSeasonTotals : latestTotals);
   const seasonStatsRecorded = hasRecordedStats(primarySeasonTotals);
   const playerDecisionPresentation = useMemo(() => buildPlayerDecisionPresentation({
     player: effectivePlayer,

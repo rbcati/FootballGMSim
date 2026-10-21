@@ -72,6 +72,30 @@ export function reconcilePlayerIdentities(side = {}) {
   return { totals: t, checks: results, ok: results.every((r) => r.ok) };
 }
 
+/** Pure invariant report for newly credited offense; never repairs or mutates rows. */
+export function validateOffensiveStatIntegrity(side = {}, { eligibleIds, context = '' } = {}) {
+  const errors = [];
+  const eligible = eligibleIds == null ? null : new Set([...eligibleIds].map(String));
+  const fail = (id, stat, detail) => errors.push(`${context} player=${id} ${stat}: ${detail}`);
+  for (const [id, row] of Object.entries(side)) {
+    const s = rowStats(row);
+    const counts = ['passAtt', 'passComp', 'passTD', 'rushAtt', 'rushTD', 'targets', 'receptions', 'recTD'];
+    for (const key of counts) if (s[key] != null && (!Number.isSafeInteger(s[key]) || s[key] < 0)) fail(id, key, `invalid count ${s[key]}`);
+    for (const key of ['passYd', 'rushYd', 'recYd']) if (s[key] != null && !Number.isSafeInteger(s[key])) fail(id, key, `invalid yards ${s[key]}`);
+    if (eligible && counts.some((key) => n(s[key]) > 0) && !eligible.has(id)) fail(id, 'eligibility', 'no eligible game-day participant');
+    if (!n(s.receptions) && (n(s.recYd) !== 0 || n(s.recTD) !== 0)) fail(id, 'receiving', 'yards/TD without reception');
+    if (n(s.recTD) > n(s.receptions)) fail(id, 'recTD', `${s.recTD} exceeds ${s.receptions} receptions`);
+    if (n(s.receptions) > n(s.targets)) fail(id, 'receptions', `${s.receptions} exceeds ${s.targets} targets`);
+    if (!n(s.rushAtt) && (n(s.rushYd) !== 0 || n(s.rushTD) !== 0)) fail(id, 'rushing', 'yards/TD without carry');
+    if (n(s.rushTD) > n(s.rushAtt)) fail(id, 'rushTD', `${s.rushTD} exceeds ${s.rushAtt} carries`);
+    if (n(s.passTD) > n(s.passComp)) fail(id, 'passTD', `${s.passTD} exceeds ${s.passComp} completions`);
+    if (n(s.passComp) > n(s.passAtt)) fail(id, 'passComp', `${s.passComp} exceeds ${s.passAtt} attempts`);
+    if (n(s.passAtt) && n(s.passComp) + n(s.interceptions) > n(s.passAtt)) fail(id, 'interceptions', 'interceptions overlap completions');
+  }
+  for (const check of reconcilePlayerIdentities(side).checks) if (!check.ok) fail('TEAM', check.key, `${check.a} != ${check.b}`);
+  return { ok: errors.length === 0, errors };
+}
+
 /**
  * Reconcile a team's player-sum totals against an independently-provided team
  * total object (e.g. teamStats from the canonical builder). `tolerance` allows a

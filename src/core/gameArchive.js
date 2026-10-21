@@ -188,6 +188,8 @@ export function normalizeArchivedGamePayload(rawGame) {
   };
 
   const normalized = {
+    ...(rawGame.statAttributionVersion != null ? { statAttributionVersion: rawGame.statAttributionVersion } : {}),
+    ...(rawGame.statScope != null ? { statScope: rawGame.statScope } : {}),
     id,
     gameId: id,
     seasonId,

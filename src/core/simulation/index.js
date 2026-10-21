@@ -27,6 +27,8 @@ import {
   buildQuarterScoresFromScoring,
   buildScoringSummaryFromSimulation,
 } from '../gameSummary.js';
+import { chooseCreditedTouchdown } from './touchdownAttribution.js';
+import { attributeAggregatePassing } from './aggregatePassingAttribution.js';
 import { buildCanonicalGameEvents } from './canonicalGameEvents.js';
 import { buildCanonicalGameId } from '../gameIdentity.js';
 
@@ -50,13 +52,13 @@ function recomputeReconciledQbDependentStats(g = {}) {
   const n = nQbStat;
   g.passAtt = Math.max(0, Math.round(n(g.passAtt)));
   g.passComp = Math.max(0, Math.min(g.passAtt, Math.round(n(g.passComp))));
-  g.passYd = Math.max(0, Math.round(n(g.passYd)));
+  g.passYd = Math.round(n(g.passYd));
   g.passTD = Math.max(0, Math.round(n(g.passTD)));
   g.interceptions = Math.max(0, Math.round(n(g.interceptions)));
   const sacksTaken = Math.max(0, Math.round(n(g.sacked ?? g.sacksTaken ?? g.sacks)));
   g.dropbacks = g.passAtt + sacksTaken;
-  if (g.passComp === 0 || g.passYd === 0) g.longestPass = 0;
-  else g.longestPass = Math.max(0, Math.min(Math.round(n(g.longestPass)), g.passYd));
+  // Aggregate legacy production cannot substantiate an individual longest play.
+  delete g.longestPass;
   g.completionPct = Math.round((g.passComp / Math.max(1, g.passAtt)) * 1000) / 10;
   g.passerRating = calculateCanonicalPasserRating(g);
   if ('yardsPerAttempt' in g) g.yardsPerAttempt = Math.round((g.passYd / Math.max(1, g.passAtt)) * 10) / 10;
@@ -1374,6 +1376,7 @@ export function simGameStats(home, away, options = {}) {
               if (stats.passTD !== undefined) stats.passTD = 0;
               if (stats.rushTD !== undefined) stats.rushTD = 0;
               if (stats.recTD !== undefined) stats.recTD = 0;
+              delete stats.longestPass; delete stats.longestRun; delete stats.longestCatch;
               Object.assign(starter.stats.game, stats);
           }
 
@@ -1388,6 +1391,7 @@ export function simGameStats(home, away, options = {}) {
                if (stats.passTD !== undefined) stats.passTD = 0;
                if (stats.rushTD !== undefined) stats.rushTD = 0;
                if (stats.recTD !== undefined) stats.recTD = 0;
+               delete stats.longestPass; delete stats.longestRun; delete stats.longestCatch;
                Object.assign(backup.stats.game, stats);
           }
       };
@@ -1464,6 +1468,7 @@ export function simGameStats(home, away, options = {}) {
         const wrStats = generateReceiverStats(item.player, item.targets, score, oppDefenseStrength, U);
         // Zero out random TDs
         wrStats.recTD = 0;
+        delete wrStats.longestCatch;
         Object.assign(item.player.stats.game, wrStats);
       });
 
@@ -1497,25 +1502,14 @@ export function simGameStats(home, away, options = {}) {
           .filter((q) => q?.stats?.game && (q.stats.game.passAtt || 0) > 0)
           .sort((a, b) => (b.stats.game.passAtt || 0) - (a.stats.game.passAtt || 0));
         if (passingQbs.length > 0) {
-          const totalGenComp = passingQbs.reduce((acc, q) => acc + (q.stats.game.passComp || 0), 0);
-          let assignedRec = 0;
-          let assignedYd = 0;
+          const parts = attributeAggregatePassing(teamReceptions, teamRecYd, passingQbs.map((q) => q.stats.game.passComp || 0));
           passingQbs.forEach((q, i) => {
-            const g = q.stats.game;
-            const frac = totalGenComp > 0 ? (g.passComp || 0) / totalGenComp : (i === 0 ? 1 : 0);
-            g.passComp = Math.max(0, Math.round(teamReceptions * frac));
-            g.passYd = Math.max(0, Math.round(teamRecYd * frac));
-            assignedRec += g.passComp;
-            assignedYd += g.passYd;
+            Object.assign(q.stats.game, parts[i]);
           });
-          // Assign any rounding remainder to the starter (highest attempts).
-          const starter = passingQbs[0].stats.game;
-          starter.passComp = Math.max(0, starter.passComp + (teamReceptions - assignedRec));
-          starter.passYd = Math.max(0, starter.passYd + (teamRecYd - assignedYd));
           // A QB can't complete more passes than they attempted.
           passingQbs.forEach((q) => {
             const g = q.stats.game;
-            if ((g.passAtt || 0) < g.passComp) g.passAtt = g.passComp;
+            if ((g.passAtt || 0) < g.passComp + (g.interceptions || 0)) g.passAtt = g.passComp + (g.interceptions || 0);
             recomputeReconciledQbDependentStats(g);
           });
         }
@@ -1591,42 +1585,23 @@ export function simGameStats(home, away, options = {}) {
               ? Math.min(tdsToAssign, Math.round(actualTDs * 0.50))
               : 0;
 
-          for (let i = 0; i < passTdFloor; i++) {
-              const weights = receiverScorers.map(s => s.weight);
-              const idx = U.weightedChoice(weights);
-              const winner = receiverScorers[idx];
-              winner.p.stats.game.recTD = (winner.p.stats.game.recTD || 0) + 1;
-              totalRecTDs++;
+          const assignTd = (receiverOnly = false) => {
+              const selected = chooseCreditedTouchdown(scorers, receiverOnly, U);
+              if (!selected) return false;
+              const g = selected.p.stats.game;
+              g[selected.stat] = (g[selected.stat] || 0) + 1;
+              if (selected.stat === 'recTD') totalRecTDs++;
               tdsToAssign--;
+              return true;
+          };
+          // A floor is a preference; it cannot invent a catch or exceed its capacity.
+          for (let i = 0; i < passTdFloor; i++) if (!assignTd(true)) break;
+          const remaining = tdsToAssign;
+          for (let i = 0; i < remaining; i++) {
+              if (!assignTd()) throw new SimulationError(`Stat attribution: ${team.id} has ${tdsToAssign} offensive TDs with no credited catch/carry capacity`);
           }
-
-          // Step 2: Distribute remaining TDs among all scorers (QBs + RBs + receivers)
-          while (tdsToAssign > 0) {
-              const weights = scorers.map(s => s.weight);
-              const idx = U.weightedChoice(weights);
-              const winner = scorers[idx];
-
-              if (winner.type === 'QB') {
-                  // QB rushing TD
-                  winner.p.stats.game.rushTD = (winner.p.stats.game.rushTD || 0) + 1;
-              } else if (winner.type === 'RB') {
-                  // Bias towards rush TD if rush yards > rec yards
-                  const rushY = winner.p.stats.game.rushYd || 0;
-                  const recY = winner.p.stats.game.recYd || 0;
-                  const rushChance = rushY / Math.max(1, rushY + recY);
-
-                  if (U.random() < rushChance) {
-                      winner.p.stats.game.rushTD = (winner.p.stats.game.rushTD || 0) + 1;
-                  } else {
-                      winner.p.stats.game.recTD = (winner.p.stats.game.recTD || 0) + 1;
-                      totalRecTDs++;
-                  }
-              } else {
-                  winner.p.stats.game.recTD = (winner.p.stats.game.recTD || 0) + 1;
-                  totalRecTDs++;
-              }
-              tdsToAssign--;
-          }
+      } else if (tdsToAssign > 0) {
+          throw new SimulationError(`Stat attribution: ${team.id} has offensive TDs but no eligible participant`);
       }
 
       // --- DISTRIBUTE 2-POINT CONVERSIONS ---
@@ -1660,16 +1635,14 @@ export function simGameStats(home, away, options = {}) {
         .filter((q) => q?.stats?.game && (q.stats.game.passAtt || 0) > 0)
         .sort((a, b) => (b.stats.game.passAtt || 0) - (a.stats.game.passAtt || 0));
       if (passingQbsForTD.length > 0) {
-        const totalComp = passingQbsForTD.reduce((acc, q) => acc + (q.stats.game.passComp || 0), 0);
-        let assignedTD = 0;
-        passingQbsForTD.forEach((q, i) => {
-          const frac = totalComp > 0 ? (q.stats.game.passComp || 0) / totalComp : (i === 0 ? 1 : 0);
-          q.stats.game.passTD = Math.round(totalRecTDs * frac);
-          assignedTD += q.stats.game.passTD;
-        });
-        // Rounding remainder to the starter (highest attempts).
-        passingQbsForTD[0].stats.game.passTD += (totalRecTDs - assignedTD);
-        if (passingQbsForTD[0].stats.game.passTD < 0) passingQbsForTD[0].stats.game.passTD = 0;
+        for (const q of passingQbsForTD) q.stats.game.passTD = 0;
+        // Each TD consumes one of this QB's actual reconciled completion slots.
+        for (let i = 0; i < totalRecTDs; i++) {
+          const pool = passingQbsForTD.filter((q) => q.stats.game.passTD < q.stats.game.passComp);
+          if (!pool.length) throw new SimulationError(`Stat attribution: ${team.id} has receiving TDs without passer completion capacity`);
+          const qb = pool.reduce((best, q) => (q.stats.game.passTD + 1) / q.stats.game.passComp < (best.stats.game.passTD + 1) / best.stats.game.passComp ? q : best);
+          qb.stats.game.passTD++;
+        }
         passingQbsForTD.forEach((q) => recomputeReconciledQbDependentStats(q.stats.game));
       }
 
@@ -2014,14 +1987,12 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
                         if (!p.stats.playoffs) p.stats.playoffs = {};
                         const counted = accumulateStats(p.stats.game, p.stats.playoffs, commitGameId, processedGameIds);
                         if (counted) {
-                            if (!p.stats.playoffs.gamesPlayed) p.stats.playoffs.gamesPlayed = 0;
-                            p.stats.playoffs.gamesPlayed++;
+                            if (!p.stats.game.gamesPlayed) p.stats.playoffs.gamesPlayed = (p.stats.playoffs.gamesPlayed || 0) + 1;
                         }
                     } else {
                         const counted = accumulateStats(p.stats.game, p.stats.season, commitGameId, processedGameIds);
                         if (counted) {
-                            if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
-                            p.stats.season.gamesPlayed++;
+                            if (!p.stats.game.gamesPlayed) p.stats.season.gamesPlayed = (p.stats.season.gamesPlayed || 0) + 1;
 
                             if (updateAdvancedStats) {
                                 updateAdvancedStats(p, p.stats.season);
@@ -2371,7 +2342,7 @@ export function simulateBatch(games, options = {}) {
                     const playerStats = {};
                     for (let i = 0; i < roster.length; i++) {
                         const player = roster[i];
-                        if (player && player.stats && player.stats.game) {
+                        if (player && player.stats && player.stats.game && Object.keys(player.stats.game).length > 0) {
                             const normalizedStats = normalizeGameStatsForBoxScore(player.stats.game);
                             playerStats[String(player.id)] = {
                                 name: player.name,

@@ -256,6 +256,9 @@ describe('simulateRichGame – playerStatsStore integration', () => {
       { id: 'h-ot1', name: 'Home OT', pos: 'OT', ovr: 78 },
     ],
     awayPlayers: [
+      { id: 'a-qb1', name: 'Away QB', pos: 'QB', ovr: 80 },
+      { id: 'a-rb1', name: 'Away RB', pos: 'RB', ovr: 80 },
+      { id: 'a-wr1', name: 'Away WR', pos: 'WR', ovr: 80 },
       { id: 'a-cb1', name: 'Away CB', pos: 'CB', ovr: 80 },
       { id: 'a-edge1', name: 'Away EDGE', pos: 'EDGE', ovr: 83 },
     ],

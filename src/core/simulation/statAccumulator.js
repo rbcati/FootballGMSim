@@ -14,16 +14,8 @@
 import { Utils as U } from '../utils.js';
 import { TRAITS } from '../traits.js';
 import { getZeroStats } from '../player.js';
-import { canPlayerPlay } from '../injury-core.js';
-
-// Stat keys that are derived/calculated and must NOT be accumulated.
-const DERIVED_STAT_KEYS = new Set([
-  'completionPct', 'yardsPerCarry', 'yardsPerReception', 'avgPuntYards',
-  'avgKickYards', 'successPct', 'passerRating', 'sackPct',
-  'dropRate', 'separationRate', 'pressureRate',
-  'coverageRating', 'pressureRating', 'protectionGrade',
-  'ratingWhenTargeted',
-]);
+import { isAvailableForGameDay } from '../holdouts/holdoutEngine.js';
+import { accumulateStatLine } from './statAggregation.js';
 
 function computePasserRating({ comp = 0, att = 0, yds = 0, td = 0, ints = 0 } = {}) {
   if (att <= 0) return null;
@@ -108,6 +100,7 @@ export function getActiveGroups(team, league) {
   const fullGroups = getCachedGroups(team, league);
   const active = [];
   const groups = {};
+  const seen = new Set();
 
   const positions = Object.keys(fullGroups);
   for (let j = 0; j < positions.length; j++) {
@@ -116,7 +109,13 @@ export function getActiveGroups(team, league) {
     const fullGroup = fullGroups[pos];
     for (let i = 0; i < fullGroup.length; i++) {
       const p = fullGroup[i];
-      if (canPlayerPlay(p)) {
+      if (isAvailableForGameDay(p, { teamId: team.id })) {
+        if ((typeof p.id !== 'string' && typeof p.id !== 'number')
+          || (typeof p.id === 'number' && !Number.isFinite(p.id))
+          || !String(p.id).trim() || seen.has(String(p.id))) {
+          throw new Error(`Stat attribution team=${team.id}: missing, malformed or duplicate player ID ${p.id}`);
+        }
+        seen.add(String(p.id));
         activeInPos.push(p);
         active.push(p);
       }
@@ -320,7 +319,8 @@ export function generateRBStats(rb, teamScore, oppScore, defenseStrength, Urng, 
 
   const targets = Math.max(0, Math.min(8, Math.round((catching / 20) + Urng.rand(0, 3))));
   const receptions = Math.max(0, Math.min(targets, Math.round(targets * (catching / 100) + Urng.rand(-1, 1))));
-  const recYd = Math.max(0, Math.round(receptions * (5 + speed / 20) + Urng.rand(-5, 15)));
+  const sampledRecYd = Math.round(receptions * (5 + speed / 20) + Urng.rand(-5, 15));
+  const recYd = receptions > 0 ? sampledRecYd : 0;
   const recTD = receptions > 0 && Urng.rand(1, 100) < 15 ? 1 : 0;
   const drops = Math.max(0, targets - receptions);
   const yardsAfterCatch = Math.max(0, Math.round(recYd * 0.4 + Urng.rand(-5, 10)));
@@ -395,7 +395,7 @@ export function generateReceiverStats(receiver, targetCount, teamScore, defenseS
   const recYd = Math.round(receptions * avgYardsPerCatch * perfMult);
 
   const recTdRate = recYd / 100 * (0.4 + (catching - 60) * 0.005);
-  const recTD = Math.max(0, Math.min(3, Math.round(recTdRate + Urng.rand(-0.3, 0.8))));
+  const recTD = Math.max(0, Math.min(receptions, 3, Math.round(recTdRate + Urng.rand(-0.3, 0.8))));
 
   const dropRate = Math.max(0, (100 - catching) / 200);
   const drops = Math.max(0, Math.min(targets - receptions, Math.round(targets * dropRate + Urng.rand(-0.5, 1.5))));
@@ -623,10 +623,6 @@ export function accumulateStats(source, target, gameId = null, processedGameIds 
     processedGameIds.add(key);
   }
 
-  for (const [key, value] of Object.entries(source)) {
-    if (typeof value !== 'number') continue;
-    if (DERIVED_STAT_KEYS.has(key)) continue;
-    target[key] = (target[key] || 0) + value;
-  }
+  accumulateStatLine(source, target);
   return true;
 }

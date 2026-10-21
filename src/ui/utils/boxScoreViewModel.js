@@ -58,7 +58,10 @@ function normalizePlayers(raw = {}, side, teamId, playerMap = null) {
   return Object.entries(raw || {}).map(([id, row]) => {
     const playerId = normalizePlayerId(id);
     const name = resolvePlayerName(playerId, { row, playerMap });
-    return { playerId, teamId, teamSide: side, ...row, name, stats: row?.stats ?? row ?? {} };
+    const stats = { ...(row?.stats ?? row ?? {}) };
+    if (stats.rushLong == null && stats.longestRun != null) stats.rushLong = stats.longestRun;
+    if (stats.recLong == null && stats.longestCatch != null) stats.recLong = stats.longestCatch;
+    return { playerId, teamId, teamSide: side, ...row, name, stats };
   });
 }
 
@@ -130,8 +133,6 @@ function buildTeamComparisonRows(teamTotals = {}) {
 
 const PLAYER_SECTION_SPECS = [
   { key: 'passing', title: 'Passing', defaultSort: 'passYd', countLabel: 'passers', cols: [['passComp', 'Cmp'], ['passAtt', 'Att'], ['passYd', 'Yds'], ['passTD', 'TD'], ['interceptions', 'INT'], ['sacked', 'Sck'], ['passerRating', 'Rate']], include: (s) => toNum(s.passAtt) > 0 },
-  // TODO(rushLong/recLong): rich engine does not track per-play max yards; columns always blank.
-  //   Requires play-level stat modeling (out of scope). Deferred — see post-engine-flip-verification.md.
   { key: 'rushing', title: 'Rushing', defaultSort: 'rushYd', countLabel: 'rushers', cols: [['rushAtt', 'Att'], ['rushYd', 'Yds'], ['rushTD', 'TD'], ['fumbles', 'Fum'], ['rushLong', 'Long']], include: (s) => toNum(s.rushAtt) > 0 },
   { key: 'receiving', title: 'Receiving', defaultSort: 'recYd', countLabel: 'receivers', cols: [['targets', 'Tgt'], ['receptions', 'Rec'], ['recYd', 'Yds'], ['recTD', 'TD'], ['drops', 'Drop'], ['recLong', 'Long']], include: (s) => toNum(s.receptions) > 0 || toNum(s.targets) > 0 },
   { key: 'defense', title: 'Defense', defaultSort: 'tackles', countLabel: 'defenders', cols: [['tackles', 'Tkl'], ['sacks', 'Sack'], ['tfl', 'TFL'], ['interceptions', 'INT'], ['passesDefended', 'PD'], ['forcedFumbles', 'FF'], ['fumbleRecoveries', 'FR'], ['defTD', 'TD']], include: (s) => toNum(s.tackles) > 0 || toNum(s.sacks) > 0 || toNum(s.interceptions) > 0 || toNum(s.passesDefended) > 0 || toNum(s.forcedFumbles) > 0 },

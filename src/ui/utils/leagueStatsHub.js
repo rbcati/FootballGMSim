@@ -23,8 +23,8 @@ const safeRate = (num, den) => (NUM(den) > 0 ? NUM(num) / NUM(den) : 0);
 
 const PLAYER_STAT_ALIASES = Object.freeze({
   cmp: ["passComp", "completions"], att: ["passAtt", "attempts"], passYds: ["passYards", "passYd", "passingYards"], passTd: ["passTD", "passTd", "passTDs"], passInt: ["interceptions", "int", "passInt"],
-  rushAtt: ["rushAtt", "rushingAttempts"], rushYds: ["rushYards", "rushYd", "rushingYards"], rushTd: ["rushTD", "rushTd", "rushTDs"], rushLong: ["rushLong", "longRush"],
-  tgt: ["targets", "tgt"], rec: ["receptions", "rec"], recYds: ["recYards", "recYd", "receivingYards"], recTd: ["recTD", "recTd", "recTDs"], recLong: ["recLong", "longReception"],
+  rushAtt: ["rushAtt", "rushingAttempts"], rushYds: ["rushYards", "rushYd", "rushingYards"], rushTd: ["rushTD", "rushTd", "rushTDs"], rushLong: ["rushLong", "longestRun", "longRush"],
+  tgt: ["targets", "tgt"], rec: ["receptions", "rec"], recYds: ["recYards", "recYd", "receivingYards"], recTd: ["recTD", "recTd", "recTDs"], recLong: ["recLong", "longestCatch", "longReception"],
   tkl: ["tackles", "totalTackles"], sack: ["sacks"], tfl: ["tfl", "tacklesForLoss"], defInt: ["interceptions", "defInt"], pd: ["passesDefended", "passDeflections", "pd"], ff: ["forcedFumbles", "ff"], fr: ["fumbleRecoveries", "fr"], defTd: ["defTD", "defensiveTD"],
   fgm: ["fgm", "fgMade", "fieldGoalsMade"], fga: ["fga", "fgAtt", "fieldGoalsAttempted"], xpm: ["xpm", "xpMade", "extraPointsMade"], xpa: ["xpa", "xpAtt", "extraPointsAttempted"], pts: ["kickingPoints", "points", "pts"],
 });
@@ -74,12 +74,12 @@ function normalizeSeasonRow(player, team) {
     rushAtt: NUM(pick(s, ["rushAtt", "rushingAttempts"])),
     rushYds: NUM(pick(s, ["rushYards", "rushYd", "rushingYards"])),
     rushTd: NUM(pick(s, ["rushTD", "rushTd", "rushTDs"])),
-    rushLong: NUM(pick(s, ["rushLong", "longRush"])),
+    rushLong: NUM(pick(s, ["rushLong", "longestRun", "longRush"])),
     tgt: NUM(pick(s, ["targets", "tgt"])),
     rec: NUM(pick(s, ["receptions", "rec"])),
     recYds: NUM(pick(s, ["recYards", "recYd", "receivingYards"])),
     recTd: NUM(pick(s, ["recTD", "recTd", "recTDs"])),
-    recLong: NUM(pick(s, ["recLong", "longReception"])),
+    recLong: NUM(pick(s, ["recLong", "longestCatch", "longReception"])),
     tkl: NUM(pick(s, ["tackles", "totalTackles"])),
     sack: NUM(pick(s, ["sacks"])),
     tfl: NUM(pick(s, ["tfl", "tacklesForLoss"])),
@@ -162,7 +162,7 @@ function extractCompletedGames(league = {}) {
     unique.push(game);
   }
 
-  return unique;
+  return unique.filter((g) => g.statScope !== 'playoffs' && g.isPlayoff !== true && !(Number(g.week) > 18));
 }
 
 function aggregateGamePlayers(games, teamsById) {
@@ -181,7 +181,7 @@ function aggregateGamePlayers(games, teamsById) {
         const base = normalizePlayerStats(raw?.stats ?? raw ?? {});
         const key = String(pid);
         const existing = byPlayer.get(key);
-        const prev = existing ?? normalizeSeasonRow({ id: Number(pid), name: raw?.name ?? raw?.playerName, position: raw?.pos }, team);
+        const prev = existing ?? normalizeSeasonRow({ id: pid, name: raw?.name ?? raw?.playerName, position: raw?.pos }, team);
         const next = { ...prev };
         // This row is now an aggregate, not the first game's raw stat object.
         // Its normalized numeric fields are the canonical values to present.
@@ -191,8 +191,10 @@ function aggregateGamePlayers(games, teamsById) {
           : { ...base.statAvailability };
         next.g += 1;
         next.cmp += base.cmp; next.att += base.att; next.passYds += base.passYds; next.passTd += base.passTd; next.passInt += base.passInt;
-        next.rushAtt += base.rushAtt; next.rushYds += base.rushYds; next.rushTd += base.rushTd; next.rushLong = Math.max(next.rushLong, base.rushLong);
-        next.tgt += base.tgt; next.rec += base.rec; next.recYds += base.recYds; next.recTd += base.recTd; next.recLong = Math.max(next.recLong, base.recLong);
+        next.rushLong = next.rushAtt > 0 ? Math.max(next.rushLong, base.rushLong) : base.rushLong;
+        next.rushAtt += base.rushAtt; next.rushYds += base.rushYds; next.rushTd += base.rushTd;
+        next.recLong = next.rec > 0 ? Math.max(next.recLong, base.recLong) : base.recLong;
+        next.tgt += base.tgt; next.rec += base.rec; next.recYds += base.recYds; next.recTd += base.recTd;
         next.tkl += base.tkl; next.sack += base.sack; next.tfl += base.tfl; next.defInt += base.defInt; next.pd += base.pd; next.ff += base.ff; next.fr += base.fr; next.defTd += base.defTd;
         next.fgm += base.fgm; next.fga += base.fga; next.xpm += base.xpm; next.xpa += base.xpa; next.pts += base.pts;
         byPlayer.set(key, withDerived(next));

@@ -351,6 +351,12 @@ describe('isAvailableForGameDay', () => {
     expect(isAvailableForGameDay(player)).toBe(true);
     expect(isAvailableForGameDay(player, { teamId: 1 })).toBe(false);
     expect(isAvailableForGameDay(player, { teamId: '2' })).toBe(true);
+    expect(isAvailableForGameDay(makePlayer({ teamId: null }), { teamId: 1 })).toBe(false);
+    expect(isAvailableForGameDay({ id: 'legacy', pos: 'WR' }, { teamId: 1 })).toBe(true);
+  });
+
+  it.each([{ inactive: true }, { active: false }, { status: 'inactive' }, { status: 'released' }, { status: 'suspended' }])('excludes explicitly unavailable roster status %j', (patch) => {
+    expect(isAvailableForGameDay(makePlayer(patch))).toBe(false);
   });
 
   it('is deterministic and does not mutate injury, roster, or transaction state', () => {

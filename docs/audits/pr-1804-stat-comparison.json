@@ -1,0 +1,39 @@
+{
+  "base": "0185cd0b1182fda4d6f76fb4517298b83e13c93d",
+  "seeds": "1–256",
+  "games": 256,
+  "scoreChanged": 0,
+  "oldInvariantFailures": 141,
+  "newInvariantFailures": 0,
+  "example": {
+    "seed": 1,
+    "side": "home",
+    "id": "1-H-RB2",
+    "before": {
+      "rushAtt": 3,
+      "rushYd": 31,
+      "fumbles": 0,
+      "targets": 0,
+      "receptions": 0,
+      "recYd": 46,
+      "recTD": 1,
+      "drops": 0
+    },
+    "after": {
+      "fumbles": 0,
+      "rushAtt": 11,
+      "rushYd": 49,
+      "longestRun": 8,
+      "drops": 0,
+      "targets": 5,
+      "receptions": 3,
+      "recYd": 36,
+      "longestCatch": 17,
+      "recTD": 1
+    },
+    "score": [
+      27,
+      28
+    ]
+  }
+}
