@@ -1,0 +1,83 @@
+{
+  "seasons": 4,
+  "teams": 32,
+  "seed": 20260605,
+  "legacy": {
+    "games": 1088,
+    "crashes": 0,
+    "msPerGame": 0.4481042049632331,
+    "pointsPerGame": 35.369025735294116,
+    "passYdsPerGame": 250.73667279411765,
+    "rushYdsPerGame": 163.82444852941177,
+    "scoreStdDev": 10.950521079768544,
+    "topQuartileWinPct": 0.5698529411764706,
+    "minTeamScore": 3,
+    "finalTieRate": 0.007352941176470588,
+    "regulationTieRate": null,
+    "preFloorShutoutRate": null
+  },
+  "matchup": {
+    "games": 1088,
+    "crashes": 0,
+    "msPerGame": 13.4168241038603,
+    "pointsPerGame": 23.899816176470587,
+    "passYdsPerGame": 209.2389705882353,
+    "rushYdsPerGame": 96.45542279411765,
+    "scoreStdDev": 12.43490698521356,
+    "topQuartileWinPct": 0.7720588235294118,
+    "minTeamScore": 3,
+    "finalTieRate": 0,
+    "regulationTieRate": 0.035845588235294115,
+    "preFloorShutoutRate": 0.03722426470588235
+  },
+  "gate": {
+    "checks": [
+      {
+        "name": "Win distribution (top-quartile win%)",
+        "pass": false,
+        "detail": "77.2% (want 68–76%)"
+      },
+      {
+        "name": "Stat realism (pass yds/game)",
+        "pass": false,
+        "detail": "209.2 (want 220–280)"
+      },
+      {
+        "name": "Stat realism (rush yds/game)",
+        "pass": false,
+        "detail": "96.5 (want 100–130)"
+      },
+      {
+        "name": "Stat realism (points/game)",
+        "pass": true,
+        "detail": "23.9 (want 20–27)"
+      },
+      {
+        "name": "Floor regression check (shutout floor guarantees >= 3; not a scoring-health gate)",
+        "pass": true,
+        "detail": "min individual team score: 3"
+      },
+      {
+        "name": "Final tie rate (OT must resolve ties)",
+        "pass": true,
+        "detail": "0.00% of games (max 1%)"
+      },
+      {
+        "name": "Score variance (PBP std-dev >= legacy)",
+        "pass": true,
+        "detail": "PBP 12.43 vs legacy 10.95"
+      },
+      {
+        "name": "Performance (ms/game)",
+        "pass": true,
+        "detail": "13.417 ms (max 50)"
+      },
+      {
+        "name": "Crash/error rate (zero throws)",
+        "pass": true,
+        "detail": "0 crashes"
+      }
+    ],
+    "passed": false
+  }
+}

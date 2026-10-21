@@ -23,6 +23,8 @@
  *  Total hot: < 3 MB.  With LRU of 5 seasons: < 15 MB — safe for 200+ seasons.
  */
 
+import { accumulateStatLine } from '../core/simulation/statAggregation.js';
+
 // ── LRU helper ───────────────────────────────────────────────────────────────
 
 /**
@@ -287,7 +289,7 @@ export const cache = {
                                 ?? null,
   /** Non-destructive read of all current-season stat entries. */
   getAllSeasonStats: ()        => [..._seasonStats.values()],
-  updateSeasonStat: (playerId, teamId, partialTotals) => {
+  updateSeasonStat: (playerId, teamId, partialTotals, scope = 'regular') => {
     const seasonId = _meta?.currentSeasonId;
     if (!seasonId) return;
     // Always store under a String key so lookups with String(player.id) always hit.
@@ -297,10 +299,8 @@ export const cache = {
       entry = { seasonId, playerId: key, teamId, totals: {} };
       _seasonStats.set(key, entry);
     }
-    // Merge totals (numeric accumulation)
-    for (const [k, v] of Object.entries(partialTotals)) {
-      entry.totals[k] = (entry.totals[k] ?? 0) + v;
-    }
+    const totals = scope === 'playoffs' ? (entry.playoffTotals ??= {}) : entry.totals;
+    accumulateStatLine(partialTotals, totals);
     _dirty.seasonStats.add(playerId);
   },
   /**
@@ -323,6 +323,7 @@ export const cache = {
         seasonId: row.seasonId ?? _meta?.currentSeasonId,
         playerId: key,
         teamId: row.teamId,
+        ...(row.playoffTotals ? { playoffTotals: row.playoffTotals } : {}),
         totals: (row.totals && typeof row.totals === 'object') ? row.totals : {},
       });
     }

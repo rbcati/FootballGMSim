@@ -919,27 +919,15 @@ describe('2.6 holdout roster cliff edge', () => {
     expect(gameRoster.length).toBe(1); // QB still available
   });
 
-  it('simulateRichGame does NOT crash when a whole skill group is missing (all targets held out)', () => {
-    // Roster present (length > 0 → no defaultPlayers fallback) but NO WR/TE/RB,
-    // so pass-play target selection returns null. The sim must tolerate it.
+  it('rejects a roster with no eligible receiving participants', () => {
     const noTargetsHome = toSimRefs(fullRoster('home').filter((p) => !['WR', 'TE', 'RB'].includes(p.pos)));
-    expect(noTargetsHome.length).toBeGreaterThan(0);
-    expect(noTargetsHome.some((p) => ['WR', 'TE', 'RB'].includes(p.pos))).toBe(false);
     const away = toSimRefs(fullRoster('away'));
-
-    let summary;
-    expect(() => { summary = simulateRichGame(richPayload(noTargetsHome, away, 777)); }).not.toThrow();
-    expect(Number.isFinite(summary.homeScore)).toBe(true);
-    expect(Number.isFinite(summary.awayScore)).toBe(true);
-    expect(summary.totalPlays).toBeGreaterThan(0);
+    expect(() => simulateRichGame(richPayload(noTargetsHome, away, 777))).toThrow(/missing eligible QB, rusher, or receiver/);
   });
 
-  it('simulateRichGame falls back to a default roster when a side is fully empty (entire roster held out)', () => {
-    // Empty array → richGameSimulator.ts:348 substitutes defaultPlayers (graceful).
+  it('rejects an explicitly empty game-day roster instead of inventing players', () => {
     const away = toSimRefs(fullRoster('away'));
-    let summary;
-    expect(() => { summary = simulateRichGame(richPayload([], away, 888)); }).not.toThrow();
-    expect(summary.totalPlays).toBeGreaterThan(0);
+    expect(() => simulateRichGame(richPayload([], away, 888))).toThrow(/missing eligible/);
   });
 });
 

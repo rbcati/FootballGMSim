@@ -1,0 +1,28 @@
+[
+  {
+    "seed": 1804,
+    "engine": "rich",
+    "regularGames": 272,
+    "fullRegularSeason": true,
+    "injuries": 0,
+    "saveReload": "passed",
+    "gameBook": "passed",
+    "seasonTotals": "passed",
+    "leagueStats": "passed",
+    "allTimeDeduplication": "passed",
+    "rollover": "passed"
+  },
+  {
+    "seed": 4180,
+    "engine": "legacy",
+    "regularGames": 64,
+    "fullRegularSeason": false,
+    "injuries": 1,
+    "saveReload": "passed",
+    "gameBook": "passed",
+    "seasonTotals": "passed",
+    "leagueStats": "passed",
+    "allTimeDeduplication": "passed",
+    "rollover": "not run"
+  }
+]

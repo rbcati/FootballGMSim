@@ -41,7 +41,7 @@ export function getPlayerGameLogs(league, player) {
       if (!statRow) continue;
       const homeId = normalizeTeamId(game?.homeId ?? game?.home);
       const awayId = normalizeTeamId(game?.awayId ?? game?.away);
-      const playerTeamId = normalizeTeamId(player?.teamId);
+      const playerTeamId = homeStats[playerId] != null ? homeId : awayId;
       const opponentId = playerTeamId === homeId ? awayId : homeId;
       const stats = statRow?.stats ?? statRow ?? {};
       const pa = Number(stats.passAtt ?? 0);
@@ -51,6 +51,7 @@ export function getPlayerGameLogs(league, player) {
       const pint = Number(stats.interceptions ?? 0);
       const rate = pa > 0 ? Number((((pc / pa) * 100) + (py / pa) + (ptd * 7) - (pint * 10)).toFixed(1)) : null;
       rows.push({
+        statScope: game.statScope ?? (game.isPlayoff || week > 18 ? 'playoffs' : 'regular'),
         week,
         gameId: resolveCompletedGameId(game, { seasonId: league?.seasonId, week }),
         opponentId,
@@ -69,4 +70,11 @@ export function getPlayerGameLogs(league, player) {
     }
   }
   return rows.sort((a, b) => a.week - b.week);
+}
+
+/** Recorded current-season totals take precedence over partial game-log detail. */
+export function recordedPlayerSeasonTotals(league, player, statRows = []) {
+  const seasonId = league?.currentSeasonId ?? league?.seasonId;
+  const current = seasonId == null ? null : statRows.find((row) => String(row?.seasonId) === String(seasonId));
+  return current?.totals ?? player?.seasonStats ?? null;
 }

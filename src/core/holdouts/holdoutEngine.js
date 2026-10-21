@@ -293,14 +293,15 @@ export function getHoldoutDemandPremium(player) {
 export function isAvailableForGameDay(player, context = {}) {
   if (!player || typeof player !== 'object') return false;
 
-  if (context.teamId != null && player.teamId != null && String(player.teamId) !== String(context.teamId)) return false;
+  if (context.teamId != null && player.teamId !== undefined && String(player.teamId) !== String(context.teamId)) return false;
   if (!canPlayerPlay(player)) return false;
+  if (player.inactive === true || player.active === false) return false;
   if (player.holdout?.active === true) return false;
   if (isOnPracticeSquad(player)) return false;
 
   const status = String(player.status ?? '').trim().toLowerCase();
   if (player.retired === true || player.isRetired === true) return false;
-  return !['retired', 'injured_reserve', 'free_agent', 'draft_eligible'].includes(status);
+  return !['retired', 'injured_reserve', 'inactive', 'suspended', 'released', 'free_agent', 'draft_eligible'].includes(status);
 }
 
 // ── checkHoldoutTimeExpiry ────────────────────────────────────────────────────
