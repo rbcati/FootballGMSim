@@ -10,6 +10,7 @@ import * as rich from '../../src/core/sim/richGameSimulator.ts';
 import { isAvailableForGameDay } from '../../src/core/holdouts/holdoutEngine.js';
 import { validateOffensiveStatIntegrity, reconcilePlayerToTeam } from '../../src/core/simulation/gameStatReconciliation.js';
 import { buildGameBookPresentation } from '../../src/ui/utils/boxScoreViewModel.js';
+import { calculateCanonicalPasserRating } from '../../src/core/simulation/mathHelpers.js';
 import { buildLeagueStatsHubModel } from '../../src/ui/utils/leagueStatsHub.js';
 
 const copy = (x) => JSON.parse(JSON.stringify(x));
@@ -68,9 +69,11 @@ async function assertConsumers(games) {
     expect(row.rushYards).toBe(total.rushYd ?? 0);
     expect(row.recYards).toBe(total.recYd ?? 0);
     expect(row.receptions).toBe(total.receptions ?? 0);
+    if (row.pos === 'QB' && (total.passAtt ?? 0) > 0) expect(row.passerRating, `AnalyticsHub QB=${row.id}`).toBe(calculateCanonicalPasserRating({ ...total, interceptions: cache.getSeasonStat(row.id)?.totals?.interceptions ?? 0 }));
   }
   const teams = cache.getAllTeams().map((t) => ({ ...t, roster: cache.getPlayersByTeam(t.id).map((p) => ({ ...p, seasonStats: cache.getSeasonStat(p.id)?.totals ?? {} })) }));
-  const hub = buildLeagueStatsHubModel({ teams, games });
+  const hub = buildLeagueStatsHubModel({ teams, schedule: games });
+  for (const row of hub.playerTables.passing) expect(row.rate, `League Stats QB=${row.playerId}`).toBe(calculateCanonicalPasserRating(row.canonicalStats));
   for (const [category, fields] of Object.entries({ passing: { passYds: 'passYd', passTd: 'passTD', cmp: 'passComp' }, rushing: { rushYds: 'rushYd', rushTd: 'rushTD', rushAtt: 'rushAtt' }, receiving: { recYds: 'recYd', recTd: 'recTD', rec: 'receptions' } })) {
     for (const row of hub.playerTables[category]) for (const [display, key] of Object.entries(fields)) {
       expect(row[display], `LeagueStats ${category}/${row.playerId}/${display}`).toBe(totals.get(String(row.playerId))?.[key] ?? 0);
@@ -99,6 +102,7 @@ describe.sequential('game-stat ledger through the real worker and IndexedDB', ()
     const inactive = cache.getPlayersByTeam(0).find((p) => p.pos === 'QB');
     cache.updatePlayer(inactive.id, { inactive: true });
     const events = [];
+    const driveLedgers = new Map();
     const actual = rich.simulateRichGame;
     const spy = vi.spyOn(rich, 'simulateRichGame').mockImplementation((payload) => {
       const result = actual(payload); // Instrumentation calls the real simulator unchanged.
@@ -106,6 +110,7 @@ describe.sequential('game-stat ledger through the real worker and IndexedDB', ()
         const ids = payload[`${side}Players`].map((p) => String(p.id));
         expect(validateOffensiveStatIntegrity(result.boxScore[side], { eligibleIds: ids, context: `${seed}/${payload.gameId}/${side}` }).errors).toEqual([]);
       }
+      driveLedgers.set(result.gameId, structuredClone(result.driveSummary));
       events.push(result.gameId);
       return result;
     });
@@ -127,10 +132,13 @@ describe.sequential('game-stat ledger through the real worker and IndexedDB', ()
         completed = (await Games.bySeason('s1')).filter((g) => g.week <= 18);
         for (const game of completed.filter((g) => g.week === w)) {
           expect(game.statAttributionVersion).toBe(1);
+          if (engine) expect(game.driveSummary, `${game.id} archived drives`).toEqual(driveLedgers.get(game.id));
           expect(game.statScope).toBe('regular');
           for (const side of ['home', 'away']) {
             expect(validateOffensiveStatIntegrity(game.playerStats[side], { context: `seed=${seed}/${game.id}/${side}` }).errors).toEqual([]);
             expect(reconcilePlayerToTeam(game.playerStats[side], game.teamStats[side]).ok).toBe(true);
+            const sacks = Object.values(game.playerStats[side]).reduce((sum, row) => sum + (row.stats.sackYards ?? 0), 0);
+            expect(game.teamStats[side].totalYards, `${game.id}/${side} net yards`).toBe((game.teamStats[side].passYd ?? game.teamStats[side].passYards ?? 0) + (game.teamStats[side].rushYd ?? game.teamStats[side].rushYards ?? 0) - sacks);
             if (game.week === w) for (const id of Object.keys(game.playerStats[side])) expect(unavailable.has(id), `${game.id} inactive=${id}`).toBe(false);
             const td = Object.values(game.playerStats[side]).reduce((s, r) => s + (r.stats.passTD ?? 0) + (r.stats.rushTD ?? 0), 0);
             const score = side === 'home' ? game.homeScore : game.awayScore;

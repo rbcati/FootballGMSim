@@ -68,18 +68,23 @@ export function deriveTeamStatsFromPlayerRows(playerRows = {}) {
   const rushYards = sum('rushYd');
   const passAtt = sum('passAtt');
   const rushAtt = sum('rushAtt');
-  const plays = passAtt + rushAtt;
+  const sackYards = sum('sackYards');
+  const sacksAllowed = sum('sacked') || sum('sacksTaken');
+  const totalYards = passYards + rushYards - sackYards;
+  const plays = passAtt + rushAtt + sacksAllowed;
   return {
-    totalYards: passYards + rushYards,
+    totalYards,
+    sackYards,
+    netPassYards: passYards - sackYards,
     passYards,
     rushYards,
     passAtt,
     passComp: sum('passComp'),
     rushAtt,
     plays,
-    yardsPerPlay: plays > 0 ? Math.round(((passYards + rushYards) / plays) * 100) / 100 : 0,
+    yardsPerPlay: plays > 0 ? Math.round((totalYards / plays) * 100) / 100 : 0,
     turnovers: sumIf('interceptions', (stats) => Number(stats?.passAtt ?? 0) > 0) + sum('fumblesLost'),
-    sacksAllowed: sumIf('sacked', (stats) => Number(stats?.passAtt ?? 0) > 0) || sumIf('sacksTaken', (stats) => Number(stats?.passAtt ?? 0) > 0),
+    sacksAllowed,
     sacks: sumIf('sacks', (stats) => Number(stats?.passAtt ?? 0) === 0),
     firstDowns: sum('firstDowns'),
     thirdDownMade: sum('thirdDownMade'),

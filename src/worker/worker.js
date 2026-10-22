@@ -1,3 +1,5 @@
+import { calculateCanonicalPasserRating } from '../core/simulation/mathHelpers.js';
+import { advanceInjuryRecovery } from '../core/injury-core.js';
 /**
  * Post-Claude Stability Hardening + Scheme Polish Pass v2
  *
@@ -3557,23 +3559,7 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
               const recoveryBoost = Number(staffBonuses?.recoveryDelta ?? 0);
               const extraRecovery = recoveryBoost >= 0.09 ? 1 : Utils.random() < Math.max(0, recoveryBoost) * 2.5 ? 1 : 0;
               const recoveryWeeks = 1 + extraRecovery;
-              p.injuryWeeksRemaining -= recoveryWeeks;
-              // Decrement per-entry counters on the SAME cadence as the aggregate
-              // so they never desync (the canonical availability predicate keys off
-              // p.injured, but downstream readers inspect per-entry weeksRemaining).
-              if (Array.isArray(p.injuries)) {
-                  p.injuries = p.injuries
-                      .map(inj => ({ ...inj, weeksRemaining: (inj.weeksRemaining || 0) - recoveryWeeks }))
-                      .filter(inj => inj.weeksRemaining > 0);
-              }
-              if (p.injuryWeeksRemaining <= 0) {
-                  // Healed
-                  p.injuryWeeksRemaining = 0;
-                  p.injured = false;
-                  p.injuries = []; // Clear injury list
-                  p.seasonEndingInjury = false;
-                  // Notify? Maybe too spammy.
-              }
+              advanceInjuryRecovery(p, recoveryWeeks);
               // Mark as dirty to ensure persistence
               cache.updatePlayer(p.id, {
                   injuryWeeksRemaining: p.injuryWeeksRemaining,
@@ -14224,15 +14210,7 @@ async function handleGetLeagueLeaders({ mode = 'season' }, id) {
   };
 
   // Computed-stat helpers
-  const passerRating = (totals) => {
-    const att = totals.passAtt || 0;
-    if (att === 0) return 0;
-    const a = Math.max(0, Math.min(2.375, ((totals.passComp || 0) / att - 0.3) / 0.2));
-    const b = Math.max(0, Math.min(2.375, ((totals.passYd   || 0) / att - 3) / 4));
-    const c = Math.max(0, Math.min(2.375, ((totals.passTD   || 0) / att) / 0.05));
-    const d = Math.max(0, Math.min(2.375, 2.375 - ((totals.interceptions || 0) / att) / 0.04));
-    return Math.round(((a + b + c + d) / 6) * 100 * 10) / 10;
-  };
+  const passerRating = (totals) => (totals.passAtt || 0) > 0 ? calculateCanonicalPasserRating(totals) : 0;
 
   const allTeamsByIdRef = cache.getAllTeams();
 
@@ -14440,7 +14418,7 @@ async function handleGetAllPlayerStats(_payload, id) {
         passYards:    totals.passYd || 0,
         passTDs:      totals.passTD || 0,
         int:          totals.interceptions || 0,
-        passerRating: totals.passerRating || 0,
+        passerRating: (totals.passAtt || 0) > 0 ? calculateCanonicalPasserRating(totals) : 0,
 
         // Rushing
         rushYards:    totals.rushYd || 0,

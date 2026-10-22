@@ -10,7 +10,7 @@ export function createOffensiveLedger(playerIds: string[], context: string) {
     throw new Error(`Stat attribution ${context}: missing or duplicate player ID`);
   }
   const rows = new Map<string, OffensiveStats>();
-  const totals = { passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, sacksAllowed: 0 };
+  const totals = { passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, sacksAllowed: 0, sackYards: 0 };
   const row = (id: string) => {
     if (!eligible.has(id)) throw new Error(`Stat attribution ${context}: ineligible player ${id}`);
     let stats = rows.get(id);
@@ -42,7 +42,7 @@ export function createOffensiveLedger(playerIds: string[], context: string) {
     add(qb, 'dropbacks');
     if (play.sack) {
       add(qb, 'sacked'); add(qb, 'sacksTaken'); add(qb, 'sackYards', -yards);
-      totals.sacksAllowed++;
+      totals.sacksAllowed++; totals.sackYards -= yards;
     } else {
       add(qb, 'passAtt'); totals.passAtt++;
       const receiver = row(play.targetId!);

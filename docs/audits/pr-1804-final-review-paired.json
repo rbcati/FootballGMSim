@@ -1,0 +1,33 @@
+{
+  "baselineRef": "65bc42b79589fd1264e64596d304843cb5e7909b",
+  "seeds": "1–256",
+  "games": 256,
+  "scoreChanges": 0,
+  "playerLineChanges": 0,
+  "driveTransitionChanges": 0,
+  "netYardFailures": 0,
+  "touchdownExample": {
+    "seed": 1,
+    "drive": 1,
+    "plays": 14,
+    "startYardLine": 25,
+    "endYardLine": 100,
+    "beforeSampledDriveYards": 81,
+    "afterFieldMovement": 75,
+    "archivedDriveYards": 75,
+    "score": [
+      27,
+      28
+    ]
+  },
+  "netYardExample": {
+    "seed": 2,
+    "side": "home",
+    "grossPassing": 187,
+    "rushing": 133,
+    "sacks": 1,
+    "sackYards": 1,
+    "beforeTotal": 320,
+    "afterNetTotal": 319
+  }
+}
