@@ -14,6 +14,7 @@ Reviewed head: fc98cdb4292a4b43cedb18bc854b864902cec4df. Baseline main remains 0
 
 - `offensiveLedger.test.ts`: reserved IDs credit independent pass/rush/drop rows; unknown inherited names are rejected.
 - `gameStatAttributionIntegrity.test.ts`: 12 rich games with reserved IDs spanning QB/RB/WR/defense/kicker, JSON round trips, own-row checks, exact reconciliation and unchanged Object.prototype; real legacy batch with reserved QB/RB/WR IDs; missing, injured and inactive QB rooms fail without returning a credited game. Existing event/eligibility sweeps remain in place.
+- `tacticalTendency.test.js`: independent trials now clone their initial rosters, instead of carrying prior-trial injuries into later seeds/comparisons. The no-QB guard exposed this invalid fixture reuse; all existing tendency assertions remain unchanged.
 - `playerGameLogs.test.js`: four restored away IDs resolve to the correct opponent/stat line; absent inherited names produce no game row.
 - `gameStatCommitFailures.worker.test.js`: real initialized franchise and three rich games, seeds 1804–1806. Injects throws after all season accumulation, after archive insertion, and inside IndexedDB game writes. Checks both teams, standings, archive uniqueness, commit markers, dirty retries, SAVE_NOW/LOAD_SAVE and replay after reload. Uses the existing database transaction and worker save/hydration paths.
 
@@ -52,4 +53,4 @@ Completed-game ledgers, season totals and schedule markers continue to use the e
 
 ## Verification status
 
-Executed command results and actual GitHub Actions status are recorded below after the final verification run. Security alert details API access is denied to the repository integration (HTTP 403); the review comment identifies alert 82. A passing CodeQL job alone is not proof that all repository alerts are resolved.
+The final PR description and review response record completed command results and head-specific GitHub Actions status. Initial focused verification passed 34 tests in three files, the retry/persistence worker test passed, the dynasty soak passed 103 tests in eight files, and production build and simulator type checking passed. The calibration gate remains deliberately active and failing. Security alert details API access is denied to the repository integration (HTTP 403); the review comment identifies alert 82. A passing CodeQL job alone is not proof that all repository alerts are resolved.
