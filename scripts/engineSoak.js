@@ -24,6 +24,7 @@
  * Exit code 0 = matchup engine passed all checks (safe to flip); 1 = failed.
  */
 
+import { advanceInjuryRecovery } from '../src/core/injury-core.js';
 import { Utils } from '../src/core/utils.js';
 import { Constants } from '../src/core/constants.js';
 import { makePlayer } from '../src/core/player.js';
@@ -179,8 +180,8 @@ function simulateMatchupGame(league, homeIdx, awayIdx, season, week) {
     homeDefense: hu.defense,
     awayOffense: au.offense,
     awayDefense: au.defense,
-    homePlayers: home.roster.map((p) => ({ id: p.id, name: p.name, pos: p.pos, ovr: p.ovr })),
-    awayPlayers: away.roster.map((p) => ({ id: p.id, name: p.name, pos: p.pos, ovr: p.ovr })),
+    homePlayers: home.roster,
+    awayPlayers: away.roster,
     weather: 'clear',
   });
   return {
@@ -198,7 +199,11 @@ function simulateMatchupGame(league, homeIdx, awayIdx, season, week) {
 function runEngine(label, simFn, league, schedule, seasons) {
   const acc = newAccumulator(league.teams.length);
   for (let s = 0; s < seasons; s++) {
+    // This synthetic calendar has 17 game weeks; advance the remaining weeks
+    // between seasons with the same recovery semantics as the worker.
+    if (s > 0) for (const team of league.teams) for (const player of team.roster) advanceInjuryRecovery(player, 52 - schedule.length);
     for (let w = 0; w < schedule.length; w++) {
+      for (const team of league.teams) for (const player of team.roster) advanceInjuryRecovery(player);
       for (const [homeIdx, awayIdx] of schedule[w]) {
         const t0 = performance.now();
         try {
@@ -318,8 +323,8 @@ export function runEngineSoak({ seasons = 100, teams = 32, seed = 20260605 } = {
   const ovrByTeam = league.teams.map((t) => t.ovr);
   const schedule = buildSchedule(teams, 17);
 
-  const legacyAcc = runEngine('legacy', simulateLegacyGame, league, schedule, seasons);
-  const matchupAcc = runEngine('matchup', simulateMatchupGame, league, schedule, seasons);
+  const legacyAcc = runEngine('legacy', simulateLegacyGame, structuredClone(league), schedule, seasons);
+  const matchupAcc = runEngine('matchup', simulateMatchupGame, structuredClone(league), schedule, seasons);
 
   const legacy = summarize(legacyAcc, ovrByTeam);
   const matchup = summarize(matchupAcc, ovrByTeam);

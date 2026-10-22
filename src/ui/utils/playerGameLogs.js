@@ -1,3 +1,4 @@
+import { calculateCanonicalPasserRating } from '../../core/simulation/mathHelpers.js';
 import { resolveCompletedGameId } from './gameResultIdentity.js';
 
 function normalizeTeamId(value) {
@@ -50,7 +51,7 @@ export function getPlayerGameLogs(league, player) {
       const py = Number(stats.passYd ?? 0);
       const ptd = Number(stats.passTD ?? 0);
       const pint = Number(stats.interceptions ?? 0);
-      const rate = pa > 0 ? Number((((pc / pa) * 100) + (py / pa) + (ptd * 7) - (pint * 10)).toFixed(1)) : null;
+      const rate = pa > 0 ? calculateCanonicalPasserRating({ passComp: pc, passAtt: pa, passYd: py, passTD: ptd, interceptions: pint }) : null;
       rows.push({
         statScope: game.statScope ?? (game.isPlayoff || week > 18 ? 'playoffs' : 'regular'),
         week,

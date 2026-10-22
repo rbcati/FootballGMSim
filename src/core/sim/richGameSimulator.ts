@@ -54,6 +54,8 @@ export interface TeamStatLine {
   rushYards: number;
   rushTD: number;
   totalYards: number;
+  sackYards: number;
+  netPassYards: number;
   yardsPerPlay: number;
   turnovers: number;
   sacksAllowed: number;
@@ -519,8 +521,8 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   const advancedAttribution = new Map<string, AdvancedGameStats>();
 
   const stats = {
-    home: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0, kickReturns: 0, kickReturnYards: 0, puntReturns: 0, puntReturnYards: 0 },
-    away: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0, kickReturns: 0, kickReturnYards: 0, puntReturns: 0, puntReturnYards: 0 },
+    home: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sackYards: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0, kickReturns: 0, kickReturnYards: 0, puntReturns: 0, puntReturnYards: 0 },
+    away: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sackYards: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0, kickReturns: 0, kickReturnYards: 0, puntReturns: 0, puntReturnYards: 0 },
   };
 
   // ── Per-drive tracking (powers driveSummary / the drive chart UI) ──────────
@@ -760,7 +762,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     const clockElapsed = noHuddle ? Math.round(result.clockElapsedSec * 0.45) : result.clockElapsedSec;
     state.clockSec = Math.max(0, state.clockSec - clockElapsed);
     curDrive.plays += 1;
-    curDrive.yards += result.yardsGained;
+    curDrive.yards += result.nextYardLine - state.yardLine;
     curDrive.seconds += clockElapsed;
 
     if (result.turnover) {
@@ -914,7 +916,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   const topReasons = [...reasonMap.entries()].sort((a, b) => b[1] - a[1]).map(([reason]) => reason).slice(0, 2);
 
   const buildTeamLine = (s: typeof stats.home): TeamStatLine => {
-    const totalYards = s.passYd + s.rushYd;
+    const totalYards = s.passYd + s.rushYd - s.sackYards;
     return {
       plays: s.plays,
       firstDowns: s.firstDowns,
@@ -928,6 +930,8 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       rushYards: s.rushYd,
       rushTD: s.rushTD,
       totalYards,
+      sackYards: s.sackYards,
+      netPassYards: s.passYd - s.sackYards,
       yardsPerPlay: Number((totalYards / Math.max(1, s.plays)).toFixed(2)),
       turnovers: s.turnovers,
       sacksAllowed: s.sacksAllowed,

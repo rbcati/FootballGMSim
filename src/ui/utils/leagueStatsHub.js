@@ -1,3 +1,5 @@
+import { calculateCanonicalPasserRating } from '../../core/simulation/mathHelpers.js';
+
 const NUM = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -41,7 +43,7 @@ const withDerived = (row) => ({
   recYpr: safeRate(row.recYds, row.rec),
   fgPct: safePct(row.fgm, row.fga),
   rate: row.att > 0
-    ? (((row.cmp / row.att) * 100) * 0.4 + (row.passYds / row.att) * 3 + (row.passTd / row.att) * 20 - (row.passInt / row.att) * 25)
+    ? calculateCanonicalPasserRating({ passComp: row.cmp, passAtt: row.att, passYd: row.passYds, passTD: row.passTd, interceptions: row.passInt })
     : 0,
 });
 
@@ -104,9 +106,10 @@ function normalizeTeamStatsRow(teamStats = {}) {
   const passYds = NUM(pick(teamStats, ["passYards", "passYds", "passingYards", "passYd"]));
   const rushYds = NUM(pick(teamStats, ["rushYards", "rushYds", "rushingYards", "rushYd"]));
   return {
+    yardageAvailable: ["totalYards", "totalYds", "yards", "yds", "offYards", "passYards", "passYds", "passYd", "rushYards", "rushYds", "rushYd"].some(key => teamStats[key] != null),
     points: NUM(pick(teamStats, ["points", "pointsFor"])),
     pointsAllowed: NUM(pick(teamStats, ["pointsAllowed"])),
-    totalYards: NUM(pick(teamStats, ["totalYards", "totalYds", "yards", "yds", "offYards"])) || (passYds + rushYds),
+    totalYards: NUM(pickDefined(teamStats, ["totalYards", "totalYds", "yards", "yds", "offYards"]) ?? (passYds + rushYds - NUM(teamStats.sackYards))),
     yardsAllowed: NUM(pick(teamStats, ["yardsAllowed", "yardsAgainst"])),
     passYards: passYds,
     passYardsAllowed: NUM(pick(teamStats, ["passYardsAllowed"])),
@@ -266,7 +269,7 @@ function aggregateTeams(games, teamsById) {
       a.penalties += asx.penalties;
       a.penaltyYards += asx.penaltyYards;
       Object.keys(h.columnAvailability).forEach((k) => k);
-      if (hsx.totalYards > 0 || asx.totalYards > 0) { h.columnAvailability.yds = true; a.columnAvailability.yds = true; }
+      if (hsx.yardageAvailable || asx.yardageAvailable) { h.columnAvailability.yds = true; a.columnAvailability.yds = true; }
       if (hsx.yardsAllowed > 0 || asx.yardsAllowed > 0) { h.columnAvailability.ydsAllowed = true; a.columnAvailability.ydsAllowed = true; }
       if (hsx.passYards > 0 || asx.passYards > 0) { h.columnAvailability.passYds = true; a.columnAvailability.passYds = true; }
       if (hsx.rushYards > 0 || asx.rushYards > 0) { h.columnAvailability.rushYds = true; a.columnAvailability.rushYds = true; }
@@ -295,7 +298,7 @@ function aggregateTeams(games, teamsById) {
     "penaltyYards",
     "turnoverMargin",
   ].reduce((acc, k) => {
-    acc[k] = rows.some((r) => NUM(r[k]) > 0 || ["ppg", "ppgAllowed"].includes(k));
+    acc[k] = rows.some((r) => (k === "yds" ? r.columnAvailability.yds : NUM(r[k]) > 0) || ["ppg", "ppgAllowed"].includes(k));
     return acc;
   }, {});
   return { rows, statSource, availableColumns };

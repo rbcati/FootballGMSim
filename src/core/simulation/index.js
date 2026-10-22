@@ -33,20 +33,9 @@ import { buildCanonicalGameEvents } from './canonicalGameEvents.js';
 import { buildCanonicalGameId } from '../gameIdentity.js';
 
 
+import { calculateCanonicalPasserRating } from './mathHelpers.js';
 const nQbStat = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
-
-export function calculateCanonicalPasserRating({ passComp = 0, passAtt = 0, passYd = 0, passTD = 0, interceptions = 0 } = {}) {
-  const att = Math.max(1, nQbStat(passAtt));
-  const comp = Math.max(0, nQbStat(passComp));
-  const yards = Math.max(0, nQbStat(passYd));
-  const tds = Math.max(0, nQbStat(passTD));
-  const ints = Math.max(0, nQbStat(interceptions));
-  const a = Math.max(0, Math.min(2.375, ((comp / att) - 0.3) / 0.2));
-  const b = Math.max(0, Math.min(2.375, ((yards / att) - 3) / 4));
-  const c = Math.max(0, Math.min(2.375, (tds / att) / 0.05));
-  const d = Math.max(0, Math.min(2.375, 2.375 - (ints / att) / 0.04));
-  return Math.round(((a + b + c + d) / 6) * 100 * 10) / 10;
-}
+export { calculateCanonicalPasserRating } from './mathHelpers.js';
 
 function recomputeReconciledQbDependentStats(g = {}) {
   const n = nQbStat;
@@ -1403,7 +1392,7 @@ export function simGameStats(home, away, options = {}) {
       });
 
       const qbs = groups['QB'] || [];
-      if (qbs.length === 0) throw new Error(`Stat attribution team ${team.id}: no eligible QB`);
+      if (qbs.length === 0) throw new SimulationError(`Stat attribution team ${team.id}: no eligible QB. Activate or sign an available quarterback before simulating.`);
       let totalPassAttempts = 0;
 
       // QB Injury/Stats Logic
@@ -1836,6 +1825,7 @@ export function simGameStats(home, away, options = {}) {
 
   } catch (error) {
     console.error('[SIM-DEBUG] Error in simGameStats:', error);
+    if (error instanceof SimulationError) throw error;
     return null;
   }
 }

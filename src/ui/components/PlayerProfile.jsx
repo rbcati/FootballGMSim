@@ -1,3 +1,4 @@
+import { calculateCanonicalPasserRating } from '../../core/simulation/mathHelpers.js';
 import { isAvailableForGameDay } from '../../core/holdouts/holdoutEngine.js';
 import { hasReadinessInjury } from '../../core/gameDayAvailability.js';
 import { getInjuryWeeksRemaining, isPlayerInjured } from '../utils/injuryReadinessModel.js';
@@ -98,16 +99,7 @@ function formatPriorityLabel(key) {
 // ── Position group → stat column definitions ──────────────────────────────────
 
 function computePasserRating(t) {
-  const att = t.passAtt || 0;
-  if (att === 0) return "-";
-  const a = Math.max(0, Math.min(2.375, ((t.passComp || 0) / att - 0.3) / 0.2));
-  const b = Math.max(0, Math.min(2.375, ((t.passYd || 0) / att - 3) / 4));
-  const c = Math.max(0, Math.min(2.375, (t.passTD || 0) / att / 0.05));
-  const d = Math.max(
-    0,
-    Math.min(2.375, 2.375 - (t.interceptions || 0) / att / 0.04),
-  );
-  return (((a + b + c + d) / 6) * 100).toFixed(1);
+  return (t.passAtt || 0) > 0 ? calculateCanonicalPasserRating(t).toFixed(1) : "-";
 }
 
 const POS_COLUMNS = {

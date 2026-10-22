@@ -104,3 +104,21 @@ export function canPlayerPlay(player) {
     if (player.seasonEndingInjury) return false;
     return true;
 }
+
+/** Advance the existing weekly recovery clock; never changes eligibility early. */
+export function advanceInjuryRecovery(player, recoveryWeeks = 1) {
+    if (!(player?.injuryWeeksRemaining > 0)) return false;
+    player.injuryWeeksRemaining -= recoveryWeeks;
+    if (Array.isArray(player.injuries)) {
+        player.injuries = player.injuries
+            .map(injury => ({ ...injury, weeksRemaining: (injury.weeksRemaining || 0) - recoveryWeeks }))
+            .filter(injury => injury.weeksRemaining > 0);
+    }
+    if (player.injuryWeeksRemaining <= 0) {
+        player.injuryWeeksRemaining = 0;
+        player.injured = false;
+        player.injuries = [];
+        player.seasonEndingInjury = false;
+    }
+    return true;
+}
