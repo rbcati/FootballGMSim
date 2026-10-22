@@ -1996,7 +1996,7 @@ async function createUniqueLeagueId() {
  *   "Failed to store record in an IDBObjectStore: Evaluating the object store's
  *    key path did not yield a value."
  */
-async function flushDirty(forceFlush = false, {
+export async function flushDirty(forceFlush = false, {
   transactions = [], seasons = [], archivedPlayerStats = [], news = [],
   deferManifestUntilAfterCommit = false,
 } = {}) {
@@ -5024,7 +5024,7 @@ function buildThreeSentenceRecap({ winnerAbbr, loserAbbr, winnerMetrics, loserMe
  * result.away (not homeTeamId / awayTeamId), so we read both field names and
  * cast to Number to match the integer keys stored in the cache Map.
  */
-function applyGameResultToCache(result, week, seasonId) {
+export function applyGameResultToCache(result, week, seasonId) {
   // result.home / result.away can be either an integer team ID (normal path)
   // or a full team object (if a simulator variant returns objects).
   // Strictly coerce to Number so the cache Map keys always match.
@@ -5041,7 +5041,10 @@ function applyGameResultToCache(result, week, seasonId) {
     (g) => Number(g.home?.id ?? g.home) === hId && Number(g.away?.id ?? g.away) === aId
   );
   // Persisted on newly committed schedule rows; legacy archives are never replayed.
-  if (scheduled?.statisticsCommitted === true) return;
+  if (!scheduled) throw new Error(`Stat commit: missing schedule game ${seasonId}/${week}/${hId}/${aId}`);
+  if (scheduled.statisticsCommitted === true) return;
+  const playerIds = [...Object.keys(result.boxScore?.home ?? {}), ...Object.keys(result.boxScore?.away ?? {})];
+  return cache.withGameResultTransaction([hId, aId], playerIds, () => {
   const statScope = result.isPlayoff || cache.getMeta()?.phase === 'playoffs' || Number(week) > 18 ? 'playoffs' : 'regular';
 
   const scoreHome = result.scoreHome ?? result.homeScore ?? 0;
@@ -5349,6 +5352,8 @@ function applyGameResultToCache(result, week, seasonId) {
   }
   cache.addGame(archivedGame);
   if (scheduled) scheduled.statisticsCommitted = true;
+  cache.setMeta({}); // Commit marker and credited rows join the same atomic flush.
+  });
 }
 
 /** Mark all games in a week as played in the slim schedule. */

@@ -1,0 +1,62 @@
+{
+  "baselineRef": "0185cd0b1182fda4d6f76fb4517298b83e13c93d",
+  "reviewedRef": "fc98cdb4292a4b43cedb18bc854b864902cec4df",
+  "seed": 20260605,
+  "seasons": 4,
+  "corpora": [
+    {
+      "source": "baseline",
+      "games": 1088,
+      "teamGames": 2176,
+      "sequentialSoakPassing": 228.42876838235293,
+      "baselinePassing": 228.42876838235293,
+      "repairedPassing": 213.1613051470588,
+      "excludedPassGainsPerTeamGame": 2.5197610294117645,
+      "excludedNegativeGainsPerTeamGame": -1.3079044117647058,
+      "excludedPositiveGainsPerTeamGame": 3.8276654411764706,
+      "completionEndzoneExcessPerTeamGame": 12.747702205882353,
+      "unexplainedYards": 0,
+      "scoreDifferences": 0,
+      "crashes": 0,
+      "legacyCrashes": 0
+    },
+    {
+      "source": "reviewed",
+      "games": 1088,
+      "teamGames": 2176,
+      "sequentialSoakPassing": 209.2389705882353,
+      "baselinePassing": 224.22012867647058,
+      "repairedPassing": 209.2389705882353,
+      "excludedPassGainsPerTeamGame": 2.4558823529411766,
+      "excludedNegativeGainsPerTeamGame": -1.8115808823529411,
+      "excludedPositiveGainsPerTeamGame": 4.267463235294118,
+      "completionEndzoneExcessPerTeamGame": 12.525275735294118,
+      "unexplainedYards": 0,
+      "scoreDifferences": 0,
+      "crashes": 0,
+      "legacyCrashes": 0
+    },
+    {
+      "source": "repaired",
+      "games": 1088,
+      "teamGames": 2176,
+      "sequentialSoakPassing": 209.8722426470588,
+      "baselinePassing": 224.80836397058823,
+      "repairedPassing": 209.8722426470588,
+      "excludedPassGainsPerTeamGame": 2.380514705882353,
+      "excludedNegativeGainsPerTeamGame": -1.8846507352941178,
+      "excludedPositiveGainsPerTeamGame": 4.265165441176471,
+      "completionEndzoneExcessPerTeamGame": 12.555606617647058,
+      "unexplainedYards": 0,
+      "scoreDifferences": 0,
+      "crashes": 0,
+      "legacyCrashes": 3
+    }
+  ],
+  "sequentialMovement": -18.556525735294116,
+  "attributionMovementOnBaselineInputs": -15.267463235294116,
+  "changedLegacyInjuryInputsMovement": -3.2890625,
+  "reviewedSequentialMovement": -19.189797794117624,
+  "reviewedChangedLegacyInjuryInputsMovement": -3.9223345588235077,
+  "reviewFixSequentialMovement": 0.6332720588235077
+}

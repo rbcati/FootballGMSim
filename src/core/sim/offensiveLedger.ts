@@ -9,11 +9,13 @@ export function createOffensiveLedger(playerIds: string[], context: string) {
   if (eligible.size !== playerIds.length || playerIds.some((id) => !id.trim() || ['undefined', 'null', 'NaN', 'Infinity', '[object Object]'].includes(id))) {
     throw new Error(`Stat attribution ${context}: missing or duplicate player ID`);
   }
-  const players: Record<string, OffensiveStats> = Object.create(null);
+  const rows = new Map<string, OffensiveStats>();
   const totals = { passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, sacksAllowed: 0 };
   const row = (id: string) => {
     if (!eligible.has(id)) throw new Error(`Stat attribution ${context}: ineligible player ${id}`);
-    return players[id] ?? (players[id] = {});
+    let stats = rows.get(id);
+    if (!stats) { stats = {}; rows.set(id, stats); }
+    return stats;
   };
   const add = (s: OffensiveStats, key: string, value = 1) => { s[key] = (s[key] ?? 0) + value; };
   const longest = (s: OffensiveStats, key: string, gain: number) => { s[key] = s[key] == null ? gain : Math.max(s[key], gain); };
@@ -58,5 +60,9 @@ export function createOffensiveLedger(playerIds: string[], context: string) {
     }
     if (play.fumbleLost && (!play.complete || play.sack)) { add(qb, 'fumbles'); add(qb, 'fumblesLost'); }
   };
-  return { players, totals, credit };
+  return {
+    get players(): Record<string, OffensiveStats> { return Object.fromEntries(rows); },
+    totals, credit,
+    creditDrop(id: string) { const stats = row(id); add(stats, 'drops'); },
+  };
 }

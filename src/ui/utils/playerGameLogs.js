@@ -37,11 +37,12 @@ export function getPlayerGameLogs(league, player) {
       if (!game?.played) continue;
       const homeStats = game?.playerStats?.home ?? game?.stats?.home ?? {};
       const awayStats = game?.playerStats?.away ?? game?.stats?.away ?? {};
-      const statRow = homeStats[playerId] ?? awayStats[playerId] ?? null;
+      const isHome = Object.hasOwn(homeStats, playerId);
+      const statRow = isHome ? homeStats[playerId] : Object.hasOwn(awayStats, playerId) ? awayStats[playerId] : null;
       if (!statRow) continue;
       const homeId = normalizeTeamId(game?.homeId ?? game?.home);
       const awayId = normalizeTeamId(game?.awayId ?? game?.away);
-      const playerTeamId = homeStats[playerId] != null ? homeId : awayId;
+      const playerTeamId = isHome ? homeId : awayId;
       const opponentId = playerTeamId === homeId ? awayId : homeId;
       const stats = statRow?.stats ?? statRow ?? {};
       const pa = Number(stats.passAtt ?? 0);

@@ -12,6 +12,58 @@ function roster(teamId: number) {
 }
 
 describe('production game attribution invariants', () => {
+  it('keeps reserved player IDs as independent own box-score rows through JSON serialization', () => {
+    const attributes = mapOverallToAttributesV2(75, 5, 'reserved-ids');
+    const home = roster(1), away = roster(2);
+    // Exercise offense, defense and special teams, including IDs with inherited names.
+    const ids = ['__proto__', 'constructor', 'prototype', 'toString', 'hasOwnProperty'];
+    for (const [index, id] of ids.entries()) home[[0, 2, 4, 16, 20][index]].id = id;
+    const prototypeBefore = Object.getOwnPropertyDescriptors(Object.prototype);
+    for (let seed = 1; seed <= 12; seed++) {
+      const game = simulateRichGame({ gameId: `reserved-${seed}`, seed, homeTeamId: 1, awayTeamId: 2,
+        homeOffense: attributes, homeDefense: attributes, awayOffense: attributes, awayDefense: attributes,
+        homePlayers: home, awayPlayers: away });
+      const box = game.boxScore.home;
+      expect(Object.getPrototypeOf(box)).toBeNull();
+      const restored = JSON.parse(JSON.stringify(box));
+      for (const id of ids) {
+        expect(Object.hasOwn(box, id), `seed=${seed} id=${id}`).toBe(true);
+        expect(restored[id]).toEqual(box[id]);
+        expect(box[id].name).toBe(home.find(p => p.id === id)!.name);
+      }
+      expect(validateOffensiveStatIntegrity(box).errors).toEqual([]);
+      expect(reconcilePlayerToTeam(box, game.teamStats.home).ok).toBe(true);
+    }
+    expect(Object.getOwnPropertyDescriptors(Object.prototype)).toEqual(prototypeBefore);
+  });
+
+  it('preserves reserved player IDs through legacy live and completed-game attribution', () => {
+    const home = { id: 1, abbr: 'HME', roster: roster(1) }, away = { id: 2, abbr: 'AWY', roster: roster(2) };
+    home.roster[0].id = '__proto__'; home.roster[2].id = 'constructor'; home.roster[4].id = 'prototype';
+    const prototypeBefore = Object.getOwnPropertyDescriptors(Object.prototype);
+    Utils.setSeed(1804);
+    const [game] = simulateBatch([{ home, away, week: 1 }], { league: { week: 1, year: 2026, seasonId: 's1', globalSeed: 1804, teams: [home, away] }, injuryFactor: 0 });
+    for (const id of ['__proto__', 'constructor', 'prototype']) {
+      expect(Object.hasOwn(game.boxScore.home, id), id).toBe(true);
+      expect(JSON.parse(JSON.stringify(game.boxScore.home))[id]).toEqual(game.boxScore.home[id]);
+    }
+    expect(validateOffensiveStatIntegrity(game.boxScore.home).errors).toEqual([]);
+    expect(reconcilePlayerToTeam(game.boxScore.home, game.teamStats.home).ok).toBe(true);
+    expect(Object.getOwnPropertyDescriptors(Object.prototype)).toEqual(prototypeBefore);
+  });
+
+  it.each(['missing', 'injured', 'inactive'])('rejects a legacy %s QB room before a credited result exists', (condition) => {
+    const home = { id: 1, abbr: 'HME', roster: roster(1) }, away = { id: 2, abbr: 'AWY', roster: roster(2) };
+    if (condition === 'missing') home.roster = home.roster.filter(p => p.pos !== 'QB');
+    else for (const p of home.roster.filter(p => p.pos === 'QB')) Object.assign(p, condition === 'injured' ? { injured: true } : { status: 'inactive' });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      Utils.setSeed(1804);
+      expect(() => simulateBatch([{ home, away, week: 1 }], { league: { week: 1, year: 2026, seasonId: 's1', globalSeed: 1804, teams: [home, away] } })).toThrow();
+      expect(error.mock.calls.flat().join(' ')).toContain('no eligible QB');
+    } finally { error.mockRestore(); }
+  });
+
   it('validates both teams and actual supporting gains across seeds 1–64 and three personnel configurations (192 games)', () => {
     const actualFactory = ledgerModule.createOffensiveLedger;
     let ledgers: Array<{ context: string; ledger: ReturnType<typeof actualFactory>; events: ledgerModule.OffensivePlay[] }> = [];

@@ -690,12 +690,13 @@ export function simGameStats(home, away, options = {}) {
         const _n = (p) => formatPlayerName(p);
 
         // Live per-play stat fields (accumulated over logs for live display)
-        const liveStats = {};
+        const liveStats = new Map();
         const _addStat = (p, key, amt = 1) => {
             if (!p) return;
             const id = String(p.id);
-            if (!liveStats[id]) liveStats[id] = { id: p.id, name: p.name, pos: p.pos };
-            liveStats[id][key] = (liveStats[id][key] || 0) + amt;
+            let line = liveStats.get(id);
+            if (!line) { line = { id: p.id, name: p.name, pos: p.pos }; liveStats.set(id, line); }
+            line[key] = (line[key] || 0) + amt;
         };
         // ── end player helpers ─────────────────────────────────────────────
 
@@ -1186,7 +1187,7 @@ export function simGameStats(home, away, options = {}) {
         checkReturnTD(result.home, awayDefStr);
         checkReturnTD(result.away, homeDefStr);
 
-        result.liveStats = liveStats;
+        result.liveStats = Object.fromEntries(liveStats);
         return result;
     };
 
@@ -1402,7 +1403,8 @@ export function simGameStats(home, away, options = {}) {
       });
 
       const qbs = groups['QB'] || [];
-      let totalPassAttempts = 30;
+      if (qbs.length === 0) throw new Error(`Stat attribution team ${team.id}: no eligible QB`);
+      let totalPassAttempts = 0;
 
       // QB Injury/Stats Logic
       if (qbs.length > 0) {
@@ -1415,7 +1417,7 @@ export function simGameStats(home, away, options = {}) {
           // Update totalPassAttempts based on whoever played
           const starterStats = qbs[0].stats.game;
           const backupStats = qbs[1] ? qbs[1].stats.game : {};
-          totalPassAttempts = (starterStats.passAtt || 0) + (backupStats.passAtt || 0) || 30;
+          totalPassAttempts = (starterStats.passAtt || 0) + (backupStats.passAtt || 0);
 
           // Assign Win/Loss to starter
           if (qbs[0]) {
@@ -1968,7 +1970,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
             team.roster.forEach(p => {
                 // Use String(p.id) to match the stringified keys written by capturePlayerStats.
                 const pid = String(p.id);
-                const pStats = teamStats.players[pid] ?? teamStats.players[p.id];
+                const pStats = Object.hasOwn(teamStats.players, pid) ? teamStats.players[pid] : null;
                 if (pStats) {
                     initializePlayerStats(p);
                     let rawGame = {};
@@ -2339,7 +2341,7 @@ export function simulateBatch(games, options = {}) {
                 // Always key by String(player.id) so numeric and string IDs
                 // (legacy saves vs. new base-36 IDs) produce consistent keys.
                 const capturePlayerStats = (roster) => {
-                    const playerStats = {};
+                    const playerStats = Object.create(null);
                     for (let i = 0; i < roster.length; i++) {
                         const player = roster[i];
                         if (player && player.stats && player.stats.game && Object.keys(player.stats.game).length > 0) {
