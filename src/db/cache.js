@@ -123,6 +123,7 @@ const _dirty = {
 };
 
 const cloneRollbackValue = (value) => {
+  if (value === undefined) return value;
   if (typeof structuredClone === 'function') return structuredClone(value);
   return JSON.parse(JSON.stringify(value));
 };
@@ -139,6 +140,32 @@ const restoreObjectReference = (reference, value) => {
 // ── Read accessors ────────────────────────────────────────────────────────────
 
 export const cache = {
+
+  /** Roll back a single game's hot-cache mutations before the existing atomic DB flush.
+   * Only participating team fields/stat rows are copied; roster references stay intact.
+   */
+  withGameResultTransaction(teamIds, playerIds, commit) {
+    const meta = cloneRollbackValue(_meta);
+    const teams = teamIds.map(id => [id, _teams.get(id), _teams.has(id) ? { ..._teams.get(id) } : undefined]);
+    const stats = [...new Set(playerIds.map(String))].map(id => [id, _seasonStats.get(id), cloneRollbackValue(_seasonStats.get(id))]);
+    const gamesLength = _weekGames.length;
+    const dirty = {
+      meta: _dirty.meta, teams: new Set(_dirty.teams), players: new Set(_dirty.players),
+      games: _dirty.games.slice(), seasonStats: new Set(_dirty.seasonStats), draftPicks: new Set(_dirty.draftPicks),
+    };
+    try { return commit(); } catch (error) {
+      _meta = restoreObjectReference(_meta, meta);
+      for (const [id, ref, value] of teams) {
+        if (ref) _teams.set(id, restoreObjectReference(ref, value)); else _teams.delete(id);
+      }
+      for (const [id, ref, value] of stats) {
+        if (ref) _seasonStats.set(id, restoreObjectReference(ref, value)); else _seasonStats.delete(id);
+      }
+      _weekGames.length = gamesLength;
+      Object.assign(_dirty, dirty);
+      throw error;
+    }
+  },
 
   // --- START_NEW_SEASON preflight rollback ---
 

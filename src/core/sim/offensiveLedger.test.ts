@@ -8,6 +8,19 @@ import { Utils } from '../utils.js';
 import { attributeAggregatePassing } from '../simulation/aggregatePassingAttribution.js';
 
 describe('live offensive ownership', () => {
+  it('credits reserved IDs and drops without exposing inherited objects', () => {
+    const ledger = createOffensiveLedger(['__proto__', 'constructor', 'prototype'], 'hostile IDs');
+    ledger.credit({ type: 'pass', passerId: '__proto__', targetId: 'constructor', complete: true, yards: 12, touchdown: true });
+    ledger.creditDrop('constructor');
+    ledger.credit({ type: 'rush', runnerId: 'prototype', yards: -2 });
+    expect(Object.keys(ledger.players)).toEqual(['__proto__', 'constructor', 'prototype']);
+    expect(ledger.players.constructor).toMatchObject({ receptions: 1, recYd: 12, recTD: 1, drops: 1 });
+    expect(ledger.players.__proto__).toMatchObject({ passComp: 1, passYd: 12 });
+    expect(ledger.players.prototype).toMatchObject({ rushAtt: 1, rushYd: -2 });
+    expect(() => ledger.creditDrop('toString')).toThrow(/ineligible/);
+    expect((Object.prototype as any).drops).toBeUndefined();
+  });
+
   it.each([0, 1, 2, 75, 250])('reconciles %i completed passes with shared targets, negative gains and TDs', (count) => {
     const ledger = createOffensiveLedger(['qb', 'rb', 'wr', 'te'], `seed=1804 count=${count}`);
     for (let i = 0; i < count; i++) ledger.credit({ type: 'pass', passerId: 'qb', targetId: ['rb', 'wr', 'te'][i % 3], complete: true, yards: i % 4 === 0 ? -3 : 15, touchdown: i % 7 === 1 });

@@ -264,8 +264,8 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
 }
 
 export function transformStatsForBoxScore(playerStatsMap, roster, teamId = null) {
-  if (!playerStatsMap) return {};
-  const box = {};
+  if (!playerStatsMap) return Object.create(null);
+  const box = Object.create(null);
   const pids = Object.keys(playerStatsMap);
   const rosterById = new Map((roster ?? []).map((player) => [String(player?.id), player]));
 

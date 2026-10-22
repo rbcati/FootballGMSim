@@ -397,10 +397,10 @@ function distributeTotal(total: number, contributors: SimPlayerRef[], rng: () =>
 }
 
 function toBoxScore(players: SimPlayerRef[], statsById: Record<string, Record<string, number>>) {
-  const box: Record<string, { name: string; pos: string; stats: Record<string, number> }> = {};
+  const box: Record<string, { name: string; pos: string; stats: Record<string, number> }> = Object.create(null);
   for (const player of players) {
     const key = String(player.id);
-    if (!statsById[key]) continue;
+    if (!Object.hasOwn(statsById, key)) continue;
     box[key] = {
       name: player.name,
       pos: player.pos,
@@ -723,8 +723,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       if (!event.playerId) continue;
       if (!sack && ['SACK_ALLOWED', 'SACK_MADE'].includes(event.type)) continue;
       if (event.type === 'DROP' && !sack && result.turnoverType !== 'interception' && target) {
-        const line = ledgers[state.possession].players[String(target.id)];
-        line.drops = (line.drops ?? 0) + 1;
+        ledgers[state.possession].creditDrop(String(target.id));
       }
       if (result.turnoverType === 'interception' && event.type === 'DROP') continue;
       if (sack && ['TARGET', 'COVERAGE_TARGET', 'DROP'].includes(event.type)) continue;
@@ -961,7 +960,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     const sackers = simWorkloadPool(players, passRusherRows, workloadCache, workloadPoolCache).sort(compareSimPlayersByDepth(passRusherRows, workloadCache));
     const ballhawks = simWorkloadPool(players, coverageRows, workloadCache, workloadPoolCache).sort(compareSimPlayersByDepth(coverageRows, workloadCache));
 
-    const statsById: Record<string, Record<string, number>> = Object.fromEntries(Object.entries(credited).map(([id, line]) => [id, { ...line }]));
+    const statsById: Record<string, Record<string, number>> = Object.assign(Object.create(null), Object.fromEntries(Object.entries(credited).map(([id, line]) => [id, { ...line }])));
     const put = (id: string, patch: Record<string, number>) => {
       statsById[id] = { ...(statsById[id] ?? {}), ...patch };
     };

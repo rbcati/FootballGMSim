@@ -10,6 +10,18 @@ const league = {
 };
 
 describe('getPlayerGameLogs', () => {
+  it.each(['__proto__', 'constructor', 'prototype', 'toString'])('uses only owned rows for a restored away player with ID %s', (id) => {
+    const restored = JSON.parse(JSON.stringify({ ...league, schedule: { weeks: [{ week: 1, games: [{
+      played: true, home: 1, away: 2, homeScore: 24, awayScore: 17,
+      playerStats: { home: {}, away: Object.fromEntries([[id, { stats: { receptions: 2, recYd: 17 } }]]) },
+    }] }] } }));
+    const [row] = getPlayerGameLogs(restored, { id, teamId: 2, pos: 'WR' });
+    expect(row.stats.recYd).toBe(17);
+    expect(row.opponentId).toBe(1);
+    expect(row.result).toBe('L 17-24');
+    expect(getPlayerGameLogs(league, { id, teamId: 2 })).toEqual([]);
+  });
+
   it('extracts QB stats', () => {
     const logs = getPlayerGameLogs(league, { id: 12, teamId: 1, pos: 'QB' });
     expect(logs[0].stats.passYd).toBe(250);
