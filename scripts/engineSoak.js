@@ -165,7 +165,7 @@ function simulateLegacyGame(league, homeIdx, awayIdx) {
   };
 }
 
-function simulateMatchupGame(league, homeIdx, awayIdx, season, week) {
+function simulateMatchupGame(league, homeIdx, awayIdx, season, week, onMatchupGame) {
   const home = league.teams[homeIdx];
   const away = league.teams[awayIdx];
   const hu = aggregateTeamUnitsFromRoster(home.roster);
@@ -184,6 +184,8 @@ function simulateMatchupGame(league, homeIdx, awayIdx, season, week) {
     awayPlayers: away.roster,
     weather: 'clear',
   });
+  // Audit a detached snapshot so observers cannot alter gameplay or gate counters.
+  onMatchupGame?.(structuredClone(res));
   return {
     homeScore: Number(res.homeScore ?? 0),
     awayScore: Number(res.awayScore ?? 0),
@@ -309,7 +311,7 @@ function applyTalentTiers(league) {
   });
 }
 
-export function runEngineSoak({ seasons = 100, teams = 32, seed = 20260605 } = {}) {
+export function runEngineSoak({ seasons = 100, teams = 32, seed = 20260605, onMatchupGame } = {}) {
   Utils.setSeed(seed);
   const stubs = buildTeamStubs(teams);
   const league = makeLeague(stubs, {}, { Constants, Utils, makePlayer });
@@ -324,7 +326,7 @@ export function runEngineSoak({ seasons = 100, teams = 32, seed = 20260605 } = {
   const schedule = buildSchedule(teams, 17);
 
   const legacyAcc = runEngine('legacy', simulateLegacyGame, structuredClone(league), schedule, seasons);
-  const matchupAcc = runEngine('matchup', simulateMatchupGame, structuredClone(league), schedule, seasons);
+  const matchupAcc = runEngine('matchup', (...args) => simulateMatchupGame(...args, onMatchupGame), structuredClone(league), schedule, seasons);
 
   const legacy = summarize(legacyAcc, ovrByTeam);
   const matchup = summarize(matchupAcc, ovrByTeam);
