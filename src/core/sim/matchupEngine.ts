@@ -241,7 +241,9 @@ export function resolveMatchup(
   const turnover = rng() <= turnoverProbability;
   const turnoverType = turnover ? (playType === 'pass' && rng() <= 0.72 ? 'interception' : 'fumble') : null;
 
-  const clockElapsedSec = Math.round(clamp(22 + rng() * (playType === 'run' ? 20 : 16) + (success ? 2 : 0), 18, 45));
+  // Snap cadence: the corrected ledger averaged only 58.2 plays/team-game.
+  // A 20s base (previously 22s) restores volume with the same gain/success model.
+  const clockElapsedSec = Math.round(clamp(20 + rng() * (playType === 'run' ? 20 : 16) + (success ? 2 : 0), 18, 45));
   const next = nextDownState(ctx, yardsGained);
   const attributionEvents: PlayAttributionEvent[] = [];
   if (playType === 'pass') {

@@ -1,0 +1,241 @@
+{
+  "games": 192,
+  "minScore": 3,
+  "maxScore": 69,
+  "maxRushAtt": 43,
+  "maxPassAtt": 57,
+  "negativeRuns": 470,
+  "negativeCompletions": 0,
+  "sacks": 324,
+  "kneels": 46,
+  "redZoneDrives": 1791,
+  "redZoneTouchdowns": 1597,
+  "scoreChanges": 117,
+  "meanScoreDelta": 1.4895833333333333,
+  "meanPlayDelta": 3.6223958333333335,
+  "maxScoreDelta": 18,
+  "beforeNegativeRuns": 439,
+  "beforeSacks": 290,
+  "runs": 10349,
+  "successfulRuns": 6545,
+  "beforeRuns": 9760,
+  "beforeSuccessfulRuns": 6183,
+  "scenarios": [
+    {
+      "offense": 65,
+      "defense": 65,
+      "setting": "neutral",
+      "points": 30.5,
+      "plays": 64,
+      "rbShare": 0.5110852812361433,
+      "topTargetShare": 0.2381473859457072
+    },
+    {
+      "offense": 65,
+      "defense": 65,
+      "setting": "pass",
+      "points": 38,
+      "plays": 68.75,
+      "rbShare": 0.5520515309577809,
+      "topTargetShare": 0.2170705962450445
+    },
+    {
+      "offense": 65,
+      "defense": 65,
+      "setting": "run",
+      "points": 32.125,
+      "plays": 66.375,
+      "rbShare": 0.5501612384170523,
+      "topTargetShare": 0.20950644071532232
+    },
+    {
+      "offense": 65,
+      "defense": 65,
+      "setting": "unavailable",
+      "points": 30,
+      "plays": 63.5,
+      "rbShare": 0.5106292893695563,
+      "topTargetShare": 0.2737711113056107
+    },
+    {
+      "offense": 65,
+      "defense": 90,
+      "setting": "neutral",
+      "points": 8.5,
+      "plays": 60.75,
+      "rbShare": 0.4885090195845345,
+      "topTargetShare": 0.2458986914005603
+    },
+    {
+      "offense": 65,
+      "defense": 90,
+      "setting": "pass",
+      "points": 11.75,
+      "plays": 62,
+      "rbShare": 0.518009768009768,
+      "topTargetShare": 0.2216331836012687
+    },
+    {
+      "offense": 65,
+      "defense": 90,
+      "setting": "run",
+      "points": 10.75,
+      "plays": 57.25,
+      "rbShare": 0.5465614654961927,
+      "topTargetShare": 0.23433883560658406
+    },
+    {
+      "offense": 65,
+      "defense": 90,
+      "setting": "unavailable",
+      "points": 6.375,
+      "plays": 59.375,
+      "rbShare": 0.48647552676156797,
+      "topTargetShare": 0.23780344235914788
+    },
+    {
+      "offense": 75,
+      "defense": 65,
+      "setting": "neutral",
+      "points": 35.75,
+      "plays": 66.5,
+      "rbShare": 0.5324057702306378,
+      "topTargetShare": 0.24113675524037365
+    },
+    {
+      "offense": 75,
+      "defense": 65,
+      "setting": "pass",
+      "points": 42.875,
+      "plays": 65.5,
+      "rbShare": 0.5517008473112681,
+      "topTargetShare": 0.21587872702423788
+    },
+    {
+      "offense": 75,
+      "defense": 65,
+      "setting": "run",
+      "points": 30.75,
+      "plays": 63,
+      "rbShare": 0.5415147783251231,
+      "topTargetShare": 0.2141761704531101
+    },
+    {
+      "offense": 75,
+      "defense": 65,
+      "setting": "unavailable",
+      "points": 35.75,
+      "plays": 67.25,
+      "rbShare": 0.5278817118342761,
+      "topTargetShare": 0.24865997899249792
+    },
+    {
+      "offense": 75,
+      "defense": 90,
+      "setting": "neutral",
+      "points": 16.125,
+      "plays": 59.375,
+      "rbShare": 0.4986212699012411,
+      "topTargetShare": 0.22538108398271436
+    },
+    {
+      "offense": 75,
+      "defense": 90,
+      "setting": "pass",
+      "points": 23.125,
+      "plays": 61,
+      "rbShare": 0.5449799771167048,
+      "topTargetShare": 0.2191301351745256
+    },
+    {
+      "offense": 75,
+      "defense": 90,
+      "setting": "run",
+      "points": 14.375,
+      "plays": 59.625,
+      "rbShare": 0.5289861776617895,
+      "topTargetShare": 0.25080027033152036
+    },
+    {
+      "offense": 75,
+      "defense": 90,
+      "setting": "unavailable",
+      "points": 14.375,
+      "plays": 67,
+      "rbShare": 0.5330232110293656,
+      "topTargetShare": 0.23854796616751048
+    },
+    {
+      "offense": 90,
+      "defense": 65,
+      "setting": "neutral",
+      "points": 40.5,
+      "plays": 61.75,
+      "rbShare": 0.47253237164336304,
+      "topTargetShare": 0.23764365253741565
+    },
+    {
+      "offense": 90,
+      "defense": 65,
+      "setting": "pass",
+      "points": 45,
+      "plays": 64,
+      "rbShare": 0.47546605038058404,
+      "topTargetShare": 0.21973888056608648
+    },
+    {
+      "offense": 90,
+      "defense": 65,
+      "setting": "run",
+      "points": 37,
+      "plays": 63.125,
+      "rbShare": 0.4700286326280818,
+      "topTargetShare": 0.2071016501371636
+    },
+    {
+      "offense": 90,
+      "defense": 65,
+      "setting": "unavailable",
+      "points": 37.875,
+      "plays": 62.25,
+      "rbShare": 0.490029630071328,
+      "topTargetShare": 0.257040364920923
+    },
+    {
+      "offense": 90,
+      "defense": 90,
+      "setting": "neutral",
+      "points": 31.375,
+      "plays": 63.25,
+      "rbShare": 0.4904165493174114,
+      "topTargetShare": 0.23354212278781245
+    },
+    {
+      "offense": 90,
+      "defense": 90,
+      "setting": "pass",
+      "points": 36.625,
+      "plays": 69.25,
+      "rbShare": 0.5024581110314805,
+      "topTargetShare": 0.22107751013567928
+    },
+    {
+      "offense": 90,
+      "defense": 90,
+      "setting": "run",
+      "points": 33,
+      "plays": 65.75,
+      "rbShare": 0.4900590494776541,
+      "topTargetShare": 0.2035498262060762
+    },
+    {
+      "offense": 90,
+      "defense": 90,
+      "setting": "unavailable",
+      "points": 30.875,
+      "plays": 63.5,
+      "rbShare": 0.45728824671399754,
+      "topTargetShare": 0.2443706685712368
+    }
+  ]
+}
