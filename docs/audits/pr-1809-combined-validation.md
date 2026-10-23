@@ -1,6 +1,6 @@
 # Main-only and #1804 combined validation
 
-This report distinguishes statistical acceptance, main compatibility, and cross-system integrity. #1804 was never merged into production to conduct this comparison.
+The requested #1809 workstream is hosted at [PR #1805](https://github.com/rbcati/FootballGMSim/pull/1805), the next number allocated by GitHub. This report distinguishes statistical acceptance, main compatibility, and cross-system integrity. #1804 was never merged into production to conduct this comparison.
 
 ## Exact states and authorities
 

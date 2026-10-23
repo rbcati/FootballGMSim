@@ -1,5 +1,7 @@
 # Football Economy & Usage Calibration V1 — narrow production prerequisite
 
+GitHub allocated [PR #1805](https://github.com/rbcati/FootballGMSim/pull/1805); #1809 remains the requested workstream name in these evidence filenames. GitHub does not allow choosing a future PR number.
+
 Scope: calibrate actual offensive volume for #1804; contract economy and free-agent market work are excluded. This is a proposed calibration, not a new statistical authority. No automatic merge.
 
 Base A: `0185cd0b1182fda4d6f76fb4517298b83e13c93d`. Integrity baseline: #1804 at `bebba8285ccbed8c995e7b4df551905dcf309905`. The isolated gameplay commit is `c313bcc0`; the combined branch carries the identical change as `ed64210d`. Both branches retain their original ledger and lifecycle behavior. Main's older ledger is compatibility evidence only.
@@ -122,4 +124,4 @@ The observer receives a detached structured clone, so inspecting a game cannot c
 
 See [separate combined-branch validation](pr-1809-combined-validation.md) for exact commands, outcomes and head-specific Actions links. Required checks must be green before considering this mergeable. Local timeout attempts under competing CPU load are reported there rather than concealed.
 
-Preferred sequence: green #1809 targeting main → rebase #1804 onto that main → rerun all #1804 required checks → merge #1804 only while green. The temporary integration branch is validation only; do not merge it or #1804's red head to obtain the comparison. Gameplay, audit tooling and evidence are separate commits. If the final main-only workflow fails, keep this draft/blocked and use a stacked PR only after the dependency is explicitly resolved; never force a red prerequisite merge.
+Preferred sequence: green #1805 (the requested #1809 workstream) targeting main → rebase #1804 onto that main → rerun all #1804 required checks → merge #1804 only while green. The temporary integration branch is validation only; do not merge it or #1804's red head to obtain the comparison. Gameplay, audit tooling and evidence are separate commits. If the final main-only workflow fails, keep this draft/blocked and use a stacked PR only after the dependency is explicitly resolved; never force a red prerequisite merge.
