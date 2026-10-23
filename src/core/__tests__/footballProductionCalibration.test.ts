@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { writeFileSync } from 'node:fs';
 import * as matchup from '../sim/matchupEngine.ts';
 import { simulateRichGame } from '../sim/richGameSimulator.ts';
-import { aggregateTeamUnitsFromRoster } from '../sim/weekSimulationBridge.ts';
+import { aggregateTeamUnitsFromRoster, buildEligibleGameDayRoster } from '../sim/weekSimulationBridge.ts';
 import { mapOverallToAttributesV2 } from '../migration/attributeMigrator.ts';
 import { deriveGamePlanMultipliers } from '../sim/gamePlanMultipliers.ts';
 
@@ -28,7 +28,7 @@ describe('offensive production calibration under actual gameplay', () => {
     });
     const report = { games: 0, minScore: Infinity, maxScore: 0, maxRushAtt: 0, maxPassAtt: 0, negativeRuns: 0, negativeCompletions: 0,
       sacks: 0, kneels: 0, redZoneDrives: 0, redZoneTouchdowns: 0, scoreChanges: 0,
-      meanScoreDelta: 0, meanPlayDelta: 0, maxScoreDelta: 0, scenarios: [] as object[] };
+      meanScoreDelta: 0, meanPlayDelta: 0, maxScoreDelta: 0, beforeNegativeRuns: 0, beforeSacks: 0, runs: 0, successfulRuns: 0, beforeRuns: 0, beforeSuccessfulRuns: 0, scenarios: [] as object[] };
     try {
       for (const offense of [65, 75, 90]) for (const defense of [65, 90]) for (const setting of ['neutral', 'pass', 'run', 'unavailable']) {
         const scores: number[] = [], plays: number[] = [], rbShares: number[] = [], targetShares: number[] = [];
@@ -45,7 +45,9 @@ describe('offensive production calibration under actual gameplay', () => {
           const prep = deriveGamePlanMultipliers({ gamePlan: { runPassBalance: setting === 'pass' ? 80 : setting === 'run' ? 20 : 50,
             blitzFrequency: setting === 'pass' ? 100 : 0 }, weeklyPrepState: { insights: { weakSecondary: setting === 'pass', weakRunDefense: setting === 'run' } } });
           const payload = { gameId: `calibration-${offense}-${defense}-${setting}-${seed}`, seed, homeTeamId: 1, awayTeamId: 2,
-            homePlayers: home, awayPlayers: away, homeOffense: hu.offense, homeDefense: hu.defense, awayOffense: au.offense, awayDefense: au.defense,
+            // Mirror the production bridge: submit eligible personnel on both branches.
+            // #1804's own invariant tests also submit raw unavailable refs.
+            homePlayers: buildEligibleGameDayRoster(home as any, 1), awayPlayers: buildEligibleGameDayRoster(away as any, 2), homeOffense: hu.offense, homeDefense: hu.defense, awayOffense: au.offense, awayDefense: au.defense,
             homeSchemeFit: hu.schemeFit, awaySchemeFit: au.schemeFit, homePrepMultipliers: prep, awayPrepMultipliers: prep };
           traces = [];
           const game = simulateRichGame(payload);
@@ -54,7 +56,7 @@ describe('offensive production calibration under actual gameplay', () => {
           report.games++;
           let redZone = false;
           for (const { context: c, result: r } of observed) {
-            if (c.playType === 'run' && r.yardsGained < 0) report.negativeRuns++;
+            if (c.playType === 'run') { report.runs++; if (r.success) report.successfulRuns++; if (r.yardsGained < 0) report.negativeRuns++; }
             if (c.playType === 'pass' && r.success && r.turnoverType !== 'interception' && r.yardsGained < 0) report.negativeCompletions++;
             if (c.playType === 'pass' && r.isSack && r.turnoverType !== 'interception') report.sacks++;
             redZone ||= c.yardLine >= 80 || (!r.turnover && r.nextYardLine >= 80 && r.nextYardLine < 100);
@@ -96,7 +98,12 @@ describe('offensive production calibration under actual gameplay', () => {
           const tracedRuns = observed.filter(x => x.context.playType === 'run' && String(x.context.blockerId).startsWith('1-')).length;
           report.kneels += Math.max(0, t.rushAtt - tracedRuns);
           // A paired replay restores only the previous clock base. All RNG draws and mechanics remain real.
-          spy.mockImplementation((o, d, c, rng) => { const r = resolve(o, d, c, rng); return { ...r, clockElapsedSec: r.clockElapsedSec + 2 }; });
+          spy.mockImplementation((o, d, c, rng) => {
+            const r = resolve(o, d, c, rng);
+            if (c.playType === 'run') { report.beforeRuns++; if (r.success) report.beforeSuccessfulRuns++; if (r.yardsGained < 0) report.beforeNegativeRuns++; }
+            if (c.playType === 'pass' && r.isSack && r.turnoverType !== 'interception') report.beforeSacks++;
+            return { ...r, clockElapsedSec: r.clockElapsedSec + 2 };
+          });
           const before = simulateRichGame(payload);
           spy.mockImplementation((o, d, c, rng) => { const r = resolve(o, d, c, rng); traces.push({ context: { ...c }, result: r }); return r; });
           if (before.homeScore !== game.homeScore || before.awayScore !== game.awayScore) report.scoreChanges++;
