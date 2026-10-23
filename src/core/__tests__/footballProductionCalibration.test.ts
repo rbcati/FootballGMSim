@@ -37,7 +37,7 @@ describe('offensive production calibration under actual gameplay', () => {
           const home = roster(1, offense, 75), away = roster(2, 75, defense);
           if (setting === 'unavailable') {
             Object.assign(home[0], { injured: true });
-            Object.assign(home.find(p => p.pos === 'RB')!, { status: 'inactive' });
+            Object.assign(home.find(p => p.pos === 'RB')!, { status: 'injured_reserve' });
             Object.assign(home.find(p => p.pos === 'WR')!, { injured: true });
           }
           const schemes = { offSchemeId: setting === 'pass' ? 'VERTICAL' : 'WEST_COAST', defSchemeId: setting === 'run' ? 'BLITZ_34' : 'COVER_2' };
@@ -76,7 +76,7 @@ describe('offensive production calibration under actual gameplay', () => {
             report.minScore = Math.min(report.minScore, score); report.maxScore = Math.max(report.maxScore, score);
             report.maxRushAtt = Math.max(report.maxRushAtt, t.rushAtt); report.maxPassAtt = Math.max(report.maxPassAtt, t.passAtt);
             if (setting === 'unavailable' && side === 'home') {
-              for (const player of home.filter(p => (p as any).injured || (p as any).status === 'inactive')) expect(game.boxScore.home[player.id]).toBeUndefined();
+              for (const player of home.filter(p => (p as any).injured || (p as any).status === 'injured_reserve')) expect(game.boxScore.home[player.id]).toBeUndefined();
             }
             // #1804 exposes explicit sack losses; then require its stronger ledger invariants too.
             if ('sackYards' in t) {
