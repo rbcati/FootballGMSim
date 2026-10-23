@@ -1,0 +1,440 @@
+{
+  "sourceHead": "94ce8aeae5752d00d6430cea4fec9675b3194c78",
+  "incorporatedMain": "d04896fa0aba07d54b87eff9bc5b43d3fd8bc22f",
+  "node": "22.23.3",
+  "command": "CORRECTED_LEDGER=1 node --import tsx scripts/football-calibration-audit.mjs . /tmp/pr1804-rebased-calibration.json",
+  "historicalComparison": {
+    "source": "pr-1809-statistics.json/C_integrityPlusCalibration",
+    "allNumericMetricsAndDistributionsEqual": true,
+    "differences": [
+      "Wall-clock timing",
+      "Existing red-zone limitation explanatory wording only"
+    ]
+  },
+  "reports": [
+    {
+      "seed": 20260605,
+      "soak": {
+        "seasons": 4,
+        "teams": 32,
+        "seed": 20260605,
+        "legacy": {
+          "games": 1088,
+          "crashes": 0,
+          "msPerGame": 0.8297086452205897,
+          "pointsPerGame": 35.4719669117647,
+          "passYdsPerGame": 250.765625,
+          "rushYdsPerGame": 163.66038602941177,
+          "scoreStdDev": 10.91116135373042,
+          "topQuartileWinPct": 0.5716911764705882,
+          "minTeamScore": 3,
+          "finalTieRate": 0.007352941176470588,
+          "regulationTieRate": null,
+          "preFloorShutoutRate": null
+        },
+        "matchup": {
+          "games": 1088,
+          "crashes": 0,
+          "msPerGame": 26.131743332720518,
+          "pointsPerGame": 26.18198529411765,
+          "passYdsPerGame": 226.52757352941177,
+          "rushYdsPerGame": 104.44623161764706,
+          "scoreStdDev": 12.674697137572688,
+          "topQuartileWinPct": 0.7591911764705882,
+          "minTeamScore": 3,
+          "finalTieRate": 0,
+          "regulationTieRate": 0.03125,
+          "preFloorShutoutRate": 0.02803308823529412
+        },
+        "gate": {
+          "checks": [
+            {
+              "name": "Win distribution (top-quartile win%)",
+              "pass": true,
+              "detail": "75.9% (want 68\u201376%)"
+            },
+            {
+              "name": "Stat realism (pass yds/game)",
+              "pass": true,
+              "detail": "226.5 (want 220\u2013280)"
+            },
+            {
+              "name": "Stat realism (rush yds/game)",
+              "pass": true,
+              "detail": "104.4 (want 100\u2013130)"
+            },
+            {
+              "name": "Stat realism (points/game)",
+              "pass": true,
+              "detail": "26.2 (want 20\u201327)"
+            },
+            {
+              "name": "Floor regression check (shutout floor guarantees >= 3; not a scoring-health gate)",
+              "pass": true,
+              "detail": "min individual team score: 3"
+            },
+            {
+              "name": "Final tie rate (OT must resolve ties)",
+              "pass": true,
+              "detail": "0.00% of games (max 1%)"
+            },
+            {
+              "name": "Score variance (PBP std-dev >= legacy)",
+              "pass": true,
+              "detail": "PBP 12.67 vs legacy 10.91"
+            },
+            {
+              "name": "Performance (ms/game)",
+              "pass": true,
+              "detail": "26.132 ms (max 50)"
+            },
+            {
+              "name": "Crash/error rate (zero throws)",
+              "pass": true,
+              "detail": "0 crashes"
+            }
+          ],
+          "passed": true
+        }
+      },
+      "correctedLedger": true,
+      "invariantTeamGames": 2176,
+      "efficiency": {
+        "attempts": 33.64154411764706,
+        "completionRate": 0.6061280804327632,
+        "yardsPerCompletion": 11.10914786684997,
+        "yardsPerAttempt": 6.733566471777499,
+        "carries": 27.255974264705884,
+        "yardsPerCarry": 3.832049098787705,
+        "plays": 61.8327205882353,
+        "sacks": 0.9352022058823529,
+        "sackLoss": 0.9352022058823529,
+        "touchdowns": 3.553768382352941,
+        "touchdownPerPlay": 0.05747391265570651,
+        "reportedRedZoneTrips": 0.01608455882352941,
+        "redZoneEfficiency": null,
+        "redZoneLimitation": "Existing trips count backward crossings of the 80, not distinct drives. Ratio is invalid; see traced adversarial audit.",
+        "turnovers": 1.2752757352941178,
+        "qbCarryShare": 0.32062587465646025
+      }
+    },
+    {
+      "seed": 4242,
+      "soak": {
+        "seasons": 4,
+        "teams": 32,
+        "seed": 4242,
+        "legacy": {
+          "games": 1088,
+          "crashes": 0,
+          "msPerGame": 1.473786673713291,
+          "pointsPerGame": 35.533088235294116,
+          "passYdsPerGame": 250.0358455882353,
+          "rushYdsPerGame": 161.31341911764707,
+          "scoreStdDev": 11.073941359222951,
+          "topQuartileWinPct": 0.6341911764705882,
+          "minTeamScore": 9,
+          "finalTieRate": 0.0027573529411764708,
+          "regulationTieRate": null,
+          "preFloorShutoutRate": null
+        },
+        "matchup": {
+          "games": 1088,
+          "crashes": 0,
+          "msPerGame": 16.670830116727885,
+          "pointsPerGame": 26.154871323529413,
+          "passYdsPerGame": 226.56341911764707,
+          "rushYdsPerGame": 104.97426470588235,
+          "scoreStdDev": 12.531592583038538,
+          "topQuartileWinPct": 0.7371323529411765,
+          "minTeamScore": 3,
+          "finalTieRate": 0,
+          "regulationTieRate": 0.04411764705882353,
+          "preFloorShutoutRate": 0.02849264705882353
+        },
+        "gate": {
+          "checks": [
+            {
+              "name": "Win distribution (top-quartile win%)",
+              "pass": true,
+              "detail": "73.7% (want 68\u201376%)"
+            },
+            {
+              "name": "Stat realism (pass yds/game)",
+              "pass": true,
+              "detail": "226.6 (want 220\u2013280)"
+            },
+            {
+              "name": "Stat realism (rush yds/game)",
+              "pass": true,
+              "detail": "105.0 (want 100\u2013130)"
+            },
+            {
+              "name": "Stat realism (points/game)",
+              "pass": true,
+              "detail": "26.2 (want 20\u201327)"
+            },
+            {
+              "name": "Floor regression check (shutout floor guarantees >= 3; not a scoring-health gate)",
+              "pass": true,
+              "detail": "min individual team score: 3"
+            },
+            {
+              "name": "Final tie rate (OT must resolve ties)",
+              "pass": true,
+              "detail": "0.00% of games (max 1%)"
+            },
+            {
+              "name": "Score variance (PBP std-dev >= legacy)",
+              "pass": true,
+              "detail": "PBP 12.53 vs legacy 11.07"
+            },
+            {
+              "name": "Performance (ms/game)",
+              "pass": true,
+              "detail": "16.671 ms (max 50)"
+            },
+            {
+              "name": "Crash/error rate (zero throws)",
+              "pass": true,
+              "detail": "0 crashes"
+            }
+          ],
+          "passed": true
+        }
+      },
+      "correctedLedger": true,
+      "invariantTeamGames": 2176,
+      "efficiency": {
+        "attempts": 33.559742647058826,
+        "completionRate": 0.6076602853778107,
+        "yardsPerCompletion": 11.109904225352112,
+        "yardsPerAttempt": 6.751047572097609,
+        "carries": 27.40579044117647,
+        "yardsPerCarry": 3.830368072440681,
+        "plays": 61.9016544117647,
+        "sacks": 0.9361213235294118,
+        "sackLoss": 0.9361213235294118,
+        "touchdowns": 3.5533088235294117,
+        "touchdownPerPlay": 0.05740248556029043,
+        "reportedRedZoneTrips": 0.011948529411764705,
+        "redZoneEfficiency": null,
+        "redZoneLimitation": "Existing trips count backward crossings of the 80, not distinct drives. Ratio is invalid; see traced adversarial audit.",
+        "turnovers": 1.2927389705882353,
+        "qbCarryShare": 0.31940974260082167
+      }
+    },
+    {
+      "seed": 8675309,
+      "soak": {
+        "seasons": 4,
+        "teams": 32,
+        "seed": 8675309,
+        "legacy": {
+          "games": 1088,
+          "crashes": 0,
+          "msPerGame": 0.9330599788602285,
+          "pointsPerGame": 35.82766544117647,
+          "passYdsPerGame": 247.9094669117647,
+          "rushYdsPerGame": 161.45266544117646,
+          "scoreStdDev": 10.474460679917101,
+          "topQuartileWinPct": 0.625,
+          "minTeamScore": 6,
+          "finalTieRate": 0.003676470588235294,
+          "regulationTieRate": null,
+          "preFloorShutoutRate": null
+        },
+        "matchup": {
+          "games": 1088,
+          "crashes": 0,
+          "msPerGame": 24.080957043198563,
+          "pointsPerGame": 26.064338235294116,
+          "passYdsPerGame": 227.24770220588235,
+          "rushYdsPerGame": 104.50827205882354,
+          "scoreStdDev": 12.786585928586446,
+          "topQuartileWinPct": 0.7536764705882353,
+          "minTeamScore": 3,
+          "finalTieRate": 0,
+          "regulationTieRate": 0.03676470588235294,
+          "preFloorShutoutRate": 0.03308823529411765
+        },
+        "gate": {
+          "checks": [
+            {
+              "name": "Win distribution (top-quartile win%)",
+              "pass": true,
+              "detail": "75.4% (want 68\u201376%)"
+            },
+            {
+              "name": "Stat realism (pass yds/game)",
+              "pass": true,
+              "detail": "227.2 (want 220\u2013280)"
+            },
+            {
+              "name": "Stat realism (rush yds/game)",
+              "pass": true,
+              "detail": "104.5 (want 100\u2013130)"
+            },
+            {
+              "name": "Stat realism (points/game)",
+              "pass": true,
+              "detail": "26.1 (want 20\u201327)"
+            },
+            {
+              "name": "Floor regression check (shutout floor guarantees >= 3; not a scoring-health gate)",
+              "pass": true,
+              "detail": "min individual team score: 3"
+            },
+            {
+              "name": "Final tie rate (OT must resolve ties)",
+              "pass": true,
+              "detail": "0.00% of games (max 1%)"
+            },
+            {
+              "name": "Score variance (PBP std-dev >= legacy)",
+              "pass": true,
+              "detail": "PBP 12.79 vs legacy 10.47"
+            },
+            {
+              "name": "Performance (ms/game)",
+              "pass": true,
+              "detail": "24.081 ms (max 50)"
+            },
+            {
+              "name": "Crash/error rate (zero throws)",
+              "pass": true,
+              "detail": "0 crashes"
+            }
+          ],
+          "passed": true
+        }
+      },
+      "correctedLedger": true,
+      "invariantTeamGames": 2176,
+      "efficiency": {
+        "attempts": 33.58547794117647,
+        "completionRate": 0.6084535179661202,
+        "yardsPerCompletion": 11.120403895023276,
+        "yardsPerAttempt": 6.766248871131058,
+        "carries": 27.357536764705884,
+        "yardsPerCarry": 3.820090710566101,
+        "plays": 61.892463235294116,
+        "sacks": 0.9494485294117647,
+        "sackLoss": 0.9494485294117647,
+        "touchdowns": 3.5418198529411766,
+        "touchdownPerPlay": 0.05722538202230505,
+        "reportedRedZoneTrips": 0.017003676470588234,
+        "redZoneEfficiency": null,
+        "redZoneLimitation": "Existing trips count backward crossings of the 80, not distinct drives. Ratio is invalid; see traced adversarial audit.",
+        "turnovers": 1.3166360294117647,
+        "qbCarryShare": 0.3196203594826138
+      }
+    },
+    {
+      "seed": 314159,
+      "soak": {
+        "seasons": 4,
+        "teams": 32,
+        "seed": 314159,
+        "legacy": {
+          "games": 1088,
+          "crashes": 0,
+          "msPerGame": 1.0353903915441098,
+          "pointsPerGame": 36.14797794117647,
+          "passYdsPerGame": 249.9659926470588,
+          "rushYdsPerGame": 164.35202205882354,
+          "scoreStdDev": 10.963181008404582,
+          "topQuartileWinPct": 0.5790441176470589,
+          "minTeamScore": 9,
+          "finalTieRate": 0.011948529411764705,
+          "regulationTieRate": null,
+          "preFloorShutoutRate": null
+        },
+        "matchup": {
+          "games": 1088,
+          "crashes": 0,
+          "msPerGame": 37.17580629595576,
+          "pointsPerGame": 26.234375,
+          "passYdsPerGame": 226.57398897058823,
+          "rushYdsPerGame": 104.94163602941177,
+          "scoreStdDev": 12.706284427306446,
+          "topQuartileWinPct": 0.7279411764705882,
+          "minTeamScore": 3,
+          "finalTieRate": 0,
+          "regulationTieRate": 0.03400735294117647,
+          "preFloorShutoutRate": 0.03400735294117647
+        },
+        "gate": {
+          "checks": [
+            {
+              "name": "Win distribution (top-quartile win%)",
+              "pass": true,
+              "detail": "72.8% (want 68\u201376%)"
+            },
+            {
+              "name": "Stat realism (pass yds/game)",
+              "pass": true,
+              "detail": "226.6 (want 220\u2013280)"
+            },
+            {
+              "name": "Stat realism (rush yds/game)",
+              "pass": true,
+              "detail": "104.9 (want 100\u2013130)"
+            },
+            {
+              "name": "Stat realism (points/game)",
+              "pass": true,
+              "detail": "26.2 (want 20\u201327)"
+            },
+            {
+              "name": "Floor regression check (shutout floor guarantees >= 3; not a scoring-health gate)",
+              "pass": true,
+              "detail": "min individual team score: 3"
+            },
+            {
+              "name": "Final tie rate (OT must resolve ties)",
+              "pass": true,
+              "detail": "0.00% of games (max 1%)"
+            },
+            {
+              "name": "Score variance (PBP std-dev >= legacy)",
+              "pass": true,
+              "detail": "PBP 12.71 vs legacy 10.96"
+            },
+            {
+              "name": "Performance (ms/game)",
+              "pass": true,
+              "detail": "37.176 ms (max 50)"
+            },
+            {
+              "name": "Crash/error rate (zero throws)",
+              "pass": true,
+              "detail": "0 crashes"
+            }
+          ],
+          "passed": true
+        }
+      },
+      "correctedLedger": true,
+      "invariantTeamGames": 2176,
+      "efficiency": {
+        "attempts": 33.58639705882353,
+        "completionRate": 0.6071506759345411,
+        "yardsPerCompletion": 11.11092330921957,
+        "yardsPerAttempt": 6.74600459744951,
+        "carries": 27.352941176470587,
+        "yardsPerCarry": 3.836575940860215,
+        "plays": 61.86810661764706,
+        "sacks": 0.9287683823529411,
+        "sackLoss": 0.9287683823529411,
+        "touchdowns": 3.5638786764705883,
+        "touchdownPerPlay": 0.05760445682451253,
+        "reportedRedZoneTrips": 0.012867647058823529,
+        "redZoneEfficiency": null,
+        "redZoneLimitation": "Existing trips count backward crossings of the 80, not distinct drives. Ratio is invalid; see traced adversarial audit.",
+        "turnovers": 1.2720588235294117,
+        "qbCarryShare": 0.3167674731182796
+      }
+    }
+  ]
+}

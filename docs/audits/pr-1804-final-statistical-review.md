@@ -1,5 +1,11 @@
 # PR #1804 final statistical consistency review
 
+> Historical review: the sections below record pre-calibration verification at
+> `bebba8285ccbed8c995e7b4df551905dcf309905` and its earlier reviewed base. Their
+> failed yardage gates and BLOCKED verdict are historical. Fresh integration
+> evidence is recorded in the post-calibration section at the end; these original
+> measurements have not been rewritten.
+
 Reviewed base: `65bc42b79589fd1264e64596d304843cb5e7909b`. Scope remains statistical integrity, existing persistence and synthetic-fixture correctness. No scoring probabilities, calibration thresholds, cap rules, roster UI or historical records are changed.
 
 ## Confirmed defects and repairs
@@ -74,3 +80,78 @@ Executed **256 paired games, seeds 1–256**. The script requires unchanged fina
 The final PR description records executed full-suite results and the actual head-specific Actions run. Focused verification completed 8 unit/component regressions and 3 new worker scenarios; build and strict simulator type checks passed. TypeScript 5.9.3 is supplied through temporary tooling because it is not a repository dependency. Existing lint tooling is absent. Historical saves are not migrated; newly generated records persist explicit net/sack fields, and missing historical sack gains are never synthesized.
 
 Verdict remains **BLOCKED** until the unchanged required workflow passes. Calibration and the absence of universal automatic AI QB replacement are disclosed limitations, not grounds to manufacture production or label a red workflow ready.
+
+
+## Post-calibration integration — 2026-10-23
+
+Rebased the existing #1804 branch from `bebba8285ccbed8c995e7b4df551905dcf309905`
+onto latest fetched main `d04896fa0aba07d54b87eff9bc5b43d3fd8bc22f` (the #1805
+merge). Rebased implementation head: `94ce8aeae5752d00d6430cea4fec9675b3194c78`;
+the subsequent audit commit changes documentation/evidence only.
+
+The exact #1805 file overlap is `scripts/engineSoak.js` (observer hook introduced
+by `04e3b508`) and `tests/e2e/box_score_clickthrough.spec.js` (reviewed browser
+correction `cf7b2e2f`). Only the soak file produced a textual conflict, while
+replaying `bebba828`. Resolution keeps independent `structuredClone(league)`
+inputs for each engine AND forwards the observer into rich simulation. Detached
+`structuredClone(res)` audit snapshots, full roster references, canonical weekly
+recovery and the remaining offseason calendar survive together, with one audit
+hook per game. The browser file is identical to main: actual player links,
+identical score/player rows after reload, and matching active league/franchise
+generation. No obsolete chronological quarter-table assertion returns.
+
+`git range-diff` confirms the other changes to the replayed patches are removal
+of the already-merged browser correction and adapting the soak edits to the
+observer API. The implementation, fixtures, tests and snapshots exactly match
+previous combined branch `fb8207c0` (`integration/football-production-v1`). The
+only tree differences from that branch before this audit are the four #1805
+audit documents. All reviewed #1804 production integrity code is unchanged;
+`matchupEngine.ts` is identical to main, preserving `c313bcc0`'s 20-second snap
+clock. There is no new probability, scoring, RNG, roster/cap, schema or historical
+save migration change. Existing signed-QB recovery tests remain explicit; no
+automatic emergency QB or invented passing production is added.
+
+Fresh calibration uses Node 22.23.3 and the existing four-season gate with its
+original thresholds. Command: `CORRECTED_LEDGER=1 node --import tsx
+scripts/football-calibration-audit.mjs . /tmp/pr1804-rebased-calibration.json`.
+[Fresh metrics and invariant counts](pr-1804-post-calibration-integration.json):
+
+| Seed | Passing/team-game | Rushing/team-game | Points/team-game | Top-quartile wins | Gate |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 20260605 | 226.527574 | 104.446232 | 26.181985 | 75.9191% | PASS |
+| 4242 | 226.563419 | 104.974265 | 26.154871 | 73.7132% | PASS |
+| 8675309 | 227.247702 | 104.508272 | 26.064338 | 75.3676% | PASS |
+| 314159 | 226.573989 | 104.941636 | 26.234375 | 72.7941% | PASS |
+
+Each seed completes 1,088 games per engine with zero errors and zero rich final
+ties. All 8,704 rich team-game ledgers satisfy the corrected player/team,
+reception/carry/TD, gross/net and plays identities. Fresh numeric metrics,
+efficiencies, player/position/team distributions and drive summaries exactly
+match historical `pr-1809-statistics.json/C_integrityPlusCalibration`. Only
+wall-clock measurements and explanatory red-zone limitation wording differ.
+All nine gate checks pass on all seeds; thresholds and the snap clock were not
+changed. Existing role-usage and red-zone limitations remain disclosed in #1805.
+
+
+Fresh verification on the rebased implementation (Node 22.23.3):
+
+| Check | Result |
+| --- | --- |
+| Full unit suite, `npm run test:unit -- --maxWorkers=2` | 6,446 passed; 1 existing controlled-audit skip; 524 files passed, 1 skipped |
+| Focused attribution, ledger, final-review, calibration and rendered rating regressions, 5 files | 34 passed |
+| Existing dynasty soak, `npm run test:soak -- --maxWorkers=1` | 103 passed / 8 files |
+| Real-worker durability, `npm run durability:test -- --maxWorkers=1` | 98 passed / 9 files: full 272-game rich regular season, postseason/rollover, 64 legacy games, canonical season ratings, eligible-QB signing, save/reload, duplicate commits and mutation/storage fault injection |
+| Built-app browser: Game Book clickthrough/reload, desktop/mobile first-week and schedule/bye | 6 passed |
+| Production build; TypeScript 5.9.3 `tsc -p tsconfig.sim.json`; Netlify artifact rules | Passed |
+| `git diff --check` | Passed |
+
+The controlled-audit skip predates this integration; the mandatory calibration
+file ran in the full unit suite and passed. No assertion, timeout, threshold or
+snapshot was changed during integration. TypeScript and Node tooling are outside
+the repository; dependencies and the lockfile are unchanged.
+
+Latest-head GitHub Actions, including downstream durability/deploy-parity/browser
+jobs, and CodeQL must pass after pushing the existing PR branch. Their run links
+and final status belong in the PR integration readout; historical Actions links
+above are not evidence for the rebased head. No automatic merge is enabled or
+performed. The optional five-season workflow is a separate manual check.
