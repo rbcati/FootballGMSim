@@ -68,6 +68,21 @@ export async function launchFranchise(page) {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
   }
   await ensureLeagueLoaded(page);
+  // Honoring the selected 2025 start year now correctly shows the first-career
+  // tour. Complete this real UI step before exercising the controls behind it.
+  const expectsTour = await page.evaluate(() => {
+    const league = window.state?.league;
+    return !localStorage.getItem('gmsim_onboarding_done')
+      && [2025, 1].includes(league?.year)
+      && (league?.week ?? 1) <= 2 && league?.phase === 'regular';
+  });
+  if (expectsTour) {
+    const skipTour = page.getByRole('button', { name: 'Skip tour', exact: true });
+    await expect(skipTour).toBeVisible();
+    await skipTour.click();
+    await expect(skipTour).toBeHidden();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('gmsim_onboarding_done'))).toBe('1');
+  }
 }
 
 export async function goToTab(page, name) {

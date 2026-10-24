@@ -1,0 +1,121 @@
+{
+  "data": {
+    "draftPicks": {
+      "rows": 672,
+      "bytes": 75307,
+      "sha256": "5b71a9625e12891bf7880c25c1eea9ce24a01dd0dee0bc59d08f0fb94780b6a8"
+    },
+    "games": {
+      "rows": 0,
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "meta": {
+      "rows": 1,
+      "bytes": 36102,
+      "sha256": "e480738db17a1eea4e4461a9505d349fabe7207cc0de9b613cf70385803b44dc"
+    },
+    "news": {
+      "rows": 0,
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "playerStats": {
+      "rows": 0,
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "players": {
+      "rows": 1696,
+      "bytes": 3262678,
+      "sha256": "03535e1f3b14afada0e0932c162b92fd0771a1464b7dac90a8bb46a5fbdbbfd2"
+    },
+    "rosters": {
+      "rows": 0,
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "seasons": {
+      "rows": 0,
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "teams": {
+      "rows": 32,
+      "bytes": 292211,
+      "sha256": "36518d4f9e54cf8838bf25d4f225bae10a82d1d75765d0b8c477e5dfdef173c6"
+    },
+    "transactions": {
+      "rows": 0,
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  },
+  "leagueMeta": {
+    "userTeamId": 1,
+    "year": 2031,
+    "currentWeek": 1,
+    "franchiseGenerationId": "franchise_4b6ccea7-88ca-4cb8-bc19-87e26f98d45c",
+    "settings": {
+      "leagueSize": 32,
+      "conferenceCount": 2,
+      "divisionCountPerConference": 4,
+      "seasonLength": 17,
+      "playoffTeams": 14,
+      "playoffSeeding": "standard",
+      "overtimeFormat": "nfl",
+      "salaryCap": 301.2,
+      "capFloor": 210,
+      "rookieContractYears": 4,
+      "freeAgencyAggressiveness": 50,
+      "tradeDifficulty": 50,
+      "injuryFrequency": 50,
+      "suspensionFrequency": 50,
+      "progressionVolatility": 50,
+      "regressionSeverity": 50,
+      "scoutingFogStrength": 55,
+      "ownerPatienceStrictness": 50,
+      "playerMoodVolatility": 50,
+      "draftOrderLogic": "reverse_standings",
+      "leagueUniverse": "fictional",
+      "scheduleBalancePreset": "balanced",
+      "difficultyPreset": "Hard",
+      "customDifficultyEnabled": true,
+      "maxContractYears": 6,
+      "minSalary": 0.75,
+      "maxSalary": 65,
+      "tradeDeadlineWeek": 9,
+      "rosterSize": 53,
+      "draftRounds": 7,
+      "prospectPoolSize": 450,
+      "lotteryEnabled": true,
+      "waiverBehavior": "standard",
+      "freeAgencyNegotiationPace": "normal",
+      "progressionEnvironmentStrength": 50,
+      "draftClassStrength": 50,
+      "staffImpactStrength": 50,
+      "useNewSimulationEngine": true,
+      "revenueSharing": true,
+      "luxuryTaxRate": 20,
+      "revealHiddenRatingsForCommissioner": true,
+      "leagueName": "Miami Dolphins Dynasty",
+      "conferenceNames": [
+        "AFC",
+        "NFC"
+      ],
+      "divisionNames": [
+        "East",
+        "North",
+        "South",
+        "West"
+      ]
+    }
+  },
+  "userTeam": {
+    "id": 1,
+    "wins": 0,
+    "losses": 0
+  },
+  "metadata": "{\"name\":\"Franchise 2\",\"teamName\":\"Miami Dolphins\",\"record\":{\"wins\":0,\"losses\":0},\"season\":2031,\"week\":1,\"lastSaved\":\"2026-10-24T20:37:59.828Z\"}",
+  "manifest": "[{\"id\":\"8ybo9mzq5e7l\",\"name\":\"Detroit Lions Dynasty\",\"year\":2026,\"teamId\":21,\"teamAbbr\":\"DET\",\"lastPlayed\":1792874262847},{\"id\":\"save_slot_1\",\"name\":\"Detroit Lions Dynasty\",\"year\":2026,\"teamId\":21,\"teamAbbr\":\"DET\",\"lastPlayed\":1792874274270},{\"id\":\"72pjpygggejd\",\"name\":\"Miami Dolphins Dynasty\",\"year\":2031,\"teamId\":1,\"teamAbbr\":\"MIA\",\"lastPlayed\":1792874279446},{\"id\":\"save_slot_2\",\"name\":\"Miami Dolphins Dynasty\",\"year\":2031,\"teamId\":1,\"teamAbbr\":\"MIA\",\"lastPlayed\":1792874279637}]"
+}

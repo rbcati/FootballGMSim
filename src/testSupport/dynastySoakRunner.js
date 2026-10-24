@@ -12,6 +12,7 @@ import {
 } from '../core/dynastySoakAudit.js';
 
 const RESPONSE_BY_REQUEST = {
+  [toWorker.GET_DRAFT_STATE]: [toUI.DRAFT_STATE, toUI.ERROR],
   [toWorker.INIT]: [toUI.READY, toUI.ERROR],
   [toWorker.USE_SAFE_STARTER_LEAGUE]: [toUI.FULL_STATE, toUI.ERROR],
   [toWorker.RUN_DYNASTY_AUDIT_CHECKPOINT]: [toUI.DYNASTY_AUDIT_CHECKPOINT, toUI.ERROR],

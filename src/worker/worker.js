@@ -2591,7 +2591,12 @@ async function handleNewLeague(payload, id) {
     // recover with the default offline league to keep first-session boot playable.
     if (!isPlayableLeagueState(league)) {
       console.warn('[Worker] NEW_LEAGUE produced an invalid league payload; falling back to default league.');
-      league = buildDefaultLeague();
+      league = buildDefaultLeague({
+        userTeamId,
+        name: options.name,
+        year: options.year,
+        scheduleSeed: options.rngSeed ?? 0,
+      });
     }
     if (!isPlayableLeagueState(league)) {
       throw new Error('League generation failed: no playable league state available.');
@@ -6804,7 +6809,7 @@ async function handleLoadSlot({ slotKey }, id) {
   await handleLoadSave({ leagueId: slotKey }, id);
 }
 
-async function handleSaveSlot({ slotKey }, id) {
+async function handleSaveSlot({ slotKey, expectedFranchiseGenerationId }, id) {
   if (!isValidSlotKey(slotKey)) {
     post(toUI.ERROR, { message: 'Invalid slot key' }, id);
     return;
@@ -6815,6 +6820,10 @@ async function handleSaveSlot({ slotKey }, id) {
     if (!sourceLeagueId) {
       post(toUI.NOTIFICATION, { level: 'warn', message: 'Select or create a game before saving to a slot.' }, id);
       return;
+    }
+
+    if (expectedFranchiseGenerationId && cache.getMeta()?.franchiseGenerationId !== expectedFranchiseGenerationId) {
+      throw new Error('The franchise changed before the new slot could be saved.');
     }
 
     await flushDirty();
@@ -6849,7 +6858,9 @@ async function handleSaveSlot({ slotKey }, id) {
     // Establish the authoritative slot identity before resolving SAVE_SLOT.
     // Worker message ordering then guarantees callers cannot start Week 1 with
     // the UI ingress guard still scoped to the temporary NEW_LEAGUE id.
-    post(toUI.STATE_UPDATE, buildViewState(), id);
+    // Only SAVED settles an awaited SAVE_SLOT request; publish the new scope
+    // first so its caller can safely activate the committed slot.
+    post(toUI.STATE_UPDATE, buildViewState());
     post(toUI.SAVED, {}, id);
   } catch (err) {
     post(toUI.ERROR, { message: err?.message ?? 'Failed to save slot.' }, id);

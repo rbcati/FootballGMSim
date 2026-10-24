@@ -154,14 +154,15 @@ function makeRoster(teamId: number) {
   return roster;
 }
 
-function makeDraftPicks(teamId: number) {
+// Draft assets use calendar years (league.year), not the season ordinal.
+function makeDraftPicks(teamId: number, startYear: number) {
   const picks = [];
   for (let yearOffset = 0; yearOffset < 3; yearOffset += 1) {
     for (let round = 1; round <= 7; round += 1) {
       picks.push({
-        id: `safe-pick-${teamId}-${START_YEAR + yearOffset}-${round}`,
+        id: `safe-pick-${teamId}-${startYear + yearOffset}-${round}`,
         round,
-        season: START_YEAR + yearOffset,
+        season: startYear + yearOffset,
         originalOwner: teamId,
         currentOwner: teamId,
         isCompensatory: false,
@@ -187,7 +188,7 @@ export function buildDefaultLeague(options: { userTeamId?: number; name?: string
       roster,
       rosterIds: roster.map((player) => player.id),
       rosterCount: roster.length,
-      picks: makeDraftPicks(idx),
+      picks: makeDraftPicks(idx, year),
       capTotal: 301.2,
       capUsed: 0,
       capRoom: 301.2,

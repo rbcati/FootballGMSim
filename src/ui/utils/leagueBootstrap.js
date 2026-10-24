@@ -90,12 +90,20 @@ export function shouldShowAuthoritativeInitGate({
  * Finalizing check. Handles both simple App.jsx check and complex
  * bootstrap-aware save-event check.
  */
-export function shouldFinalizeNewSlotBootstrap({ pendingNewSlot, bootstrapPhase, saveEvent, league }) {
+export function shouldFinalizeNewSlotBootstrap({ pendingNewSlot, bootstrapPhase, saveEvent, league, requestId, response, previousGenerationId, expectedYear, expectedUserTeamId }) {
   if (!pendingNewSlot) return false;
 
-  // Simple check for App.jsx effects that don't track fine-grained phases
+  // A playable old view is not evidence that this creation request succeeded.
   if (league && bootstrapPhase === undefined) {
-     return hasMinimumPlayableLeague(league);
+     return Boolean(requestId)
+       && response?.type === 'FULL_STATE'
+       && !response?.discarded
+       && response?.payload?.bootRequestId === requestId
+       && Boolean(league.franchiseGenerationId)
+       && league.franchiseGenerationId !== previousGenerationId
+       && (expectedYear == null || league.year === expectedYear)
+       && (expectedUserTeamId == null || league.userTeamId === expectedUserTeamId)
+       && hasMinimumPlayableLeague(league);
   }
 
   // Robust check for multi-step bootstrap flow
