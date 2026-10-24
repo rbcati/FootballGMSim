@@ -51,7 +51,7 @@ const SCHEDULE_BALANCE_OPTIONS = [
   { value: "conference-heavy", label: "Conference Heavy" },
 ];
 
-export default function NewLeagueSetup({ actions, onCancel, onStartCreate, onCreateError }) {
+export default function NewLeagueSetup({ actions, onCancel, onStartCreate, onCreateError, onCreated }) {
   // Step management
   const [step, setStep] = useState(0); // 0: team, 1: settings, 2: confirm
 
@@ -105,8 +105,10 @@ export default function NewLeagueSetup({ actions, onCancel, onStartCreate, onCre
     [selectedTeam]
   );
 
+  const creatingRef = React.useRef(false);
   const handleStart = useCallback(async () => {
-    if (selectedTeam === null) return;
+    if (selectedTeam === null || creatingRef.current) return;
+    creatingRef.current = true;
     setCreating(true);
     const bootRequestId = `boot_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     onStartCreate?.(bootRequestId, {
@@ -155,16 +157,18 @@ export default function NewLeagueSetup({ actions, onCancel, onStartCreate, onCre
           leagueName: leagueName || `${selectedTeamData?.name || "My"} Dynasty`,
         },
       });
-      await Promise.race([
+      const response = await Promise.race([
         leagueRequest,
         new Promise((_, reject) => setTimeout(() => reject(new Error('League creation timed out.')), NEW_FRANCHISE_BOOT_TIMEOUT_MS)),
       ]);
+      await onCreated?.(response);
     } catch (err) {
       onCreateError?.(err);
     } finally {
+      creatingRef.current = false;
       setCreating(false);
     }
-  }, [selectedTeam, year, difficulty, leagueName, selectedTeamData, playoffFormat, draftOrder, salaryCap, godMode, injuryFrequency, tradeRealism, seasonLength, playoffTeams, capFloor, progressionVolatility, regressionSeverity, scoutingFogStrength, ownerPatienceStrictness, playerMoodVolatility, staffImpactStrength, freeAgencyAggressiveness, leagueSize, draftRounds, scheduleBalancePreset, conferenceNames, divisionNames, actions, onStartCreate, onCreateError]);
+  }, [selectedTeam, year, difficulty, leagueName, selectedTeamData, playoffFormat, draftOrder, salaryCap, godMode, injuryFrequency, tradeRealism, seasonLength, playoffTeams, capFloor, progressionVolatility, regressionSeverity, scoutingFogStrength, ownerPatienceStrictness, playerMoodVolatility, staffImpactStrength, freeAgencyAggressiveness, leagueSize, draftRounds, scheduleBalancePreset, conferenceNames, divisionNames, actions, onStartCreate, onCreateError, onCreated]);
 
   const canProceed = step === 0 ? selectedTeam !== null : true;
 

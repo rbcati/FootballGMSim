@@ -100,11 +100,20 @@ describe('league bootstrap guards', () => {
     })).toBe(false);
   });
 
-  it('simple finalize path only resolves with playable league and pending slot', () => {
-    expect(shouldFinalizeNewSlotBootstrap({ pendingNewSlot: null, league: playableLeague })).toBe(false);
-    expect(shouldFinalizeNewSlotBootstrap({ pendingNewSlot: 'save_slot_1', league: { teams: [] } })).toBe(false);
-    expect(shouldFinalizeNewSlotBootstrap({ pendingNewSlot: 'save_slot_1', league: playableLeague })).toBe(true);
-    expect(shouldFinalizeNewSlotBootstrap({ pendingNewSlot: 'save_slot_1', league: bootViewState })).toBe(true);
+  it('requires successful current NEW_LEAGUE evidence before the opening save', () => {
+    const league = { ...bootViewState, bootRequestId: 'new_2', franchiseGenerationId: 'generation_2' };
+    const input = { pendingNewSlot: 'save_slot_2', league, requestId: 'new_2', previousGenerationId: 'generation_1', response: { type: 'FULL_STATE', payload: league } };
+    expect(shouldFinalizeNewSlotBootstrap(input)).toBe(true);
+    expect(shouldFinalizeNewSlotBootstrap({ pendingNewSlot: 'save_slot_2', league: playableLeague })).toBe(false);
+    expect(shouldFinalizeNewSlotBootstrap({ ...input, requestId: 'stale' })).toBe(false);
+    expect(shouldFinalizeNewSlotBootstrap({ ...input, expectedYear: 2031 })).toBe(false);
+    expect(shouldFinalizeNewSlotBootstrap({ ...input, expectedUserTeamId: 9 })).toBe(false);
+    expect(shouldFinalizeNewSlotBootstrap({ ...input, response: { type: 'ERROR', payload: league } })).toBe(false);
+    expect(shouldFinalizeNewSlotBootstrap({ ...input, response: { ...input.response, discarded: true } })).toBe(false);
+    expect(shouldFinalizeNewSlotBootstrap({ ...input, previousGenerationId: 'generation_2' })).toBe(false);
+    expect(shouldFinalizeNewSlotBootstrap({ ...input, league: { teams: [] } })).toBe(false);
+    expect(shouldFinalizeNewSlotBootstrap({ ...input, pendingNewSlot: null })).toBe(false);
+    expect(shouldFinalizeNewSlotBootstrap({ ...input, league: { ...playableLeague, bootRequestId: 'new_2', franchiseGenerationId: 'generation_2' } })).toBe(true);
   });
 
   it('does not request the first new-save write before a league is minimally playable', () => {

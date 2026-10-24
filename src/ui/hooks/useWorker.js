@@ -662,7 +662,9 @@ export function useWorker() {
       request(toWorker.UPDATE_FRANCHISE_CHRONICLE, { entries }, { silent: true }),
 
     loadSlot: (slotKey)          => request(toWorker.LOAD_SLOT, { slotKey }, { silent: false }),
-    saveSlot: (slotKey)          => send(toWorker.SAVE_SLOT, { slotKey }),
+    saveSlot: (slotKey, { waitForSave = false, expectedFranchiseGenerationId } = {}) => waitForSave
+      ? request(toWorker.SAVE_SLOT, { slotKey, expectedFranchiseGenerationId })
+      : send(toWorker.SAVE_SLOT, { slotKey }),
     exportSave: (leagueId)       => request(toWorker.EXPORT_SAVE, { leagueId }, { silent: true }),
     importSave: (data, saveName) => request(toWorker.IMPORT_SAVE, { data, saveName }),
     exportLeagueConfig: ()       => request(toWorker.EXPORT_LEAGUE_CONFIG, {}, { silent: true }),

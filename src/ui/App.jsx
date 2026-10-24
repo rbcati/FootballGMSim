@@ -239,6 +239,7 @@ function AppContent() {
   const hqOwnsProgression = ['HQ', 'Weekly Hub', 'Home'].includes(dashboardTab);
   const [activeSlot, setActiveSlot] = useState(() => readStoredActiveSlot());
   const [pendingNewSlot, setPendingNewSlot] = useState(null);
+  const creationRequestRef = useRef(null);
   const [watchMode, setWatchMode] = useState('watch');
   const [userTendency, setUserTendency] = useState('BALANCED');
   const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
@@ -396,10 +397,10 @@ function AppContent() {
 
   // Auto-save when user navigates away
   useEffect(() => {
-    const handler = () => { if (leagueReady && activeSlot) actions.saveSlot(activeSlot); };
+    const handler = () => { if (leagueReady && activeSlot && !pendingNewSlot && league?.activeLeagueId === activeSlot) actions.saveSlot(activeSlot); };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [leagueReady, activeSlot, actions]);
+  }, [leagueReady, league?.activeLeagueId, activeSlot, pendingNewSlot, actions]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -538,6 +539,7 @@ function AppContent() {
     if (bootRequestId) {
       actions.invalidateBootRequestId(bootRequestId);
     }
+    creationRequestRef.current = null;
     actions.setActiveBootRequestId(null);
     safeStarterInFlightRef.current = false;
     setBootRequestId(null);
@@ -724,7 +726,7 @@ function AppContent() {
 
 
   useEffect(() => {
-    if (!leagueReady || !activeSlot) return;
+    if (!leagueReady || !activeSlot || pendingNewSlot || league?.activeLeagueId !== activeSlot) return;
     const slotNum = activeSlot?.split('_')?.[2];
     if (!slotNum) return;
     const userTeam = Array.isArray(league?.teams) ? league.teams.find(t => t?.id === league?.userTeamId) : null;
@@ -744,7 +746,7 @@ function AppContent() {
       lastSaved: new Date().toISOString(),
     };
     localStorage.setItem(`footballgm_slot_${slotNum}_meta`, JSON.stringify(nextMeta));
-  }, [leagueReady, league, activeSlot]);
+  }, [leagueReady, league, activeSlot, pendingNewSlot]);
 
   useEffect(() => {
     if (!league) return;
@@ -767,21 +769,7 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (safeStarterInFlightRef.current) return;
-    if (!shouldFinalizeNewSlotBootstrap({ league, pendingNewSlot })) return;
-    // Only save and finalize if the league is actually playable.
-    if (hasMinimumPlayableLeague(league)) {
-      actions.saveSlot(pendingNewSlot);
-      setActiveSlot(pendingNewSlot);
-      setPendingNewSlot(null);
-      setInitFlow(null);
-      setBootRequestId(null);
-      pushBootDiag('league_state_set', { hasLeague: true });
-    }
-  }, [league, pendingNewSlot, actions, pushBootDiag]);
-
-  useEffect(() => {
-    if (!initFlow?.active) return;
+    if (!initFlow?.active || initFlow.mode === 'new') return;
     if (hasMinimumPlayableLeague(league)) {
       setInitFlow(null);
       return;
@@ -996,7 +984,7 @@ function AppContent() {
     return <Loading message="Starting game engine…" />;
   }
 
-  const shouldShowNewLeagueSetup = activeView === 'new_league' && !initFlow?.active && !leagueReady;
+  const shouldShowNewLeagueSetup = activeView === 'new_league' && Boolean(pendingNewSlot);
 
   if (shouldShowNewLeagueSetup || (!leagueReady && !pendingNewSlot) || activeSlot === null) {
     const initTimeoutPanel = initFlow?.timedOut ? (
@@ -1027,6 +1015,7 @@ function AppContent() {
             <NewLeagueSetup
               actions={actions}
               onStartCreate={(requestId, createMeta = {}) => {
+                creationRequestRef.current = { requestId, slotKey: pendingNewSlot, previousGenerationId: league?.franchiseGenerationId, ...createMeta };
                 setBootRequestId(requestId);
                 pushBootDiag('new_league_setup_submit', { requestId, pendingNewSlot, ...createMeta });
                 setInitFlow({
@@ -1038,7 +1027,29 @@ function AppContent() {
                   ...createMeta,
                 });
               }}
+              onCreated={async (response) => {
+                const creation = creationRequestRef.current;
+                if (!creation || !shouldFinalizeNewSlotBootstrap({
+                  pendingNewSlot: creation.slotKey,
+                  league: response?.payload,
+                  requestId: creation.requestId,
+                  response,
+                  previousGenerationId: creation.previousGenerationId,
+                  expectedYear: creation.year,
+                  expectedUserTeamId: creation.userTeamId,
+                })) throw new Error('New franchise response did not match the current creation request.');
+                await actions.saveSlot(creation.slotKey, { waitForSave: true, expectedFranchiseGenerationId: response.payload.franchiseGenerationId });
+                if (creationRequestRef.current !== creation) return;
+                creationRequestRef.current = null;
+                setActiveSlot(creation.slotKey);
+                setPendingNewSlot(null);
+                setInitFlow(null);
+                setBootRequestId(null);
+                setActiveView('league_dashboard');
+              }}
               onCreateError={(err) => {
+                if (creationRequestRef.current?.requestId) actions.invalidateBootRequestId(creationRequestRef.current.requestId);
+                creationRequestRef.current = null;
                 pushBootDiag('ui_received_ERROR', { message: err?.message ?? 'unknown' });
                 setInitFlow((prev) => prev ? {
                   ...prev,
@@ -1048,6 +1059,9 @@ function AppContent() {
                 } : prev);
               }}
               onCancel={() => {
+                if (creationRequestRef.current?.requestId) actions.invalidateBootRequestId(creationRequestRef.current.requestId);
+                creationRequestRef.current = null;
+                setBootRequestId(null);
                 setPendingNewSlot(null);
                 setInitFlow(null);
                 setActiveSlot(null);
@@ -1083,7 +1097,6 @@ function AppContent() {
             onNew={(slotKey) => {
               setInitFlow({ active: false, mode: 'new', slotKey, timedOut: false, message: '' });
               setPendingNewSlot(slotKey);
-              setActiveSlot(slotKey);
               setActiveView('new_league');
             }}
           />
