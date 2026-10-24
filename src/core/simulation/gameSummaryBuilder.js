@@ -264,8 +264,8 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
 }
 
 export function transformStatsForBoxScore(playerStatsMap, roster, teamId = null) {
-  if (!playerStatsMap) return {};
-  const box = {};
+  if (!playerStatsMap) return Object.create(null);
+  const box = Object.create(null);
   const pids = Object.keys(playerStatsMap);
   const rosterById = new Map((roster ?? []).map((player) => [String(player?.id), player]));
 
@@ -316,6 +316,8 @@ function deriveCanonicalTeamSideStats(playerRows = {}, driveStats = {}, rawTeamS
   const drive = driveStats ?? {};
   const offenseRow = (stats) => (
     Number(stats?.passAtt ?? 0) > 0
+    || Number(stats?.dropbacks ?? 0) > 0
+    || Number(stats?.sacked ?? stats?.sacksTaken ?? 0) > 0
     || Number(stats?.rushAtt ?? 0) > 0
     || Number(stats?.targets ?? 0) > 0
     || Number(stats?.receptions ?? 0) > 0
@@ -347,11 +349,12 @@ function deriveCanonicalTeamSideStats(playerRows = {}, driveStats = {}, rawTeamS
   const fumblesLost = sumPlayerStat(rows, 'fumblesLost', offenseRow)
     || sumPlayerStat(rows, 'fumbles', offenseRow);
   const sacksAllowed = (hasOffensiveRows
-    ? (sumPlayerStat(rows, 'sacked', (stats) => Number(stats?.passAtt ?? 0) > 0)
-      || sumPlayerStat(rows, 'sacksTaken', (stats) => Number(stats?.passAtt ?? 0) > 0))
+    ? (sumPlayerStat(rows, 'sacked')
+      || sumPlayerStat(rows, 'sacksTaken'))
     : Number(drive?.sacksAllowed ?? 0))
     || Number(drive?.sacksAllowed ?? 0);
-  const totalYards = passYards + rushYards;
+  const sackYards = hasOffensiveRows ? sumPlayerStat(rows, 'sackYards') : Number(drive?.sackYards ?? raw?.sackYards ?? 0);
+  const totalYards = passYards + rushYards - sackYards;
   const plays = passAtt + rushAtt + sacksAllowed;
 
   return {
@@ -368,6 +371,8 @@ function deriveCanonicalTeamSideStats(playerRows = {}, driveStats = {}, rawTeamS
     rushYd: rushYards,
     rushTD,
     totalYards,
+    sackYards,
+    netPassYards: passYards - sackYards,
     yardsPerPlay: plays > 0 ? U.round(totalYards / plays, 2) : 0,
     turnovers: Number(drive?.turnovers ?? raw?.turnovers ?? 0) || offensiveInterceptions + fumblesLost,
     sacksAllowed,

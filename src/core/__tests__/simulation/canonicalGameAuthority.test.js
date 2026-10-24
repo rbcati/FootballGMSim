@@ -145,8 +145,8 @@ describe('canonical box score owns QB participation (no rotation)', () => {
       const sacksTaken = Number(g.sacked ?? g.sacksTaken ?? g.sacks ?? 0);
       expect(g.passComp).toBeLessThanOrEqual(g.passAtt);
       expect(g.dropbacks).toBe(g.passAtt + sacksTaken);
-      expect(g.longestPass).toBeLessThanOrEqual(g.passYd);
-      if (g.passComp === 0 || g.passYd === 0) expect(g.longestPass).toBe(0);
+      expect(g.longestPass).toBeUndefined();
+      expect(g.longestPass).toBeUndefined();
       expect(g.completionPct).toBe(Math.round((g.passComp / Math.max(1, g.passAtt)) * 1000) / 10);
       expect(g.passerRating).not.toBeNull();
     }
@@ -213,8 +213,8 @@ describe('canonical player-stat reconciliation', () => {
           const sacksTaken = Number(g.sacked ?? g.sacksTaken ?? g.sacks ?? 0);
           expect(g.passComp, `seed ${seed} ${team.abbr} ${qb.id} comp`).toBeLessThanOrEqual(g.passAtt);
           expect(g.dropbacks, `seed ${seed} ${team.abbr} ${qb.id} dropbacks`).toBe(g.passAtt + sacksTaken);
-          expect(g.longestPass, `seed ${seed} ${team.abbr} ${qb.id} long`).toBeLessThanOrEqual(g.passYd);
-          if (g.passComp === 0 || g.passYd === 0) expect(g.longestPass).toBe(0);
+          expect(g.longestPass, `seed ${seed} ${team.abbr} ${qb.id} longest is unavailable`).toBeUndefined();
+          expect(g.longestPass).toBeUndefined();
         }
       }
     }

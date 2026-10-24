@@ -2,6 +2,8 @@ import { schemeMatchupDelta, type SchemeExecution } from './schemeExecution.ts';
 import { resolveMatchup, DEFAULT_NORMALIZATION_CONSTANT } from './matchupEngine.ts';
 import type { AttributesV2 } from '../../types/player.ts';
 import type { DerivedGamePlanMultipliers } from './gamePlanMultipliers.ts';
+import { createOffensiveLedger } from './offensiveLedger.ts';
+import { isAvailableForGameDay } from '../holdouts/holdoutEngine.js';
 import { archiveGameStats } from '../playerSeasonStatsArchive.js';
 import { decideLateGameSequence } from '../simulation/clockManager.js';
 import { applyMoraleToEffectiveOvr } from './moraleSimModifier.js';
@@ -29,6 +31,9 @@ export interface SimPlayerRef {
    * 1-based depth-chart order (1 = starter). Absent/invalid on old saves;
    * those players keep payload insertion order and receive no starter boost.
    */
+  teamId?: number | string;
+  injured?: boolean;
+  status?: string;
   depthOrder?: number | null;
   /** Authoritative row attached to depthOrder; absent legacy order is not promoted. */
   depthRowKey?: string | null;
@@ -49,6 +54,8 @@ export interface TeamStatLine {
   rushYards: number;
   rushTD: number;
   totalYards: number;
+  sackYards: number;
+  netPassYards: number;
   yardsPerPlay: number;
   turnovers: number;
   sacksAllowed: number;
@@ -392,10 +399,10 @@ function distributeTotal(total: number, contributors: SimPlayerRef[], rng: () =>
 }
 
 function toBoxScore(players: SimPlayerRef[], statsById: Record<string, Record<string, number>>) {
-  const box: Record<string, { name: string; pos: string; stats: Record<string, number> }> = {};
+  const box: Record<string, { name: string; pos: string; stats: Record<string, number> }> = Object.create(null);
   for (const player of players) {
     const key = String(player.id);
-    if (!statsById[key]) continue;
+    if (!Object.hasOwn(statsById, key)) continue;
     box[key] = {
       name: player.name,
       pos: player.pos,
@@ -438,12 +445,37 @@ function pushDigest(
 
 export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   const rng = makeRng(payload.seed ?? 1);
-  const homePlayers = (payload.homePlayers?.length ? payload.homePlayers : defaultPlayers(payload.homeTeamId, 'home'))
+  const homePlayers = (payload.homePlayers ?? defaultPlayers(payload.homeTeamId, 'home')).filter((p) => isAvailableForGameDay(p, { teamId: payload.homeTeamId }))
     .map((p) => ({ ...p, id: String(p.id) }));
-  const awayPlayers = (payload.awayPlayers?.length ? payload.awayPlayers : defaultPlayers(payload.awayTeamId, 'away'))
+  const awayPlayers = (payload.awayPlayers ?? defaultPlayers(payload.awayTeamId, 'away')).filter((p) => isAvailableForGameDay(p, { teamId: payload.awayTeamId }))
     .map((p) => ({ ...p, id: String(p.id) }));
   const workloadCache: SimWorkloadCache = new WeakMap();
   const workloadPoolCache: SimWorkloadPoolCache = new WeakMap();
+
+  const ledgers = {
+    home: createOffensiveLedger(homePlayers.map((p) => String(p.id)), `${payload.gameId}/home`),
+    away: createOffensiveLedger(awayPlayers.map((p) => String(p.id)), `${payload.gameId}/away`),
+  };
+  const allIds = [...homePlayers, ...awayPlayers].map((p) => String(p.id));
+  if (new Set(allIds).size !== allIds.length) throw new Error(`Stat attribution ${payload.gameId}: player belongs to both teams`);
+  // A separate seeded stream selects runners without changing play/scoring RNG draws.
+  const usageRng = makeRng((payload.seed ?? 1) ^ 0x41545452);
+  const personnel = (players: SimPlayerRef[], side: string) => {
+    const qbs = simWorkloadPool(players, QB_WORKLOAD_ROWS, workloadCache, workloadPoolCache).slice().sort(compareSimPlayersByDepth(QB_WORKLOAD_ROWS, workloadCache));
+    const runners = simWorkloadPool(players, RUSHING_WORKLOAD_ROWS, workloadCache, workloadPoolCache).slice().sort(compareSimPlayersByDepth(RUSHING_WORKLOAD_ROWS, workloadCache));
+    const receivers = simWorkloadPool(players, RECEIVING_WORKLOAD_ROWS, workloadCache, workloadPoolCache);
+    if (!qbs.length || !runners.length || !receivers.length) throw new Error(`Stat attribution ${payload.gameId}/${side}: missing eligible QB, rusher, or receiver`);
+    const baseWeights = runners.map((p, idx) => {
+      const role = resolveSimWorkloadRow(p, RUSHING_WORKLOAD_ROWS, workloadCache)?.key;
+      return Math.max(0, ((role === 'RB' ? 3 : role === 'WR' ? 1.2 : 0.8) + (p.ovr ?? 70) / 60 - idx * 0.2)
+        * depthUsageMultiplier(p, RUSHING_WORKLOAD_ROWS, workloadCache));
+    });
+    const total = baseWeights.reduce((sum, w) => sum + w, 0);
+    // Preserve the previous 9% primary-QB carry share plus weighted remainder.
+    const runnerWeights = baseWeights.map((w, i) => 0.91 * w / total + (runners[i].id === qbs[0].id ? 0.09 : 0));
+    return { qb: qbs[0], runners, runnerWeights };
+  };
+  const units = { home: personnel(homePlayers, 'home'), away: personnel(awayPlayers, 'away') };
 
   // Per-game offensive "form" (hot/cold day). Sum of three rng draws approximates
   // a normal distribution; scaled to a meaningful success-input swing so favorites
@@ -489,8 +521,8 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   const advancedAttribution = new Map<string, AdvancedGameStats>();
 
   const stats = {
-    home: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0, kickReturns: 0, kickReturnYards: 0, puntReturns: 0, puntReturnYards: 0 },
-    away: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0, kickReturns: 0, kickReturnYards: 0, puntReturns: 0, puntReturnYards: 0 },
+    home: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sackYards: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0, kickReturns: 0, kickReturnYards: 0, puntReturns: 0, puntReturnYards: 0 },
+    away: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sackYards: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0, fieldGoalsMade: 0, fieldGoalsAttempted: 0, extraPointsMade: 0, extraPointsAttempted: 0, punts: 0, puntYards: 0, kickReturns: 0, kickReturnYards: 0, puntReturns: 0, puntReturnYards: 0 },
   };
 
   // ── Per-drive tracking (powers driveSummary / the drive chart UI) ──────────
@@ -601,6 +633,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       offStats.plays += 1;
       offStats.rushAtt += 1;
       offStats.rushYd += -1;
+      ledgers[state.possession].credit({ type: 'rush', runnerId: String(units[state.possession].qb.id), yards: -1 });
       curDrive.plays += 1;
       curDrive.yards += -1;
       curDrive.seconds += 40;
@@ -664,26 +697,39 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     }, rng);
 
     offenseStats.plays += 1;
+    const sack = playType === 'pass' && result.isSack && result.turnoverType !== 'interception';
+    const complete = playType === 'pass' && result.success && !sack && result.turnoverType !== 'interception';
+    const touchdown = !result.turnover && result.nextYardLine >= 100;
+    const gain = Math.min(result.yardsGained, 100 - state.yardLine) + 0;
+    const unit = units[state.possession];
     if (playType === 'pass') {
-      offenseStats.passAtt += 1;
-      if (result.success) offenseStats.passComp += 1;
-      offenseStats.passYd += result.yardsGained;
+      ledgers[state.possession].credit({ type: 'pass', passerId: String(unit.qb.id), targetId: target?.id == null ? undefined : String(target.id),
+        yards: gain, complete, sack, interception: result.turnoverType === 'interception', touchdown,
+        fumbleLost: result.turnoverType === 'fumble' });
     } else {
-      offenseStats.rushAtt += 1;
-      offenseStats.rushYd += result.yardsGained;
+      const runner = unit.runners[chooseWeightedIndex(unit.runnerWeights, usageRng)];
+      ledgers[state.possession].credit({ type: 'rush', runnerId: String(runner.id), yards: gain, touchdown, fumbleLost: result.turnoverType === 'fumble' });
     }
+    // Team offense and player offense share the same credited event counters.
+    Object.assign(offenseStats, ledgers[state.possession].totals);
 
     reasonMap.set(result.reason, (reasonMap.get(result.reason) ?? 0) + 1);
     if (result.success) offenseStats.success += 1;
     if (result.firstDown) offenseStats.firstDowns += 1;
-    if (result.isSack) {
-      offenseStats.sacksAllowed += 1;
+    if (sack) {
       defenseStats.sacksMade += 1;
       pushDigest(digest, { quarter: state.quarter, clockSec: state.clockSec, team: state.possession === 'home' ? 'away' : 'home', type: 'sack', text: `${state.possession === 'home' ? 'Away' : 'Home'} defense generated a drive-killing sack.` }, state);
     }
 
     for (const event of result.attributionEvents ?? []) {
       if (!event.playerId) continue;
+      if (!sack && ['SACK_ALLOWED', 'SACK_MADE'].includes(event.type)) continue;
+      if (event.type === 'DROP' && !sack && result.turnoverType !== 'interception' && target) {
+        ledgers[state.possession].creditDrop(String(target.id));
+      }
+      if (result.turnoverType === 'interception' && event.type === 'DROP') continue;
+      if (sack && ['TARGET', 'COVERAGE_TARGET', 'DROP'].includes(event.type)) continue;
+      if (!complete && ['RECEPTION_ALLOWED', 'COVERAGE_COMPLETION_ALLOWED'].includes(event.type)) continue;
       const prev = advancedAttribution.get(event.playerId) ?? {
         targets: 0,
         receptionsAllowed: 0,
@@ -716,7 +762,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     const clockElapsed = noHuddle ? Math.round(result.clockElapsedSec * 0.45) : result.clockElapsedSec;
     state.clockSec = Math.max(0, state.clockSec - clockElapsed);
     curDrive.plays += 1;
-    curDrive.yards += result.yardsGained;
+    curDrive.yards += result.nextYardLine - state.yardLine;
     curDrive.seconds += clockElapsed;
 
     if (result.turnover) {
@@ -753,8 +799,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
         state.awayScore += pointsScored;
         quarterScores.away[Math.max(0, priorQuarter - 1)] += pointsScored;
       }
-      if (playType === 'pass') offenseStats.passTD += 1;
-      else offenseStats.rushTD += 1;
+
       const returnStats = state.possession === 'home' ? stats.away : stats.home;
       returnStats.kickReturns += 1;
       returnStats.kickReturnYards += Math.max(12, Math.round(18 + rng() * 18));
@@ -871,7 +916,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   const topReasons = [...reasonMap.entries()].sort((a, b) => b[1] - a[1]).map(([reason]) => reason).slice(0, 2);
 
   const buildTeamLine = (s: typeof stats.home): TeamStatLine => {
-    const totalYards = s.passYd + s.rushYd;
+    const totalYards = s.passYd + s.rushYd - s.sackYards;
     return {
       plays: s.plays,
       firstDowns: s.firstDowns,
@@ -885,6 +930,8 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       rushYards: s.rushYd,
       rushTD: s.rushTD,
       totalYards,
+      sackYards: s.sackYards,
+      netPassYards: s.passYd - s.sackYards,
       yardsPerPlay: Number((totalYards / Math.max(1, s.plays)).toFixed(2)),
       turnovers: s.turnovers,
       sacksAllowed: s.sacksAllowed,
@@ -910,74 +957,20 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   const homeTeamLine = buildTeamLine(stats.home);
   const awayTeamLine = buildTeamLine(stats.away);
 
-  const allocatePlayers = (players: SimPlayerRef[], offense: TeamStatLine, defense: TeamStatLine, rngFn: () => number) => {
-    const qbRows = QB_WORKLOAD_ROWS;
-    const rushingRows = RUSHING_WORKLOAD_ROWS;
-    const receivingRows = RECEIVING_WORKLOAD_ROWS;
+  const allocatePlayers = (players: SimPlayerRef[], offense: TeamStatLine, defense: TeamStatLine, rngFn: () => number, credited: Record<string, Record<string, number>>) => {
     const passRusherRows = PASS_RUSH_WORKLOAD_ROWS;
     const coverageRows = COVERAGE_WORKLOAD_ROWS;
     const defensiveRows = DEFENSIVE_WORKLOAD_ROWS;
-    const qb = simWorkloadPool(players, qbRows, workloadCache, workloadPoolCache).sort(compareSimPlayersByDepth(qbRows, workloadCache));
-    const rushers = simWorkloadPool(players, rushingRows, workloadCache, workloadPoolCache).sort(compareSimPlayersByDepth(rushingRows, workloadCache));
-    const targets = simWorkloadPool(players, receivingRows, workloadCache, workloadPoolCache).sort(compareSimPlayersByDepth(receivingRows, workloadCache));
     const sackers = simWorkloadPool(players, passRusherRows, workloadCache, workloadPoolCache).sort(compareSimPlayersByDepth(passRusherRows, workloadCache));
     const ballhawks = simWorkloadPool(players, coverageRows, workloadCache, workloadPoolCache).sort(compareSimPlayersByDepth(coverageRows, workloadCache));
 
-    const statsById: Record<string, Record<string, number>> = {};
+    const statsById: Record<string, Record<string, number>> = Object.assign(Object.create(null), Object.fromEntries(Object.entries(credited).map(([id, line]) => [id, { ...line }])));
     const put = (id: string, patch: Record<string, number>) => {
       statsById[id] = { ...(statsById[id] ?? {}), ...patch };
     };
 
-    const primaryQb = qb[0] ?? players[0];
-    put(String(primaryQb.id), {
-      passAtt: offense.passAtt,
-      passComp: offense.passComp,
-      passYd: offense.passYd,
-      passTD: offense.passTD,
-      interceptions: offense.turnovers,
-      rushAtt: Math.max(0, Math.round(offense.rushAtt * 0.09)),
-      rushYd: Math.max(0, Math.round(offense.rushYd * 0.07)),
-      sacksTaken: offense.sacksAllowed,
-      sacked: offense.sacksAllowed,
-      passerRating: buildQbRating(offense.passComp, offense.passAtt, offense.passYd, offense.passTD, offense.turnovers),
-    });
-
-    const rushAttemptRemainder = Math.max(0, offense.rushAtt - Math.round(offense.rushAtt * 0.09));
-    const rushYardRemainder = Math.max(0, offense.rushYd - Math.round(offense.rushYd * 0.07));
-    const rushersPool = rushers.length ? rushers : [primaryQb];
-    const rushAttemptParts = distributeTotal(rushAttemptRemainder, rushersPool, rngFn, (p, idx) => {
-      const rowKey = resolveSimWorkloadRow(p, rushingRows, workloadCache)?.key;
-      return (rowKey === 'RB' ? 3 : rowKey === 'WR' ? 1.2 : 0.8) + (p.ovr ?? 70) / 60 - idx * 0.2;
-    }, rushingRows, workloadCache);
-    const rushYardParts = distributeTotal(rushYardRemainder, rushersPool, rngFn, (p) => (resolveSimWorkloadRow(p, rushingRows, workloadCache)?.key === 'RB' ? 2.8 : 1.1) + (p.ovr ?? 70) / 65, rushingRows, workloadCache);
-    for (let i = 0; i < rushersPool.length; i += 1) {
-      const pid = String(rushersPool[i].id);
-      put(pid, {
-        rushAtt: (statsById[pid]?.rushAtt ?? 0) + rushAttemptParts[i],
-        rushYd: (statsById[pid]?.rushYd ?? 0) + rushYardParts[i],
-        fumbles: (statsById[pid]?.fumbles ?? 0) + (rushAttemptParts[i] >= 8 && rngFn() < 0.08 ? 1 : 0),
-      });
-    }
-
-    const targetPool = targets.length ? targets : players.slice(0, 3);
-    const recParts = distributeTotal(offense.passComp, targetPool, rngFn, (p, idx) => {
-      const rowKey = resolveSimWorkloadRow(p, receivingRows, workloadCache)?.key;
-      return (rowKey === 'WR' ? 2.5 : rowKey === 'TE' ? 1.8 : 1.3) + (p.ovr ?? 70) / 70 - idx * 0.08;
-    }, receivingRows, workloadCache);
-    const recYardParts = distributeTotal(Math.max(0, offense.passYd), targetPool, rngFn, (p) => {
-      const rowKey = resolveSimWorkloadRow(p, receivingRows, workloadCache)?.key;
-      return (rowKey === 'WR' ? 2.6 : rowKey === 'TE' ? 1.9 : 1.2) + (p.ovr ?? 70) / 75;
-    }, receivingRows, workloadCache);
-    const recTdParts = distributeTotal(offense.passTD, targetPool, rngFn, (p) => (resolveSimWorkloadRow(p, receivingRows, workloadCache)?.key === 'TE' ? 1.4 : 1.8) + (p.ovr ?? 70) / 90, receivingRows, workloadCache);
-    for (let i = 0; i < targetPool.length; i += 1) {
-      const pid = String(targetPool[i].id);
-      put(pid, {
-        targets: (statsById[pid]?.targets ?? 0) + recParts[i] + Math.round(rngFn() * 2),
-        receptions: (statsById[pid]?.receptions ?? 0) + recParts[i],
-        recYd: (statsById[pid]?.recYd ?? 0) + recYardParts[i],
-        recTD: (statsById[pid]?.recTD ?? 0) + recTdParts[i],
-        drops: (statsById[pid]?.drops ?? 0) + Math.max(0, Math.round((recParts[i] + rngFn() * 2 - recParts[i]) * 0.35)),
-      });
+    for (const line of Object.values(statsById)) {
+      if (line.dropbacks) line.passerRating = buildQbRating(line.passComp ?? 0, line.passAtt ?? 0, line.passYd ?? 0, line.passTD ?? 0, line.interceptions ?? 0);
     }
 
     const sackPool = sackers.length ? sackers : players.slice(0, 4);
@@ -990,7 +983,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       put(pid, { sacks: (statsById[pid]?.sacks ?? 0) + sackParts[i] });
     }
 
-    const intPool = ballhawks.length ? ballhawks : players.slice(0, 4);
+    const intPool = ballhawks.length ? ballhawks : players.filter((p) => !statsById[String(p.id)]?.dropbacks).slice(0, 4);
     const intParts = distributeTotal(defense.interceptions, intPool, rngFn, (p) => (['CB', 'S'].includes(resolveSimWorkloadRow(p, coverageRows, workloadCache)?.key ?? '') ? 2.3 : 1.2) + (p.ovr ?? 70) / 90, coverageRows, workloadCache);
     for (let i = 0; i < intPool.length; i += 1) {
       const pid = String(intPool[i].id);
@@ -1064,8 +1057,8 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     return toBoxScore(players, statsById);
   };
 
-  const homeBox = allocatePlayers(homePlayers, homeTeamLine, awayTeamLine, rng);
-  const awayBox = allocatePlayers(awayPlayers, awayTeamLine, homeTeamLine, rng);
+  const homeBox = allocatePlayers(homePlayers, homeTeamLine, awayTeamLine, rng, ledgers.home.players);
+  const awayBox = allocatePlayers(awayPlayers, awayTeamLine, homeTeamLine, rng, ledgers.away.players);
 
   const playLogs = digest.slice(0, 20).map((event) => ({
     quarter: event.quarter,
@@ -1135,7 +1128,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     advancedAttribution: Object.fromEntries(advancedAttribution),
     simFactors: {
       home: {
-        qbRating: buildQbRating(homeTeamLine.passComp, homeTeamLine.passAtt, homeTeamLine.passYd, homeTeamLine.passTD, homeTeamLine.turnovers),
+        qbRating: buildQbRating(homeTeamLine.passComp, homeTeamLine.passAtt, homeTeamLine.passYd, homeTeamLine.passTD, awayTeamLine.interceptions),
         rushYpc: Number((homeTeamLine.rushYd / Math.max(1, homeTeamLine.rushAtt)).toFixed(2)),
         successRate: homeTeamLine.successRate,
         passRate: Number((homeTeamLine.passAtt / Math.max(1, homeTeamLine.plays)).toFixed(3)),
@@ -1145,7 +1138,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
         defensiveExplosiveRiskDelta: homePrep.blitzExplosiveRiskDelta ?? 0,
       },
       away: {
-        qbRating: buildQbRating(awayTeamLine.passComp, awayTeamLine.passAtt, awayTeamLine.passYd, awayTeamLine.passTD, awayTeamLine.turnovers),
+        qbRating: buildQbRating(awayTeamLine.passComp, awayTeamLine.passAtt, awayTeamLine.passYd, awayTeamLine.passTD, homeTeamLine.interceptions),
         rushYpc: Number((awayTeamLine.rushYd / Math.max(1, awayTeamLine.rushAtt)).toFixed(2)),
         successRate: awayTeamLine.successRate,
         passRate: Number((awayTeamLine.passAtt / Math.max(1, awayTeamLine.plays)).toFixed(3)),

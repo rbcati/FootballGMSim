@@ -1,3 +1,4 @@
+import { calculateCanonicalPasserRating } from '../../core/simulation/mathHelpers.js';
 import { resolveCompletedGameId } from './gameResultIdentity.js';
 
 function normalizeTeamId(value) {
@@ -37,11 +38,12 @@ export function getPlayerGameLogs(league, player) {
       if (!game?.played) continue;
       const homeStats = game?.playerStats?.home ?? game?.stats?.home ?? {};
       const awayStats = game?.playerStats?.away ?? game?.stats?.away ?? {};
-      const statRow = homeStats[playerId] ?? awayStats[playerId] ?? null;
+      const isHome = Object.hasOwn(homeStats, playerId);
+      const statRow = isHome ? homeStats[playerId] : Object.hasOwn(awayStats, playerId) ? awayStats[playerId] : null;
       if (!statRow) continue;
       const homeId = normalizeTeamId(game?.homeId ?? game?.home);
       const awayId = normalizeTeamId(game?.awayId ?? game?.away);
-      const playerTeamId = normalizeTeamId(player?.teamId);
+      const playerTeamId = isHome ? homeId : awayId;
       const opponentId = playerTeamId === homeId ? awayId : homeId;
       const stats = statRow?.stats ?? statRow ?? {};
       const pa = Number(stats.passAtt ?? 0);
@@ -49,8 +51,9 @@ export function getPlayerGameLogs(league, player) {
       const py = Number(stats.passYd ?? 0);
       const ptd = Number(stats.passTD ?? 0);
       const pint = Number(stats.interceptions ?? 0);
-      const rate = pa > 0 ? Number((((pc / pa) * 100) + (py / pa) + (ptd * 7) - (pint * 10)).toFixed(1)) : null;
+      const rate = pa > 0 ? calculateCanonicalPasserRating({ passComp: pc, passAtt: pa, passYd: py, passTD: ptd, interceptions: pint }) : null;
       rows.push({
+        statScope: game.statScope ?? (game.isPlayoff || week > 18 ? 'playoffs' : 'regular'),
         week,
         gameId: resolveCompletedGameId(game, { seasonId: league?.seasonId, week }),
         opponentId,
@@ -69,4 +72,11 @@ export function getPlayerGameLogs(league, player) {
     }
   }
   return rows.sort((a, b) => a.week - b.week);
+}
+
+/** Recorded current-season totals take precedence over partial game-log detail. */
+export function recordedPlayerSeasonTotals(league, player, statRows = []) {
+  const seasonId = league?.currentSeasonId ?? league?.seasonId;
+  const current = seasonId == null ? null : statRows.find((row) => String(row?.seasonId) === String(seasonId));
+  return current?.totals ?? player?.seasonStats ?? null;
 }

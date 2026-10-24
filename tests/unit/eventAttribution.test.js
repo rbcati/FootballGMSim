@@ -82,8 +82,8 @@ describe('advanced box score event attribution', () => {
   });
 
   it('does not mutate player objects passed into simulation', () => {
-    const homePlayers = [{ id: 1, name: 'Home WR', pos: 'WR', ovr: 82 }];
-    const awayPlayers = [{ id: 2, name: 'Away CB', pos: 'CB', ovr: 81 }];
+    const homePlayers = [{ id: 1, name: 'Home WR', pos: 'WR', ovr: 82 }, { id: 3, name: 'Home QB', pos: 'QB', ovr: 82 }];
+    const awayPlayers = [{ id: 2, name: 'Away CB', pos: 'CB', ovr: 81 }, { id: 4, name: 'Away QB', pos: 'QB', ovr: 81 }, { id: 5, name: 'Away WR', pos: 'WR', ovr: 81 }];
     const homeSnapshot = JSON.parse(JSON.stringify(homePlayers));
     const awaySnapshot = JSON.parse(JSON.stringify(awayPlayers));
 

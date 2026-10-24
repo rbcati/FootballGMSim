@@ -24,3 +24,19 @@ export function passerRating({ comp = 0, att = 0, yds = 0, td = 0, ints = 0 } = 
   const d = U.clamp(2.375 - ((ints / att) * 25), 0, 2.375);
   return U.round(((a + b + c + d) / 6) * 100, 1);
 }
+
+// Canonical count-shaped rating API, also used by season-stat readers.
+const nQbStat = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
+
+export function calculateCanonicalPasserRating({ passComp = 0, passAtt = 0, passYd = 0, passTD = 0, interceptions = 0 } = {}) {
+  const att = Math.max(1, nQbStat(passAtt));
+  const comp = Math.max(0, nQbStat(passComp));
+  const yards = Math.max(0, nQbStat(passYd));
+  const tds = Math.max(0, nQbStat(passTD));
+  const ints = Math.max(0, nQbStat(interceptions));
+  const a = Math.max(0, Math.min(2.375, ((comp / att) - 0.3) / 0.2));
+  const b = Math.max(0, Math.min(2.375, ((yards / att) - 3) / 4));
+  const c = Math.max(0, Math.min(2.375, (tds / att) / 0.05));
+  const d = Math.max(0, Math.min(2.375, 2.375 - (ints / att) / 0.04));
+  return Math.round(((a + b + c + d) / 6) * 100 * 10) / 10;
+}

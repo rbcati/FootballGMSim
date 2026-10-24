@@ -3,7 +3,7 @@
 exports[`scheme integrity simulation balance firewall > detailed seed 39 preserves scores, effects, stats and ledger 1`] = `
 {
   "awayScore": 49,
-  "digest": "316c82d3f985b620a55c8b89d76e4fab9f0c2588eb086f1b898b42e84da5b1be",
+  "digest": "50c2a4fcc5852c34e7ec4374bc46e81ac57d3a01d284f742b1d58145a61196e2",
   "fit": [
     {
       "defense": 81,
@@ -33,7 +33,7 @@ exports[`scheme integrity simulation balance firewall > detailed seed 39 preserv
 exports[`scheme integrity simulation balance firewall > detailed seed 777 preserves scores, effects, stats and ledger 1`] = `
 {
   "awayScore": 39,
-  "digest": "608aeb030fb76a14d038d5780789d7f9a683e23660199867de4d97823c1a1b4c",
+  "digest": "401a139e035ddc9a02108a64d1f036b6884d0f810bcedf8e1203d60963a3754d",
   "fit": [
     {
       "defense": 81,
@@ -63,7 +63,7 @@ exports[`scheme integrity simulation balance firewall > detailed seed 777 preser
 exports[`scheme integrity simulation balance firewall > detailed seed 2026 preserves scores, effects, stats and ledger 1`] = `
 {
   "awayScore": 33,
-  "digest": "d8248b1d46737cacc4da4f757c6247724b348fd3bd0d92817807bbd83fbe7f13",
+  "digest": "ac9f8ec8319f3893b1ace9585bcb4268e3c714cba0f3098e80cfec4f402a4e39",
   "fit": [
     {
       "defense": 81,
@@ -93,7 +93,7 @@ exports[`scheme integrity simulation balance firewall > detailed seed 2026 prese
 exports[`scheme integrity simulation balance firewall > legacy seed 39 preserves scores, effects, stats and ledger 1`] = `
 {
   "awayScore": 49,
-  "digest": "2948a5e11639da047568daa03968ad31379a90a2e891ec4d9035d182f1acde16",
+  "digest": "c4ad2a30c6252518e1f74b2742cec62d0d65e96c44dcdfabf14bbe1146105594",
   "fit": [
     {
       "defense": 83,
@@ -123,7 +123,7 @@ exports[`scheme integrity simulation balance firewall > legacy seed 39 preserves
 exports[`scheme integrity simulation balance firewall > legacy seed 777 preserves scores, effects, stats and ledger 1`] = `
 {
   "awayScore": 39,
-  "digest": "be9ce1f19f1fdd3e255cfe6fab6d12be34b6a7bd15e8fd4c7f134499c76fed54",
+  "digest": "0352662e9c720256837aa5b78803279feeedea33bde4d27763b0d7e47240b596",
   "fit": [
     {
       "defense": 83,
@@ -153,7 +153,7 @@ exports[`scheme integrity simulation balance firewall > legacy seed 777 preserve
 exports[`scheme integrity simulation balance firewall > legacy seed 2026 preserves scores, effects, stats and ledger 1`] = `
 {
   "awayScore": 33,
-  "digest": "d83f728b963c2e96d6993b3b7480ba9f41ca05a1389826f1480003870e75629c",
+  "digest": "8364ed14514000bca38f41aaef5803748cb9a98ceb200ac39b3c1ad520de322f",
   "fit": [
     {
       "defense": 83,
@@ -183,7 +183,7 @@ exports[`scheme integrity simulation balance firewall > legacy seed 2026 preserv
 exports[`scheme integrity simulation balance firewall > mixed seed 39 preserves scores, effects, stats and ledger 1`] = `
 {
   "awayScore": 49,
-  "digest": "259855d2b586bd782ceed77b1437e4463bf832d2b93e97ba3f7fd208cecb8474",
+  "digest": "93d9fe7a6de6305f085dac97a47e9005895de722ef0f789da9a1566426cfc93c",
   "fit": [
     {
       "defense": 83,
@@ -213,7 +213,7 @@ exports[`scheme integrity simulation balance firewall > mixed seed 39 preserves 
 exports[`scheme integrity simulation balance firewall > mixed seed 777 preserves scores, effects, stats and ledger 1`] = `
 {
   "awayScore": 39,
-  "digest": "88bff3c12a05026bad553794aeea59d46972ae70d7295559521ffc8874c25b90",
+  "digest": "410232ee7b282be31ec8b2c9516e2a32e443db464928531f66cb727dec5804b2",
   "fit": [
     {
       "defense": 83,
@@ -243,7 +243,7 @@ exports[`scheme integrity simulation balance firewall > mixed seed 777 preserves
 exports[`scheme integrity simulation balance firewall > mixed seed 2026 preserves scores, effects, stats and ledger 1`] = `
 {
   "awayScore": 33,
-  "digest": "5aa28115b76f581df6a1a07a8cbe8401034c2a4b6251f17a0cf6e6f012289ab0",
+  "digest": "72f45d9aaaa65ac42d8d28ce0abc43e3a9022d28dd9fa4e61552270750707c06",
   "fit": [
     {
       "defense": 83,
@@ -273,7 +273,7 @@ exports[`scheme integrity simulation balance firewall > mixed seed 2026 preserve
 exports[`scheme integrity simulation balance firewall > modern seed 39 preserves scores, effects, stats and ledger 1`] = `
 {
   "awayScore": 49,
-  "digest": "01533f182a564ba67219fcd78965853f094ab787aa4a6f3194d3d79687c6b51c",
+  "digest": "9ad332487af15dcbdcf4280f6d64fc1c4ecae3b4eef987903752d415ffae4de1",
   "fit": [
     {
       "defense": 76,
@@ -303,7 +303,7 @@ exports[`scheme integrity simulation balance firewall > modern seed 39 preserves
 exports[`scheme integrity simulation balance firewall > modern seed 777 preserves scores, effects, stats and ledger 1`] = `
 {
   "awayScore": 38,
-  "digest": "c6c0ce120f155a04c309b86d1d9ffa38b39995707766ae238481a7073dcd78ba",
+  "digest": "ec6ba56207de1a56949b5e9d2e16101b6273ed86e9756a579388a26e00d21a84",
   "fit": [
     {
       "defense": 76,
@@ -333,7 +333,7 @@ exports[`scheme integrity simulation balance firewall > modern seed 777 preserve
 exports[`scheme integrity simulation balance firewall > modern seed 2026 preserves scores, effects, stats and ledger 1`] = `
 {
   "awayScore": 33,
-  "digest": "837facb698c8b804d67518ebb7c669ec6b74e2a6d1547f665e686d7830f42041",
+  "digest": "51c3652a1f8f5fc43f54a58a9f02461c2f055142d5fdeb41f06b87ebfc38c424",
   "fit": [
     {
       "defense": 76,
