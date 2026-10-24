@@ -51,7 +51,6 @@ const slot = (page, n) => page.getByRole('listitem').filter({ hasText: `Career S
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('gmsim_onboarding_done', '1');
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       constructor(...args) { super(...args); window.testSimWorker = this; }
