@@ -42,7 +42,7 @@ function RohCard({ member, onRetireNumber, retiredNumbers = [] }) {
         {jerseyNumber != null && (
           <span
             style={{
-              fontFamily: 'var(--font-mono, monospace)',
+              fontFamily: 'var(--font-mono)',
               fontSize: 'var(--text-lg, 18px)',
               fontWeight: 800,
               color: 'var(--warning, #f59e0b)',
@@ -221,7 +221,7 @@ function AllTimeLeadersPanel({ allTimeLeaders }) {
             </span>
             <span
               style={{
-                fontFamily: 'var(--font-mono, monospace)',
+                fontFamily: 'var(--font-mono)',
                 fontWeight: 700,
                 color: 'var(--text)',
                 minWidth: 60,
