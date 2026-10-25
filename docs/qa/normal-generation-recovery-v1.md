@@ -57,4 +57,42 @@ The draft-year browser regression previously demanded `safe-pick-*` IDs on norma
 
 ## Validation and merge recommendation
 
-Validation results are recorded below after completion. Do not merge until first-week browser acceptance, save preservation and required checks are independently reviewed.
+Validation applies to code commit `e3e9fb26`; the subsequent commit only completes this report. Node 22 was used for final local checks and CI. Local Playwright used `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium`; mobile additionally used `PLAYWRIGHT_VIEWPORT=iphone`. No assertions or existing test time limits were removed or loosened.
+
+| Command / evidence | Exact result |
+| --- | --- |
+| Pre-change `npx vitest run tests/integration/normalGeneration.test.js` | 7 failed / 7; phase rejection and worker fallback reproduced |
+| `node node_modules/vitest/vitest.mjs run tests/integration/normalGeneration.test.js tests/integration/fallbackDraftYear.test.js --maxWorkers=1` | 2 files / **12 passed**, 333.78s; includes real worker Week 1 in all three years, save/reload, forced fallback, older career preservation and historical traded picks |
+| `npm run test:soak -- --maxWorkers=1` | 8 files / **103 passed**, 13.50s |
+| `npm run test:unit` in CI | **527 files passed / 1 skipped; 6,462 tests passed / 1 skipped**, 220.08s |
+| `npm run durability:test` in CI | **9 files / 98 passed**, 233.19s |
+| Initial repaired preview: `npx playwright test --config .normal-playwright.config.ts tests/e2e/fresh_franchise_first_week_smoke.spec.js tests/e2e/fallback_draft_year.spec.js` | **5 passed**, 4.0m; temporary config only selected isolated preview port 4174 and `/tmp` output directory; no test overrides |
+| Broad final `npx playwright test tests/e2e/fresh_franchise_first_week_smoke.spec.js tests/e2e/fresh_franchise_first_playable.spec.js tests/e2e/new_franchise_slot_isolation.spec.js tests/e2e/fallback_draft_year.spec.js` | **8 passed / 2 failed**, 7.4m; failures: first-week total 120s timeout at standings, and one HQ navigation wait in isolation. Retained as failures, not suppressed |
+| `npx playwright test tests/e2e/fresh_franchise_first_week_smoke.spec.js --grep 'fresh franchise first week smoke'` | Desktop repeat: **1 passed**, 1.4m |
+| Same command with `PLAYWRIGHT_VIEWPORT=iphone` | Full mobile first-week repeat: **1 passed**, 38.5s |
+| `npx playwright test tests/e2e/new_franchise_slot_isolation.spec.js --grep 'new franchise in empty slot'` | Unchanged Week 6 / Slot 2 repeat: **1 passed**, 2.8m. The other three isolation scenarios passed in the broad final run; all four also passed in the earlier run |
+| CI `npm run test -- tests/e2e/fresh_franchise_first_week_smoke.spec.js tests/e2e/nfl_schedule_bye.spec.js` | **4 passed**, 1.2m |
+| `npm run build` | Passed locally and in Netlify CLI production/preview builds; expected chunk-size warning only |
+| `npm run check:netlify-parity` | Passed on Node 22.23.4 |
+| `npm run check:netlify-rules` | Passed |
+| `npm run check:netlify-cli-build` | Production context passed; build command 39.1s |
+| `npm run check:netlify-cli-build:preview` | Deploy-preview context passed; Netlify build 16.7s |
+| CI `npm run check:deploy` | Passed; complete parity job including unit and durability: 9m1s |
+| `node --import tsx scripts/audit-normal-generation.mjs` | Passed; committed actual measured distributions |
+| `git diff --check` | Passed |
+
+CI evidence: [complete unit/durability/deploy job](https://github.com/rbcati/FootballGMSim/actions/runs/40161885734/job/121074992494), [first-session smoke](https://github.com/rbcati/FootballGMSim/actions/runs/40161885734/job/121076631445). CodeQL also passed. [Hosted preview](https://deploy-preview-1807--footballgmsim.netlify.app) built successfully with passing header/redirect checks.
+
+### First-week and preservation evidence
+
+The expanded smoke inspects all 1,696 persisted players, salary/length variation, normal provenance and roster-owned depth IDs; opens Roster and Lineup; reloads before simulation; completes Week 1; views weekly final score and Game Book; opens standings and checks one game in the user's record; then reloads and verifies the same franchise identity, final score and Game Book. Both desktop and iPhone repeats passed with fresh browser contexts against the actual built Netlify preview bundle. Creation and week completion commit through production IndexedDB persistence, not a test-only state substitute.
+
+Worker tests additionally exercise explicit SAVE_NOW / LOAD_SAVE for all three years, compare player IDs/contracts/ratings and stored/team-owned pick rows, verify independent generation IDs, and complete Week 1 followed by another save/reload. The forced-fallback test loads and saves an older fallback career at Week 6, preserves its generation/records/players/picks across a failed creation and a second normal career, and independently reloads both. Browser isolation checks cover the actual slot promotion, cancellation/interruption, failure and generation-guard paths from PR #1806. Historical traded-pick IDs/seasons/owners remain unchanged; no rebase or roster migration is introduced.
+
+### Local-run limitations, retained explicitly
+
+Early Node 24 runs were exploratory; one overlap with Netlify's configured `npm ci` interrupted the local dependency tree. Those runs are not passing evidence. Final redundant local full runs (`npm run test:unit -- --maxWorkers=2`, `npm run durability:test -- --maxWorkers=1`) hit existing stress-test time limits under concurrent load on the two-CPU environment: stat attribution 5s, engine soak 30s, and the 18-week durability attribution case 480s. They were stopped after the complete independent CI runs passed; no local full-suite completion or green local durability claim is made.
+
+The stat-attribution timeout was independently reproduced on unchanged main `68303625` in a detached worktree: `node node_modules/vitest/vitest.mjs run src/core/__tests__/gameStatAttributionIntegrity.test.ts --maxWorkers=1` yielded **7 passed / 1 failed**, specifically the existing 5s limit (8.82s total test time). Other stress timeouts were not separately reproduced on main. The broad browser run's timing/navigation failures are recorded above; successful sequential repeats and CI provide the final acceptance evidence. A preliminary new preservation test exceeded its original 60s budget under contention; the new real-worker integration cases use 180s budgets, while existing assertions and limits remain intact.
+
+**Merge recommendation:** ready for independent engineering review of this focused creation-boundary repair, with merge conditional on required checks remaining green. First-week acceptance, save preservation, full unit, durability, and deployment parity are demonstrated. Do not merge automatically. The independently documented empty unsigned pool and other unproven adjacent issues are not claimed fixed by this PR.
