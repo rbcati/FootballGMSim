@@ -43,6 +43,12 @@ describe('PlayerProfile', () => {
     global.IntersectionObserver = vi.fn(function () { return { observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() }; });
   });
   afterEach(() => cleanup());
+  it.each(['opaque-profile-player', 11])('preserves player ID %s in the career transaction request', async (id) => {
+    const current = { ...player, id };
+    const getTransactions = vi.fn(async () => ({ payload: { transactions: [] } }));
+    render(<PlayerProfile playerId={id} onClose={vi.fn()} actions={{ ...actions, getTransactions, getPlayerCareer: vi.fn(async () => ({ payload: { player: current } })) }} teams={[{ ...league.teams[0], roster: [current] }]} league={league} />);
+    await waitFor(() => expect(getTransactions).toHaveBeenCalledWith({ playerId: id, limit: 100 }));
+  });
   it('starts with football identity and keeps deep information in reachable sections', async () => {
     render(<PlayerProfile playerId={11} onClose={vi.fn()} actions={actions} teams={league.teams} league={league} />);
     await waitFor(() => expect(screen.getByTestId('player-profile-summary').textContent).toContain('Avery Fields'));

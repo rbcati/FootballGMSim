@@ -12,6 +12,8 @@ import {
 } from '../core/dynastySoakAudit.js';
 
 const RESPONSE_BY_REQUEST = {
+  [toWorker.UPDATE_PLAYER_MANAGEMENT]: [toUI.STATE_UPDATE, toUI.ERROR],
+  [toWorker.TOGGLE_TRADE_BLOCK]: [toUI.STATE_UPDATE, toUI.ERROR],
   [toWorker.IMPORT_CUSTOM_ROSTER]: [toUI.MOD_IMPORT_RESULT, toUI.ERROR],
   [toWorker.GET_DRAFT_STATE]: [toUI.DRAFT_STATE, toUI.ERROR],
   [toWorker.INIT]: [toUI.READY, toUI.ERROR],

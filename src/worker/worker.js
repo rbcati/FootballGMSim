@@ -6022,8 +6022,12 @@ async function handleGetTransactions(payload = {}, id) {
     } = payload || {};
 
     const resolvedSeasonId = seasonId ?? (mode === "recent" ? null : meta?.currentSeasonId ?? null);
-    const pid = playerId != null ? Number(playerId) : null;
-    const wantPlayer = Number.isFinite(pid) && pid > 0;
+    const pid = canonicalIdKey(playerId);
+    const wantPlayer = pid !== null;
+    if (playerId != null && !wantPlayer) {
+      post(toUI.TRANSACTIONS, { ok: true, transactions: [] }, id);
+      return;
+    }
     const explicitRecent = mode === "recent";
 
     let rows = [];
@@ -10439,13 +10443,13 @@ async function handleUpdateDepthChart({ updates, positions }, id) {
 }
 
 async function handleToggleTradeBlock({ playerId, teamId }, id) {
-  if (!playerId) {
-    self.postMessage({ type: 'ERROR', payload: { message: 'Missing playerId' } });
+  if (canonicalIdKey(playerId) === null) {
+    post(toUI.ERROR, { message: 'Missing playerId' }, id);
     return;
   }
 
-  const numericPlayerId = Number(playerId);
-  const player = cache.getPlayer(numericPlayerId);
+  const playerKey = canonicalIdKey(playerId);
+  const player = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player) {
     post(toUI.ERROR, { message: 'Player not found' }, id);
     return;
@@ -10467,8 +10471,8 @@ async function handleToggleTradeBlock({ playerId, teamId }, id) {
 
 
 async function handleUpdatePlayerManagement({ playerId, teamId, updates = {} }, id) {
-  const numericPlayerId = Number(playerId);
-  const player = cache.getPlayer(numericPlayerId);
+  const playerKey = canonicalIdKey(playerId);
+  const player = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player) {
     post(toUI.ERROR, { message: 'Player not found' }, id);
     return;
