@@ -1209,6 +1209,7 @@ function buildViewState() {
     year:       meta?.year,
     week:       meta?.currentWeek ?? 1,
     phase:      meta?.phase       ?? 'regular',
+    generationDiagnostics: meta?.generationDiagnostics ?? null,
     userTeamId: meta?.userTeamId  ?? null,
     schedule:   meta?.schedule    ?? null,
     offseasonProgressionDone: meta?.offseasonProgressionDone ?? false,
@@ -1746,7 +1747,7 @@ function ensureTeamDepthChart(teamId, context = {}) {
       const rowKey = p?.depthChart?.rowKey;
       if (!rowKey) continue;
       if (!inferredFromPlayers[rowKey]) inferredFromPlayers[rowKey] = [];
-      inferredFromPlayers[rowKey].push({ id: Number(p.id), order: Number(p?.depthChart?.order ?? p?.depthOrder ?? 999) });
+      inferredFromPlayers[rowKey].push({ id: p.id, order: Number(p?.depthChart?.order ?? p?.depthOrder ?? 999) });
     }
     Object.keys(inferredFromPlayers).forEach((k) => {
       inferredFromPlayers[k] = inferredFromPlayers[k].sort((a, b) => a.order - b.order).map((row) => row.id);
@@ -2589,8 +2590,13 @@ async function handleNewLeague(payload, id) {
 
     // Validate league state. If generation failed or is stale/incomplete,
     // recover with the default offline league to keep first-session boot playable.
-    if (!isPlayableLeagueState(league)) {
-      console.warn('[Worker] NEW_LEAGUE produced an invalid league payload; falling back to default league.');
+    const generationValidation = getPlayableLeagueValidation(league);
+    const generationDiagnostics = {
+      source: generationValidation.valid ? 'normal' : 'fallback',
+      validationReasons: generationValidation.reasons,
+    };
+    if (!generationValidation.valid) {
+      console.warn('[Worker] NEW_LEAGUE produced an invalid league payload; falling back to default league.', generationValidation.reasons);
       league = buildDefaultLeague({
         userTeamId,
         name: options.name,
@@ -2622,13 +2628,14 @@ async function handleNewLeague(payload, id) {
     const meta = ensureLeagueMemoryMeta({
       id:              'league',
       franchiseGenerationId: createFranchiseGenerationId(),
+      generationDiagnostics,
       name:            String(options.name || resolvedSettings.leagueName || `League ${leagueId}`).slice(0, 80),
       userTeamId:      userTeamId,
       currentSeasonId: seasonId,
       currentWeek:     1,
       year:            league.year,
       season:          league.season ?? 1,
-      phase:           'regular',
+      phase:           league.phase,
       // Persist the per-save RNG entropy generated at league creation (in
       // makeLeague) so it survives save/load and keeps game outcomes unique per
       // playthrough. Fallback derives from wall-clock time (never Math.random,
@@ -2700,6 +2707,7 @@ async function handleNewLeague(payload, id) {
     // Hydrate cache
     cache.hydrate({ meta, teams, players, draftPicks });
     hydrateAllPlayersForDevelopment();
+    validateAndRepairAllTeamDepthCharts('new-league');
 
     // Compute Cap Used / Cap Room for every team now that players are in cache.
     // makePlayer() writes salary as flat fields (p.baseAnnual, p.signingBonus);
