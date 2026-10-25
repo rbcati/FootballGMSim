@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
-import { beforeAll, describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect, vi } from 'vitest';
 import { loadWorkerModule, dispatchWorker } from '../../src/testSupport/dynastySoakRunner.js';
+import * as serialization from '../../src/worker/serialization.js';
 import { cache } from '../../src/db/cache.js';
 import { Transactions } from '../../src/db/index.js';
 import { DEFAULT_TEAMS } from '../../src/data/default-teams.js';
@@ -68,5 +69,34 @@ describe.sequential('player-management and history worker identity', () => {
         expect(result.payload.transactions).toEqual([]);
       }
     }, 60000);
+    for (const [type, status] of [
+      [toWorker.HONOR_TRADE_REQUEST, 'honored'],
+      [toWorker.STONEWALL_TRADE_REQUEST, 'pending'],
+      [toWorker.OFFER_EXTENSION_TO_WITHDRAW, 'withdrawn'],
+    ]) it(`resolves ${type} for only the selected player and persists its response`, async () => {
+      cache.updatePlayer(player.id, { contractYearsLeft: 1, tradeRequest: { status: 'pending', requestedSeason: 1, requestedWeek: 1, stonewalledWeeks: 0, reason: 'personal' } });
+      const before = bytes();
+      const serialize = vi.spyOn(serialization, 'serializeLeagueDelta');
+      let result;
+      try {
+        result = await dispatchWorker(type, { playerId: player.id }, { timeoutMs: 30000 });
+        // The legacy delta transport drops this unused redirect field for both
+        // ID types. Verify its producer preserves identity without changing that
+        // separate transport/UI behavior in an ID compatibility patch.
+        if (type === toWorker.OFFER_EXTENSION_TO_WITHDRAW) expect(serialize.mock.calls.at(-1)[0].extensionRedirect).toEqual({ playerId: player.id });
+      } finally { serialize.mockRestore(); }
+      expect(result.type).toBe(toUI.STATE_UPDATE);
+      expect(cache.getPlayer(player.id)).toMatchObject({ id: player.id, tradeRequest: { status } });
+      if (type === toWorker.STONEWALL_TRADE_REQUEST) expect(cache.getPlayer(player.id).tradeRequest.stonewalledWeeks).toBe(1);
+      unchangedOthers(before, player.id);
+      await dispatchWorker(toWorker.SAVE_NOW);
+      await dispatchWorker(toWorker.LOAD_SAVE, { leagueId: boot.payload.activeLeagueId });
+      expect(cache.getPlayer(player.id)).toMatchObject({ id: player.id, tradeRequest: { status } });
+      unchangedOthers(before, player.id);
+      const after = bytes();
+      await expect(dispatchWorker(type, { playerId: 'unknown-id' }, { timeoutMs: 3000 })).rejects.toThrow('Player not found');
+      unchangedOthers(after, undefined);
+    }, 60000);
+
   });
 });

@@ -10518,8 +10518,8 @@ async function handleUpdatePlayerManagement({ playerId, teamId, updates = {} }, 
 // ── Handler: HONOR_TRADE_REQUEST ──────────────────────────────────────────────
 
 async function handleHonorTradeRequest({ playerId }, id) {
-  const numericId = Number(playerId);
-  const player    = cache.getPlayer(numericId);
+  const playerKey = canonicalIdKey(playerId);
+  const player = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
   if (!player.tradeRequest) { post(toUI.ERROR, { message: 'No active trade request' }, id); return; }
 
@@ -10561,8 +10561,8 @@ async function handleHonorTradeRequest({ playerId }, id) {
 // ── Handler: STONEWALL_TRADE_REQUEST ─────────────────────────────────────────
 
 async function handleStonewallTradeRequest({ playerId }, id) {
-  const numericId = Number(playerId);
-  const player    = cache.getPlayer(numericId);
+  const playerKey = canonicalIdKey(playerId);
+  const player = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
   if (!player.tradeRequest) { post(toUI.ERROR, { message: 'No active trade request' }, id); return; }
 
@@ -10589,8 +10589,8 @@ async function handleStonewallTradeRequest({ playerId }, id) {
 // ── Handler: OFFER_EXTENSION_TO_WITHDRAW ─────────────────────────────────────
 
 async function handleOfferExtensionToWithdraw({ playerId }, id) {
-  const numericId = Number(playerId);
-  const player    = cache.getPlayer(numericId);
+  const playerKey = canonicalIdKey(playerId);
+  const player = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
   if (!player.tradeRequest) { post(toUI.ERROR, { message: 'No active trade request' }, id); return; }
 
@@ -10633,7 +10633,7 @@ async function handleOfferExtensionToWithdraw({ playerId }, id) {
 
   await flushDirty();
   // Signal to UI that extension flow should be initiated
-  post(toUI.STATE_UPDATE, { ...buildViewState(), extensionRedirect: { playerId: numericId } }, id);
+  post(toUI.STATE_UPDATE, { ...buildViewState(), extensionRedirect: { playerId: player.id } }, id);
 }
 
 // ── Handler: INITIATE_TRADE_BLOCK ─────────────────────────────────────────────
