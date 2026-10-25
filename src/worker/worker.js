@@ -7048,10 +7048,13 @@ async function handleExportLeagueFile(payload, id) {
 }
 
 function applyImportedRoster(roster = {}) {
-  const byId = new Map((Array.isArray(roster?.players) ? roster.players : []).map((p) => [Number(p.id), p]));
+  const byId = new Map((Array.isArray(roster?.players) ? roster.players : [])
+    .filter((p) => canonicalIdKey(p?.id) !== null)
+    .map((p) => [canonicalIdKey(p.id), p]));
   let changed = 0;
   for (const player of cache.getAllPlayers()) {
-    const next = byId.get(Number(player.id));
+    const key = canonicalIdKey(player.id);
+    const next = key === null ? null : byId.get(key);
     if (!next) continue;
     cache.updatePlayer(player.id, {
       name: typeof next.name === 'string' ? next.name.slice(0, 48) : player.name,
