@@ -286,7 +286,7 @@ import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonality
 import { applyTeamCultureWeek, classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../core/teamCulture.js';
 import { selectCultureAlerts } from '../core/broadcastNarrative.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
-import { canonicalIdKey, resolveTeamRefId } from '../core/referenceIntegrity.js';
+import { canonicalIdKey, sameEntityId, resolveTeamRefId } from '../core/referenceIntegrity.js';
 import {
   computeSeed,
   computeScoutedRange,
@@ -3966,12 +3966,12 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
         const pulseItems  = [];
 
         for (const { aiTeam, targetPlayerId } of pursuits) {
-          const targetPlayer = cache.getPlayer(Number(targetPlayerId));
+          const targetPlayer = cache.getPlayer(canonicalIdKey(targetPlayerId));
           if (!targetPlayer?.onTradeBlock) continue;
 
           // Check if this AI team already has a pending offer for this player
           const existing = liveOffers.find(
-            o => o.status === 'pending' && Number(o.aiTeamId) === Number(aiTeam.id) && Number(o.targetPlayerId) === Number(targetPlayerId),
+            o => o.status === 'pending' && Number(o.aiTeamId) === Number(aiTeam.id) && sameEntityId(o.targetPlayerId, targetPlayerId),
           );
 
           const seed = ((Number(aiTeam.id) * 9973 + Number(targetPlayerId) * 1009 + blockSeason * 17 + blockWeek * 3) >>> 0);
@@ -4009,7 +4009,7 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
           // League pulse: buzz when 2+ teams are pursuing the same player
           const blockPlayers = allPlayers.filter(p => Number(p?.teamId) === userTeamId && p?.onTradeBlock);
           for (const bp of blockPlayers) {
-            const pursuersCount = capped.filter(o => o.status === 'pending' && Number(o.targetPlayerId) === Number(bp.id)).length;
+            const pursuersCount = capped.filter(o => o.status === 'pending' && sameEntityId(o.targetPlayerId, bp.id)).length;
             if (pursuersCount >= 2) {
               pulseItems.push({
                 id:       `trade_buzz_${bp.id}_s${blockSeason}w${blockWeek}`,
@@ -4455,14 +4455,14 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
 
       // Evaluate each player for new trade requests and stonewall progression
       for (const player of trAllPlayers) {
-        if (!player?.id || player.teamId == null) continue;
+        if (canonicalIdKey(player?.id) === null || player.teamId == null) continue;
         const team = cache.getTeam(player.teamId);
         if (!team) continue;
 
         const teamIdStr = String(team.id);
         const byPos = teamDepthMaps[teamIdStr] ?? {};
         const posGroup = byPos[player.pos] ?? [];
-        const depthRank = posGroup.findIndex((p) => Number(p.id) === Number(player.id));
+        const depthRank = posGroup.findIndex((p) => sameEntityId(p.id, player.id));
         const teamScheme = team?.coach?.headCoach?.scheme ?? team?.strategies?.offense ?? 'BALANCED';
         const isMisfit   = isPositionMisfitForScheme(player?.pos, teamScheme);
 
@@ -4492,9 +4492,9 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
             const STARTERS_COUNT = { QB: 1, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1 };
             for (const teammate of trAllPlayers) {
               if (Number(teammate?.teamId) !== Number(team.id)) continue;
-              if (Number(teammate.id) === Number(player.id)) continue;
+              if (sameEntityId(teammate.id, player.id)) continue;
               const tPos = teammate.pos;
-              const tRank = (byPos[tPos] ?? []).findIndex((p) => Number(p.id) === Number(teammate.id));
+              const tRank = (byPos[tPos] ?? []).findIndex((p) => sameEntityId(p.id, teammate.id));
               const starterSlots = STARTERS_COUNT[tPos] ?? 1;
               if (tRank < 0 || tRank >= starterSlots) continue; // only starters
               const dedupeKey = `teammate_trade_request_${team.id}_${trSeasonId}_${week}`;
@@ -4621,9 +4621,9 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
         const STARTERS_COUNT = { QB: 1, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1 };
         for (const teammate of trAllPlayers) {
           if (Number(teammate?.teamId) !== Number(team.id)) continue;
-          if (Number(teammate.id) === Number(player.id)) continue;
+          if (sameEntityId(teammate.id, player.id)) continue;
           const tPos = teammate.pos;
-          const tRank = (byPos[tPos] ?? []).findIndex((p) => Number(p.id) === Number(teammate.id));
+          const tRank = (byPos[tPos] ?? []).findIndex((p) => sameEntityId(p.id, teammate.id));
           const starterSlots = STARTERS_COUNT[tPos] ?? 1;
           if (tRank < 0 || tRank >= starterSlots) continue;
           const dedupeKey = `teammate_trade_request_init_${team.id}_${trSeasonId}_${week}`;
