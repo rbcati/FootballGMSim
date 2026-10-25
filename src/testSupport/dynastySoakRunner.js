@@ -12,6 +12,8 @@ import {
 } from '../core/dynastySoakAudit.js';
 
 const RESPONSE_BY_REQUEST = {
+  [toWorker.BULK_RELEASE_PLAYERS]: [toUI.SUCCESS, toUI.ERROR],
+  [toWorker.SUBMIT_WAIVER_CLAIM]: [toUI.STATE_UPDATE, toUI.ERROR],
   [toWorker.HONOR_TRADE_REQUEST]: [toUI.STATE_UPDATE, toUI.ERROR],
   [toWorker.STONEWALL_TRADE_REQUEST]: [toUI.STATE_UPDATE, toUI.ERROR],
   [toWorker.OFFER_EXTENSION_TO_WITHDRAW]: [toUI.STATE_UPDATE, toUI.ERROR],

@@ -7992,7 +7992,8 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
 }
 
 async function handleBulkReleasePlayers({ teamId, playerIds }, id) {
-  const uniquePlayerIds = [...new Set((Array.isArray(playerIds) ? playerIds : []).map(Number).filter(Number.isFinite))];
+  const uniquePlayerIds = [...new Set((Array.isArray(playerIds) ? playerIds : [])
+    .map(canonicalIdKey).filter(key => key !== null))];
   const released = [];
   for (const playerId of uniquePlayerIds) {
     const outcome = await releasePlayerWithValidation({ playerId, teamId });
@@ -8009,7 +8010,7 @@ async function handleBulkReleasePlayers({ teamId, playerIds }, id) {
       post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() });
       return;
     }
-    released.push(playerId);
+    released.push(outcome.playerId);
   }
   recalcSchemeFitForTeams(teamId);
   await flushDirty();
@@ -8030,7 +8031,8 @@ async function handleSubmitWaiverClaim({ playerId }, id) {
     post(toUI.ERROR, { message: 'WAIVERS_CLOSED' }, id);
     return;
   }
-  const player = cache.getPlayer(Number(playerId));
+  const playerKey = canonicalIdKey(playerId);
+  const player = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player || player.waiverStatus !== 'ACTIVE') {
     post(toUI.ERROR, { message: 'PLAYER_NOT_ON_WAIVERS' }, id);
     return;
@@ -8042,13 +8044,13 @@ async function handleSubmitWaiverClaim({ playerId }, id) {
   }
   const existingClaims = meta.activeWaiverClaims ?? [];
   const dup = existingClaims.find(
-    c => String(c.playerId) === String(playerId) && String(c.teamId) === String(meta.userTeamId)
+    c => sameEntityId(c.playerId, player.id) && String(c.teamId) === String(meta.userTeamId)
   );
   if (dup) {
     post(toUI.ERROR, { message: 'CLAIM_ALREADY_EXISTS' }, id);
     return;
   }
-  const newClaim = { playerId: String(playerId), teamId: meta.userTeamId, submittedWeek: week, origin: 'user' };
+  const newClaim = { playerId: String(player.id), teamId: meta.userTeamId, submittedWeek: week, origin: 'user' };
   const updatedClaims = submitWaiverClaim(existingClaims, newClaim);
   cache.setMeta({ activeWaiverClaims: updatedClaims });
   await flushDirty();
