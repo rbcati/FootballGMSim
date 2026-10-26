@@ -1,5 +1,7 @@
 # Normal franchise generation recovery V1
 
+**Current review status:** the [player-ID compatibility review](player-id-compatibility-review.md) supersedes this report’s original merge recommendation. Two newly reported execution defects remain open; PR #1807 is not merge-ready.
+
 Base: main `68303625c99d1132fab3e1f935538f0978f66e4d` (PR #1806).
 
 ## Reproduction before edits
