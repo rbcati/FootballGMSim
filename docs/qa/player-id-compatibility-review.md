@@ -1,5 +1,7 @@
 # PR #1807 — player-ID compatibility review
 
+**Current follow-up:** [accepted trades and signing](trade-signing-identity-followup.md) records repairs for the two execution blockers listed historically below, plus fresh-review ledger/UI findings. Consult that report for current validation and merge disposition.
+
 Reviewed base: `3fce7e797639e3c525a8e7bbf99c5a8764c95a74`.
 Primary ID/import repair: `0ecf81ab`; management/history repair: `e5fca252`; trade-request response repair: `4c24bf64`; weekly pursuit/rank repair: `3b2b34fa`; bulk release/waiver repair: `7eef2473`.
 Original P1: https://github.com/rbcati/FootballGMSim/pull/1807#discussion_r4369672008
