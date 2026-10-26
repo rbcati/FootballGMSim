@@ -61,6 +61,12 @@ describe.sequential('trade execution and immediate signing identity', () => {
         expect(cache.getPlayer(target.id).teamId).toBe(1);
         expect(cache.getPlayer(incoming.id).teamId).toBe(0);
       }
+      cache.updatePlayer(incoming.id, { teamId: null });
+      cache.setMeta({ tradeOffers: [reverse] });
+      const unsigned = await dispatchWorker(toWorker.ACCEPT_TRADE_OFFER, { offerId: reverse.offerId });
+      expect(unsigned.payload.accepted).toBe(false);
+      expect(cache.getPlayer(incoming.id).teamId).toBeNull();
+      cache.updatePlayer(incoming.id, { teamId: 0 });
       cache.setMeta({ tradeOffers: [reverse] });
       const beforeFailure = original.map(p => structuredClone(cache.getPlayer(p.id)));
       const update = cache.updatePlayer;
@@ -109,6 +115,8 @@ describe.sequential('trade execution and immediate signing identity', () => {
       await dispatchWorker(toWorker.SAVE_NOW);
       await dispatchWorker(toWorker.LOAD_SAVE, { leagueId: boot.payload.activeLeagueId });
       expect(cache.getPlayer(player.id)).toMatchObject({ id: player.id, teamId: 0, contract: signed.contract });
+      expect(cache.getPlayer(waiting.id).teamId).toBeNull();
+      expect(JSON.stringify(cache.getPlayer(waiting.id))).toBe(before.get(waiting.id));
     }, 60000);
   });
 });

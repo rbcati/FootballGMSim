@@ -1488,7 +1488,7 @@ function getTradeDeadlineSnapshot(metaObj = ensureDynastyMeta(cache.getMeta())) 
 function allPlayersOnTeam(teamId, playerIds = []) {
   return (playerIds ?? []).every((pid) => {
     const player = cache.getPlayer(canonicalIdKey(pid));
-    return player && Number(player.teamId) === Number(teamId);
+    return player && player.teamId != null && Number(player.teamId) === Number(teamId);
   });
 }
 
