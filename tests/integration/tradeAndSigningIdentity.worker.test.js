@@ -103,13 +103,16 @@ describe.sequential('trade execution and immediate signing identity', () => {
       await dispatchWorker(toWorker.SUBMIT_OFFER, { playerId: waiting.id, teamId: 0, contract: { baseAnnual: 0.8, signingBonus: 0, yearsTotal: 1, years: 1 } });
       expect(cache.getPlayer(waiting.id).teamId).toBeNull();
       expect(cache.getPlayer(waiting.id).offers.length).toBeGreaterThan(0);
+      expect(cache.getMeta().pendingOffers.find(row => row.playerName === waiting.name)?.status).toBe('pending');
       cache.setMeta({ phase: 'regular' });
       const player = cache.getPlayersByTeam(0).find(p => p.pos === 'P');
       await dispatchWorker(toWorker.RELEASE_PLAYER, { playerId: player.id, teamId: 0 });
       const before = new Map(cache.getAllPlayers().map(p => [p.id, JSON.stringify(p)]));
       const result = await dispatchWorker(toWorker.SUBMIT_OFFER, { playerId: player.id, teamId: 0, contract: { baseAnnual: 30, signingBonus: 30, yearsTotal: 3, years: 3, guaranteedPct: 1 } });
       console.log('SIGNING REPRO', source, result.type, cache.getPlayer(player.id).teamId);
+      expect(cache.getMeta().pendingOffers.find(row => row.playerId === player.id)?.status).toBe('accepted');
       expect(cache.getPlayer(player.id).teamId).toBe(0);
+      expect(cache.getMeta().pendingOffers.find(row => row.playerName === waiting.name)?.status).toBe('pending');
       for (const p of cache.getAllPlayers()) if (p.id !== player.id) expect(JSON.stringify(p)).toBe(before.get(p.id));
       const signed = structuredClone(cache.getPlayer(player.id));
       await dispatchWorker(toWorker.SAVE_NOW);

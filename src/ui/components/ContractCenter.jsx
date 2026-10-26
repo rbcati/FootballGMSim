@@ -1,3 +1,4 @@
+import { sameEntityId } from '../../core/referenceIntegrity.js';
 import { buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 import React, { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -203,7 +204,7 @@ function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }
     ? `Decide ${sortedRows.find((row) => row.unresolved)?.player?.name} (${sortedRows.find((row) => row.unresolved)?.player?.pos})`
     : 'All expiring decisions are resolved.';
 
-  const previewRow = sortedRows.find((row) => Number(row.player.id) === Number(previewPlayerId)) ?? null;
+  const previewRow = sortedRows.find((row) => sameEntityId(row.player.id, previewPlayerId)) ?? null;
 
   const applyDecision = async (row, decision) => {
     if (!actions?.updatePlayerManagement || !team?.id) return;

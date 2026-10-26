@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, fireEvent, waitFor } from '@testing-library/react';
 import TradeCenter from '../TradeCenter.jsx';
 
+afterEach(cleanup);
+
 function makePlayer(id, name, { pos = 'WR', ovr = 80, age = 26, baseAnnual = 6 } = {}) {
   return { id, name, pos, ovr, age, contract: { baseAnnual } };
 }
@@ -233,4 +235,15 @@ describe('TradeCenter — accept incoming trade error handling', () => {
     expect(banner.textContent).not.toContain('Missing team or player data');
     expect(queryByText('Invalid trade')).toBeNull();
   });
+});
+
+for (const playerId of ['opaque-target', 101]) it(`quick counter preserves ${typeof playerId} player identity`, async () => {
+  const counterTradeOffer = vi.fn(async () => ({ payload: { accepted: false } }));
+  const actions = makeActions({ counterTradeOffer });
+  const offer = { offerId: 'block-test', aiTeamId: 2, aiTeamName: 'Detroit', targetPlayerId: playerId, targetPlayerName: 'Target', offerPlayers: [{ id: 201, name: 'AI Guy' }], offerPicks: [], status: 'pending' };
+  const view = render(<TradeCenter league={makeLeague([], { inboundTradeOffers: [offer] })} actions={actions} />);
+  fireEvent.click(await view.findByText('Counter'));
+  fireEvent.click(await view.findByText('Quick Counter'));
+  await waitFor(() => expect(counterTradeOffer).toHaveBeenCalledWith('block-test', [playerId], []));
+  cleanup();
 });

@@ -790,7 +790,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
       // Counter: user keeps target player, but offers a different bundle
       // For simplicity in the counter flow we send the same original bundle back
       // (the full counter UI with asset pickers is in the dedicated counter modal)
-      const counterPlayerIds = [Number(offer.targetPlayerId)];
+      const counterPlayerIds = [offer.targetPlayerId];
       const resp = await actions.counterTradeOffer(offer.offerId, counterPlayerIds, []);
       setBlockCounterResult(resp?.payload ?? { accepted: false, counterStatus: 'unknown' });
       setBlockCounterOfferId(null);
