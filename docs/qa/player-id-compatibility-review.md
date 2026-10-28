@@ -1,5 +1,7 @@
 # PR #1807 — player-ID compatibility review
 
+**Latest follow-up:** [retirement, archive and proposal identity](retirement-archive-proposal-identity.md) records the current repairs, validation and review disposition. Earlier merge recommendations below are historical.
+
 **Current follow-up:** [accepted trades and signing](trade-signing-identity-followup.md) records repairs for the two execution blockers listed historically below, plus fresh-review ledger/UI findings. Consult that report for current validation and merge disposition.
 
 Reviewed base: `3fce7e797639e3c525a8e7bbf99c5a8764c95a74`.

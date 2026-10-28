@@ -1,5 +1,7 @@
 # PR #1807 — accepted trades and immediate signing
 
+**Latest follow-up:** [retirement, archive and proposal identity](retirement-archive-proposal-identity.md) records the current repairs, validation and review disposition. Earlier merge recommendations below are historical.
+
 Base: `40a688ba67aad0a03f86cd12fae19776a131f235`.
 
 ## Before repair

@@ -1,5 +1,7 @@
 # Normal franchise generation recovery V1
 
+**Latest follow-up:** [retirement, archive and proposal identity](retirement-archive-proposal-identity.md) records the current repairs, validation and review disposition. Earlier merge recommendations below are historical.
+
 **Current review status:** consult the [transaction follow-up](trade-signing-identity-followup.md) for current repairs, validation and merge disposition. Earlier recommendations below are historical.
 
 Base: main `68303625c99d1132fab3e1f935538f0978f66e4d` (PR #1806).
