@@ -247,3 +247,19 @@ for (const playerId of ['opaque-target', 101]) it(`quick counter preserves ${typ
   await waitFor(() => expect(counterTradeOffer).toHaveBeenCalledWith('block-test', [playerId], []));
   cleanup();
 });
+
+for (const ids of [['outgoing-alpha', 'incoming-beta'], [101, 201]]) it(`restores trade context without changing ${typeof ids[0]} IDs`, async () => {
+  const own = { ...USER, roster: [{ ...USER.roster[0], id: ids[0] }] };
+  const partner = { ...AI, roster: [{ ...AI.roster[0], id: ids[1] }] };
+  const actions = makeActions({ getRoster: vi.fn(async id => {
+    const team = id === 1 ? own : partner;
+    return { payload: { team, players: team.roster } };
+  }) });
+  const context = vi.fn();
+  const view = render(<TradeCenter league={makeLeague([], { teams: [own, partner] })} actions={actions} initialTradeContext={{ partnerTeamId: 2, outgoingPlayerIds: [ids[0]], incomingPlayerIds: [ids[1]] }} onTradeContextChange={context} />);
+  await waitFor(() => {
+    expect(view.getByRole('checkbox', { name: 'Remove User Guy' }).checked).toBe(true);
+    expect(view.getByRole('checkbox', { name: 'Remove AI Guy' }).checked).toBe(true);
+    expect(context.mock.calls.some(([row]) => row.outgoingPlayerIds[0] === ids[0] && row.incomingPlayerIds[0] === ids[1])).toBe(true);
+  });
+});

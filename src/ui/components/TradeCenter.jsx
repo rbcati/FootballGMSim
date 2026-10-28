@@ -1,3 +1,4 @@
+import { canonicalIdKey } from '../../core/referenceIntegrity.js';
 /**
  * TradeCenter.jsx — Full premium trade interface
  * Zen GM + Pocket GM 3 + Madden 26 mobile style
@@ -397,7 +398,7 @@ function TradePlayerSheet({ player, onClose }) {
 
 export default function TradeCenter({ league, actions, initialTradeContext = null, onTradeContextChange }) {
   const myTeamId = league?.userTeamId;
-  const toAssetId = (id) => String(id);
+  const toAssetId = canonicalIdKey;
 
   const [targetId, setTargetId] = useState(initialTradeContext?.partnerTeamId ?? null);
   const [myRoster, setMyRoster] = useState([]);
@@ -632,12 +633,12 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   useEffect(() => {
     onTradeContextChange?.({
       partnerTeamId: targetId,
-      outgoingPlayerIds: [...offering].map((id) => Number(id)),
+      outgoingPlayerIds: [...offering].map((id) => myRosterMap.get(toAssetId(id))?.id ?? id),
       outgoingPickIds: myPicks.map((p) => p.id),
-      incomingPlayerIds: [...receiving].map((id) => Number(id)),
+      incomingPlayerIds: [...receiving].map((id) => theirRosterMap.get(toAssetId(id))?.id ?? id),
       helperReason: tradeResult?.reason ?? '',
     });
-  }, [targetId, offering, myPicks, receiving, tradeResult, onTradeContextChange]);
+  }, [targetId, offering, myPicks, receiving, tradeResult, onTradeContextChange, myRosterMap, theirRosterMap]);
 
   useEffect(() => {
     if (!showSavedToast) return undefined;
@@ -650,8 +651,8 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     setSubmitting(true);
     setTradeResult(null);
     try {
-      const outgoing = { playerIds: [...offering].map((id) => Number(id)), pickIds: myPicks.map(p => p.id) };
-      const incoming = { playerIds: [...receiving].map((id) => Number(id)), pickIds: theirPicks.map(p => p.id) };
+      const outgoing = { playerIds: [...offering].map((id) => myRosterMap.get(toAssetId(id))?.id ?? id), pickIds: myPicks.map(p => p.id) };
+      const incoming = { playerIds: [...receiving].map((id) => theirRosterMap.get(toAssetId(id))?.id ?? id), pickIds: theirPicks.map(p => p.id) };
       const outgoingPlayers = [...offering].map((id) => myRosterMap.get(toAssetId(id))).filter(Boolean);
       const incomingPlayers = [...receiving].map((id) => theirRosterMap.get(toAssetId(id))).filter(Boolean);
       const resp = counterOfferId

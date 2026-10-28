@@ -286,7 +286,7 @@ import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonality
 import { applyTeamCultureWeek, classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../core/teamCulture.js';
 import { selectCultureAlerts } from '../core/broadcastNarrative.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
-import { canonicalIdKey, sameEntityId, resolveTeamRefId } from '../core/referenceIntegrity.js';
+import { canonicalIdKey, sameEntityId, resolveTeamRefId, findEntityById } from '../core/referenceIntegrity.js';
 import {
   computeSeed,
   computeScoutedRange,
@@ -6072,7 +6072,9 @@ async function handleGetTransactions(payload = {}, id) {
       const details = tx?.details ?? {};
       const team = teamLookup(tx?.teamId);
       const detailPlayerId = details?.playerId != null ? details.playerId : tx?.playerId;
-      const player = detailPlayerId != null ? cache.getPlayer(detailPlayerId) : null;
+      const player = detailPlayerId != null
+        ? (cache.getPlayer(canonicalIdKey(detailPlayerId)) ?? findEntityById(meta?.retiredPlayers, detailPlayerId))
+        : null;
       const fromTeam = details?.fromTeamId != null ? teamLookup(details.fromTeamId) : null;
       const toTeamIdVal = details?.toTeamId ?? details?.toTeam;
       const toTeam = toTeamIdVal != null ? teamLookup(toTeamIdVal) : null;
@@ -12266,9 +12268,9 @@ async function handleAdvanceOffseason(payload, id) {
         seasonId: meta.currentSeasonId,
         week: meta.currentWeek ?? 1,
         teamId: lastTeamIdForTx,
-        playerId: Number(player.id),
+        playerId: player.id,
         details: {
-          playerId: Number(player.id),
+          playerId: player.id,
           hof: Boolean(isHof),
           reason: ret.reason ?? null,
         },
@@ -13383,8 +13385,10 @@ async function archiveSeason(seasonId, { stagedArchive = null } = {}) {
     const playerSeasonStatsV1 = playerSeasonStatsV1Raw.rows.length ? playerSeasonStatsV1Raw : null;
 
     const seasonTransactions = await Transactions.bySeason(seasonId).catch(() => []);
-    const allPlayersList = cache.getAllPlayers();
-    const playersByIdMap = new Map(allPlayersList.map((p) => [Number(p.id), p]));
+    // Retired players are persisted, then evicted from the hot player cache.
+    // Existing retired snapshots retain the identity needed by history readers.
+    const allPlayersList = [...(meta.retiredPlayers ?? []), ...cache.getAllPlayers()];
+    const playersByIdMap = new Map(allPlayersList.map((p) => [canonicalIdKey(p.id), p]));
     const teamsByIdMap = new Map(teams.map((t) => [Number(t.id), t]));
     const txTimelineCtx = {
       teams,
