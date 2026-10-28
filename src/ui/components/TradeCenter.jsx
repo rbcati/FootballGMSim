@@ -406,9 +406,11 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   const [myTeam, setMyTeam] = useState(null);
   const [theirTeam, setTheirTeam] = useState(null);
 
-  const [offering, setOffering] = useState(new Set());
-  const [receiving, setReceiving] = useState(new Set());
-  const [myPicks, setMyPicks] = useState([]);
+  // Restore selections before publishing context; an empty first render can
+  // otherwise overwrite the parent package when Builder is remounted.
+  const [offering, setOffering] = useState(() => new Set((initialTradeContext?.outgoingPlayerIds ?? []).map(toAssetId)));
+  const [receiving, setReceiving] = useState(() => new Set((initialTradeContext?.incomingPlayerIds ?? []).map(toAssetId)));
+  const [myPicks, setMyPicks] = useState(() => (initialTradeContext?.outgoingPickIds ?? []).map(id => ({ id })));
   const [theirPicks, setTheirPicks] = useState([]);
 
   const [loading, setLoading] = useState(false);
