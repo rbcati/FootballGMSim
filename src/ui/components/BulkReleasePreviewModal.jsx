@@ -1,3 +1,4 @@
+import { canonicalIdKey } from '../../core/referenceIntegrity.js';
 import React, { useMemo, useState } from "react";
 import {
   calculateReleaseDeadCap,
@@ -16,8 +17,8 @@ export default function BulkReleasePreviewModal({ open, players = [], rosterCoun
   const dedupedPlayers = useMemo(() => {
     const seen = new Set();
     return players.filter((p) => {
-      const id = Number(p?.id);
-      if (!Number.isFinite(id) || seen.has(id)) return false;
+      const id = canonicalIdKey(p?.id);
+      if (id === null || seen.has(id)) return false;
       seen.add(id);
       return true;
     });

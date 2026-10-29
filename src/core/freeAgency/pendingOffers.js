@@ -1,3 +1,4 @@
+import { sameEntityId } from '../referenceIntegrity.js';
 /**
  * pendingOffers.js
  *
@@ -157,7 +158,7 @@ export function createPendingOffer({
   const fin = computeOfferFinancials(contract);
   return {
     id: `fa-offer-${playerId}-${teamId}-${day}-${createdAt}`,
-    playerId: Number(playerId),
+    playerId,
     playerName,
     pos,
     ovr,
@@ -187,7 +188,7 @@ function isPending(row) {
 }
 
 function matches(row, playerId, teamId) {
-  return Number(row?.playerId) === Number(playerId) && Number(row?.teamId) === Number(teamId);
+  return sameEntityId(row?.playerId, playerId) && Number(row?.teamId) === Number(teamId);
 }
 
 /**
@@ -220,7 +221,7 @@ export function findPendingOffer(list, playerId, teamId) {
 export function computeReservedPendingCap(list, teamId, { excludePlayerId = null } = {}) {
   return roundMoney(
     getActivePendingOffers(list, teamId)
-      .filter((row) => excludePlayerId == null || Number(row.playerId) !== Number(excludePlayerId))
+      .filter((row) => excludePlayerId == null || !sameEntityId(row.playerId, excludePlayerId))
       .reduce((sum, row) => sum + toNum(row.annualCapHit), 0),
   );
 }
@@ -343,13 +344,13 @@ export function reconcilePendingOffers({
     if (isWeak && toNum(row.daysPending) >= weakRejectDays) {
       const next = { ...row, status: PENDING_OFFER_STATUS.REJECTED, resolvedDay: day, feedback: ['Rejected — offer stayed well below the player’s market and he moved on.'] };
       rejected.push(next);
-      offerRemovals.push({ playerId: Number(row.playerId), teamId: Number(row.teamId) });
+      offerRemovals.push({ playerId: row.playerId, teamId: Number(row.teamId) });
       return next;
     }
     if (toNum(row.daysPending) >= maxPendingDays) {
       const next = { ...row, status: PENDING_OFFER_STATUS.EXPIRED, resolvedDay: day, feedback: ['Expired — the negotiation window closed without a deal.'] };
       expired.push(next);
-      offerRemovals.push({ playerId: Number(row.playerId), teamId: Number(row.teamId) });
+      offerRemovals.push({ playerId: row.playerId, teamId: Number(row.teamId) });
       return next;
     }
 

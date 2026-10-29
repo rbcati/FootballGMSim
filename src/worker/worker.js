@@ -286,7 +286,7 @@ import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonality
 import { applyTeamCultureWeek, classifyTeamCulture, buildTeamCultureNarrative, TEAM_CULTURE_DEFAULT } from '../core/teamCulture.js';
 import { selectCultureAlerts } from '../core/broadcastNarrative.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
-import { canonicalIdKey, resolveTeamRefId } from '../core/referenceIntegrity.js';
+import { canonicalIdKey, sameEntityId, resolveTeamRefId, findEntityById } from '../core/referenceIntegrity.js';
 import {
   computeSeed,
   computeScoutedRange,
@@ -1209,6 +1209,7 @@ function buildViewState() {
     year:       meta?.year,
     week:       meta?.currentWeek ?? 1,
     phase:      meta?.phase       ?? 'regular',
+    generationDiagnostics: meta?.generationDiagnostics ?? null,
     userTeamId: meta?.userTeamId  ?? null,
     schedule:   meta?.schedule    ?? null,
     offseasonProgressionDone: meta?.offseasonProgressionDone ?? false,
@@ -1486,8 +1487,8 @@ function getTradeDeadlineSnapshot(metaObj = ensureDynastyMeta(cache.getMeta())) 
 
 function allPlayersOnTeam(teamId, playerIds = []) {
   return (playerIds ?? []).every((pid) => {
-    const player = cache.getPlayer(Number(pid));
-    return player && Number(player.teamId) === Number(teamId);
+    const player = cache.getPlayer(canonicalIdKey(pid));
+    return player && player.teamId != null && Number(player.teamId) === Number(teamId);
   });
 }
 
@@ -1557,7 +1558,7 @@ function markOffseasonRelease(player, teamId, metaObj = ensureDynastyMeta(cache.
   const history = {
     ...(metaObj?.offseasonReleaseMap ?? {}),
     [key]: {
-      playerId: Number(player.id),
+      playerId: player.id,
       teamId: Number(teamId),
       season: Number(metaObj?.year ?? 0),
       schemeFit: Number(player?.schemeFit ?? 65),
@@ -1607,7 +1608,7 @@ function recordOffseasonFaMovement({ player, oldTeamId, newTeamId, contract, sou
   const qualifies = aav >= 2.5 && years >= 2 && Number(player?.ovr ?? 0) >= 66;
   const next = [...metaObj.offseasonFaMovements, {
     id: `${metaObj.year}-${player.id}-${newTeamId}-${Date.now()}`,
-    playerId: Number(player.id),
+    playerId: player.id,
     playerName: player.name,
     pos: player.pos,
     prevTeamId: Number(oldTeamId),
@@ -1692,7 +1693,7 @@ function awardCompensatoryPicksForUpcomingDraft(metaObj = ensureCompMeta(cache.g
 }
 
 function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {}) {
-  const players = playerIds.map((pid) => cache.getPlayer(Number(pid))).filter(Boolean);
+  const players = playerIds.map((pid) => cache.getPlayer(canonicalIdKey(pid))).filter(Boolean);
   const picks = pickIds.map((pid) => resolvePickById(pid)).filter(Boolean);
   return calculatePackageAdjustedValue(
     { players, picks },
@@ -1746,7 +1747,7 @@ function ensureTeamDepthChart(teamId, context = {}) {
       const rowKey = p?.depthChart?.rowKey;
       if (!rowKey) continue;
       if (!inferredFromPlayers[rowKey]) inferredFromPlayers[rowKey] = [];
-      inferredFromPlayers[rowKey].push({ id: Number(p.id), order: Number(p?.depthChart?.order ?? p?.depthOrder ?? 999) });
+      inferredFromPlayers[rowKey].push({ id: p.id, order: Number(p?.depthChart?.order ?? p?.depthOrder ?? 999) });
     }
     Object.keys(inferredFromPlayers).forEach((k) => {
       inferredFromPlayers[k] = inferredFromPlayers[k].sort((a, b) => a.order - b.order).map((row) => row.id);
@@ -2589,8 +2590,13 @@ async function handleNewLeague(payload, id) {
 
     // Validate league state. If generation failed or is stale/incomplete,
     // recover with the default offline league to keep first-session boot playable.
-    if (!isPlayableLeagueState(league)) {
-      console.warn('[Worker] NEW_LEAGUE produced an invalid league payload; falling back to default league.');
+    const generationValidation = getPlayableLeagueValidation(league);
+    const generationDiagnostics = {
+      source: generationValidation.valid ? 'normal' : 'fallback',
+      validationReasons: generationValidation.reasons,
+    };
+    if (!generationValidation.valid) {
+      console.warn('[Worker] NEW_LEAGUE produced an invalid league payload; falling back to default league.', generationValidation.reasons);
       league = buildDefaultLeague({
         userTeamId,
         name: options.name,
@@ -2622,13 +2628,14 @@ async function handleNewLeague(payload, id) {
     const meta = ensureLeagueMemoryMeta({
       id:              'league',
       franchiseGenerationId: createFranchiseGenerationId(),
+      generationDiagnostics,
       name:            String(options.name || resolvedSettings.leagueName || `League ${leagueId}`).slice(0, 80),
       userTeamId:      userTeamId,
       currentSeasonId: seasonId,
       currentWeek:     1,
       year:            league.year,
       season:          league.season ?? 1,
-      phase:           'regular',
+      phase:           league.phase,
       // Persist the per-save RNG entropy generated at league creation (in
       // makeLeague) so it survives save/load and keeps game outcomes unique per
       // playthrough. Fallback derives from wall-clock time (never Math.random,
@@ -2700,6 +2707,7 @@ async function handleNewLeague(payload, id) {
     // Hydrate cache
     cache.hydrate({ meta, teams, players, draftPicks });
     hydrateAllPlayersForDevelopment();
+    validateAndRepairAllTeamDepthCharts('new-league');
 
     // Compute Cap Used / Cap Room for every team now that players are in cache.
     // makePlayer() writes salary as flat fields (p.baseAnnual, p.signingBonus);
@@ -3958,12 +3966,12 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
         const pulseItems  = [];
 
         for (const { aiTeam, targetPlayerId } of pursuits) {
-          const targetPlayer = cache.getPlayer(Number(targetPlayerId));
+          const targetPlayer = cache.getPlayer(canonicalIdKey(targetPlayerId));
           if (!targetPlayer?.onTradeBlock) continue;
 
           // Check if this AI team already has a pending offer for this player
           const existing = liveOffers.find(
-            o => o.status === 'pending' && Number(o.aiTeamId) === Number(aiTeam.id) && Number(o.targetPlayerId) === Number(targetPlayerId),
+            o => o.status === 'pending' && Number(o.aiTeamId) === Number(aiTeam.id) && sameEntityId(o.targetPlayerId, targetPlayerId),
           );
 
           const seed = ((Number(aiTeam.id) * 9973 + Number(targetPlayerId) * 1009 + blockSeason * 17 + blockWeek * 3) >>> 0);
@@ -4001,7 +4009,7 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
           // League pulse: buzz when 2+ teams are pursuing the same player
           const blockPlayers = allPlayers.filter(p => Number(p?.teamId) === userTeamId && p?.onTradeBlock);
           for (const bp of blockPlayers) {
-            const pursuersCount = capped.filter(o => o.status === 'pending' && Number(o.targetPlayerId) === Number(bp.id)).length;
+            const pursuersCount = capped.filter(o => o.status === 'pending' && sameEntityId(o.targetPlayerId, bp.id)).length;
             if (pursuersCount >= 2) {
               pulseItems.push({
                 id:       `trade_buzz_${bp.id}_s${blockSeason}w${blockWeek}`,
@@ -4447,14 +4455,14 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
 
       // Evaluate each player for new trade requests and stonewall progression
       for (const player of trAllPlayers) {
-        if (!player?.id || player.teamId == null) continue;
+        if (canonicalIdKey(player?.id) === null || player.teamId == null) continue;
         const team = cache.getTeam(player.teamId);
         if (!team) continue;
 
         const teamIdStr = String(team.id);
         const byPos = teamDepthMaps[teamIdStr] ?? {};
         const posGroup = byPos[player.pos] ?? [];
-        const depthRank = posGroup.findIndex((p) => Number(p.id) === Number(player.id));
+        const depthRank = posGroup.findIndex((p) => sameEntityId(p.id, player.id));
         const teamScheme = team?.coach?.headCoach?.scheme ?? team?.strategies?.offense ?? 'BALANCED';
         const isMisfit   = isPositionMisfitForScheme(player?.pos, teamScheme);
 
@@ -4484,9 +4492,9 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
             const STARTERS_COUNT = { QB: 1, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1 };
             for (const teammate of trAllPlayers) {
               if (Number(teammate?.teamId) !== Number(team.id)) continue;
-              if (Number(teammate.id) === Number(player.id)) continue;
+              if (sameEntityId(teammate.id, player.id)) continue;
               const tPos = teammate.pos;
-              const tRank = (byPos[tPos] ?? []).findIndex((p) => Number(p.id) === Number(teammate.id));
+              const tRank = (byPos[tPos] ?? []).findIndex((p) => sameEntityId(p.id, teammate.id));
               const starterSlots = STARTERS_COUNT[tPos] ?? 1;
               if (tRank < 0 || tRank >= starterSlots) continue; // only starters
               const dedupeKey = `teammate_trade_request_${team.id}_${trSeasonId}_${week}`;
@@ -4613,9 +4621,9 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
         const STARTERS_COUNT = { QB: 1, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1 };
         for (const teammate of trAllPlayers) {
           if (Number(teammate?.teamId) !== Number(team.id)) continue;
-          if (Number(teammate.id) === Number(player.id)) continue;
+          if (sameEntityId(teammate.id, player.id)) continue;
           const tPos = teammate.pos;
-          const tRank = (byPos[tPos] ?? []).findIndex((p) => Number(p.id) === Number(teammate.id));
+          const tRank = (byPos[tPos] ?? []).findIndex((p) => sameEntityId(p.id, teammate.id));
           const starterSlots = STARTERS_COUNT[tPos] ?? 1;
           if (tRank < 0 || tRank >= starterSlots) continue;
           const dedupeKey = `teammate_trade_request_init_${team.id}_${trSeasonId}_${week}`;
@@ -6014,8 +6022,12 @@ async function handleGetTransactions(payload = {}, id) {
     } = payload || {};
 
     const resolvedSeasonId = seasonId ?? (mode === "recent" ? null : meta?.currentSeasonId ?? null);
-    const pid = playerId != null ? Number(playerId) : null;
-    const wantPlayer = Number.isFinite(pid) && pid > 0;
+    const pid = canonicalIdKey(playerId);
+    const wantPlayer = pid !== null;
+    if (playerId != null && !wantPlayer) {
+      post(toUI.TRANSACTIONS, { ok: true, transactions: [] }, id);
+      return;
+    }
     const explicitRecent = mode === "recent";
 
     let rows = [];
@@ -6060,7 +6072,9 @@ async function handleGetTransactions(payload = {}, id) {
       const details = tx?.details ?? {};
       const team = teamLookup(tx?.teamId);
       const detailPlayerId = details?.playerId != null ? details.playerId : tx?.playerId;
-      const player = detailPlayerId != null ? cache.getPlayer(detailPlayerId) : null;
+      const player = detailPlayerId != null
+        ? (cache.getPlayer(canonicalIdKey(detailPlayerId)) ?? findEntityById(meta?.retiredPlayers, detailPlayerId))
+        : null;
       const fromTeam = details?.fromTeamId != null ? teamLookup(details.fromTeamId) : null;
       const toTeamIdVal = details?.toTeamId ?? details?.toTeam;
       const toTeam = toTeamIdVal != null ? teamLookup(toTeamIdVal) : null;
@@ -6180,15 +6194,15 @@ async function handleGetDraftClass({ seasonId }, id) {
     const draftRows = rows.filter((tx) => String(tx?.type).toUpperCase() === 'DRAFT');
     const playersById = new Map();
     for (const tx of draftRows) {
-      const pid = Number(tx?.details?.playerId ?? tx?.playerId);
-      if (Number.isFinite(pid) && pid > 0) {
+      const pid = canonicalIdKey(tx?.details?.playerId ?? tx?.playerId);
+      if (pid !== null) {
         const pl = cache.getPlayer(pid);
         if (pl) playersById.set(pid, pl);
       }
     }
     for (const pl of cache.getAllPlayers()) {
-      const pid = Number(pl?.id);
-      if (!Number.isFinite(pid) || pid <= 0) continue;
+      const pid = canonicalIdKey(pl?.id);
+      if (pid === null) continue;
       if (Number(pl?.draftYear) === draftYear && !playersById.has(pid)) {
         playersById.set(pid, pl);
       }
@@ -6216,8 +6230,8 @@ async function handleGetDraftClass({ seasonId }, id) {
 
 async function handleGetPlayerDraftContext({ playerId }, id) {
   try {
-    const pid = Number(playerId);
-    if (!Number.isFinite(pid) || pid <= 0) {
+    const pid = canonicalIdKey(playerId);
+    if (pid === null) {
       post(toUI.PLAYER_DRAFT_CONTEXT, { context: { known: false }, classModel: null }, id);
       return;
     }
@@ -6230,7 +6244,7 @@ async function handleGetPlayerDraftContext({ playerId }, id) {
     const draftTxs = recent.filter((tx) => {
       if (String(tx?.type).toUpperCase() !== 'DRAFT') return false;
       const d = tx?.details || {};
-      const idVal = Number(d.playerId ?? tx?.playerId);
+      const idVal = canonicalIdKey(d.playerId ?? tx?.playerId);
       return idVal === pid;
     });
     let classModel = null;
@@ -6243,15 +6257,15 @@ async function handleGetPlayerDraftContext({ playerId }, id) {
       const draftRows = rows.filter((tx) => String(tx?.type).toUpperCase() === 'DRAFT');
       const playersById = new Map();
       for (const tx of draftRows) {
-        const p = Number(tx?.details?.playerId ?? tx?.playerId);
-        if (Number.isFinite(p) && p > 0) {
+        const p = canonicalIdKey(tx?.details?.playerId ?? tx?.playerId);
+        if (p !== null) {
           const pl = cache.getPlayer(p);
           if (pl) playersById.set(p, pl);
         }
       }
       for (const pl of cache.getAllPlayers()) {
-        const p = Number(pl?.id);
-        if (Number.isFinite(p) && p > 0 && Number(pl?.draftYear) === draftYear && !playersById.has(p)) {
+        const p = canonicalIdKey(pl?.id);
+        if (p !== null && Number(pl?.draftYear) === draftYear && !playersById.has(p)) {
           playersById.set(p, pl);
         }
       }
@@ -7040,10 +7054,13 @@ async function handleExportLeagueFile(payload, id) {
 }
 
 function applyImportedRoster(roster = {}) {
-  const byId = new Map((Array.isArray(roster?.players) ? roster.players : []).map((p) => [Number(p.id), p]));
+  const byId = new Map((Array.isArray(roster?.players) ? roster.players : [])
+    .filter((p) => canonicalIdKey(p?.id) !== null)
+    .map((p) => [canonicalIdKey(p.id), p]));
   let changed = 0;
   for (const player of cache.getAllPlayers()) {
-    const next = byId.get(Number(player.id));
+    const key = canonicalIdKey(player.id);
+    const next = key === null ? null : byId.get(key);
     if (!next) continue;
     cache.updatePlayer(player.id, {
       name: typeof next.name === 'string' ? next.name.slice(0, 48) : player.name,
@@ -7773,11 +7790,11 @@ function summarizePendingNotifications(rows = []) {
 async function resolvePendingFreeAgencyOffers({ resolutionDay = 7, onlyPlayerId = null, emitNotifications = false } = {}) {
   const liveMeta = ensureDynastyMeta(cache.getMeta());
   const userTeamId = Number(liveMeta?.userTeamId);
-  const targetPlayerId = onlyPlayerId == null ? null : Number(onlyPlayerId);
+  const targetPlayerId = canonicalIdKey(onlyPlayerId);
   const memory = liveMeta?.contractMarketMemory ?? {};
   const nextMemory = { ...memory };
   const freeAgentsWithOffers = cache.getAllPlayers().filter((p) => {
-    if (targetPlayerId != null && Number(p?.id) !== targetPlayerId) return false;
+    if (onlyPlayerId != null && (targetPlayerId === null || !sameEntityId(p?.id, targetPlayerId))) return false;
     return isSignableFreeAgent(p) && Array.isArray(p.offers) && p.offers.length > 0;
   }).sort((a, b) => stableIdCompare(a?.id, b?.id));
 
@@ -7888,7 +7905,7 @@ function accrueReleaseDeadCap(teamId, contract, meta) {
 async function releasePlayerWithValidation({ playerId, teamId }) {
   const player = cache.getPlayer(playerId);
   if (!player) return { ok: false, error: 'Player not found' };
-  if (Number(player.teamId) !== Number(teamId)) return { ok: false, error: 'Player is not on selected roster' };
+  if (!sameEntityId(player.teamId, teamId)) return { ok: false, error: 'Player is not on selected roster' };
 
   const meta = ensureDynastyMeta(cache.getMeta());
   const team = cache.getTeam(teamId);
@@ -7977,7 +7994,8 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
 }
 
 async function handleBulkReleasePlayers({ teamId, playerIds }, id) {
-  const uniquePlayerIds = [...new Set((Array.isArray(playerIds) ? playerIds : []).map(Number).filter(Number.isFinite))];
+  const uniquePlayerIds = [...new Set((Array.isArray(playerIds) ? playerIds : [])
+    .map(canonicalIdKey).filter(key => key !== null))];
   const released = [];
   for (const playerId of uniquePlayerIds) {
     const outcome = await releasePlayerWithValidation({ playerId, teamId });
@@ -7994,7 +8012,7 @@ async function handleBulkReleasePlayers({ teamId, playerIds }, id) {
       post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() });
       return;
     }
-    released.push(playerId);
+    released.push(outcome.playerId);
   }
   recalcSchemeFitForTeams(teamId);
   await flushDirty();
@@ -8015,7 +8033,8 @@ async function handleSubmitWaiverClaim({ playerId }, id) {
     post(toUI.ERROR, { message: 'WAIVERS_CLOSED' }, id);
     return;
   }
-  const player = cache.getPlayer(Number(playerId));
+  const playerKey = canonicalIdKey(playerId);
+  const player = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player || player.waiverStatus !== 'ACTIVE') {
     post(toUI.ERROR, { message: 'PLAYER_NOT_ON_WAIVERS' }, id);
     return;
@@ -8027,13 +8046,13 @@ async function handleSubmitWaiverClaim({ playerId }, id) {
   }
   const existingClaims = meta.activeWaiverClaims ?? [];
   const dup = existingClaims.find(
-    c => String(c.playerId) === String(playerId) && String(c.teamId) === String(meta.userTeamId)
+    c => sameEntityId(c.playerId, player.id) && String(c.teamId) === String(meta.userTeamId)
   );
   if (dup) {
     post(toUI.ERROR, { message: 'CLAIM_ALREADY_EXISTS' }, id);
     return;
   }
-  const newClaim = { playerId: String(playerId), teamId: meta.userTeamId, submittedWeek: week, origin: 'user' };
+  const newClaim = { playerId: String(player.id), teamId: meta.userTeamId, submittedWeek: week, origin: 'user' };
   const updatedClaims = submitWaiverClaim(existingClaims, newClaim);
   cache.setMeta({ activeWaiverClaims: updatedClaims });
   await flushDirty();
@@ -8982,10 +9001,18 @@ function tradeNeedsSummary(teamId) {
 function tradePackagePositions(playerIds = []) {
   const positions = new Set();
   for (const pid of playerIds) {
-    const player = cache.getPlayer(Number(pid));
+    const player = cache.getPlayer(canonicalIdKey(pid));
     if (player?.pos) positions.add(player.pos);
   }
   return [...positions];
+}
+
+function capHitOf(pids = []) {
+  return pids.reduce((sum, pid) => {
+    const key = canonicalIdKey(pid);
+    const player = key === null ? null : cache.getPlayer(key);
+    return sum + (player ? getPlayerCapHit(player) : 0);
+  }, 0);
 }
 
 function evaluateTradeLegality({ fromTeamId, toTeamId, offering = {}, receiving = {}, phase }) {
@@ -8993,12 +9020,16 @@ function evaluateTradeLegality({ fromTeamId, toTeamId, offering = {}, receiving 
   const rosterLimit = getRosterLimitForPhase(phase);
   const fromTeam = cache.getTeam(Number(fromTeamId));
   const toTeam = cache.getTeam(Number(toTeamId));
+  if (Number(fromTeamId) === Number(toTeamId)) return { ok: false, reason: 'Trade blocked: teams must be distinct.' };
   if (!fromTeam || !toTeam) return { ok: false, reason: 'Trade blocked: invalid team context.' };
 
-  const capHitOf = (pids = []) => pids.reduce((sum, pid) => {
-    const p = cache.getPlayer(Number(pid));
-    return sum + (p ? getPlayerCapHit(p) : 0);
-  }, 0);
+
+  const ids = [...(offering.playerIds ?? []), ...(receiving.playerIds ?? [])].map(canonicalIdKey);
+  if (ids.some(key => key === null) || new Set(ids).size !== ids.length
+      || !allPlayersOnTeam(fromTeamId, offering.playerIds)
+      || !allPlayersOnTeam(toTeamId, receiving.playerIds)) {
+    return { ok: false, reason: 'Trade blocked: missing, duplicate or incorrectly owned player.' };
+  }
 
   const fromProjectedCap = (fromTeam?.capUsed ?? 0) - capHitOf(offering.playerIds) + capHitOf(receiving.playerIds);
   const toProjectedCap = (toTeam?.capUsed ?? 0) - capHitOf(receiving.playerIds) + capHitOf(offering.playerIds);
@@ -9042,7 +9073,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   const aiNeeds = tradeNeedsSummary(toTeamId);
   const aiGetsPositions = tradePackagePositions(offering?.playerIds ?? []);
   const aiGivesPositions = tradePackagePositions(receiving?.playerIds ?? []);
-  const incomingPlayers = (offering?.playerIds ?? []).map((pid) => cache.getPlayer(Number(pid))).filter(Boolean);
+  const incomingPlayers = (offering?.playerIds ?? []).map((pid) => cache.getPlayer(canonicalIdKey(pid))).filter(Boolean);
   const underwaterIncoming = incomingPlayers.find((p) => {
     const expectedAav = Math.max(1.5, ((Number(p?.ovr ?? 70) - 58) * 0.72) * (POSITION_PAY_SCALARS[p?.pos] ?? 0.92));
     const actualAav = getContractAav(p?.contract);
@@ -9064,7 +9095,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   };
   const offerVal    = calcAssetBundleValue(offering, valuationContext);
   const receiveVal  = calcAssetBundleValue(receiving, valuationContext);
-  const receivingPlayers = (receiving?.playerIds ?? []).map((pid) => cache.getPlayer(Number(pid))).filter(Boolean);
+  const receivingPlayers = (receiving?.playerIds ?? []).map((pid) => cache.getPlayer(canonicalIdKey(pid))).filter(Boolean);
   const playerAvailability = receivingPlayers.map((p) => ({
     player: p,
     availability: evaluateTradeAvailability(p, { teamDirection: aiDirection }),
@@ -9101,7 +9132,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   const qbProtection = evaluateDraftBoardQbProtection(toTeamId, receiving?.pickIds ?? []);
   const threshold = receiveVal * diffMult * directionPremium * fitDiscount * reluctancePenalty * draftStructurePenalty * (qbProtection?.multiplier ?? 1);
   const incomingQbFix = (offering?.playerIds ?? [])
-    .map((pid) => cache.getPlayer(Number(pid)))
+    .map((pid) => cache.getPlayer(canonicalIdKey(pid)))
     .some((p) => p?.pos === 'QB' && Number(p?.ovr ?? 0) >= 80 && Number(p?.age ?? 35) <= 29);
   if (isDraftDay && qbProtection?.active && !incomingQbFix && offerVal < threshold * 1.16) {
     post(toUI.TRADE_RESPONSE, {
@@ -9219,7 +9250,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
       const involvedPlayerIds = [
         ...(offering?.playerIds ?? []),
         ...(receiving?.playerIds ?? []),
-      ].map(Number).filter(Number.isFinite);
+      ].map(canonicalIdKey).filter(key => key !== null);
       for (const pid of involvedPlayerIds) {
         const tradeRejPlayer = cache.getPlayer(pid);
         if (!tradeRejPlayer) continue;
@@ -9244,32 +9275,50 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
 }
 
 async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving }) {
-  // Trading away a player accelerates his remaining signing-bonus proration onto
-  // the team that gives him up (just like a release). The acquiring team picks up
-  // his cap hit via recalculateTeamCap below. Accrue dead cap BEFORE reassigning
-  // the player's team so the charge lands on the correct (giving) side.
-  const tradeMeta = ensureDynastyMeta(cache.getMeta());
-  (offering?.playerIds ?? []).forEach(pid => {
-    const player = cache.getPlayer(Number(pid));
-    if (player?.contract) accrueReleaseDeadCap(Number(fromTeamId), player.contract, tradeMeta);
-    cache.updatePlayer(Number(pid), { teamId: Number(toTeamId) });
-  });
-  (receiving?.playerIds ?? []).forEach(pid => {
-    const player = cache.getPlayer(Number(pid));
-    if (player?.contract) accrueReleaseDeadCap(Number(toTeamId), player.contract, tradeMeta);
-    cache.updatePlayer(Number(pid), { teamId: Number(fromTeamId) });
-  });
+  const legality = evaluateTradeLegality({ fromTeamId, toTeamId, offering, receiving, phase: cache.getMeta().phase });
+  if (!legality.ok) throw new Error(legality.reason);
+  offering = { ...offering, playerIds: (offering?.playerIds ?? []).map(pid => cache.getPlayer(canonicalIdKey(pid)).id) };
+  receiving = { ...receiving, playerIds: (receiving?.playerIds ?? []).map(pid => cache.getPlayer(canonicalIdKey(pid)).id) };
+  const originalPlayers = [...(offering?.playerIds ?? []), ...(receiving?.playerIds ?? [])]
+    .map(pid => structuredClone(cache.getPlayer(canonicalIdKey(pid))));
+  const originalTeams = [fromTeamId, toTeamId].map(tid => structuredClone(cache.getTeam(Number(tid))));
+  try {
+    // Trading away a player accelerates his remaining signing-bonus proration onto
+    // the team that gives him up (just like a release). The acquiring team picks up
+    // his cap hit via recalculateTeamCap below. Accrue dead cap BEFORE reassigning
+    // the player's team so the charge lands on the correct (giving) side.
+    const tradeMeta = ensureDynastyMeta(cache.getMeta());
+    (offering?.playerIds ?? []).forEach(pid => {
+      const player = cache.getPlayer(canonicalIdKey(pid));
+      if (player?.contract) accrueReleaseDeadCap(Number(fromTeamId), player.contract, tradeMeta);
+      cache.updatePlayer(canonicalIdKey(pid), { teamId: Number(toTeamId) });
+    });
+    (receiving?.playerIds ?? []).forEach(pid => {
+      const player = cache.getPlayer(canonicalIdKey(pid));
+      if (player?.contract) accrueReleaseDeadCap(Number(toTeamId), player.contract, tradeMeta);
+      cache.updatePlayer(canonicalIdKey(pid), { teamId: Number(fromTeamId) });
+    });
+
+
+    if (!allPlayersOnTeam(toTeamId, offering?.playerIds) || !allPlayersOnTeam(fromTeamId, receiving?.playerIds)) {
+      throw new Error('Trade failed: required roster mutations did not complete.');
+    }
+    recalculateTeamCap(Number(fromTeamId));
+    recalculateTeamCap(Number(toTeamId));
+    // Rosters just changed on both sides — invalidate/recalculate cached scheme fits.
+    recalcSchemeFitForTeams(Number(fromTeamId), Number(toTeamId));
+    const tradeIssues = runLegalityValidation({ stage: 'post-trade', teamIds: [Number(fromTeamId), Number(toTeamId)] }).issues.filter((issue) => issue.severity === 'error');
+    if (tradeIssues.length > 0) {
+      throw new Error(tradeIssues[0].message);
+    }
+
+  } catch (error) {
+    for (const player of originalPlayers) cache.updatePlayer(player.id, player);
+    for (const team of originalTeams) cache.updateTeam(team.id, team);
+    throw error;
+  }
   transferPickOwnership(offering?.pickIds ?? [], Number(fromTeamId), Number(toTeamId));
   transferPickOwnership(receiving?.pickIds ?? [], Number(toTeamId), Number(fromTeamId));
-
-  recalculateTeamCap(Number(fromTeamId));
-  recalculateTeamCap(Number(toTeamId));
-  // Rosters just changed on both sides — invalidate/recalculate cached scheme fits.
-  recalcSchemeFitForTeams(Number(fromTeamId), Number(toTeamId));
-  const tradeIssues = runLegalityValidation({ stage: 'post-trade', teamIds: [Number(fromTeamId), Number(toTeamId)] }).issues.filter((issue) => issue.severity === 'error');
-  if (tradeIssues.length > 0) {
-    throw new Error(tradeIssues[0].message);
-  }
 
   const latestMeta = ensureDynastyMeta(cache.getMeta());
   const tradeRecord = {
@@ -9307,7 +9356,7 @@ async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving 
                       : null;
       if (!eventType) return;
       for (const pid of (playerIds ?? [])) {
-        const player = cache.getPlayer(Number(pid));
+        const player = cache.getPlayer(canonicalIdKey(pid));
         if (!player) continue;
         const updated = applyMoraleEvent(player, {
           type:      eventType,
@@ -9341,7 +9390,7 @@ async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving 
     const allTradedIds = [
       ...(offering?.playerIds ?? []),
       ...(receiving?.playerIds ?? []),
-    ].map(Number).filter(Number.isFinite);
+    ].map(canonicalIdKey).filter(key => key !== null);
     for (const pid of allTradedIds) {
       const tradedPlayer = cache.getPlayer(pid);
       if (!tradedPlayer?.holdout?.active) continue;
@@ -9656,10 +9705,10 @@ async function handleApplyCommissionerActions({ actions = [] }, id) {
       const from = Number(action?.fromTeamId);
       const to = Number(action?.toTeamId);
       for (const pid of (action?.playerIdsFrom ?? [])) {
-        cache.updatePlayer(Number(pid), { teamId: to });
+        cache.updatePlayer(canonicalIdKey(pid), { teamId: to });
       }
       for (const pid of (action?.playerIdsTo ?? [])) {
-        cache.updatePlayer(Number(pid), { teamId: from });
+        cache.updatePlayer(canonicalIdKey(pid), { teamId: from });
       }
       appliedCount++;
     }
@@ -10428,13 +10477,13 @@ async function handleUpdateDepthChart({ updates, positions }, id) {
 }
 
 async function handleToggleTradeBlock({ playerId, teamId }, id) {
-  if (!playerId) {
-    self.postMessage({ type: 'ERROR', payload: { message: 'Missing playerId' } });
+  if (canonicalIdKey(playerId) === null) {
+    post(toUI.ERROR, { message: 'Missing playerId' }, id);
     return;
   }
 
-  const numericPlayerId = Number(playerId);
-  const player = cache.getPlayer(numericPlayerId);
+  const playerKey = canonicalIdKey(playerId);
+  const player = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player) {
     post(toUI.ERROR, { message: 'Player not found' }, id);
     return;
@@ -10456,8 +10505,8 @@ async function handleToggleTradeBlock({ playerId, teamId }, id) {
 
 
 async function handleUpdatePlayerManagement({ playerId, teamId, updates = {} }, id) {
-  const numericPlayerId = Number(playerId);
-  const player = cache.getPlayer(numericPlayerId);
+  const playerKey = canonicalIdKey(playerId);
+  const player = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player) {
     post(toUI.ERROR, { message: 'Player not found' }, id);
     return;
@@ -10503,8 +10552,8 @@ async function handleUpdatePlayerManagement({ playerId, teamId, updates = {} }, 
 // ── Handler: HONOR_TRADE_REQUEST ──────────────────────────────────────────────
 
 async function handleHonorTradeRequest({ playerId }, id) {
-  const numericId = Number(playerId);
-  const player    = cache.getPlayer(numericId);
+  const playerKey = canonicalIdKey(playerId);
+  const player = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
   if (!player.tradeRequest) { post(toUI.ERROR, { message: 'No active trade request' }, id); return; }
 
@@ -10546,8 +10595,8 @@ async function handleHonorTradeRequest({ playerId }, id) {
 // ── Handler: STONEWALL_TRADE_REQUEST ─────────────────────────────────────────
 
 async function handleStonewallTradeRequest({ playerId }, id) {
-  const numericId = Number(playerId);
-  const player    = cache.getPlayer(numericId);
+  const playerKey = canonicalIdKey(playerId);
+  const player = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
   if (!player.tradeRequest) { post(toUI.ERROR, { message: 'No active trade request' }, id); return; }
 
@@ -10574,8 +10623,8 @@ async function handleStonewallTradeRequest({ playerId }, id) {
 // ── Handler: OFFER_EXTENSION_TO_WITHDRAW ─────────────────────────────────────
 
 async function handleOfferExtensionToWithdraw({ playerId }, id) {
-  const numericId = Number(playerId);
-  const player    = cache.getPlayer(numericId);
+  const playerKey = canonicalIdKey(playerId);
+  const player = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
   if (!player.tradeRequest) { post(toUI.ERROR, { message: 'No active trade request' }, id); return; }
 
@@ -10618,14 +10667,14 @@ async function handleOfferExtensionToWithdraw({ playerId }, id) {
 
   await flushDirty();
   // Signal to UI that extension flow should be initiated
-  post(toUI.STATE_UPDATE, { ...buildViewState(), extensionRedirect: { playerId: numericId } }, id);
+  post(toUI.STATE_UPDATE, { ...buildViewState(), extensionRedirect: { playerId: player.id } }, id);
 }
 
 // ── Handler: INITIATE_TRADE_BLOCK ─────────────────────────────────────────────
 
 async function handleInitiateTradeBlock({ playerId }, id) {
-  const numericId = Number(playerId);
-  const player    = cache.getPlayer(numericId);
+  const playerKey = canonicalIdKey(playerId);
+  const player    = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   const meta    = ensureDynastyMeta(cache.getMeta());
@@ -10640,7 +10689,7 @@ async function handleInitiateTradeBlock({ playerId }, id) {
     return;
   }
 
-  cache.updatePlayer(numericId, { onTradeBlock: true });
+  cache.updatePlayer(player.id, { onTradeBlock: true });
   await flushDirty();
   post(toUI.STATE_UPDATE, buildViewState(), id);
 }
@@ -10648,8 +10697,8 @@ async function handleInitiateTradeBlock({ playerId }, id) {
 // ── Handler: REMOVE_FROM_TRADE_BLOCK ─────────────────────────────────────────
 
 async function handleRemoveFromTradeBlock({ playerId }, id) {
-  const numericId = Number(playerId);
-  const player    = cache.getPlayer(numericId);
+  const playerKey = canonicalIdKey(playerId);
+  const player    = playerKey === null ? null : cache.getPlayer(playerKey);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   const meta    = ensureDynastyMeta(cache.getMeta());
@@ -10659,12 +10708,12 @@ async function handleRemoveFromTradeBlock({ playerId }, id) {
     return;
   }
 
-  cache.updatePlayer(numericId, { onTradeBlock: false });
+  cache.updatePlayer(player.id, { onTradeBlock: false });
 
   // Expire any pending inbound offers for this player
   const existing = getInboundOffers(meta);
   const updated  = existing.map(o =>
-    o.status === 'pending' && Number(o.targetPlayerId) === numericId
+    o.status === 'pending' && sameEntityId(o.targetPlayerId, player.id)
       ? { ...o, status: 'expired' }
       : o,
   );
@@ -10696,11 +10745,11 @@ async function handleAcceptTradeOffer({ offerId }, id) {
   const aiTeamId    = Number(offer.aiTeamId);
 
   // Build offering/receiving bundles
-  const offerPlayerIds = (offer.offerPlayers ?? []).map(p => Number(p.id));
+  const offerPlayerIds = (offer.offerPlayers ?? []).map(p => p.id);
   const offerPickIds   = (offer.offerPicks   ?? []).map(p => String(p.id));
 
   const offering  = { playerIds: offerPlayerIds,           pickIds: offerPickIds };           // AI gives
-  const receiving = { playerIds: [Number(offer.targetPlayerId)], pickIds: [] };                // AI gets
+  const receiving = { playerIds: [offer.targetPlayerId], pickIds: [] };                // AI gets
 
   const legality = evaluateTradeLegality({
     fromTeamId: userTeamId,
@@ -10777,13 +10826,13 @@ async function handleCounterTradeOffer({ offerId, counterPlayers, counterPicks }
   const aiTeam     = cache.getTeam(aiTeamId);
 
   // What the AI receives in the counter (user's proposed bundle)
-  const counterPlayerIds = Array.isArray(counterPlayers) ? counterPlayers.map(Number) : [Number(offer.targetPlayerId)];
+  const counterPlayerIds = Array.isArray(counterPlayers) ? counterPlayers.slice() : [offer.targetPlayerId];
   const counterPickIds   = Array.isArray(counterPicks)   ? counterPicks.map(String)  : [];
   const userBundle = { playerIds: counterPlayerIds, pickIds: counterPickIds };
 
   // What the AI gives in the original offer
   const aiBundle = {
-    playerIds: (offer.offerPlayers ?? []).map(p => Number(p.id)),
+    playerIds: (offer.offerPlayers ?? []).map(p => p.id),
     pickIds:   (offer.offerPicks   ?? []).map(p => String(p.id)),
   };
 
@@ -10831,7 +10880,7 @@ async function handleCounterTradeOffer({ offerId, counterPlayers, counterPicks }
     const allPicks   = Array.isArray(latestMeta.draftPicks) ? latestMeta.draftPicks : [];
     const season     = latestMeta.currentSeasonId ?? latestMeta.season ?? 0;
     const week       = Number(latestMeta.currentWeek ?? 0);
-    const targetPlayer = cache.getPlayer(Number(offer.targetPlayerId));
+    const targetPlayer = cache.getPlayer(canonicalIdKey(offer.targetPlayerId));
 
     const improved = aiTeam && targetPlayer
       ? improveAIOffer(offer, targetPlayer, aiTeam, allPlayers, allPicks, season, week, seed)
@@ -12219,9 +12268,9 @@ async function handleAdvanceOffseason(payload, id) {
         seasonId: meta.currentSeasonId,
         week: meta.currentWeek ?? 1,
         teamId: lastTeamIdForTx,
-        playerId: Number(player.id),
+        playerId: player.id,
         details: {
-          playerId: Number(player.id),
+          playerId: player.id,
           hof: Boolean(isHof),
           reason: ret.reason ?? null,
         },
@@ -12519,7 +12568,7 @@ function emitFaCompetitionEvents(day, preBidPlayerIds, aiCountByPlayerId) {
 
     // Bidding war pulse: 3+ total competing bids (AI + possible user) on a player
     const aiCount = (aiCountByPlayerId instanceof Map ? aiCountByPlayerId.get(pid) : aiCountByPlayerId?.[pid]) ?? 0;
-    const userHadOffer = ledger.some((r) => Number(r.teamId) === userTeamId && Number(r.playerId) === pid && r.status === 'pending');
+    const userHadOffer = ledger.some((r) => Number(r.teamId) === userTeamId && sameEntityId(r.playerId, pid) && r.status === 'pending');
     const totalBids = aiCount + (userHadOffer ? 1 : 0);
     if (totalBids >= 3) {
       const existingPulse = Array.isArray(meta?.leaguePulseItems) ? meta.leaguePulseItems : [];
@@ -13336,8 +13385,10 @@ async function archiveSeason(seasonId, { stagedArchive = null } = {}) {
     const playerSeasonStatsV1 = playerSeasonStatsV1Raw.rows.length ? playerSeasonStatsV1Raw : null;
 
     const seasonTransactions = await Transactions.bySeason(seasonId).catch(() => []);
-    const allPlayersList = cache.getAllPlayers();
-    const playersByIdMap = new Map(allPlayersList.map((p) => [Number(p.id), p]));
+    // Retired players are persisted, then evicted from the hot player cache.
+    // Existing retired snapshots retain the identity needed by history readers.
+    const allPlayersList = [...(meta.retiredPlayers ?? []), ...cache.getAllPlayers()];
+    const playersByIdMap = new Map(allPlayersList.map((p) => [canonicalIdKey(p.id), p]));
     const teamsByIdMap = new Map(teams.map((t) => [Number(t.id), t]));
     const txTimelineCtx = {
       teams,

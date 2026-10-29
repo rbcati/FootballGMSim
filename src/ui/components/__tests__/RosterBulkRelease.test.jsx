@@ -10,7 +10,7 @@
  */
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import Roster from '../Roster.jsx';
 
 function makePlayer(id, overrides = {}) {
@@ -106,5 +106,32 @@ describe('Roster — bulk release confirm flow', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: /bulk release preview/i })).toBeNull(),
     );
+  });
+});
+
+describe('legacy player zero in bulk confirmation', () => {
+  afterEach(cleanup);
+  it('retains player zero when confirming the actual roster modal', async () => {
+    const zeroPlayers = [makePlayer(0),makePlayer(2)];
+    const actions = { getRoster:vi.fn(async()=>({payload:{...rosterPayload,players:zeroPlayers}})),bulkReleasePlayers:vi.fn(async()=>({type:'SUCCESS',payload:{ok:true,released:[0,2]}})) };
+    await driveToConfirm(actions);
+    await waitFor(()=>expect(actions.bulkReleasePlayers).toHaveBeenCalledWith(1,[0,2]));
+  });
+});
+
+describe('single-release identity boundary', () => {
+  afterEach(cleanup);
+  it('does not discard a valid numeric-zero player at confirmation', async () => {
+    const zero = makePlayer(0);
+    const actions = {
+      getRoster: vi.fn(async () => ({ payload: { ...rosterPayload, players: [zero] } })),
+      releasePlayer: vi.fn(),
+    };
+    render(<Roster league={baseLeague} actions={actions} onPlayerSelect={() => {}}
+      initialState={{ view: 'table', filter: 'ALL' }} initialViewMode="table" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cut', exact: true }));
+    const modal = await screen.findByRole('dialog', { name: 'Release preview for Player 0' });
+    fireEvent.click(within(modal).getByRole('button', { name: 'Confirm Release' }));
+    expect(actions.releasePlayer).toHaveBeenCalledWith(0, 1);
   });
 });

@@ -1,7 +1,11 @@
+/** @vitest-environment jsdom */
 import React from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
+import { cleanup, render, fireEvent, within } from '@testing-library/react';
 import ContractCenter from './ContractCenter.jsx';
+
+afterEach(cleanup);
 
 const league = {
   phase: 'offseason_resign',
@@ -34,4 +38,14 @@ describe('ContractCenter re-signing mode', () => {
     expect(html).toContain('Let Walk');
     expect(html).toContain('Defer');
   });
+});
+
+for (const playerId of ['opaque-extension', 1]) it(`opens an extension preview for ${typeof playerId} identity`, () => {
+  const career = structuredClone(league);
+  career.teams[0].roster[0].id = playerId;
+  const view = render(<ContractCenter league={career} actions={{ extendContract: vi.fn() }} onNavigate={() => {}} />);
+  fireEvent.click(within(view.getByText('Core QB').closest('tr')).getByText('Extend'));
+  expect(view.getByText('Extension preview · Core QB')).toBeTruthy();
+  expect(view.getByText('Confirm extension')).toBeTruthy();
+  cleanup();
 });

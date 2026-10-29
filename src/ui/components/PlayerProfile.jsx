@@ -705,7 +705,7 @@ export default function PlayerProfile({
       return () => { cancelled = true; };
     }
     actions
-      .getTransactions({ playerId: Number(playerId), limit: 100 })
+      .getTransactions({ playerId, limit: 100 })
       .then((res) => {
         if (cancelled) return;
         const txs = res?.payload?.transactions ?? [];

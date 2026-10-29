@@ -14,7 +14,7 @@ async function readCareer(page) {
     const meta = (await read('meta')).find(row => row.id === 'league');
     const picks = await read('draftPicks');
     db.close();
-    return { year: meta.year, userTeamId: meta.userTeamId, difficulty: meta.settings.difficultyPreset, picks };
+    return { year: meta.year, userTeamId: meta.userTeamId, difficulty: meta.settings.difficultyPreset, generationDiagnostics: meta.generationDiagnostics, picks };
   });
 }
 
@@ -37,11 +37,13 @@ for (const year of [2025, 2026, 2031]) {
     }
     const before = await readCareer(page);
     expect(before).toMatchObject({ year, difficulty: 'Hard', userTeamId: DEFAULT_TEAMS.find(t => t.name.includes('Miami')).id });
+    expect(before.generationDiagnostics).toEqual({ source: 'normal', validationReasons: [] });
     expect(before.picks).toHaveLength(672);
     expect([...new Set(before.picks.map(p => p.season))].sort()).toEqual([year, year + 1, year + 2]);
     expect(new Set(before.picks.map(p => p.id)).size).toBe(672);
     for (const pick of before.picks) {
-      expect(pick.id).toBe(`safe-pick-${pick.originalOwner}-${pick.season}-${pick.round}`);
+      expect(typeof pick.id).toBe('string');
+      expect(pick.id.length).toBeGreaterThan(0);
       expect(pick.currentOwner).toBe(pick.originalOwner);
     }
     await page.reload();

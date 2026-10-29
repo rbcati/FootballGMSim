@@ -317,3 +317,22 @@ describe('offer feedback', () => {
     expect(text).toContain('Competing offers');
   });
 });
+
+describe('opaque ledger identity', () => {
+  it.each([['alpha-id', 'beta-id'], [21, 22]])('keeps distinct bids, reservations, replacements and withdrawals for %s', (first, second) => {
+    const a = makeOffer({ playerId: first });
+    const b = makeOffer({ playerId: second });
+    expect(a.playerId).toBe(first);
+    const list = upsertPendingOffer(upsertPendingOffer([], a).list, b).list;
+    expect(list).toHaveLength(2);
+    expect(computeReservedPendingCap(list, 5)).toBe(24);
+    expect(computeReservedPendingCap(list, 5, { excludePlayerId: String(first) })).toBe(12);
+    const replaced = upsertPendingOffer(list, makeOffer({ playerId: first, createdAt: 2000 })).list;
+    expect(replaced).toHaveLength(2);
+    const withdrawn = markOfferResolved(replaced, { playerId: String(first), teamId: 5, status: PENDING_OFFER_STATUS.WITHDRAWN });
+    expect(computeReservedPendingCap(withdrawn, 5)).toBe(12);
+    const reconciled = reconcilePendingOffers({ pendingOffers: list, resolvePlayer: id => ({ id, teamId: null, status: 'free_agent', offers: [{ teamId: 5 }] }), day: 1 });
+    expect(reconciled.list.every(row => row.status === PENDING_OFFER_STATUS.PENDING)).toBe(true);
+    expect(reconciled.list.map(row => row.playerId)).toEqual([first, second]);
+  });
+});

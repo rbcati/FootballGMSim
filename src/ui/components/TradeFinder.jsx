@@ -1,3 +1,4 @@
+import { canonicalIdKey, sameEntityId } from '../../core/referenceIntegrity.js';
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -105,7 +106,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
 
   const selectedPartner = useMemo(() => teams.find((t) => Number(t.id) === Number(selectedPartnerId)), [teams, selectedPartnerId]);
 
-  const selectedOutgoingPlayers = useMemo(() => outgoingPlayers.map((id) => userRoster.find((p) => Number(p.id) === Number(id))).filter(Boolean), [outgoingPlayers, userRoster]);
+  const selectedOutgoingPlayers = useMemo(() => outgoingPlayers.map((id) => userRoster.find((p) => sameEntityId(p.id, id))).filter(Boolean), [outgoingPlayers, userRoster]);
   const selectedOutgoingPicks = useMemo(() => outgoingPicks.map((id) => userPicks.find((p) => String(p.id) === String(id))).filter(Boolean), [outgoingPicks, userPicks]);
 
   const partnerRanks = useMemo(() => rankTradePartners({
@@ -254,7 +255,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
   const makeDealWork = () => {
     if (!selectedPartner) return;
     const theirRoster = [...(selectedPartner.roster ?? [])].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
-    const incoming = incomingPlayers.map((id) => theirRoster.find((p) => Number(p.id) === Number(id))).filter(Boolean);
+    const incoming = incomingPlayers.map((id) => theirRoster.find((p) => sameEntityId(p.id, id))).filter(Boolean);
     const adjustment = buildCounterAdjustment({
       partnerTeam: teamsWithIntel.find((t) => Number(t.id) === Number(selectedPartner.id)) ?? selectedPartner,
       outgoingPlayers: selectedOutgoingPlayers,
@@ -265,8 +266,8 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
 
     if (adjustment.type === 'add_pick' && userPicks[0]) {
       setOutgoingPicks((prev) => prev.includes(userPicks[0].id) ? prev : [...prev, userPicks[0].id]);
-    } else if (adjustment.playerId) {
-      setIncomingPlayers((prev) => prev.includes(adjustment.playerId) ? prev : [...prev, adjustment.playerId]);
+    } else if (canonicalIdKey(adjustment.playerId) !== null) {
+      setIncomingPlayers((prev) => prev.some(id => sameEntityId(id, adjustment.playerId)) ? prev : [...prev, adjustment.playerId]);
     }
     setHelperReason(adjustment.explain);
   };
@@ -319,7 +320,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
               <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Outgoing Players</div>
               <div style={{ maxHeight: 250, overflow: 'auto', display: 'grid', gap: 6 }}>
                 {userRoster.slice(0, 32).map((p) => (
-                  <PlayerAssetRow key={p.id} p={p} selected={outgoingPlayers.includes(p.id)} onToggle={() => setOutgoingPlayers((prev) => prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id])} />
+                  <PlayerAssetRow key={p.id} p={p} selected={outgoingPlayers.some(id => sameEntityId(id, p.id))} onToggle={() => setOutgoingPlayers((prev) => prev.some(id => sameEntityId(id, p.id)) ? prev.filter((id) => !sameEntityId(id, p.id)) : [...prev, p.id])} />
                 ))}
               </div>
             </div>
@@ -453,7 +454,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Incoming players</div>
             <div style={{ display: 'grid', gap: 4, maxHeight: 180, overflow: 'auto' }}>
               {(selectedPartner.roster ?? []).slice(0, 28).map((p) => (
-                <button key={p.id} onClick={() => setIncomingPlayers((prev) => prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id])} style={{ textAlign: 'left', border: '1px solid var(--hairline)', background: incomingPlayers.includes(p.id) ? 'var(--accent-muted)' : 'var(--surface)', borderRadius: 8, padding: '8px 10px' }}>
+                <button key={p.id} onClick={() => setIncomingPlayers((prev) => prev.some(id => sameEntityId(id, p.id)) ? prev.filter((id) => !sameEntityId(id, p.id)) : [...prev, p.id])} style={{ textAlign: 'left', border: '1px solid var(--hairline)', background: incomingPlayers.some(id => sameEntityId(id, p.id)) ? 'var(--accent-muted)' : 'var(--surface)', borderRadius: 8, padding: '8px 10px' }}>
                   <span onClick={(e) => { e.stopPropagation(); onPlayerSelect?.(p.id); }}>{p.pos} {p.name}</span> · OVR {p.ovr} · Age {p.age}
                 </button>
               ))}

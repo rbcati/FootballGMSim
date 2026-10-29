@@ -60,7 +60,9 @@ jobs:
 
   first-session-smoke:
     needs: parity
-    runs-on: ubuntu-latest
+    # Playwright 1.59 supports Ubuntu 24.04; ubuntu-latest now resolves to
+    # 26.04, where browser dependency installation fails before tests start.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -78,4 +80,9 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run fresh franchise first-week smoke
-        run: npm run test -- tests/e2e/fresh_franchise_first_week_smoke.spec.js tests/e2e/nfl_schedule_bye.spec.js
+        run: npm run test -- tests/e2e/fresh_franchise_first_week_smoke.spec.js tests/e2e/nfl_schedule_bye.spec.js tests/e2e/normal_identity_operations.spec.js
+
+      - name: Run mobile fresh franchise first-week smoke
+        env:
+          PLAYWRIGHT_VIEWPORT: iphone
+        run: npm run test -- tests/e2e/fresh_franchise_first_week_smoke.spec.js --grep "fresh franchise first week smoke"

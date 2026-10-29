@@ -1,0 +1,149 @@
+[
+  {
+    "year": 2025,
+    "seed": 3831,
+    "phase": "regular",
+    "season": 1,
+    "week": 1,
+    "validation": {
+      "valid": true,
+      "reasons": []
+    },
+    "teams": 32,
+    "players": 1696,
+    "positionsPerTeam": {
+      "QB": 3,
+      "RB": 4,
+      "WR": 6,
+      "TE": 3,
+      "OL": 9,
+      "DL": 9,
+      "LB": 7,
+      "CB": 6,
+      "S": 4,
+      "K": 1,
+      "P": 1
+    },
+    "contractLengths": {
+      "1": 362,
+      "2": 320,
+      "3": 352,
+      "4": 322,
+      "5": 340
+    },
+    "salaryMillions": {
+      "min": 0.7999999999999758,
+      "median": 2.2,
+      "max": 44.8,
+      "mean": 5.398867924528308,
+      "distinct": 281
+    },
+    "unsigned": 0,
+    "scheduleWeeks": 18,
+    "scheduleGames": 272,
+    "picks": 672,
+    "pickSeasons": [
+      2025,
+      2026,
+      2027
+    ]
+  },
+  {
+    "year": 2026,
+    "seed": 3832,
+    "phase": "regular",
+    "season": 1,
+    "week": 1,
+    "validation": {
+      "valid": true,
+      "reasons": []
+    },
+    "teams": 32,
+    "players": 1696,
+    "positionsPerTeam": {
+      "QB": 3,
+      "RB": 4,
+      "WR": 6,
+      "TE": 3,
+      "OL": 9,
+      "DL": 9,
+      "LB": 7,
+      "CB": 6,
+      "S": 4,
+      "K": 1,
+      "P": 1
+    },
+    "contractLengths": {
+      "1": 315,
+      "2": 357,
+      "3": 346,
+      "4": 355,
+      "5": 323
+    },
+    "salaryMillions": {
+      "min": 0.7999999999999758,
+      "median": 2.7,
+      "max": 42.1,
+      "mean": 5.398867924528308,
+      "distinct": 275
+    },
+    "unsigned": 0,
+    "scheduleWeeks": 18,
+    "scheduleGames": 272,
+    "picks": 672,
+    "pickSeasons": [
+      2026,
+      2027,
+      2028
+    ]
+  },
+  {
+    "year": 2031,
+    "seed": 3837,
+    "phase": "regular",
+    "season": 1,
+    "week": 1,
+    "validation": {
+      "valid": true,
+      "reasons": []
+    },
+    "teams": 32,
+    "players": 1696,
+    "positionsPerTeam": {
+      "QB": 3,
+      "RB": 4,
+      "WR": 6,
+      "TE": 3,
+      "OL": 9,
+      "DL": 9,
+      "LB": 7,
+      "CB": 6,
+      "S": 4,
+      "K": 1,
+      "P": 1
+    },
+    "contractLengths": {
+      "1": 339,
+      "2": 329,
+      "3": 355,
+      "4": 332,
+      "5": 341
+    },
+    "salaryMillions": {
+      "min": 0.7999999999999758,
+      "median": 2.3,
+      "max": 44.7,
+      "mean": 5.398867924528302,
+      "distinct": 273
+    },
+    "unsigned": 0,
+    "scheduleWeeks": 18,
+    "scheduleGames": 272,
+    "picks": 672,
+    "pickSeasons": [
+      2031,
+      2032,
+      2033
+    ]
+  }
+]

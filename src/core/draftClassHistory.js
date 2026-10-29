@@ -1,3 +1,4 @@
+import { canonicalIdKey, sameEntityId, stableIdCompare, findEntityById } from './referenceIntegrity.js';
 /**
  * Draft Class Memory / Redraft V1 — pure helpers (no worker, no React).
  * Builds explainable draft-class views from DRAFT transactions + player career signals.
@@ -32,10 +33,8 @@ function teamAbbrFromCtx(teamId, ctx = {}) {
  */
 export function normalizeDraftPickRow(rawTx, ctx = {}) {
   const d = rawTx?.details && typeof rawTx.details === 'object' ? rawTx.details : {};
-  const playerId = d.playerId != null ? num(d.playerId) : num(rawTx?.playerId);
-  const pl = ctx.playersById instanceof Map
-    ? ctx.playersById.get(playerId)
-    : (ctx.players || []).find((p) => num(p?.id) === playerId);
+  const playerId = d.playerId ?? rawTx?.playerId;
+  const pl = findEntityById(ctx.playersById ?? ctx.players, playerId);
   const draftTeamId = num(rawTx?.teamId);
   const abbr = str(rawTx?.teamAbbr) || teamAbbrFromCtx(draftTeamId, ctx);
   const overall = d.overall != null ? num(d.overall) : null;
@@ -46,7 +45,7 @@ export function normalizeDraftPickRow(rawTx, ctx = {}) {
   else if (round > 0) originalPickLabel = `R${round}${pickInRound > 0 ? ` · ${pickInRound}` : ''}`;
 
   return {
-    playerId: playerId > 0 ? playerId : null,
+    playerId: canonicalIdKey(playerId) !== null ? playerId : null,
     playerName: str(rawTx?.playerName) || str(pl?.name) || '',
     pos: str(rawTx?.playerPos) || str(pl?.pos) || '',
     draftTeamId: draftTeamId > 0 ? draftTeamId : null,
@@ -154,7 +153,7 @@ export function computeOutcomeScore(player, report) {
 
 /**
  * @param {object[]} draftTransactions - raw DB rows type DRAFT
- * @param {{ teams?: any[], teamsById?: Map<number,any>, players?: any[], playersById?: Map<number,any> }} ctx
+ * @param {{ teams?: any[], teamsById?: Map<number,any>, players?: any[], playersById?: Map<number|string,any> }} ctx
  */
 export function picksFromDraftTransactions(draftTransactions, ctx = {}) {
   if (!Array.isArray(draftTransactions)) return [];
@@ -162,10 +161,10 @@ export function picksFromDraftTransactions(draftTransactions, ctx = {}) {
   for (const tx of draftTransactions) {
     if (str(tx?.type).toUpperCase() !== 'DRAFT') continue;
     const row = normalizeDraftPickRow(tx, ctx);
-    if (!row.playerId) continue;
-    byPlayer.set(row.playerId, row);
+    if (canonicalIdKey(row.playerId) === null) continue;
+    byPlayer.set(canonicalIdKey(row.playerId), row);
   }
-  return [...byPlayer.values()].sort((a, b) => num(a.overall) - num(b.overall) || num(a.playerId) - num(b.playerId));
+  return [...byPlayer.values()].sort((a, b) => num(a.overall) - num(b.overall) || stableIdCompare(a.playerId, b.playerId));
 }
 
 /**
@@ -179,8 +178,8 @@ export function mergePlayerFieldFallbackPicks(draftYear, players, existingPlayer
   if (!Number.isFinite(draftYear) || draftYear <= 0 || !Array.isArray(players)) return [];
   const out = [];
   for (const p of players) {
-    const pid = num(p?.id);
-    if (!pid || existingPlayerIds.has(pid)) continue;
+    const pid = p?.id;
+    if (canonicalIdKey(pid) === null || [...existingPlayerIds].some(id => sameEntityId(id, pid))) continue;
     const py = num(p?.draftYear);
     if (py !== draftYear) continue;
     const tid = num(p?.draftTeamId);
@@ -275,14 +274,14 @@ export function gradeTeamDraftClass(model, teamId) {
  * @param {object[]} draftTransactions - recent raw DRAFT rows (optional)
  */
 export function findPlayerDraftOrigin(player, draftTransactions = []) {
-  const pid = num(player?.id);
-  if (!pid) return null;
+  const pid = player?.id;
+  if (canonicalIdKey(pid) === null) return null;
   if (Array.isArray(draftTransactions)) {
     const hit = draftTransactions.find((tx) => {
       if (str(tx?.type).toUpperCase() !== 'DRAFT') return false;
       const d = tx?.details || {};
-      const id = d.playerId != null ? num(d.playerId) : num(tx?.playerId);
-      return id === pid;
+      const id = d.playerId ?? tx?.playerId;
+      return sameEntityId(id, pid);
     });
     if (hit) {
       const row = normalizeDraftPickRow(hit, { players: [player] });
@@ -321,7 +320,7 @@ export function findPlayerDraftOrigin(player, draftTransactions = []) {
  *   year: number,
  *   seasonId: string|null,
  *   draftTransactions: object[],
- *   playersById: Map<number, object>,
+ *   playersById: Map<number|string, object>,
  *   currentLeagueYear: number,
  *   recordBook?: object|null,
  *   archivedSeasons?: any[],
@@ -344,7 +343,7 @@ export function buildDraftClassModel(input) {
   const ctx = { teams, teamsById, playersById };
 
   let basePicks = picksFromDraftTransactions(draftTransactions, ctx);
-  const existingIds = new Set(basePicks.map((p) => num(p.playerId)).filter((x) => x > 0));
+  const existingIds = new Set(basePicks.map((p) => canonicalIdKey(p.playerId)).filter((x) => x !== null));
   const fallback = mergePlayerFieldFallbackPicks(
     year,
     [...playersById.values()],
@@ -360,7 +359,7 @@ export function buildDraftClassModel(input) {
   const legacyCtx = { recordBook, archivedSeasons, teams, year: currentLeagueYear };
 
   const enriched = basePicks.map((pick) => {
-    const pl = playersById.get(num(pick.playerId)) || null;
+    const pl = findEntityById(playersById, pick.playerId) || null;
     const report = pl ? buildLegacyScoreReport(pl, legacyCtx) : null;
     const outcome = assignOutcomeTier(pl || {}, report || {}, seasonsSinceDraft, { isDevelopingClass });
     const outcomeScore = pl && report ? computeOutcomeScore(pl, report) : 0;
@@ -386,13 +385,13 @@ export function buildDraftClassModel(input) {
     const orig = num(p.overall) > 0 ? num(p.overall) : idx + 32;
     const redraftRank = idx + 1;
     const redraftDelta = orig - redraftRank;
-    redraftByPlayerId.set(num(p.playerId), { redraftRank, redraftDelta });
+    redraftByPlayerId.set(canonicalIdKey(p.playerId), { redraftRank, redraftDelta });
   });
   const byOriginal = [...enriched].sort(
-    (a, b) => num(a.overall) - num(b.overall) || num(a.playerId) - num(b.playerId),
+    (a, b) => num(a.overall) - num(b.overall) || stableIdCompare(a.playerId, b.playerId),
   );
   const withRedraft = byOriginal.map((p) => {
-    const rr = redraftByPlayerId.get(num(p.playerId)) || { redraftRank: null, redraftDelta: null };
+    const rr = redraftByPlayerId.get(canonicalIdKey(p.playerId)) || { redraftRank: null, redraftDelta: null };
     return { ...p, redraftRank: rr.redraftRank, redraftDelta: rr.redraftDelta };
   });
 
@@ -453,8 +452,8 @@ export function buildDraftClassModel(input) {
   const starterCount = withRedraft.filter((p) =>
     ['LONG_STARTER', 'STAR', 'SUPERSTAR', 'HOF', 'CONTRIBUTOR'].includes(p.outcomeTier)).length;
   const hofCount = withRedraft.filter((p) => p.outcomeTier === 'HOF').length;
-  const mvpCount = withRedraft.filter((p) => (p.playerId && (playersById.get(num(p.playerId))?.accolades || []).some((a) => a?.type === 'MVP'))).length;
-  const allProCount = withRedraft.filter((p) => (p.playerId && (playersById.get(num(p.playerId))?.accolades || []).some((a) => a?.type === 'ALL_PRO' || a?.type === 'ALLPRO'))).length;
+  const mvpCount = withRedraft.filter((p) => (canonicalIdKey(p.playerId) !== null && (findEntityById(playersById, p.playerId)?.accolades || []).some((a) => a?.type === 'MVP'))).length;
+  const allProCount = withRedraft.filter((p) => (canonicalIdKey(p.playerId) !== null && (findEntityById(playersById, p.playerId)?.accolades || []).some((a) => a?.type === 'ALL_PRO' || a?.type === 'ALLPRO'))).length;
   const avgLegacyScore = legacies.length
     ? Math.round((legacies.reduce((a, b) => a + b, 0) / legacies.length) * 10) / 10
     : null;
@@ -543,11 +542,11 @@ export function indexDraftClassesFromTransactions(rawTransactions, seasonRows = 
  */
 export function buildPlayerDraftContext(player, classModel = null, draftTransactions = []) {
   const origin = findPlayerDraftOrigin(player, draftTransactions);
-  const pid = num(player?.id);
+  const pid = player?.id;
   let redraftRank = null;
   let stealBustNote = '';
-  if (classModel?.picks && pid) {
-    const row = classModel.picks.find((p) => num(p.playerId) === pid);
+  if (classModel?.picks && canonicalIdKey(pid) !== null) {
+    const row = classModel.picks.find((p) => sameEntityId(p.playerId, pid));
     if (row) {
       redraftRank = row.redraftRank;
       if (classModel.classSummary?.isDevelopingClass) stealBustNote = 'Developing class — no steal/bust labels yet.';
@@ -567,7 +566,7 @@ export function buildPlayerDraftContext(player, classModel = null, draftTransact
     overall: (origin?.overall ?? num(player?.draftOverall ?? player?.draftOverallPick)) || null,
     draftYear: dy,
     redraftRank,
-    outcomeLabel: classModel?.picks?.find((p) => num(p.playerId) === pid)?.outcomeLabel || null,
+    outcomeLabel: classModel?.picks?.find((p) => sameEntityId(p.playerId, pid))?.outcomeLabel || null,
     stealBustNote,
   };
 }
