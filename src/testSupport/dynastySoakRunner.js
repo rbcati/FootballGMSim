@@ -12,6 +12,9 @@ import {
 } from '../core/dynastySoakAudit.js';
 
 const RESPONSE_BY_REQUEST = {
+  [toWorker.GET_DRAFT_CLASS]: [toUI.DRAFT_CLASS, toUI.ERROR],
+  [toWorker.GET_PLAYER_DRAFT_CONTEXT]: [toUI.PLAYER_DRAFT_CONTEXT, toUI.ERROR],
+  [toWorker.GET_FREE_AGENTS]: [toUI.FREE_AGENT_DATA, toUI.ERROR],
   [toWorker.ADVANCE_OFFSEASON]: [toUI.OFFSEASON_PHASE, toUI.ERROR],
   [toWorker.START_NEW_SEASON]: [toUI.FULL_STATE, toUI.ERROR],
   [toWorker.TRADE_OFFER]: [toUI.TRADE_RESPONSE, toUI.ERROR],

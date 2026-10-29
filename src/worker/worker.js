@@ -1558,7 +1558,7 @@ function markOffseasonRelease(player, teamId, metaObj = ensureDynastyMeta(cache.
   const history = {
     ...(metaObj?.offseasonReleaseMap ?? {}),
     [key]: {
-      playerId: Number(player.id),
+      playerId: player.id,
       teamId: Number(teamId),
       season: Number(metaObj?.year ?? 0),
       schemeFit: Number(player?.schemeFit ?? 65),
@@ -1608,7 +1608,7 @@ function recordOffseasonFaMovement({ player, oldTeamId, newTeamId, contract, sou
   const qualifies = aav >= 2.5 && years >= 2 && Number(player?.ovr ?? 0) >= 66;
   const next = [...metaObj.offseasonFaMovements, {
     id: `${metaObj.year}-${player.id}-${newTeamId}-${Date.now()}`,
-    playerId: Number(player.id),
+    playerId: player.id,
     playerName: player.name,
     pos: player.pos,
     prevTeamId: Number(oldTeamId),
@@ -6194,15 +6194,15 @@ async function handleGetDraftClass({ seasonId }, id) {
     const draftRows = rows.filter((tx) => String(tx?.type).toUpperCase() === 'DRAFT');
     const playersById = new Map();
     for (const tx of draftRows) {
-      const pid = Number(tx?.details?.playerId ?? tx?.playerId);
-      if (Number.isFinite(pid) && pid > 0) {
+      const pid = canonicalIdKey(tx?.details?.playerId ?? tx?.playerId);
+      if (pid !== null) {
         const pl = cache.getPlayer(pid);
         if (pl) playersById.set(pid, pl);
       }
     }
     for (const pl of cache.getAllPlayers()) {
-      const pid = Number(pl?.id);
-      if (!Number.isFinite(pid) || pid <= 0) continue;
+      const pid = canonicalIdKey(pl?.id);
+      if (pid === null) continue;
       if (Number(pl?.draftYear) === draftYear && !playersById.has(pid)) {
         playersById.set(pid, pl);
       }
@@ -6230,8 +6230,8 @@ async function handleGetDraftClass({ seasonId }, id) {
 
 async function handleGetPlayerDraftContext({ playerId }, id) {
   try {
-    const pid = Number(playerId);
-    if (!Number.isFinite(pid) || pid <= 0) {
+    const pid = canonicalIdKey(playerId);
+    if (pid === null) {
       post(toUI.PLAYER_DRAFT_CONTEXT, { context: { known: false }, classModel: null }, id);
       return;
     }
@@ -6244,7 +6244,7 @@ async function handleGetPlayerDraftContext({ playerId }, id) {
     const draftTxs = recent.filter((tx) => {
       if (String(tx?.type).toUpperCase() !== 'DRAFT') return false;
       const d = tx?.details || {};
-      const idVal = Number(d.playerId ?? tx?.playerId);
+      const idVal = canonicalIdKey(d.playerId ?? tx?.playerId);
       return idVal === pid;
     });
     let classModel = null;
@@ -6257,15 +6257,15 @@ async function handleGetPlayerDraftContext({ playerId }, id) {
       const draftRows = rows.filter((tx) => String(tx?.type).toUpperCase() === 'DRAFT');
       const playersById = new Map();
       for (const tx of draftRows) {
-        const p = Number(tx?.details?.playerId ?? tx?.playerId);
-        if (Number.isFinite(p) && p > 0) {
+        const p = canonicalIdKey(tx?.details?.playerId ?? tx?.playerId);
+        if (p !== null) {
           const pl = cache.getPlayer(p);
           if (pl) playersById.set(p, pl);
         }
       }
       for (const pl of cache.getAllPlayers()) {
-        const p = Number(pl?.id);
-        if (Number.isFinite(p) && p > 0 && Number(pl?.draftYear) === draftYear && !playersById.has(p)) {
+        const p = canonicalIdKey(pl?.id);
+        if (p !== null && Number(pl?.draftYear) === draftYear && !playersById.has(p)) {
           playersById.set(p, pl);
         }
       }
@@ -7905,7 +7905,7 @@ function accrueReleaseDeadCap(teamId, contract, meta) {
 async function releasePlayerWithValidation({ playerId, teamId }) {
   const player = cache.getPlayer(playerId);
   if (!player) return { ok: false, error: 'Player not found' };
-  if (Number(player.teamId) !== Number(teamId)) return { ok: false, error: 'Player is not on selected roster' };
+  if (!sameEntityId(player.teamId, teamId)) return { ok: false, error: 'Player is not on selected roster' };
 
   const meta = ensureDynastyMeta(cache.getMeta());
   const team = cache.getTeam(teamId);
@@ -12568,7 +12568,7 @@ function emitFaCompetitionEvents(day, preBidPlayerIds, aiCountByPlayerId) {
 
     // Bidding war pulse: 3+ total competing bids (AI + possible user) on a player
     const aiCount = (aiCountByPlayerId instanceof Map ? aiCountByPlayerId.get(pid) : aiCountByPlayerId?.[pid]) ?? 0;
-    const userHadOffer = ledger.some((r) => Number(r.teamId) === userTeamId && Number(r.playerId) === pid && r.status === 'pending');
+    const userHadOffer = ledger.some((r) => Number(r.teamId) === userTeamId && sameEntityId(r.playerId, pid) && r.status === 'pending');
     const totalBids = aiCount + (userHadOffer ? 1 : 0);
     if (totalBids >= 3) {
       const existingPulse = Array.isArray(meta?.leaguePulseItems) ? meta.leaguePulseItems : [];

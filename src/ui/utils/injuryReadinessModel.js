@@ -1,3 +1,4 @@
+import { canonicalIdKey, sameEntityId } from '../../core/referenceIntegrity.js';
 import { DEPTH_CHART_ROWS, autoBuildDepthChart } from '../../core/depthChart.js';
 
 function toNumber(value, fallback = 0) {
@@ -28,7 +29,8 @@ export function isPlayerInjured(player) {
 }
 
 function getPlayerId(player) {
-  return Number(player?.id ?? player?.pid);
+  const id = player?.id ?? player?.pid;
+  return canonicalIdKey(id) === null ? null : id;
 }
 
 function buildExistingAssignments(players = []) {
@@ -41,10 +43,10 @@ function buildExistingAssignments(players = []) {
   }
   for (const row of DEPTH_CHART_ROWS) {
     assignments[row.key] = assignments[row.key]
-      .filter((id) => Number.isFinite(id))
+      .filter((id) => canonicalIdKey(id) !== null)
       .sort((a, b) => {
-        const playerA = players.find((player) => getPlayerId(player) === a);
-        const playerB = players.find((player) => getPlayerId(player) === b);
+        const playerA = players.find((player) => sameEntityId(getPlayerId(player), a));
+        const playerB = players.find((player) => sameEntityId(getPlayerId(player), b));
         const orderA = toNumber(playerA?.depthChart?.order ?? playerA?.depthOrder, 999);
         const orderB = toNumber(playerB?.depthChart?.order ?? playerB?.depthOrder, 999);
         return orderA - orderB;
@@ -64,35 +66,26 @@ function mapPositionGroup(player) {
 function collectLeagueInjuredPlayers(league) {
   const teams = Array.isArray(league?.teams) ? league.teams : [];
   const injured = [];
-
+  const seen = new Set();
+  const append = (player, context) => {
+    const key = canonicalIdKey(getPlayerId(player));
+    if (!isPlayerInjured(player) || key === null || seen.has(key)) return;
+    seen.add(key);
+    injured.push({ ...player, ...context });
+  };
   for (const team of teams) {
     const roster = Array.isArray(team?.roster) ? team.roster : Array.isArray(team?.players) ? team.players : [];
-    for (const player of roster) {
-      if (!isPlayerInjured(player)) continue;
-      injured.push({
-        ...player,
-        teamId: team?.id ?? team?.tid,
-        teamAbbr: team?.abbr ?? team?.name?.slice(0, 3)?.toUpperCase() ?? 'UNK',
-        teamName: team?.name ?? team?.abbr ?? 'Unknown Team',
-      });
-    }
+    for (const player of roster) append(player, {
+      teamId: team?.id ?? team?.tid,
+      teamAbbr: team?.abbr ?? team?.name?.slice(0, 3)?.toUpperCase() ?? 'UNK',
+      teamName: team?.name ?? team?.abbr ?? 'Unknown Team',
+    });
   }
-
-  const seen = new Set(injured.map((player) => getPlayerId(player)).filter(Number.isFinite));
-  if (Array.isArray(league?.roster)) {
-    for (const player of league.roster) {
-      if (!isPlayerInjured(player)) continue;
-      const id = getPlayerId(player);
-      if (Number.isFinite(id) && seen.has(id)) continue;
-      seen.add(id);
-      injured.push({
-        ...player,
-        teamId: league?.userTeamId,
-        teamAbbr: 'USR',
-        teamName: 'My Team',
-      });
-    }
-  }
+  for (const player of (Array.isArray(league?.roster) ? league.roster : [])) append(player, {
+    teamId: league?.userTeamId,
+    teamAbbr: 'USR',
+    teamName: 'My Team',
+  });
 
   return injured;
 }
@@ -131,7 +124,12 @@ export function deriveInjuryReadinessModel({ league = null, source = 'injury-rep
     : [];
   const fallbackUserRoster = Array.isArray(league?.roster) ? league.roster : [];
   const roster = teamRoster.length > 0 ? teamRoster : fallbackUserRoster;
-  const safeRoster = Array.isArray(roster) ? roster.filter(Boolean) : [];
+  const uniqueRoster = new Map();
+  for (const player of (Array.isArray(roster) ? roster : [])) {
+    const key = canonicalIdKey(getPlayerId(player));
+    if (key !== null && !uniqueRoster.has(key)) uniqueRoster.set(key, player);
+  }
+  const safeRoster = [...uniqueRoster.values()];
 
   const allLeagueInjured = collectLeagueInjuredPlayers(league);
 
@@ -160,17 +158,17 @@ export function deriveInjuryReadinessModel({ league = null, source = 'injury-rep
   }
 
   const assignments = autoBuildDepthChart(safeRoster, buildExistingAssignments(safeRoster));
-  const byId = new Map(safeRoster.map((player) => [getPlayerId(player), player]));
+  const byId = new Map(safeRoster.map((player) => [canonicalIdKey(getPlayerId(player)), player]));
   const starterIds = new Set(
     Object.values(assignments)
       .map((ids) => (Array.isArray(ids) ? ids[0] : null))
-      .filter((id) => Number.isFinite(Number(id)))
-      .map((id) => Number(id)),
+      .map(canonicalIdKey)
+      .filter((key) => key !== null),
   );
 
   const depthByGroup = DEPTH_CHART_ROWS.reduce((acc, row) => {
     acc[row.key] = (assignments[row.key] ?? [])
-      .map((id) => byId.get(Number(id)))
+      .map((id) => byId.get(canonicalIdKey(id)))
       .filter(Boolean);
     return acc;
   }, {});
@@ -182,7 +180,7 @@ export function deriveInjuryReadinessModel({ league = null, source = 'injury-rep
       const groupKey = mapPositionGroup(player);
       const depthGroup = depthByGroup[groupKey] ?? [];
       const healthyBackups = depthGroup.slice(1).filter((depthPlayer) => !isPlayerInjured(depthPlayer));
-      const isStarter = starterIds.has(playerId) || toNumber(player?.depthChart?.order ?? player?.depthOrder, 99) === 1;
+      const isStarter = starterIds.has(canonicalIdKey(playerId)) || toNumber(player?.depthChart?.order ?? player?.depthOrder, 99) === 1;
       const isKeyContributor = isStarter || toNumber(player?.ovr, 0) >= 80 || toNumber(player?.depthChart?.order ?? player?.depthOrder, 99) <= 2;
       const weeksRemaining = getInjuryWeeksRemaining(player);
       const replacementRisk = isStarter || (isKeyContributor && weeksRemaining >= 2) || healthyBackups.length === 0 || weeksRemaining >= 4;
