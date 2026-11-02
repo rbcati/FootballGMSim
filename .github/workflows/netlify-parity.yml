@@ -80,9 +80,17 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run fresh franchise first-week smoke
-        run: npm run test -- tests/e2e/fresh_franchise_first_week_smoke.spec.js tests/e2e/nfl_schedule_bye.spec.js tests/e2e/normal_identity_operations.spec.js
+        run: npm run test -- tests/e2e/fresh_franchise_first_week_smoke.spec.js tests/e2e/nfl_schedule_bye.spec.js tests/e2e/normal_identity_operations.spec.js tests/e2e/first_install_startup.spec.js --output=test-results/desktop
 
       - name: Run mobile fresh franchise first-week smoke
         env:
           PLAYWRIGHT_VIEWPORT: iphone
-        run: npm run test -- tests/e2e/fresh_franchise_first_week_smoke.spec.js --grep "fresh franchise first week smoke"
+        run: npm run test -- tests/e2e/fresh_franchise_first_week_smoke.spec.js tests/e2e/first_install_startup.spec.js --grep "fresh franchise first week smoke|2026 Buffalo Week 1" --output=test-results/mobile
+
+      - name: Preserve first-session browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-session-browser-evidence
+          path: test-results
+          retention-days: 7

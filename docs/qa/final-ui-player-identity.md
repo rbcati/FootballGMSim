@@ -1,5 +1,7 @@
 # PR #1807 — final UI player identity compatibility
 
+Latest startup diagnosis and release verification: [live-startup-verification.md](live-startup-verification.md). Final executed results supersede the historical pending-validation note below and are published in the PR description and evidence comment.
+
 This follow-up supersedes the outstanding merge holds in the earlier identity reports. It changes creation-exposed identity consumers only; it does not migrate saves or replace stored IDs. Validation results and the final review disposition are recorded below after execution.
 
 ## Reproductions on reviewed head 4e721e18
