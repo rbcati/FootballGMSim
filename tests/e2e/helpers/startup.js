@@ -99,12 +99,12 @@ export async function selectBuffalo(page, slot = 1) {
   await page.locator('.settings-group').filter({ has: page.locator('label', { hasText: 'Starting Year' }) }).locator('input').fill('2026');
 }
 
-export async function finishCreation(page) {
+export async function finishCreation(page, { dismissChangelog = true } = {}) {
   await page.getByTestId('onboarding-continue-button').click();
   await page.getByTestId('start-dynasty-button').click();
   await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: 60000 });
   const close = page.getByLabel('Close changelog');
-  if (await close.isVisible()) await close.click();
+  if (dismissChangelog && await close.isVisible()) await close.click();
 }
 
 export async function readFranchise(page, slot) {

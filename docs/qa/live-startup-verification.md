@@ -43,6 +43,8 @@ The first expanded CI browser run at 4c902261 completed with 10 passed / 4 faile
 
 `tests/e2e/helpers/franchise.js` now dismisses that visible top dialog through its normal close button and asserts it is hidden before retaining all existing tour visibility/click/completion assertions. The four affected tests passed using CI's exact Chromium 145 headless shell (1.2m). No assertion or timeout was weakened. This secondary helper sequencing issue does not change the original confirmed application-defect verdict.
 
+A later bb2a7441 CI run completed successfully with 13 desktop passes / 1 flaky retry and 2 mobile passes. Its retained trace showed the genuine update case had already saved and intentionally reloaded while the helper tried to dismiss the old document's changelog. That test now waits for the replacement document without performing the optional old-page dialog interaction. Every controller, checkpoint, generation, roster and reload assertion remains intact. This is automation synchronization, not an additional application defect.
+
 ## Commands and result publication
 
 Use Node 22. Local production-preview commands build and serve dist, not the development server. Live commands do not start a local server and use the actual Netlify bundle. Proxy configuration follows the inherited runtime configuration without disabling TLS checks.

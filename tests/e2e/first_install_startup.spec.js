@@ -58,7 +58,9 @@ test('replacement activation defers restart through onboarding and acknowledged 
   await expect.poll(() => trace.events.filter(row => row.event === 'controllerchange').length).toBe(2);
   expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId);
   await expect(page.getByTestId('onboarding-continue-button')).toBeVisible();
-  await finishCreation(page);
+  // This activation intentionally restarts after commit. Do not interact with
+  // the transient old document while its acknowledged checkpoint reloads it.
+  await finishCreation(page, { dismissChangelog: false });
   await page.waitForFunction(before => performance.timeOrigin !== before && window.state?.isHydrated
     && !window.state.busy && window.state.league?.activeLeagueId === 'save_slot_1', documentId);
   const saved = await readFranchise(page);
