@@ -1,4 +1,5 @@
 import { expect } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 
 export async function observeStartup(context, page, testInfo, { holdRegistration = false } = {}) {
   // Netlify's injected collaboration drawer is hosting UI, not game UI. Close
@@ -83,9 +84,11 @@ export async function observeStartup(context, page, testInfo, { holdRegistration
   page.on('pageerror', error => record('pageerror', { text: String(error) }));
   page.on('requestfailed', request => record('requestfailed', { url: request.url(), error: request.failure()?.errorText }));
   page.on('response', response => { if (response.status() >= 400) record('http-error', { url: response.url(), status: response.status() }); });
-  testInfo.onStartupEvidence = () => testInfo.attach('startup-evidence', {
-    body: Buffer.from(JSON.stringify({ initial, events }, null, 2)), contentType: 'application/json',
-  });
+  testInfo.onStartupEvidence = async () => {
+    const path = testInfo.outputPath('startup-evidence.json');
+    await writeFile(path, JSON.stringify({ initial, events }, null, 2));
+    await testInfo.attach('startup-evidence', { path, contentType: 'application/json' });
+  };
   return { initial, events };
 }
 
