@@ -68,6 +68,13 @@ export async function launchFranchise(page) {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
   }
   await ensureLeagueLoaded(page);
+  // First-install activation no longer reloads away the intended changelog.
+  // Dismiss the top dialog before interacting with the tour underneath it.
+  const closeChangelog = page.getByLabel('Close changelog');
+  if (await closeChangelog.isVisible()) {
+    await closeChangelog.click();
+    await expect(closeChangelog).toBeHidden();
+  }
   // Honoring the selected 2025 start year now correctly shows the first-career
   // tour. Complete this real UI step before exercising the controls behind it.
   const expectsTour = await page.evaluate(() => {

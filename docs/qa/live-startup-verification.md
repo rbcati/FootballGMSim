@@ -37,6 +37,12 @@ No cache version, registration scope, skipWaiting protocol, offline behavior, sa
 
 The tests assert genuinely empty storage/cookies/service-worker state using browser context state and CDP origin quota. They attach chronological lifecycle/navigation/worker/error/network JSON. CI preserves separate desktop/mobile output in its first-session-browser-evidence artifact. The saved game, players, contracts, ratings, team records, scores and generation/slot IDs are compared after reload. Existing-save isolation is also covered by the unchanged four #1806 regressions.
 
+## Secondary test-readiness correction
+
+The first expanded CI browser run at 4c902261 completed with 10 passed / 4 failed; mobile did not execute. The four existing 2025 first-career tests tried to click Skip tour while the legitimate changelog dialog intercepted the pointer. The removed first-install reload had previously hidden that dialog. The production UI already offers Close changelog; changing dialog design is unnecessary.
+
+`tests/e2e/helpers/franchise.js` now dismisses that visible top dialog through its normal close button and asserts it is hidden before retaining all existing tour visibility/click/completion assertions. The four affected tests passed using CI's exact Chromium 145 headless shell (1.2m). No assertion or timeout was weakened. This secondary helper sequencing issue does not change the original confirmed application-defect verdict.
+
 ## Commands and result publication
 
 Use Node 22. Local production-preview commands build and serve dist, not the development server. Live commands do not start a local server and use the actual Netlify bundle. Proxy configuration follows the inherited runtime configuration without disabling TLS checks.
