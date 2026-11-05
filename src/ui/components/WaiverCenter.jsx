@@ -128,7 +128,7 @@ export default function WaiverCenter({ league, actions }) {
                       </span>
                     </td>
                     <td style={{ padding: '8px 8px', color: '#9ca3af' }}>{player.age ?? '??'}</td>
-                    <td style={{ padding: '8px 8px', fontFamily: 'monospace', fontSize: 12 }}>
+                    <td style={{ padding: '8px 8px', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
                       {formatContract(player.waiverContract)}
                     </td>
                     <td style={{ padding: '8px 8px', color: '#9ca3af' }}>
