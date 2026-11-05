@@ -256,7 +256,7 @@ export async function simulateSingleWeek(page, options = {}) {
       try {
         await expect(advanceCta).toBeEnabled({ timeout: 500 });
       } catch (err) {
-        if (err.name !== 'TimeoutError') throw err;
+        if (err.name !== 'TimeoutError' && !(err.name === 'Error' && err.message.includes('toBeEnabled'))) throw err;
       }
     } catch (err) {
       if (err.name !== 'TimeoutError') throw err;
@@ -294,7 +294,7 @@ export async function simulateSingleWeek(page, options = {}) {
       await expect(advanceAnywayBtn).toBeEnabled({ timeout: 5000 });
       await advanceAnywayBtn.click();
     } catch (err) {
-      if (err.name !== 'TimeoutError') throw err;
+      if (err.name !== 'TimeoutError' && !(err.name === 'Error' && err.message.includes('toBeEnabled'))) throw err;
     }
   }
   const skipPromptBtn = page.getByRole('button', { name: /Simulate Week \(Skip Presentation\)/i });
@@ -305,7 +305,7 @@ export async function simulateSingleWeek(page, options = {}) {
     await expect(skipPromptBtn).toBeEnabled({ timeout: 5000 });
     await skipPromptBtn.click();
   } catch (err) {
-    if (err.name !== 'TimeoutError') throw err;
+    if (err.name !== 'TimeoutError' && !(err.name === 'Error' && err.message.includes('toBeEnabled'))) throw err;
   }
   await page.waitForFunction(
     (baseline) => {
