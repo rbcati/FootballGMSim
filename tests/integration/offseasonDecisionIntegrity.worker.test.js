@@ -22,7 +22,10 @@ describe.sequential('offseason decision persistence', () => {
     const [walk, extend] = cache.getPlayersByTeam(0).filter(p => p.contract?.years <= 1).sort((a,b) => a.contract.baseAnnual - b.contract.baseAnnual);
     expect(walk).toBeTruthy(); expect(extend).toBeTruthy();
     const original = structuredClone(walk);
-    expect((await dispatchWorker(toWorker.UPDATE_PLAYER_MANAGEMENT, { playerId: walk.id, teamId: 0, updates: { extensionDecision: 'let_walk' } })).type).toBe(toUI.STATE_UPDATE);
+    const decisionResponse = await dispatchWorker(toWorker.UPDATE_PLAYER_MANAGEMENT, { playerId: walk.id, teamId: 0, updates: { extensionDecision: 'let_walk' } });
+    expect(decisionResponse.type).toBe(toUI.STATE_UPDATE);
+    const decisionPayload = decisionResponse.payload?._jsonPayload ? JSON.parse(decisionResponse.payload._jsonPayload) : decisionResponse.payload;
+    expect(decisionPayload.teams.find(t => t.id === 0).roster.find(p => p.id === walk.id).extensionDecision).toBe('let_walk');
     expect(cache.getPlayer(walk.id)).toMatchObject({ id: original.id, teamId: 0, contract: original.contract, extensionDecision: 'let_walk' });
     await dispatchWorker(toWorker.SAVE_NOW);
     await dispatchWorker(toWorker.LOAD_SAVE, { leagueId });

@@ -16,11 +16,15 @@ async function dismissPreviewDrawer(page) {
     await dismiss.press('Enter');
   }
 }
-async function openCenter(page) {
-  for (const name of ['Proceed to Offseason', "Let's Go!"]) {
-    const button = page.getByRole('button', { name, exact: true });
-    if (await button.isVisible()) await button.click();
+async function openCenter(page, expectSplash = true) {
+  if (expectSplash) {
+    const proceed = page.getByRole('button', { name: 'Proceed to Offseason', exact: true });
+    await expect(proceed).toBeVisible({ timeout: 15000 });
+    await proceed.click();
+    await expect(proceed).toBeHidden();
   }
+  const bracket = page.getByRole('button', { name: "Let's Go!", exact: true });
+  if (await bracket.isVisible()) await bracket.click();
   await page.locator('[data-testid="nav-team"], [data-testid="primary-nav-team"]').first().click();
   await page.getByTestId('section-tab-contract-center').click();
   console.info('Contract Center opened');
@@ -79,7 +83,7 @@ for (const team of ['Buffalo', 'Miami']) test(`${team}: manual decisions persist
   expect(cancelledConfirmation).toBe(true);
   expect(await page.evaluate(() => window.state.league.phase)).toBe('offseason_resign');
   if (team === 'Miami') {
-    await openCenter(page);
+    await openCenter(page, false);
     for (const p of targets) {
       const decisionRow = page.locator('tr').filter({ hasText: p.name });
       if (await decisionRow.count()) {
