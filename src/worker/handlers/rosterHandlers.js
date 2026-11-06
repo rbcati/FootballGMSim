@@ -48,6 +48,10 @@ export async function handleGetRoster({ teamId }, id, ctx) {
         potential:        p.potential ?? null,
         status:           p.status ?? 'active',
         onTradeBlock:     p?.onTradeBlock ?? false,
+        teamId:           p.teamId ?? numId,
+        extensionDecision: p.extensionDecision ?? null,
+        tradeStatus:      p.tradeStatus ?? 'available',
+        contractPlan:     Array.isArray(p.contractPlan) ? [...p.contractPlan] : [],
         contract,
         traits:           p.traits ?? [],
         schemeFit:        fit,
@@ -59,7 +63,7 @@ export async function handleGetRoster({ teamId }, id, ctx) {
     team,
     roster: players,
     cap: { capRoom: team?.capRoom, capUsed: team?.capUsed, deadCap: team?.deadCap },
-    freeAgents: cache.getAllPlayers().filter((p) => !p?.teamId || p?.status === 'free_agent'),
+    freeAgents: cache.getAllPlayers().filter((p) => p?.teamId == null || p?.status === 'free_agent'),
     draftPicks: Array.isArray(team?.picks) ? team.picks : [],
   });
 

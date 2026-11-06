@@ -30,6 +30,8 @@ describe.sequential('offseason decision persistence', () => {
     await dispatchWorker(toWorker.SAVE_NOW);
     await dispatchWorker(toWorker.LOAD_SAVE, { leagueId });
     expect(cache.getPlayer(walk.id).extensionDecision).toBe('let_walk');
+    const freshRoster = await dispatchWorker(toWorker.GET_ROSTER, { teamId: 0 });
+    expect(freshRoster.payload.players.find(p => p.id === walk.id)).toMatchObject({ id: walk.id, teamId: 0, extensionDecision: 'let_walk' });
     const old = structuredClone(cache.getPlayer(walk.id).contract);
     const rejected = await dispatchWorker(toWorker.EXTEND_CONTRACT, { playerId: walk.id, teamId: 0, contract: { years: 1, yearsTotal: 1, baseAnnual: 0, guaranteedPct: 0 } });
     expect(rejected.type).toBe(toUI.EXTENSION_RESPONSE);
@@ -47,7 +49,10 @@ describe.sequential('offseason decision persistence', () => {
     expect(cache.getTeam(0).capUsed).toBeCloseTo(cap - priorHit + getPlayerCapHit(cache.getPlayer(extend.id)), 4);
     await dispatchWorker(toWorker.SAVE_NOW);
     const second = await boot('save_slot_2');
+    await dispatchWorker(toWorker.LOAD_SAVE, { leagueId: second.payload.activeLeagueId });
     const secondIds = cache.getPlayersByTeam(0).map(p => p.id);
+    const secondContracts = new Map(cache.getPlayersByTeam(0).map(p => [p.id, structuredClone(p.contract)]));
+    const secondCap = cache.getTeam(0).capUsed;
     expect(cache.getPlayersByTeam(0).some(p => p.extensionDecision === 'let_walk')).toBe(false);
     await dispatchWorker(toWorker.LOAD_SAVE, { leagueId });
     expect(cache.getPlayer(walk.id).extensionDecision).toBe('let_walk');
@@ -61,6 +66,8 @@ describe.sequential('offseason decision persistence', () => {
     expect(cache.getMeta().phase).toBe('free_agency');
     await dispatchWorker(toWorker.LOAD_SAVE, { leagueId: second.payload.activeLeagueId });
     expect(new Set(cache.getPlayersByTeam(0).map(p => p.id))).toEqual(new Set(secondIds));
+    for (const p of cache.getPlayersByTeam(0)) expect(p.contract).toEqual(secondContracts.get(p.id));
+    expect(cache.getTeam(0).capUsed).toBeCloseTo(secondCap, 4);
     expect(cache.getPlayersByTeam(0).some(p => p.extensionDecision === 'let_walk')).toBe(false);
   }, 180000);
 });
