@@ -12,6 +12,8 @@ import {
 } from '../core/dynastySoakAudit.js';
 
 const RESPONSE_BY_REQUEST = {
+  [toWorker.EXTEND_CONTRACT]: [toUI.EXTENSION_RESPONSE, toUI.ERROR],
+  [toWorker.APPLY_FRANCHISE_TAG]: [toUI.STATE_UPDATE, toUI.ERROR],
   [toWorker.GET_DRAFT_CLASS]: [toUI.DRAFT_CLASS, toUI.ERROR],
   [toWorker.GET_PLAYER_DRAFT_CONTEXT]: [toUI.PLAYER_DRAFT_CONTEXT, toUI.ERROR],
   [toWorker.GET_FREE_AGENTS]: [toUI.FREE_AGENT_DATA, toUI.ERROR],

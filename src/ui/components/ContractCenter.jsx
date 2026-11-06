@@ -144,7 +144,7 @@ function PlayerRow({ row, onOpenTalks, onTag }) {
   );
 }
 
-function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }) {
+function ReSigningCenter({ league, team, actions, onNavigate, statusMessage, setStatusMessage, onTag }) {
   const [sortPreset, setSortPreset] = useState('priority');
   const [previewPlayerId, setPreviewPlayerId] = useState(null);
   const [busyPlayerId, setBusyPlayerId] = useState(null);
@@ -207,10 +207,15 @@ function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }
   const previewRow = sortedRows.find((row) => sameEntityId(row.player.id, previewPlayerId)) ?? null;
 
   const applyDecision = async (row, decision) => {
-    if (!actions?.updatePlayerManagement || !team?.id) return;
+    if (!actions?.updatePlayerManagement || team?.id == null || row.player?.id == null) {
+      setStatusMessage('Unable to update decision. Reload the franchise and retry.');
+      return;
+    }
+    setStatusMessage('');
     setBusyPlayerId(row.player.id);
     try {
-      await actions.updatePlayerManagement(row.player.id, team.id, { extensionDecision: decision });
+      const response = await actions.updatePlayerManagement(row.player.id, team.id, { extensionDecision: decision });
+      if (response?.type !== 'STATE_UPDATE') throw new Error(response?.payload?.message || 'Decision was not confirmed. Reload and retry.');
       setStatusMessage(`${row.player.name}: ${decisionLabel(decision)}.`);
     } catch (err) {
       setStatusMessage(err?.message ?? 'Unable to update contract decision.');
@@ -220,7 +225,11 @@ function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }
   };
 
   const confirmExtension = async () => {
-    if (!previewRow || !actions?.extendContract || !team?.id) return;
+    if (!previewRow || !actions?.extendContract || team?.id == null) {
+      setStatusMessage('Unable to submit extension. Reload the franchise and retry.');
+      return;
+    }
+    setStatusMessage('');
     setBusyPlayerId(previewRow.player.id);
     const contract = {
       years: previewRow.demand.yearsTotal,
@@ -241,9 +250,12 @@ function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }
           source: 'resigning_center',
           headline: `${previewRow.player.name} signs extension`,
         });
-        await actions.updatePlayerManagement(previewRow.player.id, team.id, { extensionDecision: 'extended' });
-        await persistFranchiseChronicle(actions, league);
-        setStatusMessage(`${previewRow.player.name} extension accepted.`);
+        try {
+          await persistFranchiseChronicle(actions, league);
+          setStatusMessage(`${previewRow.player.name} extension accepted.`);
+        } catch (err) {
+          setStatusMessage(`${previewRow.player.name} extension accepted, but history could not be saved. Reload before retrying: ${err?.message ?? 'History save failed'}`);
+        }
       } else if (status === 'counter') {
         setStatusMessage(`${previewRow.player.name} countered. Ask increased to ${money(response?.payload?.counter?.baseAnnual)}.`);
       } else {
@@ -258,6 +270,7 @@ function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }
 
   return (
     <div className="app-screen-stack" style={{ display: 'grid', gap: 'var(--space-3)' }}>
+      {statusMessage ? <div role="status" aria-live="polite">{statusMessage}</div> : null}
       <TeamWorkspaceHeader
         title="Re-signing Center"
         subtitle="Lock in core players with clear cap and roster impact before free agency opens."
@@ -276,7 +289,7 @@ function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
         <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total expirings</div><div style={{ fontWeight: 800 }}>{rows.length}</div></div>
-        <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Unresolved key expirings</div><div style={{ fontWeight: 800, color: unresolvedKey ? 'var(--warning)' : 'var(--success)' }}>{unresolvedKey}</div></div>
+        <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Unresolved key expirings</div><div data-testid="unresolved-key-expirings" style={{ fontWeight: 800, color: unresolvedKey ? 'var(--warning)' : 'var(--success)' }}>{unresolvedKey}</div></div>
         <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Projected cap room (pending)</div><div style={{ fontWeight: 800, color: projectedCapRoom < 8 ? 'var(--warning)' : 'var(--text)' }}>{money(projectedCapRoom)}</div></div>
         <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Premium positions at risk</div><div style={{ fontWeight: 800, color: premiumAtRisk ? 'var(--warning)' : 'var(--success)' }}>{premiumAtRisk}</div></div>
       </div>
@@ -353,6 +366,7 @@ function ReSigningCenter({ league, team, actions, onNavigate, setStatusMessage }
                     <Button size="sm" variant="outline" disabled={busyPlayerId === row.player.id} onClick={() => setPreviewPlayerId(row.player.id)}>Extend</Button>
                     <Button size="sm" variant="outline" disabled={busyPlayerId === row.player.id} onClick={() => applyDecision(row, 'let_walk')}>Let Walk</Button>
                     <Button size="sm" variant="outline" disabled={busyPlayerId === row.player.id} onClick={() => applyDecision(row, 'deferred')}>Defer</Button>
+                    <Button size="sm" variant="outline" disabled={busyPlayerId != null} onClick={() => onTag(row.player)}>Use franchise tag</Button>
                   </div>
                 </td>
               </tr>
@@ -384,12 +398,14 @@ export default function ContractCenter({ league, actions, compact = false, onNav
   }, [board]);
 
   const handleTag = async (player) => {
-    if (!actions?.applyFranchiseTag || !team?.id) {
+    if (!actions?.applyFranchiseTag || team?.id == null) {
       setStatusMessage('Special retention tool not yet available in this build.');
       return;
     }
     try {
-      await actions.applyFranchiseTag(player.id, team.id);
+      setStatusMessage('');
+      const response = await actions.applyFranchiseTag(player.id, team.id);
+      if (response?.type !== 'STATE_UPDATE') throw new Error(response?.payload?.message || 'Franchise tag was not confirmed. Reload and retry.');
       logCompletedContractAction(league, {
         id: `contract-${league?.seasonId ?? league?.year}-wk${league?.week ?? 1}-tag-${team.id}-${player.id}`,
         player,
@@ -398,16 +414,19 @@ export default function ContractCenter({ league, actions, compact = false, onNav
         headline: `${player.name} receives franchise tag`,
         summary: 'Franchise tag applied.',
       });
-      await actions.updatePlayerManagement?.(player.id, team.id, { extensionDecision: 'tagged' });
-      await persistFranchiseChronicle(actions, league);
-      setStatusMessage(`Tagged ${player.name}.`);
+      try {
+        await persistFranchiseChronicle(actions, league);
+        setStatusMessage(`Tagged ${player.name}.`);
+      } catch (err) {
+        setStatusMessage(`Tagged ${player.name}, but history could not be saved. Reload before retrying: ${err?.message ?? 'History save failed'}`);
+      }
     } catch (err) {
       setStatusMessage(err?.message || 'Special retention tool not yet available.');
     }
   };
 
   if (league?.phase === 'offseason_resign') {
-    return <ReSigningCenter league={league} team={team} actions={actions} onNavigate={onNavigate} setStatusMessage={setStatusMessage} />;
+    return <ReSigningCenter league={league} team={team} actions={actions} onNavigate={onNavigate} statusMessage={statusMessage} setStatusMessage={setStatusMessage} onTag={handleTag} />;
   }
 
   return (
@@ -438,7 +457,7 @@ export default function ContractCenter({ league, actions, compact = false, onNav
 
       <section className="card" style={{ padding: compact ? '10px' : 'var(--space-3)' }}>
         <div style={{ marginTop: 6, color: 'var(--text-subtle)', fontSize: 12 }}>{capOutlook.summary}</div>
-        {statusMessage ? <div style={{ marginTop: 4, fontSize: 11, color: 'var(--accent)' }}>{statusMessage}</div> : null}
+        {statusMessage ? <div role="status" aria-live="polite" style={{ marginTop: 4, fontSize: 11, color: 'var(--accent)' }}>{statusMessage}</div> : null}
       </section>
 
       {Object.entries(grouped).map(([title, rows]) => (
