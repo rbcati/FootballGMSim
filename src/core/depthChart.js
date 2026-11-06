@@ -144,38 +144,38 @@ export function autoBuildDepthChart(players = [], existingAssignments = {}) {
 
   for (const row of DEPTH_CHART_ROWS) {
     const currentIds = Array.isArray(existingAssignments?.[row.key])
-      ? existingAssignments[row.key].map((x) => Number(x)).filter(Number.isFinite)
+      ? existingAssignments[row.key].map(String)
       : [];
 
     const pool = availablePlayers.filter((player) => {
-      if (assignedPlayerIds.has(Number(player.id))) return false;
+      if (assignedPlayerIds.has(String(player.id))) return false;
       const tier = playerMatchTier(player, row);
       return tier <= 1;
     });
 
     const ranked = [...pool].sort((a, b) => {
-      const idxA = currentIds.indexOf(Number(a.id));
-      const idxB = currentIds.indexOf(Number(b.id));
+      const idxA = currentIds.indexOf(String(a.id));
+      const idxB = currentIds.indexOf(String(b.id));
       if (idxA >= 0 && idxB >= 0) return idxA - idxB;
       if (idxA >= 0) return -1;
       if (idxB >= 0) return 1;
       return scorePlayerForRow(b, row.key) - scorePlayerForRow(a, row.key);
     });
 
-    const chosen = ranked.slice(0, row.slots).map((p) => Number(p.id));
+    const chosen = ranked.slice(0, row.slots).map((p) => p.id);
     assignments[row.key] = chosen;
-    chosen.forEach((id) => assignedPlayerIds.add(id));
+    chosen.forEach((id) => assignedPlayerIds.add(String(id)));
   }
 
   // Fill any still-empty rows with best available fallback player to keep chart complete.
   for (const row of DEPTH_CHART_ROWS) {
     if ((assignments[row.key] ?? []).length > 0) continue;
     const fallback = availablePlayers
-      .filter((player) => !assignedPlayerIds.has(Number(player.id)))
+      .filter((player) => !assignedPlayerIds.has(String(player.id)))
       .sort((a, b) => scorePlayerForRow(b, row.key) - scorePlayerForRow(a, row.key))[0];
     if (fallback) {
-      assignments[row.key] = [Number(fallback.id)];
-      assignedPlayerIds.add(Number(fallback.id));
+      assignments[row.key] = [fallback.id];
+      assignedPlayerIds.add(String(fallback.id));
     }
   }
 
@@ -186,12 +186,12 @@ export function applyDepthChartToPlayers(players = [], assignments = {}) {
   const placement = new Map();
   for (const [rowKey, ids] of Object.entries(assignments || {})) {
     (ids || []).forEach((id, idx) => {
-      placement.set(Number(id), { rowKey, order: idx + 1, role: SLOT_ROLES[Math.min(idx, SLOT_ROLES.length - 1)] });
+      placement.set(String(id), { rowKey, order: idx + 1, role: SLOT_ROLES[Math.min(idx, SLOT_ROLES.length - 1)] });
     });
   }
 
   return players.map((player) => {
-    const p = placement.get(Number(player.id));
+    const p = placement.get(String(player.id));
     if (!p) return player;
     return {
       ...player,
@@ -202,7 +202,7 @@ export function applyDepthChartToPlayers(players = [], assignments = {}) {
 }
 
 export function depthWarnings(assignments = {}, players = []) {
-  const byId = new Map(players.map((p) => [Number(p.id), p]));
+  const byId = new Map(players.map((p) => [String(p.id), p]));
   const warnings = [];
 
   for (const row of DEPTH_CHART_ROWS) {
@@ -216,7 +216,7 @@ export function depthWarnings(assignments = {}, players = []) {
     }
 
     ids.forEach((id, idx) => {
-      const assigned = byId.get(Number(id));
+      const assigned = byId.get(String(id));
       if (!assigned) return;
       const profile = getPositionalPenaltyProfile(assigned?.pos, row.key);
       if (profile.compatibility === 'cross') {
@@ -226,7 +226,7 @@ export function depthWarnings(assignments = {}, players = []) {
       }
     });
 
-    const injuredStarter = byId.get(Number(ids[0]));
+    const injuredStarter = byId.get(String(ids[0]));
     if (injuredStarter && (injuredStarter?.injuryWeeksRemaining ?? 0) > 0) {
       warnings.push({ rowKey: row.key, severity: 'warn', message: `${row.label} starter is injured.` });
     }

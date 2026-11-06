@@ -1,5 +1,6 @@
 // league.js - Core League Generation Logic
 'use strict';
+import { normalizeContractDetails } from './contracts/realisticContracts.js';
 import { initializeCoachingStats } from './coach-system.js';
 import { makePlayer as makePlayerImport } from './player.js';
 import { Constants as ConstantsImport } from './constants.js';
@@ -108,6 +109,14 @@ const initializeRoster = (team, Constants, Utils, makePlayer, eliteNames = new S
                     capHit = player.baseAnnual;
                 }
 
+                // Persist the same canonical contract that load uses, after the cap clamp.
+                // Otherwise the nested pre-clamp salary can win on first reload.
+                player.contract = normalizeContractDetails({
+                    ...player.contract,
+                    baseAnnual: player.baseAnnual,
+                    signingBonus: player.signingBonus,
+                    guaranteedPct: player.guaranteedPct,
+                }, player);
                 estimatedCapUsed += capHit;
                 roster.push(player);
                 playersCreated++;
@@ -171,7 +180,8 @@ function makeLeague(teams, options = {}, dependencies = {}) {
             teams: [],
             year: leagueYear,
             season: 1,
-            week: 1, // Default to week 1; offseason flag handles phase logic
+            week: 1,
+            phase: startPoint === 'offseason' ? 'offseason' : 'regular',
             // Per-save entropy generated once at creation and persisted in the save.
             // Mixed into per-game RNG seeds so identical teams/weeks produce different
             // outcomes across different playthroughs (prevents deterministic exploits).

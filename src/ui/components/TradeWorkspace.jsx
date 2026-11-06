@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import TradeFinder from './TradeFinder.jsx';
 import TradeCenter from './TradeCenter.jsx';
 import TradeBlockPanel from './TradeBlockPanel.jsx';
@@ -28,6 +28,10 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, onNavi
     helperReason: '',
     helperContext: null,
   });
+
+  const handleWorkspaceChange = useCallback((patch) => {
+    setWorkspace((prev) => mergeTradeWorkspaceState(prev, patch));
+  }, []);
 
   const myTeam = useMemo(
     () => (league?.teams ?? []).find((t) => Number(t.id) === Number(league?.userTeamId)),
@@ -100,7 +104,7 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, onNavi
             actions={actions}
             onPlayerSelect={onPlayerSelect}
             workspace={workspace}
-            onWorkspaceChange={(patch) => setWorkspace((prev) => mergeTradeWorkspaceState(prev, patch))}
+            onWorkspaceChange={handleWorkspaceChange}
             onOpenTradeCenter={() => setView('Builder')}
           />
           <SectionCard title="Recent Market Activity" subtitle="Use live league deals to pick your next call list.">
@@ -125,7 +129,7 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, onNavi
           league={league}
           actions={actions}
           initialTradeContext={workspace}
-          onTradeContextChange={(patch) => setWorkspace((prev) => mergeTradeWorkspaceState(prev, patch))}
+          onTradeContextChange={handleWorkspaceChange}
         />
       )}
 

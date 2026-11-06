@@ -1,3 +1,4 @@
+import { canonicalIdKey } from '../../core/referenceIntegrity.js';
 import { autoBuildDepthChart, depthWarnings, DEPTH_CHART_ROWS } from '../../core/depthChart.js';
 import { deriveGamePlanMultipliers, getGamePlanSynergySummary } from '../../core/sim/gamePlanMultipliers.ts';
 import { getNextUserGame } from './userWeeklyGames.js';
@@ -77,8 +78,15 @@ function getExistingAssignments(roster) {
     const rowKey = player?.depthChart?.rowKey;
     if (!rowKey) continue;
     if (!assignments[rowKey]) assignments[rowKey] = [];
-    assignments[rowKey].push(Number(player.id));
+    assignments[rowKey].push(player.id);
   }
+  const byId = new Map(roster.map(player => [canonicalIdKey(player.id), player]));
+  for (const ids of Object.values(assignments)) ids.sort((a, b) => {
+    const left = byId.get(canonicalIdKey(a));
+    const right = byId.get(canonicalIdKey(b));
+    return safeNum(left?.depthChart?.order ?? left?.depthOrder, 999)
+      - safeNum(right?.depthChart?.order ?? right?.depthOrder, 999);
+  });
   return assignments;
 }
 
@@ -104,10 +112,10 @@ function buildLineupReadiness(userTeam, league) {
     });
   }
 
-  const byId = new Map(roster.map((player) => [Number(player.id), player]));
+  const byId = new Map(roster.map((player) => [canonicalIdKey(player.id), player]));
   for (const row of DEPTH_CHART_ROWS) {
     const starterId = assignments?.[row.key]?.[0];
-    const starter = byId.get(Number(starterId));
+    const starter = byId.get(canonicalIdKey(starterId));
     if (!starter) continue;
     if (safeNum(starter?.ovr, 99) <= 62) {
       issues.push({

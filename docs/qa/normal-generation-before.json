@@ -1,0 +1,131 @@
+{
+  "baseCommit": "68303625c99d1132fab3e1f935538f0978f66e4d",
+  "before": [
+    {
+      "year": 2025,
+      "season": 1,
+      "week": 1,
+      "validation": {
+        "valid": false,
+        "reasons": [
+          "Missing phase"
+        ]
+      },
+      "roster": 53,
+      "positions": {
+        "QB": 3,
+        "RB": 4,
+        "WR": 6,
+        "TE": 3,
+        "OL": 9,
+        "DL": 9,
+        "LB": 7,
+        "CB": 6,
+        "S": 4,
+        "K": 1,
+        "P": 1
+      },
+      "lengths": {
+        "1": 362,
+        "2": 320,
+        "3": 352,
+        "4": 322,
+        "5": 340
+      },
+      "unsigned": 0,
+      "weeks": 18,
+      "picks": 672,
+      "salarySummary": {
+        "distinct": 281,
+        "min": 0.7999999999999758,
+        "median": 2.2,
+        "max": 44.8,
+        "mean": 5.399
+      }
+    },
+    {
+      "year": 2026,
+      "season": 1,
+      "week": 1,
+      "validation": {
+        "valid": false,
+        "reasons": [
+          "Missing phase"
+        ]
+      },
+      "roster": 53,
+      "positions": {
+        "QB": 3,
+        "RB": 4,
+        "WR": 6,
+        "TE": 3,
+        "OL": 9,
+        "DL": 9,
+        "LB": 7,
+        "CB": 6,
+        "S": 4,
+        "K": 1,
+        "P": 1
+      },
+      "lengths": {
+        "1": 315,
+        "2": 357,
+        "3": 346,
+        "4": 355,
+        "5": 323
+      },
+      "unsigned": 0,
+      "weeks": 18,
+      "picks": 672,
+      "salarySummary": {
+        "distinct": 275,
+        "min": 0.7999999999999758,
+        "median": 2.7,
+        "max": 42.1,
+        "mean": 5.399
+      }
+    },
+    {
+      "year": 2031,
+      "season": 1,
+      "week": 1,
+      "validation": {
+        "valid": false,
+        "reasons": [
+          "Missing phase"
+        ]
+      },
+      "roster": 53,
+      "positions": {
+        "QB": 3,
+        "RB": 4,
+        "WR": 6,
+        "TE": 3,
+        "OL": 9,
+        "DL": 9,
+        "LB": 7,
+        "CB": 6,
+        "S": 4,
+        "K": 1,
+        "P": 1
+      },
+      "lengths": {
+        "1": 339,
+        "2": 329,
+        "3": 355,
+        "4": 332,
+        "5": 341
+      },
+      "unsigned": 0,
+      "weeks": 18,
+      "picks": 672,
+      "salarySummary": {
+        "distinct": 273,
+        "min": 0.7999999999999758,
+        "median": 2.3,
+        "max": 44.7,
+        "mean": 5.399
+      }
+    }
+  ]
+}

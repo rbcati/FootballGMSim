@@ -1,3 +1,4 @@
+import { canonicalIdKey, sameEntityId } from '../../core/referenceIntegrity.js';
 const PREMIUM_POSITIONS = new Set(['QB', 'EDGE', 'DE', 'OT', 'CB', 'WR']);
 
 function n(v, d = 0) {
@@ -87,16 +88,17 @@ export function buildCounterAdjustment({
   const incomingValue = incomingPlayers.reduce((sum, p) => sum + playerAssetValue(p, { direction: 'balanced' }), 0);
   const gap = incomingValue - outgoingValue;
 
+  const movable = (partnerTeam?.roster ?? [])
+    .filter((p) => canonicalIdKey(p?.id) !== null && !incomingPlayers.some((x) => sameEntityId(x?.id, p?.id)))
+    .filter((p) => p?.tradeStatus !== 'untouchable' && p?.tradeStatus !== 'not_available');
+  const availabilityNote = movable.length ? '' : 'No eligible unselected player is available. ';
+
   if (gap > 140) {
-    return { type: 'add_pick', explain: 'they need more future value to offset what they are sending' };
+    return { type: 'add_pick', explain: `${availabilityNote}they need more future value to offset what they are sending` };
   }
   if (gap > 40) {
-    return { type: 'balance_salary', explain: 'they need better cap balance on this package' };
+    return { type: 'balance_salary', explain: `${availabilityNote}they need better cap balance on this package` };
   }
-
-  const movable = (partnerTeam?.roster ?? [])
-    .filter((p) => !incomingPlayers.some((x) => Number(x?.id) === Number(p?.id)))
-    .filter((p) => p?.tradeStatus !== 'untouchable' && p?.tradeStatus !== 'not_available');
 
   if (direction === 'rebuilding') {
     const younger = movable.find((p) => n(p?.age, 30) <= 26 && n(p?.potential, n(p?.ovr, 60)) >= n(p?.ovr, 60));
@@ -115,6 +117,7 @@ export function buildCounterAdjustment({
     if (surplusSwap) return { type: 'swap_surplus', playerId: surplusSwap.id, explain: `they are more willing to move ${surplusPos} depth` };
   }
 
+  if (!movable.length) return { type: 'no_alternative', explain: 'No eligible unselected player is available. Adjust picks or the existing package.' };
   return { type: 'small_add', explain: 'they need a small sweetener to close this' };
 }
 

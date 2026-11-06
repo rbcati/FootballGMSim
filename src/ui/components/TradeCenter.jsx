@@ -1,3 +1,4 @@
+import { canonicalIdKey } from '../../core/referenceIntegrity.js';
 /**
  * TradeCenter.jsx — Full premium trade interface
  * Zen GM + Pocket GM 3 + Madden 26 mobile style
@@ -397,7 +398,7 @@ function TradePlayerSheet({ player, onClose }) {
 
 export default function TradeCenter({ league, actions, initialTradeContext = null, onTradeContextChange }) {
   const myTeamId = league?.userTeamId;
-  const toAssetId = (id) => String(id);
+  const toAssetId = canonicalIdKey;
 
   const [targetId, setTargetId] = useState(initialTradeContext?.partnerTeamId ?? null);
   const [myRoster, setMyRoster] = useState([]);
@@ -405,9 +406,11 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   const [myTeam, setMyTeam] = useState(null);
   const [theirTeam, setTheirTeam] = useState(null);
 
-  const [offering, setOffering] = useState(new Set());
-  const [receiving, setReceiving] = useState(new Set());
-  const [myPicks, setMyPicks] = useState([]);
+  // Restore selections before publishing context; an empty first render can
+  // otherwise overwrite the parent package when Builder is remounted.
+  const [offering, setOffering] = useState(() => new Set((initialTradeContext?.outgoingPlayerIds ?? []).map(toAssetId)));
+  const [receiving, setReceiving] = useState(() => new Set((initialTradeContext?.incomingPlayerIds ?? []).map(toAssetId)));
+  const [myPicks, setMyPicks] = useState(() => (initialTradeContext?.outgoingPickIds ?? []).map(id => ({ id })));
   const [theirPicks, setTheirPicks] = useState([]);
 
   const [loading, setLoading] = useState(false);
@@ -632,12 +635,12 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   useEffect(() => {
     onTradeContextChange?.({
       partnerTeamId: targetId,
-      outgoingPlayerIds: [...offering].map((id) => Number(id)),
+      outgoingPlayerIds: [...offering].map((id) => myRosterMap.get(toAssetId(id))?.id ?? id),
       outgoingPickIds: myPicks.map((p) => p.id),
-      incomingPlayerIds: [...receiving].map((id) => Number(id)),
+      incomingPlayerIds: [...receiving].map((id) => theirRosterMap.get(toAssetId(id))?.id ?? id),
       helperReason: tradeResult?.reason ?? '',
     });
-  }, [targetId, offering, myPicks, receiving, tradeResult, onTradeContextChange]);
+  }, [targetId, offering, myPicks, receiving, tradeResult, onTradeContextChange, myRosterMap, theirRosterMap]);
 
   useEffect(() => {
     if (!showSavedToast) return undefined;
@@ -650,8 +653,8 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     setSubmitting(true);
     setTradeResult(null);
     try {
-      const outgoing = { playerIds: [...offering].map((id) => Number(id)), pickIds: myPicks.map(p => p.id) };
-      const incoming = { playerIds: [...receiving].map((id) => Number(id)), pickIds: theirPicks.map(p => p.id) };
+      const outgoing = { playerIds: [...offering].map((id) => myRosterMap.get(toAssetId(id))?.id ?? id), pickIds: myPicks.map(p => p.id) };
+      const incoming = { playerIds: [...receiving].map((id) => theirRosterMap.get(toAssetId(id))?.id ?? id), pickIds: theirPicks.map(p => p.id) };
       const outgoingPlayers = [...offering].map((id) => myRosterMap.get(toAssetId(id))).filter(Boolean);
       const incomingPlayers = [...receiving].map((id) => theirRosterMap.get(toAssetId(id))).filter(Boolean);
       const resp = counterOfferId
@@ -790,7 +793,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
       // Counter: user keeps target player, but offers a different bundle
       // For simplicity in the counter flow we send the same original bundle back
       // (the full counter UI with asset pickers is in the dedicated counter modal)
-      const counterPlayerIds = [Number(offer.targetPlayerId)];
+      const counterPlayerIds = [offer.targetPlayerId];
       const resp = await actions.counterTradeOffer(offer.offerId, counterPlayerIds, []);
       setBlockCounterResult(resp?.payload ?? { accepted: false, counterStatus: 'unknown' });
       setBlockCounterOfferId(null);

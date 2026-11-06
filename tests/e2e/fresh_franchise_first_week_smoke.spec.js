@@ -113,6 +113,45 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
     await closeChangelog.click();
   }
 
+  // Inspect the actual persisted normal franchise before its first game.
+  const creation = await page.evaluate(async () => {
+    const league = window.state.league;
+    const db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open(`FootballGM_League_${league.activeLeagueId}`);
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+    });
+    const read = store => new Promise((resolve, reject) => {
+      const req = db.transaction(store).objectStore(store).getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+    });
+    const players = await read('players');
+    const teams = await read('teams');
+    const meta = (await read('meta')).find(m => m.id === 'league');
+    db.close();
+    return { players, teams, meta };
+  });
+  expect(creation.meta.generationDiagnostics).toEqual({ source: 'normal', validationReasons: [] });
+  expect(creation.players).toHaveLength(1696);
+  expect(new Set(creation.players.map(p => p.years)).size).toBeGreaterThan(1);
+  expect(new Set(creation.players.map(p => p.baseAnnual)).size).toBeGreaterThan(10);
+  for (const team of creation.teams) {
+    const ids = new Set(creation.players.filter(p => p.teamId === team.id).map(p => String(p.id)));
+    expect(Object.keys(team.depthChart).length).toBeGreaterThan(10);
+    for (const id of Object.values(team.depthChart).flat()) expect(ids.has(String(id))).toBe(true);
+  }
+  await goToTab(page, 'roster');
+  await expect(page.locator('.app-error-boundary-overlay')).toHaveCount(0);
+  await goToTab(page, 'hq');
+  await page.getByRole('button', { name: 'Lineup', exact: true }).click();
+  await expect(page.getByTestId('offense-lineup')).toBeVisible();
+  await expect(page.locator('.app-error-boundary-overlay')).toHaveCount(0);
+  await goToTab(page, 'hq');
+  // Creation commits to IndexedDB; reload from those rows before simulation.
+  await page.reload();
+  await page.waitForFunction(id => window.state?.isHydrated && !window.state?.busy
+    && window.state?.league?.franchiseGenerationId === id, creation.meta.franchiseGenerationId);
+  await expect(page.getByTestId('franchise-hq')).toBeVisible();
+
   // ── Advance Week 1 while skipping presentation ──────────────────────────────
   const advanceBtn = page.getByTestId('advance-week-cta');
   await expect(advanceBtn).toBeVisible();
@@ -226,6 +265,15 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await expect(page.getByTestId('hq-next-game').getByRole('button')).toHaveCount(0);
   await expect(page.getByText('More Prep', { exact: true })).toBeVisible();
   await expect(page.locator('.hq-v2-more')).not.toHaveAttribute('open', '');
+
+  await goToTab(page, 'standings');
+  await expect(page.getByRole('heading', { name: 'Standings Center', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => {
+    const league = window.state.league;
+    const team = league.teams.find(t => Number(t.id) === Number(league.userTeamId));
+    return Number(team.wins) + Number(team.losses) + Number(team.ties);
+  })).toBe(1);
+  await goToTab(page, 'hq');
 
   // Reload retains the canonical result on Weekly Results and Game Book.
   const savedFranchise = await page.evaluate(() => ({

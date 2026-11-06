@@ -1,3 +1,4 @@
+import { canonicalIdKey } from './referenceIntegrity.js';
 /**
  * Dynasty soak / balance audit V1 — pure integrity checks on snapshots from the worker.
  * No I/O, no mutations to game state.
@@ -1091,7 +1092,7 @@ export function runDynastySoakAudit(input = {}) {
       teams,
       teamsById: new Map(teams.map((t) => [Number(t.id), t])),
       players: allPlayers,
-      playersById: new Map(allPlayers.map((p) => [Number(p.id), p])),
+      playersById: new Map(allPlayers.map((p) => [canonicalIdKey(p.id), p])),
       year,
       phase: metaPhase,
     };
@@ -1105,7 +1106,7 @@ export function runDynastySoakAudit(input = {}) {
     }
     const draftTxs = rawTx.filter((t) => String(t?.type ?? '').toUpperCase() === 'DRAFT');
     const indexed = indexDraftClassesFromTransactions(rawTx, leagueHistory);
-    const playersById = new Map(allPlayers.map((p) => [num(p.id), p]));
+    const playersById = new Map(allPlayers.map((p) => [canonicalIdKey(p.id), p]));
     for (const entry of indexed.slice(0, 10)) {
       const sid = entry.seasonId;
       const seasonYear = num(entry.year) || year;

@@ -1,3 +1,4 @@
+import { canonicalIdKey, sameEntityId } from '../../core/referenceIntegrity.js';
 import { DEPTH_CHART_ROWS, autoBuildDepthChart, depthWarnings } from '../../core/depthChart.js';
 import { isAvailableForGameDay } from '../../core/holdouts/holdoutEngine.js';
 
@@ -17,14 +18,14 @@ function buildExistingAssignments(players = []) {
   for (const player of players) {
     const rowKey = player?.depthChart?.rowKey;
     if (!rowKey || !assignments[rowKey]) continue;
-    assignments[rowKey].push(Number(player.id));
+    assignments[rowKey].push(player.id);
   }
   for (const row of DEPTH_CHART_ROWS) {
     assignments[row.key] = assignments[row.key]
-      .filter((id) => Number.isFinite(id))
+      .filter((id) => canonicalIdKey(id) !== null)
       .sort((a, b) => {
-        const playerA = players.find((player) => Number(player?.id) === Number(a));
-        const playerB = players.find((player) => Number(player?.id) === Number(b));
+        const playerA = players.find((player) => sameEntityId(player?.id, a));
+        const playerB = players.find((player) => sameEntityId(player?.id, b));
         return toNumber(playerA?.depthChart?.order ?? playerA?.depthOrder, 999) - toNumber(playerB?.depthChart?.order ?? playerB?.depthOrder, 999);
       });
   }
@@ -90,13 +91,13 @@ export function deriveRosterReadinessModel({
     ? assignments
     : autoBuildDepthChart(safeRoster, buildExistingAssignments(safeRoster));
   const warnings = depthWarnings(resolvedAssignments, safeRoster);
-  const byId = new Map(safeRoster.map((player) => [Number(player.id), player]));
+  const byId = new Map(safeRoster.map((player) => [canonicalIdKey(player.id), player]));
 
   const perRowRisk = DEPTH_CHART_ROWS.map((row) => {
     const ids = Array.isArray(resolvedAssignments?.[row.key]) ? resolvedAssignments[row.key] : [];
-    const starter = byId.get(Number(ids[0]));
+    const starter = byId.get(canonicalIdKey(ids[0]));
     const injuredInRow = ids
-      .map((id) => byId.get(Number(id)))
+      .map((id) => byId.get(canonicalIdKey(id)))
       .filter(Boolean)
       .filter((player) => isInjured(player)).length;
     const missing = ids.length === 0 ? 1 : 0;

@@ -1,0 +1,451 @@
+[
+  {
+    "attempt": 1,
+    "initialQuota": 0,
+    "initialServiceWorkers": 0,
+    "events": [
+      {
+        "at": 1793599972223,
+        "kind": "navigation",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/"
+      },
+      {
+        "at": 1793599973052,
+        "kind": "browser",
+        "event": "worker-send",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599971189.1,
+        "type": "INIT",
+        "id": "msg_1"
+      },
+      {
+        "at": 1793599973949,
+        "kind": "start-clicked"
+      },
+      {
+        "at": 1793599974183,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599971189.1,
+        "state": "installing",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599974186,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599971189.1,
+        "state": "installing",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599974384,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599971189.1,
+        "state": "installed",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599974386,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599971189.1,
+        "state": "installed",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599974390,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599971189.1,
+        "state": "activating",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599974391,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599971189.1,
+        "state": "activating",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599974392,
+        "kind": "browser",
+        "event": "controllerchange",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599971189.1,
+        "controller": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599974410,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599971189.1,
+        "state": "activated",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599974410,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599971189.1,
+        "state": "activated",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599974516,
+        "kind": "navigation",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/"
+      },
+      {
+        "at": 1793599974987,
+        "kind": "browser",
+        "event": "worker-send",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599974389.6,
+        "type": "INIT",
+        "id": "msg_1"
+      },
+      {
+        "at": 1793599975138,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599974389.6,
+        "state": "activated",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599983951,
+        "kind": "buffalo-interrupted",
+        "error": "TimeoutError: locator.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.team-card').filter({ hasText: 'Buffalo' })\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-semibold ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-[44px] bg-[color:var(--accent)] text-white hover:bg-[color:var(--accent-hover)] active:scale-[0.98] h-10 px-4 p"
+      }
+    ],
+    "final": {
+      "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+      "controller": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js",
+      "saveHub": true,
+      "onboarding": false,
+      "databases": [
+        {
+          "name": "FootballGM_Meta",
+          "version": 1
+        }
+      ],
+      "storage": [
+        "fgmsim_settings_v1",
+        "footballgm_slot_order_v1",
+        "gmsim_last_seen_version"
+      ]
+    }
+  },
+  {
+    "attempt": 2,
+    "initialQuota": 0,
+    "initialServiceWorkers": 0,
+    "events": [
+      {
+        "at": 1793599984348,
+        "kind": "navigation",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/"
+      },
+      {
+        "at": 1793599984852,
+        "kind": "browser",
+        "event": "worker-send",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599984203.1,
+        "type": "INIT",
+        "id": "msg_1"
+      },
+      {
+        "at": 1793599985508,
+        "kind": "start-clicked"
+      },
+      {
+        "at": 1793599985823,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599984203.1,
+        "state": "installing",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599985824,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599984203.1,
+        "state": "installing",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599985961,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599984203.1,
+        "state": "installed",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599985962,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599984203.1,
+        "state": "installed",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599985963,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599984203.1,
+        "state": "activating",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599985964,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599984203.1,
+        "state": "activating",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599985965,
+        "kind": "browser",
+        "event": "controllerchange",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599984203.1,
+        "controller": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599985976,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599984203.1,
+        "state": "activated",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599985978,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599984203.1,
+        "state": "activated",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599986089,
+        "kind": "navigation",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/"
+      },
+      {
+        "at": 1793599986312,
+        "kind": "browser",
+        "event": "worker-send",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599985959.3,
+        "type": "INIT",
+        "id": "msg_1"
+      },
+      {
+        "at": 1793599986656,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599985959.3,
+        "state": "activated",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599995510,
+        "kind": "buffalo-interrupted",
+        "error": "TimeoutError: locator.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.team-card').filter({ hasText: 'Buffalo' })\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-semibold ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-[44px] bg-[color:var(--accent)] text-white hover:bg-[color:var(--accent-hover)] active:scale-[0.98] h-10 px-4 p"
+      }
+    ],
+    "final": {
+      "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+      "controller": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js",
+      "saveHub": true,
+      "onboarding": false,
+      "databases": [
+        {
+          "name": "FootballGM_Meta",
+          "version": 1
+        }
+      ],
+      "storage": [
+        "fgmsim_settings_v1",
+        "footballgm_slot_order_v1",
+        "gmsim_last_seen_version"
+      ]
+    }
+  },
+  {
+    "attempt": 3,
+    "initialQuota": 0,
+    "initialServiceWorkers": 0,
+    "events": [
+      {
+        "at": 1793599995978,
+        "kind": "navigation",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/"
+      },
+      {
+        "at": 1793599996559,
+        "kind": "browser",
+        "event": "worker-send",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599995795.5,
+        "type": "INIT",
+        "id": "msg_1"
+      },
+      {
+        "at": 1793599996927,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599995795.5,
+        "state": "installing",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599996930,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599995795.5,
+        "state": "installing",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599997095,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599995795.5,
+        "state": "installed",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599997095,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599995795.5,
+        "state": "installed",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599997096,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599995795.5,
+        "state": "activating",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599997097,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599995795.5,
+        "state": "activating",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599997099,
+        "kind": "browser",
+        "event": "controllerchange",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599995795.5,
+        "controller": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599997109,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599995795.5,
+        "state": "activated",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599997111,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599995795.5,
+        "state": "activated",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599997242,
+        "kind": "navigation",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/"
+      },
+      {
+        "at": 1793599997474,
+        "kind": "browser",
+        "event": "worker-send",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599997096.2,
+        "type": "INIT",
+        "id": "msg_1"
+      },
+      {
+        "at": 1793599997748,
+        "kind": "browser",
+        "event": "sw-state",
+        "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+        "doc": 1793599997096.2,
+        "state": "activated",
+        "script": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js"
+      },
+      {
+        "at": 1793599998150,
+        "kind": "start-clicked"
+      },
+      {
+        "at": 1793599998666,
+        "kind": "buffalo-clicked"
+      }
+    ],
+    "final": {
+      "url": "https://deploy-preview-1807--footballgmsim.netlify.app/",
+      "controller": "https://deploy-preview-1807--footballgmsim.netlify.app/sw.js",
+      "saveHub": false,
+      "onboarding": true,
+      "databases": [
+        {
+          "name": "FootballGM_Meta",
+          "version": 1
+        }
+      ],
+      "storage": [
+        "fgmsim_settings_v1",
+        "footballgm_slot_order_v1",
+        "gmsim_last_seen_version"
+      ]
+    }
+  }
+]

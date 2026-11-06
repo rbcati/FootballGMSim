@@ -67,6 +67,21 @@ export function sameEntityId(a, b) {
   return ka !== null && ka === kb;
 }
 
+/** Resolve an entity from raw-ID or canonical-key maps/arrays without changing IDs.
+ * Invalid references never match, including an accidental NaN/null map key.
+ */
+export function findEntityById(entities, id) {
+  const key = canonicalIdKey(id);
+  if (key === null) return null;
+  if (entities instanceof Map) {
+    const direct = entities.get(id) ?? entities.get(key);
+    if (direct && sameEntityId(direct.id, id)) return direct;
+  }
+  const values = entities instanceof Map ? entities.values() : (Array.isArray(entities) ? entities : []);
+  for (const entity of values) if (sameEntityId(entity?.id, id)) return entity;
+  return null;
+}
+
 /** True when an id is a valid (present) reference — 0 counts, null does not. */
 export function isValidIdRef(id) {
   return canonicalIdKey(id) !== null;

@@ -1,3 +1,4 @@
+import { canonicalIdKey, sameEntityId, stableIdCompare, findEntityById } from './referenceIntegrity.js';
 /**
  * Pure transaction / activity timeline normalization (no DB, no React).
  * Normalizes rows from IndexedDB `transactions` store and enriched worker payloads.
@@ -46,25 +47,20 @@ function teamAbbrFor(teamId, ctx = {}) {
 }
 
 function playerLookup(playerId, ctx = {}) {
-  if (playerId == null) return null;
-  const id = Number(playerId);
-  if (ctx.playersById instanceof Map) return ctx.playersById.get(id) ?? null;
-  const players = ctx.players || [];
-  return players.find((p) => Number(p?.id) === id) ?? null;
+  return findEntityById(ctx.playersById ?? ctx.players, playerId);
 }
 
 /**
  * Collect player IDs involved in a raw transaction (for filtering).
  * @param {object} tx
- * @returns {number[]}
+ * @returns {(number|string)[]}
  */
 export function collectPlayerIdsFromRaw(tx) {
   const d = tx?.details && typeof tx.details === 'object' ? tx.details : {};
   const ids = new Set();
   const add = (v) => {
     if (v == null) return;
-    const n = Number(v);
-    if (Number.isFinite(n)) ids.add(n);
+    if (canonicalIdKey(v) !== null && ![...ids].some(id => sameEntityId(id, v))) ids.add(v);
   };
   add(d.playerId);
   add(d.receivedPlayerId);
@@ -87,14 +83,13 @@ export function tradeDedupeFingerprint(tx) {
   const off = d.offering?.playerIds;
   const rec = d.receiving?.playerIds;
   if (Array.isArray(off) && off.length + (Array.isArray(rec) ? rec.length : 0) > 0) {
-    const all = [...(off || []), ...(rec || [])].map((x) => num(x)).filter((n) => n > 0).sort((a, b) => a - b);
+    const all = [...(off || []), ...(rec || [])].map(canonicalIdKey).filter((id) => id !== null).sort(stableIdCompare);
     return `pkg|${str(tx?.seasonId)}|${num(tx?.week)}|${fromTeamId}|${toTeamId}|${all.join(',')}`;
   }
-  const a = num(d.playerId);
-  const b = num(d.receivedPlayerId);
-  if (a && b) {
-    const lo = Math.min(a, b);
-    const hi = Math.max(a, b);
+  const a = canonicalIdKey(d.playerId);
+  const b = canonicalIdKey(d.receivedPlayerId);
+  if (a !== null && b !== null) {
+    const [lo, hi] = [a, b].sort(stableIdCompare);
     return `ai|${str(tx?.seasonId)}|${num(tx?.week)}|${lo}|${hi}`;
   }
   return `misc|${str(tx?.id)}`;
@@ -126,7 +121,7 @@ function summarizeContract(contract) {
 function buildHeadlineAndDetail(tx, bucket, ctx) {
   const d = tx?.details || {};
   const teamAbbr = str(tx?.teamAbbr) || teamAbbrFor(tx?.teamId, ctx);
-  const playerId = d.playerId != null ? num(d.playerId) : num(tx?.playerId);
+  const playerId = d.playerId ?? tx?.playerId;
   const pl = playerLookup(playerId, ctx);
   const playerName = str(tx?.playerName) || pl?.name || '';
   const pos = str(tx?.playerPos) || pl?.pos || '';
@@ -192,7 +187,7 @@ function buildHeadlineAndDetail(tx, bucket, ctx) {
         detail: `Outgoing ${offPlayers}P/${offPicks}pk · Incoming ${recPlayers}P/${recPicks}pk`,
       };
     }
-    const recvId = num(d.receivedPlayerId);
+    const recvId = d.receivedPlayerId;
     const recv = playerLookup(recvId, ctx);
     const recvName = recv?.name || '';
     return {
@@ -209,13 +204,13 @@ function buildHeadlineAndDetail(tx, bucket, ctx) {
 /**
  * Normalize a single raw transaction row.
  * @param {object} tx - raw from DB or partially enriched from worker
- * @param {{ teams?: any[], teamsById?: Map<number,any>, players?: any[], playersById?: Map<number,any>, year?: number|null, phase?: string|null }} ctx
+ * @param {{ teams?: any[], teamsById?: Map<number,any>, players?: any[], playersById?: Map<number|string,any>, year?: number|null, phase?: string|null }} ctx
  */
 export function normalizeRawTransaction(tx, ctx = {}) {
   const d = tx?.details && typeof tx.details === 'object' ? tx.details : {};
   const internalType = str(tx?.type).toUpperCase();
   const bucket = rawTypeToBucket(internalType);
-  const playerId = d.playerId != null ? num(d.playerId) : num(tx?.playerId);
+  const playerId = d.playerId ?? tx?.playerId;
   const pl = playerLookup(playerId, ctx);
   const pos = str(tx?.playerPos) || pl?.pos || '';
 
@@ -244,7 +239,7 @@ export function normalizeRawTransaction(tx, ctx = {}) {
   }
 
   const row = {
-    id: tx?.id != null ? `tx-${tx.id}` : `tx-${internalType}-${str(tx?.seasonId)}-w${num(tx?.week)}-t${num(tx?.teamId)}-p${num(playerId)}`,
+    id: tx?.id != null ? `tx-${tx.id}` : `tx-${internalType}-${str(tx?.seasonId)}-w${num(tx?.week)}-t${num(tx?.teamId)}-p${canonicalIdKey(playerId) ?? 'unknown'}`,
     rawId: tx?.id ?? null,
     type: bucket,
     subtype: subtype || null,
@@ -253,7 +248,7 @@ export function normalizeRawTransaction(tx, ctx = {}) {
     phase: ctx.phase != null ? str(ctx.phase) : null,
     seasonId: tx?.seasonId != null ? str(tx.seasonId) : null,
     dateLabel: tx?.week != null && ctx.year != null ? `Y${ctx.year} W${tx.week}` : (tx?.seasonId != null ? str(tx.seasonId) : ''),
-    playerId: Number.isFinite(playerId) && playerId > 0 ? playerId : null,
+    playerId: canonicalIdKey(playerId) !== null ? playerId : null,
     playerName: str(tx?.playerName) || pl?.name || null,
     pos: pos || null,
     fromTeamId: Number.isFinite(fromTeamId) && fromTeamId > 0 ? fromTeamId : null,
@@ -319,7 +314,7 @@ export function filterNormalizedTransactions(rows, filters = {}) {
   } = filters;
   const q = str(search).toLowerCase();
   const tid = teamId != null ? num(teamId) : null;
-  const pid = playerId != null ? num(playerId) : null;
+  const pid = canonicalIdKey(playerId);
   const sid = seasonId != null ? str(seasonId) : null;
   const y = year != null ? num(year) : null;
   const typeBucket = type ? str(type).toLowerCase() : '';
@@ -328,10 +323,10 @@ export function filterNormalizedTransactions(rows, filters = {}) {
     if (sid && str(r.seasonId) !== sid) return false;
     if (y != null && num(r.year) !== y && y > 0) return false;
     if (typeBucket && str(r.type) !== typeBucket) return false;
-    if (pid != null && pid > 0) {
+    if (pid !== null) {
       const ids = Array.isArray(r._playerIds) ? r._playerIds : [];
-      const primary = num(r.playerId);
-      if (!ids.includes(pid) && primary !== pid) return false;
+      const primary = canonicalIdKey(r.playerId);
+      if (!ids.some(id => sameEntityId(id, pid)) && primary !== pid) return false;
     }
     if (tid != null && tid > 0) {
       const hit = num(r.teamId) === tid

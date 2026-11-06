@@ -1,3 +1,4 @@
+import { canonicalIdKey, sameEntityId } from '../../core/referenceIntegrity.js';
 import { buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 /**
  * Roster.jsx
@@ -871,7 +872,7 @@ function RosterTable({
   };
   const cancelReleasePreview = () => setReleaseCandidate(null);
   const confirmRelease = () => {
-    if (!releaseCandidate?.id) return;
+    if (canonicalIdKey(releaseCandidate?.id) === null) return;
     actions.releasePlayer(releaseCandidate.id, teamId);
     setReleaseCandidate(null);
     onRefetch?.();
@@ -887,7 +888,7 @@ function RosterTable({
     return players.filter((p) => selectedSet.has(p.id) && !seen.has(p.id) && seen.add(p.id));
   }, [players, bulkSelectedIds]);
   const confirmBulkRelease = async (dedupedPlayers) => {
-    const ids = [...new Set((dedupedPlayers ?? []).map((p) => p?.id).filter(Boolean))];
+    const ids = [...new Set((dedupedPlayers ?? []).map((p) => p?.id).filter((id) => canonicalIdKey(id) !== null))];
     if (!ids.length || !actions?.bulkReleasePlayers) return;
     try {
       // Resolves with { type: 'SUCCESS', payload: { ok, released } }; a worker
@@ -2692,7 +2693,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
     if (updates.length === 0) return;
 
     setPlayers((prev) => prev.map((player) => {
-      const update = updates.find((entry) => Number(entry.playerId) === Number(player.id));
+      const update = updates.find((entry) => sameEntityId(entry.playerId, player.id));
       if (!update) return player;
       return {
         ...player,

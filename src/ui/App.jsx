@@ -349,6 +349,9 @@ function AppContent() {
   // ── Service-Worker update detection ───────────────────────────────────────
   const [swUpdateReady, setSwUpdateReady] = useState(false);
   const swRegRef = useRef(null);
+  const [swReloadPending, setSwReloadPending] = useState(false);
+  const [swRestartError, setSwRestartError] = useState('');
+  const swRestartInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
@@ -378,20 +381,48 @@ function AppContent() {
     };
     navigator.serviceWorker.addEventListener('message', onMessage);
 
-    // Reload automatically after the new SW takes control
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      window.location.reload();
-    });
+    // First installation claims this already-current page; reloading would
+    // discard onboarding. Only replacement of an existing controller is an update.
+    let controller = navigator.serviceWorker.controller;
+    const onControllerChange = () => {
+      const nextController = navigator.serviceWorker.controller;
+      const replacingController = controller && nextController && controller !== nextController;
+      controller = nextController;
+      if (replacingController) setSwReloadPending(true);
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
-    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', onMessage);
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+    };
   }, []);
 
+  // An update activated by another tab must not interrupt creation or a worker
+  // operation. Use the existing acknowledged save boundary before restarting.
+  useEffect(() => {
+    if (!swReloadPending || swRestartInFlightRef.current || pendingNewSlot || initFlow?.active || busy || simulating || batchSim) return;
+    if (leagueReady && (!activeSlot || league?.activeLeagueId !== activeSlot)) return;
+    swRestartInFlightRef.current = true;
+    Promise.resolve().then(() => leagueReady
+      ? actions.saveSlot(activeSlot, { waitForSave: true, expectedFranchiseGenerationId: league.franchiseGenerationId })
+      : undefined
+    ).then(() => window.location.reload()).catch((error) => {
+      console.error('[SW] Restart deferred because saving failed:', error);
+      swRestartInFlightRef.current = false;
+      setSwReloadPending(false);
+      setSwUpdateReady(true);
+      setSwRestartError('Could not save the franchise. Retry the update when saving succeeds.');
+    });
+  }, [swReloadPending, pendingNewSlot, initFlow?.active, busy, simulating, batchSim, leagueReady, activeSlot, league?.activeLeagueId, league?.franchiseGenerationId, actions]);
+
   const handleSwUpdate = () => {
+    setSwRestartError('');
     const reg = swRegRef.current;
     if (reg?.waiting) {
       reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     } else {
-      window.location.reload();
+      setSwReloadPending(true);
     }
   };
 
@@ -1412,9 +1443,9 @@ function AppContent() {
       {swUpdateReady && (
         <div role="alert" className="app-banner app-banner-info">
           <span className="app-banner-text">
-            New version available. You can keep playing now and update when ready.
+            {swRestartError || 'New version available. You can keep playing now and update when ready.'}
           </span>
-          <button className="btn btn-primary app-banner-btn" onClick={handleSwUpdate}>
+          <button className="btn btn-primary app-banner-btn" onClick={handleSwUpdate} disabled={swReloadPending || busy || simulating || Boolean(batchSim)}>
             Update &amp; Restart
           </button>
           <button
