@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadWorkerModule, dispatchWorker } from '../../src/testSupport/dynastySoakRunner.js';
 import { cache } from '../../src/db/cache.js';
+import { Transactions } from '../../src/db/index.js';
 import { DEFAULT_TEAMS } from '../../src/data/default-teams.js';
 import { getSalaryInflationMultiplier } from '../../src/core/economy.js';
 import { calculateExtensionDemand } from '../../src/core/player.js';
@@ -31,6 +32,7 @@ describe.sequential('offseason decision persistence', () => {
     expect(rejected.type).toBe(toUI.EXTENSION_RESPONSE);
     expect(['counter', 'declined']).toContain(rejected.payload.status);
     expect(cache.getPlayer(walk.id).contract).toEqual(old);
+    expect((await Transactions.loadRecent()).filter(t => t.type === 'EXTEND' && t.details?.playerId === walk.id)).toHaveLength(0);
     const demand = calculateExtensionDemand(cache.getPlayer(extend.id), 'Normal');
     const years = 5;
     const contract = { signingBonus: demand.signingBonus, years, yearsTotal: years, baseAnnual: demand.baseAnnual * getSalaryInflationMultiplier(cache.getMeta().economy) * 2, guaranteedPct: 0.95 };
@@ -47,6 +49,7 @@ describe.sequential('offseason decision persistence', () => {
     await dispatchWorker(toWorker.LOAD_SAVE, { leagueId });
     expect(cache.getPlayer(walk.id).extensionDecision).toBe('let_walk');
     expect(cache.getPlayer(extend.id).contract).toMatchObject(contract);
+    expect((await Transactions.loadRecent()).filter(t => t.type === 'EXTEND' && t.details?.playerId === extend.id)).toHaveLength(1);
     const advanced = await dispatchWorker(toWorker.ADVANCE_OFFSEASON, {}, { timeoutMs: 120000 });
     expect(advanced.type).toBe(toUI.OFFSEASON_PHASE);
     expect(cache.getMeta().phase).toBe('free_agency');

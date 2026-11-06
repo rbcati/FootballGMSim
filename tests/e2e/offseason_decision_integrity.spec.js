@@ -1,18 +1,34 @@
 import { test, expect } from '@playwright/test';
 test.setTimeout(600000);
+test.use({ actionTimeout: 30000 });
 async function readPlayer(page, id) {
   return page.evaluate(async pid => {
     const res = await window.gameController.getRoster(window.state.league.userTeamId);
     return res.payload.players.find(p => p.id === pid);
   }, id);
 }
+async function dismissPreviewDrawer(page) {
+  if (new URL(page.url()).hostname.endsWith('.netlify.app')) {
+    const frame = page.locator('iframe[src*="app.netlify.com/cdp"]');
+    await frame.waitFor({ state: 'attached', timeout: 15000 });
+    const dismiss = page.frameLocator('iframe[src*="app.netlify.com/cdp"]').locator('button[aria-label="Dismiss"], button[title="Dismiss"]').first();
+    await dismiss.focus();
+    await dismiss.press('Enter');
+  }
+}
 async function openCenter(page) {
+  for (const name of ['Proceed to Offseason', "Let's Go!"]) {
+    const button = page.getByRole('button', { name, exact: true });
+    if (await button.isVisible()) await button.click();
+  }
   await page.locator('[data-testid="nav-team"], [data-testid="primary-nav-team"]').first().click();
   await page.getByTestId('section-tab-contract-center').click();
+  console.info('Contract Center opened');
   await expect(page.getByText('Re-signing Center', { exact: true })).toBeVisible();
 }
 for (const team of ['Buffalo', 'Miami']) test(`${team}: manual decisions persist and Advance confirmation is respected`, async ({ page }) => {
   await page.goto('/');
+  await dismissPreviewDrawer(page);
   await page.getByTestId('start-new-franchise-cta').first().click();
   await page.locator('.team-card').filter({ hasText: team }).click();
   await page.getByTestId('onboarding-continue-button').click();
@@ -37,6 +53,7 @@ for (const team of ['Buffalo', 'Miami']) test(`${team}: manual decisions persist
   const row = page.locator('tr').filter({ hasText: target.name });
   await row.getByRole('button', { name: 'Let Walk', exact: true }).click();
   await expect(row.locator('td').nth(10)).toHaveText('Let Walk');
+  console.info(`${team}: Let Walk committed`);
   expect((await readPlayer(page, target.id)).extensionDecision).toBe('let_walk');
   await expect(page.getByTestId('unresolved-key-expirings')).toHaveText(String(unresolved - 1));
   await page.reload();
@@ -56,8 +73,10 @@ for (const team of ['Buffalo', 'Miami']) test(`${team}: manual decisions persist
   const saved = (await readPlayer(page, extension.id)).contract;
   for (const key of ['years', 'yearsTotal', 'baseAnnual', 'signingBonus', 'guaranteedPct']) expect(saved[key]).toBe(after.contract[key]);
   await openCenter(page);
-  page.once('dialog', dialog => dialog.dismiss());
+  let cancelledConfirmation = false;
+  page.once('dialog', dialog => { cancelledConfirmation = true; return dialog.dismiss(); });
   await page.locator('.app-advance-btn').click();
+  expect(cancelledConfirmation).toBe(true);
   expect(await page.evaluate(() => window.state.league.phase)).toBe('offseason_resign');
   if (team === 'Miami') {
     await openCenter(page);
