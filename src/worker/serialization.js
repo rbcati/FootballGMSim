@@ -206,7 +206,7 @@ export function serializeLeagueDelta(fullState, previousState) {
   }
 
   // ── Teams (with roster — backward compatible) ────────────────────────────
-  // Only include when any team's win/loss/cap/ovr/fanApproval has changed.
+  // Include roster decisions and contracts even when team totals stay unchanged.
   const teams = fullState.teams ?? [];
   const prevTeams = hasPrev ? (previousState.teams ?? []) : null;
   const teamsChanged =
@@ -228,7 +228,14 @@ export function serializeLeagueDelta(fullState, previousState) {
         t.strategies?.defSchemeId !== pt.strategies?.defSchemeId ||
         (t.roster ?? []).some((player, playerIndex) => {
           const previousPlayer = pt.roster?.[playerIndex];
-          return String(player?.id) !== String(previousPlayer?.id)
+          return player?.extensionDecision !== previousPlayer?.extensionDecision
+            || player?.tradeStatus !== previousPlayer?.tradeStatus
+            || player?.onTradeBlock !== previousPlayer?.onTradeBlock
+            || (player?.contractPlan !== previousPlayer?.contractPlan
+              && JSON.stringify(player?.contractPlan ?? []) !== JSON.stringify(previousPlayer?.contractPlan ?? []))
+            || (player?.contract !== previousPlayer?.contract
+              && JSON.stringify(player?.contract) !== JSON.stringify(previousPlayer?.contract))
+            || String(player?.id) !== String(previousPlayer?.id)
             || player?.depthChart?.rowKey !== previousPlayer?.depthChart?.rowKey
             || Number(player?.depthChart?.order ?? player?.depthOrder ?? 0)
               !== Number(previousPlayer?.depthChart?.order ?? previousPlayer?.depthOrder ?? 0);

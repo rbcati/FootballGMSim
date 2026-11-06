@@ -67,6 +67,12 @@ function makeActions(players = rosterPayload.players) {
 describe('FinancialsView — expiring contracts dashboard', () => {
   afterEach(cleanup);
 
+  for (const teamId of [0, 1]) it(`fetches the roster for team ${teamId}`, async () => {
+    const actions = makeActions();
+    render(<FinancialsView league={{ ...baseLeague, userTeamId: teamId, teams: [{ ...baseLeague.teams[0], id: teamId }] }} actions={actions} />);
+    await waitFor(() => expect(actions.getRoster).toHaveBeenCalledWith(teamId));
+  });
+
   it('renders priority badges for expiring players', async () => {
     const actions = makeActions();
     const { findAllByTestId } = render(<FinancialsView league={baseLeague} actions={actions} />);

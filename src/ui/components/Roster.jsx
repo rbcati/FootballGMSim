@@ -909,7 +909,7 @@ function RosterTable({
   };
 
   const handleTradeBlockToggle = async (playerId) => {
-    if (!playerId || !actions?.toggleTradeBlock) return;
+    if (playerId == null || !actions?.toggleTradeBlock) return;
     try {
       await actions.toggleTradeBlock(playerId, teamId);
       actions.save();
@@ -922,7 +922,10 @@ function RosterTable({
   };
 
   const handleManagementUpdate = async (player, updates) => {
-    if (!actions?.updatePlayerManagement || !player?.id || !teamId) return;
+    if (!actions?.updatePlayerManagement || player?.id == null || teamId == null) {
+      setActionError('Unable to update player. Reload the franchise and retry.');
+      return;
+    }
     try {
       await actions.updatePlayerManagement(player.id, teamId, updates);
       setActionError(null);
@@ -1547,7 +1550,7 @@ function RosterTable({
                     </TableCell>
                     {/* Release / Extend */}
                     <TableCell style={{ textAlign: "center", padding: "0 var(--space-2)" }}>
-                      {player?.id && (
+                      {player?.id != null && (
                         <div style={{ display: 'grid', gap: 4 }}>
                           <select
                             value={normalizeManagement(player).tradeStatus}
