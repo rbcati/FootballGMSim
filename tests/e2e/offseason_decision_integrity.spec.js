@@ -25,6 +25,11 @@ async function openCenter(page, expectSplash = true) {
   }
   const bracket = page.getByRole('button', { name: "Let's Go!", exact: true });
   if (await bracket.isVisible()) await bracket.click();
+  const briefing = page.getByRole('dialog', { name: 'Weekly GM briefing', exact: true });
+  if (await briefing.isVisible()) {
+    await page.keyboard.press('Escape');
+    await expect(briefing).toBeHidden();
+  }
   await page.locator('[data-testid="nav-team"], [data-testid="primary-nav-team"]').first().click();
   await page.getByTestId('section-tab-contract-center').click();
   console.info('Contract Center opened');
@@ -61,6 +66,7 @@ for (const team of ['Buffalo', 'Miami']) test(`${team}: manual decisions persist
   expect((await readPlayer(page, target.id)).extensionDecision).toBe('let_walk');
   await expect(page.getByTestId('unresolved-key-expirings')).toHaveText(String(unresolved - 1));
   await page.reload();
+  await dismissPreviewDrawer(page);
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: 60000 });
   await openCenter(page);
   await expect(page.locator('tr').filter({ hasText: target.name }).locator('td').nth(10)).toHaveText('Let Walk');
@@ -73,10 +79,15 @@ for (const team of ['Buffalo', 'Miami']) test(`${team}: manual decisions persist
   if (after.extensionDecision === 'extended') expect(after.contract).not.toEqual(previous);
   else expect(after.contract).toEqual(previous);
   await page.reload();
+  await dismissPreviewDrawer(page);
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: 60000 });
   const saved = (await readPlayer(page, extension.id)).contract;
   for (const key of ['years', 'yearsTotal', 'baseAnnual', 'signingBonus', 'guaranteedPct']) expect(saved[key]).toBe(after.contract[key]);
   await openCenter(page);
+  if (Number(await page.getByTestId('unresolved-key-expirings').textContent()) === 0) {
+    await page.locator('tr').filter({ hasText: target.name }).getByRole('button', { name: 'Defer', exact: true }).click();
+    await expect(page.getByTestId('unresolved-key-expirings')).toHaveText('1');
+  }
   let cancelledConfirmation = false;
   page.once('dialog', dialog => { cancelledConfirmation = true; return dialog.dismiss(); });
   await page.locator('.app-advance-btn').click();
@@ -100,6 +111,7 @@ for (const team of ['Buffalo', 'Miami']) test(`${team}: manual decisions persist
   await expect(page.locator('body')).toContainText(/Free Agency/i);
   await page.screenshot({ path: test.info().outputPath('free-agency.png'), fullPage: true });
   await page.reload();
+  await dismissPreviewDrawer(page);
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: 60000 });
   expect(await page.evaluate(() => window.state.league.phase)).toBe('free_agency');
 });

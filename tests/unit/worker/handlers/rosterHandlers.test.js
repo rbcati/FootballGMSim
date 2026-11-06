@@ -87,7 +87,7 @@ describe('handleGetRoster', () => {
     expect(payload.analysis).toBeTruthy();
   });
 
-  it('maps players into the roster view-model shape (same keys as the monolith)', async () => {
+  it('maps players into the roster view-model shape including persisted management fields', async () => {
     const { ctx } = setup();
     await handleGetRoster({ teamId: 3 }, 'msg_roster_2', ctx);
 
@@ -95,12 +95,22 @@ describe('handleGetRoster', () => {
     expect(players).toHaveLength(2);
     const ricky = players.find((p) => p.id === 11);
     expect(Object.keys(ricky).sort()).toEqual([
-      'age', 'contract', 'id', 'morale', 'name', 'onTradeBlock', 'ovr',
-      'pos', 'potential', 'progressionDelta', 'schemeFit', 'status', 'traits',
+      'age', 'contract', 'contractPlan', 'extensionDecision', 'id', 'morale', 'name', 'onTradeBlock', 'ovr',
+      'pos', 'potential', 'progressionDelta', 'schemeFit', 'status', 'teamId', 'tradeStatus', 'traits',
     ].sort());
     expect(ricky.contract).toEqual({ years: 2, yearsTotal: 4, yearsRemaining: 2, baseAnnual: 12, signingBonus: 6, guaranteedPct: 0.6 });
+    expect(ricky).toMatchObject({ teamId: 3, extensionDecision: null, tradeStatus: 'available', contractPlan: [] });
     expect(typeof ricky.schemeFit).toBe('number');
     expect(typeof ricky.morale).toBe('number');
+  });
+
+  it('returns committed management intent without sharing mutable plan arrays', async () => {
+    const player = makeRosterPlayer({ extensionDecision: 'let_walk', tradeStatus: 'untouchable', contractPlan: ['shortlist_extension'] });
+    const { ctx } = setup({ players: [player] });
+    await handleGetRoster({ teamId: 3 }, 'management', ctx);
+    const result = ctx.posts[0].payload.players[0];
+    expect(result).toMatchObject({ id: player.id, teamId: 3, extensionDecision: 'let_walk', tradeStatus: 'untouchable', contractPlan: ['shortlist_extension'] });
+    expect(result.contractPlan).not.toBe(player.contractPlan);
   });
 
   it('normalizes legacy flat contract fields into a nested contract', async () => {
