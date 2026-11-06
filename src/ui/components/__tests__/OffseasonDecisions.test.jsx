@@ -44,6 +44,12 @@ describe.each([0, 7])('offseason actions for team %s', teamId => {
     await waitFor(() => expect(v.getByRole('status').textContent).toBe('Save failed. Retry.'));
     expect(v.container.textContent).not.toContain('Test Quarterback: Let Walk.');
   });
+  it('reports a committed extension truthfully when saving its history fails', async () => {
+    const v = setup(teamId, 0, { updateFranchiseChronicle: vi.fn(async () => { throw new Error('History write failed'); }) });
+    fireEvent.click(v.getByRole('button', { name: 'Extend', exact: true }));
+    fireEvent.click(v.getByRole('button', { name: 'Confirm extension' }));
+    await waitFor(() => expect(v.getByRole('status').textContent).toContain('extension accepted, but history could not be saved'));
+  });
   it('displays rejected extensions and tag errors', async () => {
     const v = setup(teamId, 'opaque', { extendContract: vi.fn(async () => ({ payload: { status: 'declined', reason: 'Cap room short' } })), applyFranchiseTag: vi.fn(async () => { throw new Error('Tag failed. Retry.'); }) });
     fireEvent.click(v.getByRole('button', { name: 'Extend', exact: true }));

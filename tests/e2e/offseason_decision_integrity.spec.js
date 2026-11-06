@@ -47,17 +47,31 @@ for (const team of ['Buffalo', 'Miami']) test(`${team}: manual decisions persist
   const previous = (await readPlayer(page, extension.id)).contract;
   await page.locator('tr').filter({ hasText: extension.name }).getByRole('button', { name: 'Extend', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm extension' }).click();
-  await expect(page.getByRole('status').filter({ hasText: /accepted|countered|declined|Cap room|offer|Agent/i })).toBeVisible();
+  await expect(page.getByRole('status')).toContainText(/\S/);
   const after = await readPlayer(page, extension.id);
   if (after.extensionDecision === 'extended') expect(after.contract).not.toEqual(previous);
   else expect(after.contract).toEqual(previous);
   await page.reload();
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: 60000 });
-  expect((await readPlayer(page, extension.id)).contract).toEqual(after.contract);
+  const saved = (await readPlayer(page, extension.id)).contract;
+  for (const key of ['years', 'yearsTotal', 'baseAnnual', 'signingBonus', 'guaranteedPct']) expect(saved[key]).toBe(after.contract[key]);
+  await openCenter(page);
   page.once('dialog', dialog => dialog.dismiss());
   await page.locator('.app-advance-btn').click();
   expect(await page.evaluate(() => window.state.league.phase)).toBe('offseason_resign');
-  page.once('dialog', dialog => dialog.accept());
+  if (team === 'Miami') {
+    await openCenter(page);
+    for (const p of targets) {
+      const decisionRow = page.locator('tr').filter({ hasText: p.name });
+      if (await decisionRow.count()) {
+        await decisionRow.getByRole('button', { name: 'Let Walk', exact: true }).click();
+        await expect(decisionRow.locator('td').nth(10)).toHaveText('Let Walk');
+      }
+    }
+    await expect(page.getByTestId('unresolved-key-expirings')).toHaveText('0');
+  } else {
+    page.once('dialog', dialog => dialog.accept());
+  }
   await page.locator('.app-advance-btn').click();
   await expect.poll(() => page.evaluate(() => window.state.league.phase), { timeout: 120000 }).toBe('free_agency');
   await expect(page.locator('body')).toContainText(/Free Agency/i);

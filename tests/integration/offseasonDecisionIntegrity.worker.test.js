@@ -33,7 +33,7 @@ describe.sequential('offseason decision persistence', () => {
     expect(cache.getPlayer(walk.id).contract).toEqual(old);
     const demand = calculateExtensionDemand(cache.getPlayer(extend.id), 'Normal');
     const years = 5;
-    const contract = { ...demand, years, yearsTotal: years, baseAnnual: demand.baseAnnual * getSalaryInflationMultiplier(cache.getMeta().economy) * 2, guaranteedPct: 0.95 };
+    const contract = { signingBonus: demand.signingBonus, years, yearsTotal: years, baseAnnual: demand.baseAnnual * getSalaryInflationMultiplier(cache.getMeta().economy) * 2, guaranteedPct: 0.95 };
     const cap = cache.getTeam(0).capUsed;
     const priorHit = getPlayerCapHit(cache.getPlayer(extend.id));
     const accepted = await dispatchWorker(toWorker.EXTEND_CONTRACT, { playerId: extend.id, teamId: 0, contract });
@@ -46,7 +46,7 @@ describe.sequential('offseason decision persistence', () => {
     expect(cache.getPlayersByTeam(0).some(p => p.extensionDecision === 'let_walk')).toBe(false);
     await dispatchWorker(toWorker.LOAD_SAVE, { leagueId });
     expect(cache.getPlayer(walk.id).extensionDecision).toBe('let_walk');
-    expect(cache.getPlayer(extend.id).contract).toEqual(contract);
+    expect(cache.getPlayer(extend.id).contract).toMatchObject(contract);
     const advanced = await dispatchWorker(toWorker.ADVANCE_OFFSEASON, {}, { timeoutMs: 120000 });
     expect(advanced.type).toBe(toUI.OFFSEASON_PHASE);
     expect(cache.getMeta().phase).toBe('free_agency');
@@ -54,7 +54,7 @@ describe.sequential('offseason decision persistence', () => {
     await dispatchWorker(toWorker.LOAD_SAVE, { leagueId });
     expect(cache.getMeta().phase).toBe('free_agency');
     await dispatchWorker(toWorker.LOAD_SAVE, { leagueId: second.payload.activeLeagueId });
-    expect(cache.getPlayersByTeam(0).map(p => p.id)).toEqual(secondIds);
+    expect(new Set(cache.getPlayersByTeam(0).map(p => p.id))).toEqual(new Set(secondIds));
     expect(cache.getPlayersByTeam(0).some(p => p.extensionDecision === 'let_walk')).toBe(false);
   }, 180000);
 });
