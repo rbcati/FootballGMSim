@@ -490,7 +490,8 @@ function AppContent() {
 
   const isBatchSimBlocking = !!batchSim && !['cancelled', 'completed', 'idle'].includes(batchSim?.status);
 
-  const handleAdvanceWeek = useCallback(() => {
+  const [advanceError, setAdvanceError] = useState('');
+  const handleAdvanceWeek = useCallback(async () => {
     if (busy || simulating || advancingRef.current) return;
     if (!league?.phase) return;
     if (unresolvedWeeklyEvent) {
@@ -511,7 +512,14 @@ function AppContent() {
         }
       }
       advancingRef.current = true;
-      actions.advanceOffseason();
+      setAdvanceError('');
+      try {
+        await actions.advanceOffseason();
+      } catch (err) {
+        setAdvanceError(err?.message || 'Unable to advance offseason. Please retry.');
+      } finally {
+        advancingRef.current = false;
+      }
     } else if (league.phase === 'free_agency') {
       advancingRef.current = true;
       actions.advanceFreeAgencyDay();
@@ -1459,6 +1467,7 @@ function AppContent() {
       )}
 
       {/* ── Error banner ───────────────────────────────────────────────── */}
+      {advanceError && <div role="alert">{advanceError}</div>}
       {error && (
         <div role="alert" className="app-banner app-banner-error">
           <span>{error}</span>

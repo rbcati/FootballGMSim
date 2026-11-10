@@ -170,7 +170,7 @@ export default function FinancialsView({ league, actions }) {
   const phase = league?.phase ?? "";
 
   const fetchRoster = useCallback(async () => {
-    if (!teamId || !actions?.getRoster) return;
+    if (teamId == null || !actions?.getRoster) return;
     setLoading(true);
     setError(null);
     try {
@@ -271,7 +271,7 @@ export default function FinancialsView({ league, actions }) {
 
   const applyExpiringBatchAction = useCallback(async (flag) => {
     const rows = expiringDashboard.rows ?? [];
-    if (!rows.length || !actions?.updatePlayerManagement || !teamId) return;
+    if (!rows.length || !actions?.updatePlayerManagement || teamId == null) return;
     setApplyingBatch(true);
     try {
       await Promise.all(rows.map((row) => {

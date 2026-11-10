@@ -297,6 +297,9 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed, league }) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Season Complete"
       style={{
         position: "fixed",
         top: 0,
@@ -308,7 +311,9 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed, league }) {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: "safe center",
+        overflowY: "auto",
+        boxSizing: "border-box",
         gap: "var(--space-3)",
         padding: "var(--space-5)",
       }}

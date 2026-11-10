@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import Roster from '../Roster.jsx';
 
 function makePlayer(id, overrides = {}) {
@@ -40,6 +40,18 @@ const baseLeague = {
 
 describe('Roster — expiring/re-sign tab priority badges', () => {
   afterEach(cleanup);
+
+  for (const teamId of [0, 1]) for (const playerId of [0, 'player:opaque']) it(`updates management for team ${teamId}, player ${playerId}`, async () => {
+    const player = makePlayer(playerId, { teamId });
+    const team = { ...baseLeague.teams[0], id: teamId, roster: [player] };
+    const actions = {
+      getRoster: vi.fn(async () => ({ payload: { team, players: [player] } })),
+      updatePlayerManagement: vi.fn(async () => ({ type: 'STATE_UPDATE' })),
+    };
+    const view = render(<Roster league={{ ...baseLeague, userTeamId: teamId, teams: [team] }} actions={actions} initialState={{ view: 'table', filter: 'ALL' }} initialViewMode="table" />);
+    fireEvent.change(await view.findByTitle('Trade posture'), { target: { value: 'untouchable' } });
+    await waitFor(() => expect(actions.updatePlayerManagement).toHaveBeenCalledWith(playerId, teamId, { tradeStatus: 'untouchable' }));
+  });
 
   it('renders priority badges for expiring players in the resign-phase table', async () => {
     const actions = { getRoster: vi.fn(async () => ({ payload: rosterPayload })) };

@@ -298,7 +298,7 @@ export default function ExtensionNegotiationModal({
               <div style={{ display: "flex", gap: "var(--space-3)" }}>
 
                 <Button className="btn" onClick={onClose} style={{ flex: 1 }}>
-                  Reject
+                  Close offer
                 </Button>
                 <Button
                   className="btn btn-primary"
