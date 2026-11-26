@@ -26,6 +26,7 @@ import ReSignPriorityBadges from "./resign/ReSignPriorityBadges.jsx";
 import ReSignDecisionTabs from "./resign/ReSignDecisionTabs.jsx";
 import { buildResignDecisionTabs, filterResignDecisionRows, RESIGN_DECISION_DEFAULT_TAB } from "../utils/resignDecisionFilters.js";
 import { CONTRACT_PLAN_LABELS, normalizeManagement } from "../utils/playerManagement.js";
+const EXTENSION_DECISION_LABELS = { let_walk: "Let Walk", extended: "Extended", tagged: "Franchise tag", deferred: "Decide Later", pending: "Pending" };
 import InfoTip from "./InfoTip.jsx";
 import { computeRestructureOutcome, isContractRestructureEligible } from "../../core/contracts/restructure.js";
 
@@ -241,7 +242,17 @@ export default function FinancialsView({ league, actions }) {
     const expiring = enriched
       .filter((p) => Number(p?.contract?.years ?? p?.contract?.yearsRemaining ?? 0) <= 1)
       .map((p) => {
-        const rec = evaluateResignRecommendation(p, { team: userTeam, direction, roster: enriched });
+        const baseRec = evaluateResignRecommendation(p, { team: userTeam, direction, roster: enriched });
+        // A committed Re-signing Center decision outranks the recommendation:
+        // the dashboard must show what will happen, not what was suggested.
+        const committed = String(p?.extensionDecision ?? '');
+        const rec = committed === 'let_walk'
+          ? { ...baseRec, tier: 'let_walk', reason: 'Committed: Let Walk — enters free agency when the window closes.' }
+          : ['extended', 'tagged'].includes(committed)
+            ? { ...baseRec, tier: 'resolved', reason: committed === 'tagged' ? 'Committed: Franchise tag.' : 'Committed: Extended.' }
+            : committed === 'deferred'
+              ? { ...baseRec, reason: `Decide Later — enters free agency unless extended before the window closes. ${baseRec.reason ?? ''}`.trim() }
+              : baseRec;
         const estimatedDemand = Math.max(Number(p?.contract?.baseAnnual ?? 0) * 1.12, Number(p?.ovr ?? 60) * 0.14);
         const willingness = rec.negotiationRisk === 'Low' ? 'High' : rec.negotiationRisk === 'High' ? 'Low' : 'Medium';
         const marketPressure = rec.replacementDifficulty === 'High' ? 'High' : rec.replacementDifficulty === 'Medium' ? 'Medium' : 'Low';
@@ -683,7 +694,7 @@ export default function FinancialsView({ league, actions }) {
                     replacementDifficulty={row.rec.replacementDifficulty}
                     shortReason={row.rec.reason}
                   />
-                  <div style={{ color: 'var(--text-subtle)' }}>Plan: {row.management.contractPlan[0] ? (CONTRACT_PLAN_LABELS[row.management.contractPlan[0]] ?? row.management.contractPlan[0]) : 'None'} · Trade status: {row.management.tradeStatus}</div></div>
+                  <div style={{ color: 'var(--text-subtle)' }} data-testid="expiring-decision">Decision: {EXTENSION_DECISION_LABELS[row.extensionDecision] ?? 'Pending'} · Plan: {row.management.contractPlan[0] ? (CONTRACT_PLAN_LABELS[row.management.contractPlan[0]] ?? row.management.contractPlan[0]) : 'None'} · Trade status: {row.management.tradeStatus}</div></div>
                 <div>{row.ovr}/{row.potential ?? row.ovr}</div>
                 <div>{fmt(row.capHit)}</div>
                 <div>{fmt(row.estimatedDemand)}</div>

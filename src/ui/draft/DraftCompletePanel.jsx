@@ -8,6 +8,24 @@ import { OvrBadge } from "./DraftBadges.jsx";
 export default function DraftCompletePanel({ actions, draftState }) {
   const { completedPicks = [], totalPicks = 0 } = draftState;
   const userPicks = completedPicks.filter((pk) => pk.isUser);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState("");
+
+  // A control that cannot act must say why: the worker's refusal (e.g. a
+  // roster-legality failure) is shown here instead of vanishing.
+  const handleStartNewSeason = async () => {
+    if (starting || !actions?.startNewSeason) return;
+    setStarting(true);
+    setStartError("");
+    try {
+      const response = await actions.startNewSeason();
+      if (response?.type === "ERROR") setStartError(response?.payload?.message || "The new season could not start. Your save was not changed.");
+    } catch (err) {
+      setStartError(`${err?.message || "The new season could not start."} Your save was not changed.`);
+    } finally {
+      setStarting(false);
+    }
+  };
 
   return (
     <div>
@@ -45,10 +63,17 @@ export default function DraftCompletePanel({ actions, draftState }) {
         <Button
           className="btn btn-primary"
           style={{ fontSize: "var(--text-base)" }}
-          onClick={() => actions.startNewSeason()}
+          disabled={starting}
+          onClick={handleStartNewSeason}
+          data-testid="draft-start-new-season"
         >
-          Start New Season →
+          {starting ? "Starting season…" : "Start New Season →"}
         </Button>
+        {startError ? (
+          <div role="alert" data-testid="draft-start-new-season-error" style={{ marginTop: "var(--space-3)", color: "var(--danger)", fontWeight: 700 }}>
+            {startError}
+          </div>
+        ) : null}
       </div>
 
       {/* Full pick history */}

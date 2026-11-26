@@ -1,6 +1,7 @@
 import { sameEntityId } from '../../core/referenceIntegrity.js';
+import { isKeyExpiringPlayer } from '../utils/offseasonActionCenter.js';
 import { buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import ExtensionNegotiationModal from './ExtensionNegotiationModal.jsx';
 import FaceAvatar from './FaceAvatar.jsx';
@@ -84,9 +85,10 @@ function decisionLabel(decision) {
   return 'Pending';
 }
 
+// Same predicate the Advance gate uses, so the "Unresolved key expirings"
+// count is exactly what Advance will ask about.
 function isKeyPlayer(player) {
-  const pos = String(player?.pos ?? '').toUpperCase();
-  return PREMIUM_POSITIONS.has(pos) || toNumber(player?.ovr, 0) >= 82;
+  return isKeyExpiringPlayer(player);
 }
 
 function replacementHint(player, roster) {
@@ -148,6 +150,36 @@ function ReSigningCenter({ league, team, actions, onNavigate, statusMessage, set
   const [sortPreset, setSortPreset] = useState('priority');
   const [previewPlayerId, setPreviewPlayerId] = useState(null);
   const [busyPlayerId, setBusyPlayerId] = useState(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // Worker-authoritative terms for the open preview: { playerId, loading, data }
+  const [quote, setQuote] = useState(null);
+  const previewRef = useRef(null);
+
+  useEffect(() => {
+    if (previewPlayerId == null || !actions?.getExtensionQuote || team?.id == null) {
+      setQuote(null);
+      return undefined;
+    }
+    let live = true;
+    setQuote({ playerId: previewPlayerId, loading: true, data: null });
+    Promise.resolve(actions.getExtensionQuote(previewPlayerId, team.id))
+      .then((response) => {
+        if (!live) return;
+        if (response?.type === 'ERROR' || !response?.payload) {
+          setQuote({ playerId: previewPlayerId, loading: false, data: { canCommit: false, blockReason: response?.payload?.message ?? 'Could not load extension terms. Close and retry.' } });
+          return;
+        }
+        setQuote({ playerId: previewPlayerId, loading: false, data: response.payload });
+      })
+      .catch((err) => {
+        if (live) setQuote({ playerId: previewPlayerId, loading: false, data: { canCommit: false, blockReason: err?.message ?? 'Could not load extension terms. Close and retry.' } });
+      });
+    return () => { live = false; };
+  }, [previewPlayerId, actions, team?.id]);
+
+  useEffect(() => {
+    if (previewPlayerId != null) previewRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [previewPlayerId]);
 
   const capSnapshot = useMemo(() => deriveTeamCapSnapshot(team ?? {}, { fallbackCapTotal: 255 }), [team]);
   const roster = Array.isArray(team?.roster) ? team.roster : [];
@@ -197,14 +229,49 @@ function ReSigningCenter({ league, team, actions, onNavigate, statusMessage, set
 
   const unresolvedKey = rows.filter((row) => row.unresolved && isKeyPlayer(row.player)).length;
   const premiumAtRisk = rows.filter((row) => row.premium && row.decision !== 'extended' && row.decision !== 'tagged').length;
-  const projectedCapRoom = capSnapshot.capRoom - rows
-    .filter((row) => row.decision === 'deferred')
-    .reduce((sum, row) => sum + Math.max(0, row.projectedCapHit - row.currentCapHit), 0);
+  // Only committed extensions change the cap; they are already in capRoom.
+  // Deferred/Pending players enter free agency when the window closes, so they
+  // must not reserve projected room (they previously did, forever).
+  const projectedCapRoom = capSnapshot.capRoom;
+  const carryIntoFreeAgency = rows.filter((row) => row.decision !== 'extended' && row.decision !== 'tagged' && row.decision !== 'let_walk');
   const recommendedNextMove = sortedRows.find((row) => row.unresolved)
     ? `Decide ${sortedRows.find((row) => row.unresolved)?.player?.name} (${sortedRows.find((row) => row.unresolved)?.player?.pos})`
     : 'All expiring decisions are resolved.';
 
   const previewRow = sortedRows.find((row) => sameEntityId(row.player.id, previewPlayerId)) ?? null;
+  // With a worker quote available, nothing is confirmable until the quote for
+  // THIS player has arrived (prevents a flash of client-estimated terms).
+  const previewQuoteLoading = !!(previewRow && actions?.getExtensionQuote
+    && (!quote || !sameEntityId(quote.playerId, previewRow.player.id) || quote.loading));
+  const previewQuote = previewRow && quote && sameEntityId(quote.playerId, previewRow.player.id) && !quote.loading ? quote.data : null;
+  const previewTerms = previewQuote?.terms ?? (previewRow ? previewRow.demand : null);
+  const previewCapDelta = previewQuote?.capHitDelta != null
+    ? Number(previewQuote.capHitDelta)
+    : (previewRow ? Math.max(0, previewRow.projectedCapHit - previewRow.currentCapHit) : 0);
+
+  const resolveAllRemaining = async () => {
+    const targets = carryIntoFreeAgency;
+    if (!targets.length) return;
+    if (!actions?.updatePlayerManagement || team?.id == null) {
+      setStatusMessage('Unable to update decisions. Reload the franchise and retry.');
+      return;
+    }
+    setBulkBusy(true);
+    setStatusMessage('');
+    const failed = [];
+    for (const row of targets) {
+      try {
+        const response = await actions.updatePlayerManagement(row.player.id, team.id, { extensionDecision: 'let_walk' });
+        if (response?.type !== 'STATE_UPDATE') failed.push(row.player.name);
+      } catch {
+        failed.push(row.player.name);
+      }
+    }
+    setBulkBusy(false);
+    setStatusMessage(failed.length
+      ? `Could not record Let Walk for: ${failed.join(', ')}. Reload and retry.`
+      : `Let Walk recorded for ${targets.length} player${targets.length === 1 ? '' : 's'}: ${targets.map((row) => row.player.name).join(', ')}.`);
+  };
 
   const applyDecision = async (row, decision) => {
     if (!actions?.updatePlayerManagement || team?.id == null || row.player?.id == null) {
@@ -229,9 +296,14 @@ function ReSigningCenter({ league, team, actions, onNavigate, statusMessage, set
       setStatusMessage('Unable to submit extension. Reload the franchise and retry.');
       return;
     }
+    const quoted = previewQuote;
+    if (quoted && !quoted.canCommit) {
+      setStatusMessage(quoted.blockReason || `${previewRow.player.name} cannot be extended right now.`);
+      return;
+    }
     setStatusMessage('');
     setBusyPlayerId(previewRow.player.id);
-    const contract = {
+    const contract = quoted?.terms ? { ...quoted.terms } : {
       years: previewRow.demand.yearsTotal,
       yearsTotal: previewRow.demand.yearsTotal,
       baseAnnual: previewRow.demand.baseAnnual,
@@ -240,8 +312,10 @@ function ReSigningCenter({ league, team, actions, onNavigate, statusMessage, set
     };
     try {
       const response = await actions.extendContract(previewRow.player.id, team.id, contract);
+      if (response?.type === 'ERROR') throw new Error(response?.payload?.message || 'Extension was not confirmed. Reload and retry.');
       const status = response?.payload?.status;
       if (status === 'accepted') {
+        setPreviewPlayerId(null);
         logCompletedContractAction(league, {
           id: `contract-${league?.seasonId ?? league?.year}-wk${league?.week ?? 1}-resign-${team.id}-${previewRow.player.id}`,
           player: previewRow.player,
@@ -252,7 +326,7 @@ function ReSigningCenter({ league, team, actions, onNavigate, statusMessage, set
         });
         try {
           await persistFranchiseChronicle(actions, league);
-          setStatusMessage(`${previewRow.player.name} extension accepted.`);
+          setStatusMessage(`${previewRow.player.name} extension accepted: ${money(contract.baseAnnual)} AAV · ${contract.yearsTotal ?? contract.years} years.`);
         } catch (err) {
           setStatusMessage(`${previewRow.player.name} extension accepted, but history could not be saved. Reload before retrying: ${err?.message ?? 'History save failed'}`);
         }
@@ -270,7 +344,7 @@ function ReSigningCenter({ league, team, actions, onNavigate, statusMessage, set
 
   return (
     <div className="app-screen-stack" style={{ display: 'grid', gap: 'var(--space-3)' }}>
-      {statusMessage ? <div role="status" aria-live="polite">{statusMessage}</div> : null}
+      {statusMessage && !previewRow ? <div role="status" aria-live="polite" data-testid="resign-status" className="card" style={{ padding: 10, fontWeight: 700, position: 'sticky', top: 0, zIndex: 5 }}>{statusMessage}</div> : null}
       <TeamWorkspaceHeader
         title="Re-signing Center"
         subtitle="Lock in core players with clear cap and roster impact before free agency opens."
@@ -290,7 +364,7 @@ function ReSigningCenter({ league, team, actions, onNavigate, statusMessage, set
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
         <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total expirings</div><div style={{ fontWeight: 800 }}>{rows.length}</div></div>
         <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Unresolved key expirings</div><div data-testid="unresolved-key-expirings" style={{ fontWeight: 800, color: unresolvedKey ? 'var(--warning)' : 'var(--success)' }}>{unresolvedKey}</div></div>
-        <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Projected cap room (pending)</div><div style={{ fontWeight: 800, color: projectedCapRoom < 8 ? 'var(--warning)' : 'var(--text)' }}>{money(projectedCapRoom)}</div></div>
+        <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cap room (committed)</div><div style={{ fontWeight: 800, color: projectedCapRoom < 8 ? 'var(--warning)' : 'var(--text)' }}>{money(projectedCapRoom)}</div></div>
         <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Premium positions at risk</div><div style={{ fontWeight: 800, color: premiumAtRisk ? 'var(--warning)' : 'var(--success)' }}>{premiumAtRisk}</div></div>
       </div>
 
@@ -304,30 +378,53 @@ function ReSigningCenter({ league, team, actions, onNavigate, statusMessage, set
         </label>
       </section>
 
+      <section className="card" data-testid="resign-advance-gate" style={{ padding: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 12 }}>
+        {carryIntoFreeAgency.length ? (
+          <>
+            <div>
+              <strong>When you advance to Free Agency</strong>, {carryIntoFreeAgency.length} player{carryIntoFreeAgency.length === 1 ? '' : 's'} without an extension or tag will leave the roster and enter the free-agent pool: {carryIntoFreeAgency.map((row) => `${row.player.name} (${row.decisionLabel})`).join(', ')}.
+            </div>
+            <Button size="sm" variant="outline" disabled={bulkBusy || busyPlayerId != null} onClick={resolveAllRemaining} data-testid="resign-let-all-walk">
+              {bulkBusy ? 'Recording…' : `Let all remaining walk (${carryIntoFreeAgency.length})`}
+            </Button>
+          </>
+        ) : (
+          <div>All expiring decisions are committed. Let Walk players enter free agency when you advance.</div>
+        )}
+      </section>
+
       {previewRow ? (
-        <section className="card" style={{ padding: 12 }}>
+        <section className="card" style={{ padding: 12 }} ref={previewRef} data-testid="extension-preview">
+          {statusMessage ? <div role="status" aria-live="polite" data-testid="resign-status" style={{ marginBottom: 8, fontWeight: 700 }}>{statusMessage}</div> : null}
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ fontWeight: 800 }}>Extension preview · {previewRow.player.name}</div>
-            <div style={{ fontSize: 12, color: projectedCapRoom < 5 ? 'var(--danger)' : 'var(--text-muted)' }}>
-              Cap room after signing: {money(capSnapshot.capRoom - Math.max(0, previewRow.projectedCapHit - previewRow.currentCapHit))}
+            <div style={{ fontSize: 12, color: capSnapshot.capRoom - previewCapDelta < 5 ? 'var(--danger)' : 'var(--text-muted)' }}>
+              Cap room after signing: {money(capSnapshot.capRoom - previewCapDelta)}
             </div>
           </div>
-          <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)' }}>
-            {money(previewRow.demand.baseAnnual)} AAV · {previewRow.demand.yearsTotal} years · Total {money(previewRow.demand.baseAnnual * previewRow.demand.yearsTotal)}.
+          <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)' }} data-testid="extension-preview-terms">
+            {previewQuoteLoading ? 'Getting terms from the player\'s agent…' : (
+              <>{money(previewTerms.baseAnnual)} AAV · {previewTerms.yearsTotal ?? previewTerms.years} years · Total {money(previewTerms.baseAnnual * (previewTerms.yearsTotal ?? previewTerms.years))}.{previewQuote?.canCommit ? ' These are the terms his agent will sign.' : ''}</>
+            )}
           </div>
+          {previewQuote && !previewQuote.canCommit ? (
+            <div role="alert" style={{ marginTop: 6, fontSize: 12, color: 'var(--danger)', fontWeight: 700 }}>
+              Cannot extend: {previewQuote.blockReason}
+            </div>
+          ) : null}
           <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-subtle)' }}>Market estimate: {previewRow.insight.marketTierLabel}</span>
             <span style={{ fontSize: 11, border: `1px solid ${toneToContractInsightColor(previewRow.insight.capFitTone)}`, borderRadius: 999, padding: '2px 8px', color: toneToContractInsightColor(previewRow.insight.capFitTone) }}>{previewRow.insight.capFitLabel}</span>
             {previewRow.insight.riskTags.slice(0, 2).map((tag) => <span key={`preview-${tag}`} style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-subtle)' }}>{tag}</span>)}
           </div>
-          {capSnapshot.capRoom - Math.max(0, previewRow.projectedCapHit - previewRow.currentCapHit) < 5 ? (
+          {capSnapshot.capRoom - previewCapDelta < 5 ? (
             <div style={{ marginTop: 6, fontSize: 12, color: 'var(--warning)' }}>Warning: this creates cap stress heading into free agency.</div>
           ) : null}
           {isKeyPlayer(previewRow.player) ? null : (
             <div style={{ marginTop: 4, fontSize: 12, color: 'var(--warning)' }}>Warning: letting this player walk could create a depth hole at {previewRow.player.pos}.</div>
           )}
           <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
-            <Button size="sm" disabled={busyPlayerId === previewRow.player.id} onClick={confirmExtension}>Confirm extension</Button>
+            <Button size="sm" disabled={busyPlayerId === previewRow.player.id || previewQuoteLoading} onClick={confirmExtension}>{busyPlayerId === previewRow.player.id ? 'Submitting…' : 'Confirm extension'}</Button>
             <Button size="sm" variant="outline" onClick={() => setPreviewPlayerId(null)}>Close preview</Button>
           </div>
         </section>

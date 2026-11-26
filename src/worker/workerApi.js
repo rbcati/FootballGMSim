@@ -120,6 +120,7 @@ export function handleWorkerMessage(msg, setState) {
         nextWeek: payload.nextWeek,
         phase: payload.phase,
         standings: payload.standings,
+        isSeasonOver: payload.isSeasonOver === true,
       });
       return true;
 

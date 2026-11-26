@@ -55,7 +55,7 @@ import { SettingsProvider, useSettings } from './context/SettingsContext.jsx';
 import { ACTION_LABELS, formatRegularUnitLabel } from './constants/navigationCopy.js';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from './utils/boxScoreAccess.js';
 import { capVisibleNotifications, getDisplayableNotifications } from './utils/notificationsDisplay.js';
-import { buildOffseasonActionCenter } from './utils/offseasonActionCenter.js';
+import { buildResignAdvanceGate } from './utils/offseasonActionCenter.js';
 import {
   hasMinimumPlayableLeague,
   shouldFinalizeNewSlotBootstrap,
@@ -249,9 +249,14 @@ function AppContent() {
   const { settings, updateSetting } = useSettings();
   const soundEnabled = settings?.soundEnabled ?? true;
   const isWeeklyResultPhase = league?.phase === 'preseason' || league?.phase === 'regular' || league?.phase === 'playoffs';
+  // The Super Bowl advance also flips the phase to offseason_resign; keep its
+  // final score visible in the results ticker during the re-signing window.
+  const seasonFinaleResults = league?.phase === 'offseason_resign' && Array.isArray(state.seasonFinale?.results)
+    ? state.seasonFinale.results
+    : null;
   const authoritativeResults = useMemo(
-    () => (isWeeklyResultPhase && Array.isArray(lastResults) ? lastResults : []),
-    [isWeeklyResultPhase, lastResults],
+    () => (isWeeklyResultPhase && Array.isArray(lastResults) ? lastResults : (seasonFinaleResults ?? [])),
+    [isWeeklyResultPhase, lastResults, seasonFinaleResults],
   );
   const unresolvedWeeklyEvent = useMemo(
     () => (league?.pendingWeeklyEvents ?? []).find((event) => event?.state !== 'resolved') ?? null,
@@ -491,30 +496,56 @@ function AppContent() {
   const isBatchSimBlocking = !!batchSim && !['cancelled', 'completed', 'idle'].includes(batchSim?.status);
 
   const [advanceError, setAdvanceError] = useState('');
+  // A refusal message describes the phase it was raised in; clear it once the
+  // league actually moves on.
+  useEffect(() => { setAdvanceError(''); }, [league?.phase]);
   const handleAdvanceWeek = useCallback(async () => {
-    if (busy || simulating || advancingRef.current) return;
-    if (!league?.phase) return;
+    // Every refusal below names its reason: a control that cannot act must
+    // explain why (a silent no-op is a defect by construction).
+    if (busy || simulating) {
+      setAdvanceError('Advance is unavailable while the league is processing. Wait for the current step to finish.');
+      return;
+    }
+    if (advancingRef.current) {
+      setAdvanceError('An advance is already in progress.');
+      return;
+    }
+    if (!league?.phase) {
+      setAdvanceError('The league is still loading. Advance will be available once it finishes.');
+      return;
+    }
     if (unresolvedWeeklyEvent) {
       setShowWeeklyEventModal(true);
       return;
     }
+    setAdvanceError('');
 
     if (['regular', 'playoffs', 'preseason'].includes(league.phase)) {
       advancingRef.current = true;
       actions.advanceWeek();
     } else if (['offseason_resign', 'offseason'].includes(league.phase)) {
       if (league.phase === 'offseason_resign') {
-        const actionCenter = buildOffseasonActionCenter(league);
-        const unresolvedKey = Number(actionCenter?.unresolved?.keyExpiringContracts ?? 0);
-        if (unresolvedKey > 0) {
-          const proceed = window.confirm(`You still have ${unresolvedKey} unresolved key re-signing decisions. Advance anyway?`);
-          if (!proceed) return;
+        // Documented gate: unresolved (Pending / Decide Later) expiring
+        // players may carry into Free Agency — they leave the roster and enter
+        // the free-agent pool. Advance asks once, naming every one of them.
+        const gate = buildResignAdvanceGate(league);
+        if (gate.total > 0) {
+          const lines = [];
+          if (gate.keyNames.length) lines.push(`Key (${gate.keyNames.length}): ${gate.keyNames.join(', ')}`);
+          if (gate.otherNames.length) lines.push(`Other (${gate.otherNames.length}): ${gate.otherNames.join(', ')}`);
+          const keyLead = gate.key.length ? `You still have ${gate.key.length} unresolved key re-signing decision${gate.key.length === 1 ? '' : 's'}. ` : '';
+          const message = `${keyLead}${gate.total} expiring player${gate.total === 1 ? '' : 's'} without an extension, tag or Let Walk will leave your roster and enter free agency:\n${lines.join('\n')}\n\nAdvance anyway?`;
+          const proceed = window.confirm(message);
+          if (!proceed) {
+            setAdvanceError(`Advance cancelled. Unresolved expiring contracts — ${lines.join(' · ')}. Decide them in the Re-signing Center (or use "Let all remaining walk"), then advance.`);
+            return;
+          }
         }
       }
       advancingRef.current = true;
-      setAdvanceError('');
       try {
-        await actions.advanceOffseason();
+        const response = await actions.advanceOffseason();
+        if (response?.type === 'ERROR') setAdvanceError(response?.payload?.message || 'Unable to advance offseason. Please retry.');
       } catch (err) {
         setAdvanceError(err?.message || 'Unable to advance offseason. Please retry.');
       } finally {
@@ -524,9 +555,25 @@ function AppContent() {
       advancingRef.current = true;
       actions.advanceFreeAgencyDay();
     } else if (league.phase === 'draft') {
-      // Refresh draft state so the LeagueDashboard auto-navigates to the Draft tab.
-      // Note: getDraftState is silent, so busy won't toggle. We don't lock for this.
+      const draftDone = ['draft_complete', 'complete', 'completed'].includes(String(league?.draftLifecycleStatus ?? ''));
+      if (draftDone && actions.startNewSeason) {
+        advancingRef.current = true;
+        try {
+          const response = await actions.startNewSeason();
+          if (response?.type === 'ERROR') setAdvanceError(response?.payload?.message || 'The new season could not start. Your save was not changed.');
+        } catch (err) {
+          setAdvanceError(`${err?.message || 'The new season could not start.'} Your save was not changed.`);
+        } finally {
+          advancingRef.current = false;
+        }
+        return;
+      }
+      // Draft still open: take the user to the Draft board and say so.
+      setAdvanceError('The draft is still in progress. Make or simulate the remaining picks on the Draft page, then start the new season.');
+      setExternalDashboardDestination?.('Draft');
       actions.getDraftState();
+    } else {
+      setAdvanceError(`Advance is not available in the "${league.phase}" phase.`);
     }
   }, [busy, simulating, actions, league, unresolvedWeeklyEvent]);
 
@@ -1467,7 +1514,12 @@ function AppContent() {
       )}
 
       {/* ── Error banner ───────────────────────────────────────────────── */}
-      {advanceError && <div role="alert">{advanceError}</div>}
+      {advanceError && (
+        <div role="alert" data-testid="advance-blocked-message" className="app-banner app-banner-error">
+          <span style={{ whiteSpace: 'pre-line' }}>{advanceError}</span>
+          <button type="button" className="btn btn-sm" aria-label="Dismiss advance message" onClick={() => setAdvanceError('')}>×</button>
+        </div>
+      )}
       {error && (
         <div role="alert" className="app-banner app-banner-error">
           <span>{error}</span>
@@ -1573,7 +1625,7 @@ function AppContent() {
             simProgress={simProgress}
             league={league}
             lastResults={authoritativeResults}
-            simulatedWeek={lastSimWeek}
+            simulatedWeek={lastSimWeek ?? (seasonFinaleResults ? state.seasonFinale?.week ?? null : null)}
             gameEvents={gameEvents}
             busy={busy}
             error={error}
@@ -1671,7 +1723,7 @@ function AppContent() {
 
       {/* ── Milestone modals (playoff bracket, season complete) ─────── */}
       {leagueReady && league && (
-        <MilestoneModal league={league} />
+        <MilestoneModal league={league} seasonFinale={state.seasonFinale} />
       )}
 
       {/* ── Simulation Progress Spinner (CSS-only, prevents frozen-UI appearance) ── */}

@@ -630,10 +630,47 @@ export const PlayerStats = {
 
 const TRANSACTIONS_RECENT_CAP = 4000;
 
+// ── Direct-write staging (atomic lifecycle transitions) ──────────────────────
+// While a multi-step transition that must be all-or-nothing is running (e.g.
+// "Sim to Season": auto-draft → season rollover), rows that would normally be
+// written straight to the transactions/news stores are held here instead and
+// committed inside the rollover's single league-database transaction. If the
+// transition fails, the caller discards the stage and nothing was written.
+let directWriteStage = null;
+
+export function beginDirectWriteStaging() {
+  directWriteStage = { transactions: [], news: [] };
+  return directWriteStage;
+}
+
+/** Ends staging and returns the held rows (empty arrays when none). */
+export function endDirectWriteStaging() {
+  const stage = directWriteStage ?? { transactions: [], news: [] };
+  directWriteStage = null;
+  return stage;
+}
+
+/** Removes and returns the held rows while keeping staging active. */
+export function takeStagedDirectWrites() {
+  if (!directWriteStage) return { transactions: [], news: [] };
+  const taken = directWriteStage;
+  directWriteStage = { transactions: [], news: [] };
+  return taken;
+}
+
+export function isDirectWriteStagingActive() {
+  return directWriteStage != null;
+}
+
 export const Transactions = {
-  addBulk:   (txs)      => dbPutBulk(STORES.TRANSACTIONS, txs),
-  add:      (tx)       => dbPut(STORES.TRANSACTIONS, tx),
-  addBulk:  (txs)      => dbPutBulk(STORES.TRANSACTIONS, txs),
+  add:      (tx)       => {
+    if (directWriteStage) { directWriteStage.transactions.push(tx); return Promise.resolve(); }
+    return dbPut(STORES.TRANSACTIONS, tx);
+  },
+  addBulk:  (txs)      => {
+    if (directWriteStage) { directWriteStage.transactions.push(...(Array.isArray(txs) ? txs : [])); return Promise.resolve(); }
+    return dbPutBulk(STORES.TRANSACTIONS, txs);
+  },
   bySeason: (seasonId) => dbGetAllByIndex(STORES.TRANSACTIONS, 'seasonId', seasonId),
   byTeam:   (teamId)   => dbGetAllByIndex(STORES.TRANSACTIONS, 'teamId',   teamId),
   /** Full scan — only for filtered activity views; hard-capped for mobile safety. */
@@ -664,7 +701,10 @@ export const DraftPicks = {
 // --- News ---
 
 export const News = {
-  add:      (item)   => dbPut(STORES.NEWS, item),
+  add:      (item)   => {
+    if (directWriteStage) { directWriteStage.news.push(item); return Promise.resolve(); }
+    return dbPut(STORES.NEWS, item);
+  },
   getRecent:(limit)  => dbGetAll(STORES.NEWS).then(all =>
     all.sort((a, b) => b.timestamp - a.timestamp).slice(0, limit || 50)
   ),

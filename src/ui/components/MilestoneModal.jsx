@@ -14,6 +14,7 @@ import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { buildCoachingNarrativeCards } from "../utils/coachingIdentity.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { franchiseInvestmentSummary } from "../utils/franchiseInvestments.js";
+import { deriveSuperBowlResult } from "../utils/superBowlResult.js";
 
 // ── Playoff Bracket Modal ────────────────────────────────────────────────────
 
@@ -273,7 +274,7 @@ function PlayoffBracketModal({ playoffSeeds, teams, onDismiss }) {
 
 // ── Season Complete Splash ──────────────────────────────────────────────────
 
-function SeasonCompleteSplash({ championTeamId, teams, onProceed, league }) {
+function SeasonCompleteSplash({ championTeamId, teams, onProceed, league, superBowl = null }) {
   if (championTeamId == null || !teams?.length) return null;
 
   const champ = teams.find((t) => t.id === championTeamId);
@@ -339,6 +340,29 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed, league }) {
       >
         Season Complete
       </div>
+      {superBowl ? (
+        <div
+          data-testid="super-bowl-score"
+          aria-label={`Super Bowl final: ${superBowl.awayName} ${superBowl.awayScore}, ${superBowl.homeName} ${superBowl.homeScore}`}
+          style={{
+            minWidth: 280,
+            maxWidth: 440,
+            background: "rgba(17,24,39,0.82)",
+            border: "1px solid rgba(255,255,255,0.18)",
+            borderRadius: 12,
+            padding: "10px 14px",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: "0.72rem", color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "1.5px" }}>Super Bowl · Final</div>
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "baseline", gap: 10, marginTop: 4, color: "#fff", fontWeight: 800, fontSize: "1.25rem" }}>
+            <span style={{ opacity: superBowl.winnerId === superBowl.awayId ? 1 : 0.65 }}>{superBowl.awayAbbr} {superBowl.awayScore}</span>
+            <span style={{ color: "var(--text-subtle)", fontWeight: 600 }}>—</span>
+            <span style={{ opacity: superBowl.winnerId === superBowl.homeId ? 1 : 0.65 }}>{superBowl.homeScore} {superBowl.homeAbbr}</span>
+          </div>
+          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 2 }}>{superBowl.awayName} at {superBowl.homeName}</div>
+        </div>
+      ) : null}
       <div
         style={{
           width: 88,
@@ -503,6 +527,7 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed, league }) {
 
 export default function MilestoneModal({
   league,
+  seasonFinale = null,
   onDismissPlayoffs,
   onDismissChampion,
 }) {
@@ -554,6 +579,7 @@ export default function MilestoneModal({
           championTeamId={league?.championTeamId}
           teams={league?.teams}
           league={league}
+          superBowl={deriveSuperBowlResult(league, seasonFinale)}
           onProceed={() => {
             setShowChampion(false);
             onDismissChampion?.();

@@ -34,6 +34,10 @@ import { isScopedSimulationMessage, shouldAcceptSimulationScope } from '../../wo
 const WORKER_REQUEST_TIMEOUT_MS = 20000;
 const WORKER_TIMEOUT_BY_TYPE = Object.freeze({
   [toWorker.GET_DRAFT_STATE]: 120000,
+  // Season rollover and the re-signing → FA transition run the whole league's
+  // progression/contract lifecycle; a 20s timeout would report a false failure.
+  [toWorker.START_NEW_SEASON]: 180000,
+  [toWorker.ADVANCE_OFFSEASON]: 180000,
 });
 
 // ── State shape ───────────────────────────────────────────────────────────────
@@ -66,6 +70,12 @@ export const INITIAL_WORKER_STATE = {
    * Cleared when a new simulation starts.
    */
   gameEvents:   [],
+  /**
+   * The Super Bowl's WEEK_COMPLETE results. Kept separately because the same
+   * advance flips the phase to offseason_resign, which clears lastResults.
+   * { seasonId, year, week, results } | null
+   */
+  seasonFinale: null,
   /** last error message */
   error:        null,
   /** notification queue */
@@ -163,8 +173,10 @@ export function workerReducer(state, action) {
         ...state, busy: false, simulating: false,
         simProgress: shouldClearTransients ? 0 : state.simProgress,
         batchSim: null, isHydrated: true, league: action.payload,
+        ...(['preseason', 'regular'].includes(action.payload?.phase) ? { seasonFinale: null } : {}),
         ...(shouldClearTransients ? {
           lastResults: null, lastSimWeek: null, gameEvents: [], promptUserGame: false,
+          seasonFinale: null,
           userGameLogs: null, userGameLiveStats: null, userGamePlayerStats: null,
           userGameTeamStats: null, userGameCanonicalEvents: null,
           userGameScoringSummary: null, userGameQuarterScores: null,
@@ -184,6 +196,7 @@ export function workerReducer(state, action) {
         ...(action.payload?.phase && !isWeeklyResultsPhase(action.payload.phase)
           ? { lastResults: [], lastSimWeek: null, gameEvents: [] }
           : {}),
+        ...(['preseason', 'regular'].includes(action.payload?.phase) ? { seasonFinale: null } : {}),
       };
     case 'PROMPT_USER_GAME':
       return { ...state, busy: false, simulating: false, simProgress: 0, promptUserGame: true, userGameLogs: null };
@@ -229,6 +242,9 @@ export function workerReducer(state, action) {
         simProgress: 100,
         lastResults: action.results,
         lastSimWeek: action.week ?? null,
+        seasonFinale: action.isSeasonOver && action.phase === 'offseason_resign' && Array.isArray(action.results) && action.results.length > 0
+          ? { seasonId: state.league?.seasonId ?? null, year: state.league?.year ?? null, week: action.week ?? null, results: action.results }
+          : state.seasonFinale,
         league:      {
           ...(state.league ?? {}),
           week:  action.nextWeek,
@@ -771,6 +787,10 @@ export function useWorker() {
     getExtensionAsk: (playerId) =>
       request(toWorker.GET_EXTENSION_ASK, { playerId }, { silent: true }),
 
+    /** Worker-authoritative extension terms (or the reason none can commit). */
+    getExtensionQuote: (playerId, teamId) =>
+      request(toWorker.GET_EXTENSION_QUOTE, { playerId, teamId }, { silent: true }),
+
     /** Extend contract (returns Promise with new state). */
     extendContract: (playerId, teamId, contract) =>
       request(toWorker.EXTEND_CONTRACT, { playerId, teamId, contract }),
@@ -879,7 +899,8 @@ export function useWorker() {
       send(toWorker.ADVANCE_COMBINE_WEEK),
 
     /** Finalise offseason → generate new schedule → Week 1. */
-    startNewSeason: () => send(toWorker.START_NEW_SEASON),
+    // Request (not fire-and-forget) so callers can show the worker's refusal.
+    startNewSeason: () => request(toWorker.START_NEW_SEASON),
 
     /** Update depth chart order for the user's team. */
     updateDepthChart: (updates) =>
