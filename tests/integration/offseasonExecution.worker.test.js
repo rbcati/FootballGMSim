@@ -195,4 +195,32 @@ describe.sequential('offseason execution', () => {
     expect(cache.getMeta().phase).toBe('draft');
     expect(cache.getMeta().draftState.currentPickIndex).toBe(pickIndexBefore);
   }, 700000);
+
+  it('Sim to Season from the draft completes with every AI team at 53, and the user can fill to 53 in one action', async () => {
+    const id = await bootBuffalo('save_slot_4', 2027);
+    cache.setMeta({ phase: 'offseason_resign' });
+    await dispatchWorker(toWorker.ADVANCE_OFFSEASON, {}, { timeoutMs: 180000 });
+    const started = Date.now();
+    const result = await dispatchWorker(toWorker.SIM_TO_PHASE, { targetPhase: 'preseason' }, { timeoutMs: 600000 });
+    expect(result.type).toBe(toUI.FULL_STATE);
+    expect(cache.getMeta()).toMatchObject({ phase: 'preseason', year: 2027 });
+    expect(Date.now() - started).toBeLessThan(240000);
+    for (const team of cache.getAllTeams()) {
+      if (team.id === USER) continue;
+      expect(cache.getPlayersByTeam(team.id).length, team.abbr).toBeGreaterThanOrEqual(53);
+    }
+    // Undrafted prospects became free agents.
+    expect(cache.getAllPlayers().some((p) => p.status === 'draft_eligible')).toBe(false);
+    const userBefore = cache.getPlayersByTeam(USER).length;
+    if (userBefore < 53) {
+      const filled = await dispatchWorker(toWorker.FILL_ROSTER_TO_MINIMUM, { teamId: USER }, { timeoutMs: 120000 });
+      expect(filled.type).toBe(toUI.STATE_UPDATE);
+      expect(cache.getPlayersByTeam(USER).length).toBe(53);
+      const fillRows = (await Transactions.loadRecent(4000)).filter((t) => t.type === 'SIGN' && t.details?.source === 'user_roster_fill');
+      expect(fillRows.length).toBe(53 - userBefore);
+    }
+    await dispatchWorker(toWorker.SAVE_NOW);
+    await dispatchWorker(toWorker.LOAD_SAVE, { leagueId: id });
+    expect(cache.getMeta()).toMatchObject({ phase: 'preseason', year: 2027 });
+  }, 700000);
 });

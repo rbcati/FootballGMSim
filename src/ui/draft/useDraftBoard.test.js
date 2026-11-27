@@ -100,4 +100,19 @@ describe("useDraftBoard", () => {
       vi.useRealTimers();
     }
   });
+
+  it("starts CPU picking on its own when the draft opens on a CPU pick", async () => {
+    vi.useFakeTimers();
+    try {
+      const onSimToMyPick = vi.fn(async () => {});
+      const state = { ...emptyDraftState, currentPick: { overall: 1, round: 1, teamId: 9 }, isUserPick: false };
+      renderHook((props) => useDraftBoard(props), {
+        initialProps: { draftState: state, onDraftPlayer: vi.fn(), onSimToMyPick, league: { userTeamId: 1, teams: [] } },
+      });
+      await act(async () => { vi.advanceTimersByTime(1500); });
+      expect(onSimToMyPick).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

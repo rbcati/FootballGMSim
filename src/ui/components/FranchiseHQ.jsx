@@ -148,6 +148,11 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, onOpenB
     {control && <section className="hq-v2-week-control" data-testid="hq-week-control">
       <button type="button" className="hq-v2-primary" data-testid="advance-week-cta" aria-describedby={control.blocked ? 'hq-advance-reason' : undefined} disabled={busy || simulating || advanceDisabled || control.blocked} onClick={onAdvanceWeek}>{control.label} →</button>
       {control.blocked && <><p id="hq-advance-reason">{control.reason}</p>{(control.reviewEvent || control.destination !== action.destination) && <button type="button" className="hq-v2-text-link" onClick={() => control.reviewEvent ? onAdvanceWeek?.() : onNavigate?.(control.destination)}>{control.repairLabel} →</button>}</>}
+      {control.blocked && /Roster minimum not met/.test(String(control.reason ?? '')) && actions?.fillRosterToMinimum ? (
+        <button type="button" className="hq-v2-text-link" data-testid="fill-roster-to-minimum" disabled={busy || simulating} onClick={() => actions.fillRosterToMinimum(league?.userTeamId)}>
+          Sign minimum-contract players to reach 53 →
+        </button>
+      ) : null}
     </section>}
     <HqLastResult league={league} actions={actions} requestKey={leaderRequestKey} onOpenBoxScore={onOpenBoxScore} onNavigate={onNavigate} />
     {league?.userFranchiseTerminated ? <section className="hq-v2-card" data-testid="franchise-terminated-notice"><h2>Franchise Dismissed</h2><p>Your ownership tenure has ended.</p></section> : null}

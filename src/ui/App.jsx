@@ -1523,6 +1523,24 @@ function AppContent() {
       {error && (
         <div role="alert" className="app-banner app-banner-error">
           <span>{error}</span>
+          {/Roster minimum not met/.test(String(error)) && actions.fillRosterToMinimum ? (
+            <button
+              className="btn app-banner-btn"
+              data-testid="fill-roster-to-minimum"
+              disabled={busy || simulating}
+              onClick={async () => {
+                try {
+                  // The request's BUSY dispatch clears this banner; the
+                  // worker names every signing in a notification.
+                  await actions.fillRosterToMinimum(league?.userTeamId);
+                } catch (err) {
+                  setAdvanceError(err?.message || 'Could not sign minimum-contract players.');
+                }
+              }}
+            >
+              Sign minimum-contract players to reach 53
+            </button>
+          ) : null}
           <button className="btn app-banner-btn" onClick={handlePrimaryRetry} disabled={busy || simulating}>
             {retryLabel}
           </button>

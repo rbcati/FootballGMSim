@@ -113,15 +113,28 @@ export function useDraftBoard({ draftState, onDraftPlayer, onSimToMyPick, league
     return () => clearInterval(timer);
   }, [draftPhase, isUserPick, isDraftComplete, userAutoPick, sortedByOvr, onDraftPlayer]);
 
+  // CPU picks on the clock. Same stale-effect trap as the pick flash: with
+  // `cpuPending` in the deps, setting it re-ran the effect and the cleanup
+  // cancelled the timer before it fired, so the draft never started on its own.
+  const cpuTimerRef = useRef(null);
+  const cpuInFlightRef = useRef(false);
+  const simToMyPickRef = useRef(onSimToMyPick);
+  simToMyPickRef.current = onSimToMyPick;
+  useEffect(() => () => { if (cpuTimerRef.current) clearTimeout(cpuTimerRef.current); }, []);
   useEffect(() => {
-    if (draftPhase !== DRAFT_ROOM_PHASES.CPU_PICKING || isUserPick || isDraftComplete || cpuPending) return undefined;
+    if (draftPhase !== DRAFT_ROOM_PHASES.CPU_PICKING || isUserPick || isDraftComplete) return;
+    if (cpuInFlightRef.current || cpuTimerRef.current) return;
     setCpuPending(true);
     const delay = 400 + Math.random() * 800;
-    const timer = setTimeout(async () => {
-      try { await onSimToMyPick(); } finally { setCpuPending(false); }
+    cpuTimerRef.current = setTimeout(async () => {
+      cpuTimerRef.current = null;
+      cpuInFlightRef.current = true;
+      try { await simToMyPickRef.current?.(); } finally {
+        cpuInFlightRef.current = false;
+        setCpuPending(false);
+      }
     }, delay);
-    return () => { clearTimeout(timer); setCpuPending(false); };
-  }, [draftPhase, isUserPick, isDraftComplete, cpuPending, onSimToMyPick]);
+  }, [draftPhase, isUserPick, isDraftComplete, cpuPending]);
 
   const toggleSort = useCallback((key) => {
     if (sortKey === key) setSortDir((d) => -d);

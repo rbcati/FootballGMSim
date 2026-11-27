@@ -483,11 +483,16 @@ class AiLogic {
         transactionSink = null,
         searchMaxStates = null,
         releasedPlayerIdsByTeam = null,
+        teamIds = null,
     } = {}) {
         const meta = cache.getMeta();
         const userTeamId = meta?.userTeamId;
+        // Optional scope: reconcile only these teams (one-team searches stay
+        // linear in the deficit; the shared multi-team search does not).
+        const teamScope = Array.isArray(teamIds) ? new Set(teamIds.map((tid) => String(tid))) : null;
         const teams = cache.getAllTeams()
             .filter((team) => includeUserTeam || Number(team.id) !== Number(userTeamId))
+            .filter((team) => !teamScope || teamScope.has(String(team.id)))
             .sort((a, b) => stableIdCompare(a?.id, b?.id));
         const underfilled = teams.filter((team) => cache.getPlayersByTeam(team.id).length < minimum);
         const projectedRosters = new Map(underfilled.map((team) => [team.id, cache.getPlayersByTeam(team.id)]));
@@ -815,6 +820,149 @@ class AiLogic {
             failures, signedByTeam, completionCandidateIdsByTeam, recoveryReserveByTeam, recoveryCandidateIdsByTeam,
             searchDiagnostics: { affordable: affordableSearch.diagnostics, recovery: null, totalExploredStates: affordableSearch.diagnostics.exploredStates },
         };
+    }
+
+    /**
+     * Cost of the cheapest canonical offers that would fill a team's open
+     * slots from the current pool (used to reserve cap room for completion).
+     * @returns {{ deficit: number, cost: number|null, candidateIds: any[] }}
+     */
+    static cheapestRosterCompletion(teamId, { minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON } = {}) {
+        const meta = cache.getMeta();
+        const team = cache.getTeam(teamId);
+        const roster = cache.getPlayersByTeam(teamId);
+        const deficit = Math.max(0, minimum - roster.length);
+        if (!team || deficit === 0) return { deficit, cost: 0, candidateIds: [] };
+        const legalCap = resolveLiveCapForMinimumRoster(team, meta);
+        const cap = buildTeamCapSnapshot({ team, roster, salaryCap: legalCap });
+        const strategy = buildAiTeamStrategy({ team, roster, league: { year: meta?.year, phase: meta?.phase }, phase: meta?.phase, year: meta?.year });
+        const offers = cache.getAllPlayers()
+            .filter((player) => isSignableFreeAgent(player))
+            .map((player) => {
+                const contract = buildMinimumRosterContract(player, team, { year: meta?.year, strategy, capRoom: cap.capRoom });
+                return contract ? { id: player.id, hit: Number(getActiveCapHit({ contract }) ?? 0) } : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => (a.hit - b.hit) || stableIdCompare(a.id, b.id))
+            .slice(0, deficit);
+        if (offers.length < deficit) return { deficit, cost: null, candidateIds: offers.map((o) => o.id) };
+        return {
+            deficit,
+            cost: Math.round(offers.reduce((sum, o) => sum + o.hit, 0) * 100) / 100,
+            candidateIds: offers.map((o) => o.id),
+        };
+    }
+
+    /**
+     * Budget-aware greedy fill of ONE AI team to the roster minimum from the
+     * existing free-agent pool, using the canonical minimum-roster offers.
+     *
+     * ensureMinimumRosters() is an exhaustive search designed for small
+     * emergency deficits; for a team that is a dozen players short it tries the
+     * priciest fits first and exhausts its state budget without signing
+     * anyone. This pass walks the team's preference order once and accepts a
+     * candidate only while enough room remains to fill every other open slot at
+     * the league minimum, so it is linear and always makes progress.
+     *
+     * @returns {{ teamId, signed: number, rosterCount: number }}
+     */
+    static async fillRosterToMinimumGreedy(teamId, {
+        minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON,
+        transactionSink = null,
+        source = 'ai_roster_floor',
+        veteranMinimumFallback = false,
+    } = {}) {
+        const meta = cache.getMeta();
+        const minHit = minimumRosterCapHit();
+        let signed = 0;
+        const tried = new Set();
+        for (let guard = 0; guard < minimum; guard += 1) {
+            const team = cache.getTeam(teamId);
+            if (!team) break;
+            const roster = cache.getPlayersByTeam(teamId);
+            const deficit = minimum - roster.length;
+            if (deficit <= 0) break;
+            const legalCap = resolveLiveCapForMinimumRoster(team, meta);
+            const cap = buildTeamCapSnapshot({ team, roster, salaryCap: legalCap });
+            const capRoom = Number(cap.capRoom ?? 0);
+            if (capRoom + 0.01 < minHit) break;
+            const needs = AiLogic.calculateTeamNeedsFromRoster(team, roster, meta);
+            const neededPositions = Object.keys(needs)
+                .filter((pos) => Number(needs[pos] ?? 0) > 1)
+                .sort((a, b) => (Number(needs[b] ?? 0) - Number(needs[a] ?? 0)) || a.localeCompare(b));
+            const positionOrder = [...neededPositions, ...Constants.POSITIONS.filter((pos) => !neededPositions.includes(pos))];
+            const strategy = buildAiTeamStrategy({ team, roster, league: { year: meta?.year, phase: meta?.phase }, phase: meta?.phase, year: meta?.year });
+            const pool = cache.getAllPlayers()
+                .filter((player) => isSignableFreeAgent(player) && !tried.has(String(player.id)))
+                .sort((a, b) => (positionRank(a?.pos, positionOrder) - positionRank(b?.pos, positionOrder))
+                    || (Number(b?.ovr ?? 0) - Number(a?.ovr ?? 0))
+                    || stableIdCompare(a?.id, b?.id));
+            const offers = [];
+            for (const player of pool) {
+                const contract = buildMinimumRosterContract(player, team, {
+                    year: meta?.year, strategy, capRoom, needMultiplier: needs?.[player?.pos] ?? 1,
+                });
+                if (!contract) continue;
+                offers.push({ player, contract, hit: Number(getActiveCapHit({ contract }) ?? 0) });
+            }
+            // Reserve the real cost of the other open slots: the (deficit - 1)
+            // cheapest offers actually available (only replacement-level players
+            // take the league minimum, and the pool can run out of them).
+            const cheapest = [...offers].sort((a, b) => (a.hit - b.hit) || stableIdCompare(a.player?.id, b.player?.id));
+            const reserveExcluding = (offer) => {
+                let sum = 0;
+                let taken = 0;
+                for (const row of cheapest) {
+                    if (taken >= deficit - 1) break;
+                    if (row === offer) continue;
+                    sum += row.hit;
+                    taken += 1;
+                }
+                return taken >= deficit - 1 ? sum : Number.POSITIVE_INFINITY;
+            };
+            let pick = offers.find((offer) => offer.hit + reserveExcluding(offer) <= capRoom + 0.01) ?? null;
+            // The full deficit is not affordable: sign the cheapest offer that
+            // fits so later cap management only has a small gap to close.
+            if (!pick) pick = cheapest.find((offer) => offer.hit <= capRoom + 0.01) ?? null;
+            // Last-resort auto-repair: an unsigned depth veteran (OVR < 75,
+            // never an elite player) takes a one-year league-minimum deal.
+            if (!pick && veteranMinimumFallback && capRoom + 0.01 >= minHit) {
+                const depth = pool.filter((player) => Number(player?.ovr ?? 0) < 75);
+                if (depth.length) {
+                    const player = depth[0];
+                    const contract = {
+                        ...buildMinimumRosterContract(player, team, { year: meta?.year, strategy, capRoom }),
+                        ...buildContractFromMarket(
+                            { suggestedAnnual: Constants.SALARY_CAP.MIN_CONTRACT, suggestedYears: 1, signingBonus: 0 },
+                            { startYear: meta?.year, signedYear: meta?.year },
+                        ),
+                        yearsRemaining: 1,
+                        veteranMinimum: true,
+                    };
+                    pick = { player, contract, hit: minHit };
+                }
+            }
+            if (!pick) break;
+            tried.add(String(pick.player.id));
+            const beforePlayer = JSON.parse(JSON.stringify(pick.player));
+            const beforeTeam = JSON.parse(JSON.stringify(team));
+            cache.updatePlayer(pick.player.id, { ...minimumRosterSigningPatch(pick.contract), teamId });
+            const capResult = AiLogic.updateTeamCap(teamId);
+            if (capResult?.ok === false) {
+                cache.updatePlayer(pick.player.id, restoreMinimumRosterPlayerPatch(beforePlayer));
+                cache.updateTeam(teamId, beforeTeam);
+                continue;
+            }
+            const signingTransaction = {
+                type: 'SIGN', seasonId: meta?.currentSeasonId, week: meta?.currentWeek,
+                teamId, playerId: pick.player.id,
+                details: { playerId: pick.player.id, source, contract: pick.contract },
+            };
+            if (Array.isArray(transactionSink)) transactionSink.push(signingTransaction);
+            else await Transactions.add(signingTransaction);
+            signed += 1;
+        }
+        return { teamId, signed, rosterCount: cache.getPlayersByTeam(teamId).length };
     }
 
     /**

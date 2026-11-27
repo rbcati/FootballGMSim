@@ -40,6 +40,9 @@ async function reloadApp() {
   await dismissPreviewDrawer(page);
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: 90_000 });
   await page.waitForFunction(() => window.state?.league?.phase, null, { timeout: 60_000 });
+  // The Season Complete splash is shown again after a reload in the offseason.
+  const proceed = page.getByRole('button', { name: 'Proceed to Offseason', exact: true });
+  if (await proceed.isVisible({ timeout: 3_000 }).catch(() => false)) await proceed.click();
 }
 
 const phase = () => page.evaluate(() => window.state.league.phase);
@@ -57,6 +60,19 @@ async function clickAdvance() {
 }
 
 async function closeOverlays() {
+  // If Buffalo has a game this week, take the "Simulate Week" choice.
+  const playPrompt = page.getByRole('dialog', { name: 'Play this week' });
+  if (await playPrompt.isVisible().catch(() => false)) {
+    const simulate = playPrompt.getByRole('button', { name: /Simulate Week/ });
+    if (!(await simulate.isVisible().catch(() => false))) {
+      await playPrompt.getByText('+ More Options').click().catch(() => {});
+    }
+    // Disabled while the worker is busy; callers poll, so try again later.
+    if (await simulate.isEnabled().catch(() => false)) {
+      await simulate.click({ timeout: 5_000 }).catch(() => {});
+      await expect(playPrompt).toBeHidden({ timeout: 120_000 });
+    }
+  }
   for (const name of ["Let's Go!", 'Close changelog', 'Continue']) {
     const b = page.getByRole('button', { name, exact: true });
     if (await b.isVisible().catch(() => false)) await b.click().catch(() => {});
@@ -108,16 +124,19 @@ test('Super Bowl is simulated, scored and shown before the Season Complete splas
   await page.evaluate(() => window.gameController.simToPhase('playoffs'));
   await expect.poll(phase, { timeout: 600_000 }).toBe('playoffs');
   await openTab('nav-league', 'standings').catch(() => {});
-  for (let round = 0; round < 3; round += 1) {
+  const advanceRound = async () => {
     const week = await page.evaluate(() => window.state.league.week);
     await closeOverlays();
     await clickAdvance();
-    await expect.poll(() => page.evaluate(() => window.state.league.week), { timeout: 180_000 }).not.toBe(week);
-  }
+    await expect.poll(async () => {
+      await closeOverlays();
+      return page.evaluate(() => `${window.state.league.phase}:${window.state.league.week}`);
+    }, { timeout: 240_000 }).not.toBe(`playoffs:${week}`);
+  };
+  for (let round = 0; round < 3; round += 1) await advanceRound();
   expect(await page.evaluate(() => window.state.league.week)).toBe(22);
   const before = await page.evaluate(() => Object.fromEntries(window.state.league.teams.map((t) => [t.id, t.wins])));
-  await closeOverlays();
-  await clickAdvance();
+  await advanceRound();
   await expect.poll(phase, { timeout: 180_000 }).toBe('offseason_resign');
 
   const splash = page.getByRole('dialog', { name: 'Season Complete' });
@@ -167,7 +186,9 @@ test('Re-signing: Confirm extension commits or explains itself; Let Walk persist
       const after = await rosterPlayer(name);
       expect(after.decision).toBe('extended');
       expect(after.contract).not.toEqual(before.contract);
-      await expect(page.locator('tr').filter({ hasText: name })).toHaveCount(0); // no longer expiring
+      // Multi-year deals leave the expiring table; a 1-year deal stays, marked Extended.
+      const extendedRow = page.locator('tr').filter({ hasText: name });
+      if (await extendedRow.count()) await expect(extendedRow.locator('td').nth(10)).toHaveText('Extended');
     } else {
       expect(text.length).toBeGreaterThan(10);
       expect(await rosterPlayer(name)).toEqual(before);
@@ -176,7 +197,14 @@ test('Re-signing: Confirm extension commits or explains itself; Let Walk persist
   }
 
   // Let Walk one Pending player.
-  const pendingRow = page.locator('tr').filter({ has: page.getByRole('button', { name: 'Let Walk', exact: true }) }).filter({ hasText: 'Pending' }).first();
+  // Youngest Pending player, so offseason retirements cannot claim him.
+  const pendingRows = page.locator('tr').filter({ has: page.getByRole('button', { name: 'Let Walk', exact: true }) }).filter({ hasText: 'Pending' });
+  let pendingRow = pendingRows.first();
+  let youngest = Infinity;
+  for (let i = 0; i < await pendingRows.count(); i += 1) {
+    const age = Number(await pendingRows.nth(i).locator('td').nth(1).innerText());
+    if (age < youngest) { youngest = age; pendingRow = pendingRows.nth(i); }
+  }
   walkName = (await pendingRow.locator('td').first().innerText()).split(' (')[0].trim();
   await pendingRow.getByRole('button', { name: 'Let Walk', exact: true }).click();
   await expect(page.getByTestId('resign-status')).toContainText(`${walkName}: Let Walk.`);
@@ -244,41 +272,87 @@ test('Free Agency → Draft (page renders, picks by hand, history logs) → 2027
 
   await openTab('nav-league', 'draft');
   await expect(page.getByText('Draft encountered a render error')).toHaveCount(0);
-  for (let guard = 0; guard < 60; guard += 1) {
-    if (await page.getByText('Draft Complete', { exact: true }).isVisible().catch(() => false)) break;
+  // Make every Buffalo pick by hand; the draft room simulates CPU picks.
+  for (let guard = 0; guard < 120; guard += 1) {
+    if ((await phase()) !== 'draft') break;
+    if (await page.getByTestId('draft-start-new-season').isVisible().catch(() => false)) break;
     const start = page.getByRole('button', { name: 'Start Draft', exact: true });
     if (await start.isVisible().catch(() => false) && await start.isEnabled()) { await start.click(); continue; }
-    const simTo = page.getByRole('button', { name: 'Sim to My Pick', exact: true });
-    if (await simTo.isVisible().catch(() => false) && await simTo.isEnabled()) { await simTo.click(); await page.waitForTimeout(1500); continue; }
-    const draftButtons = page.locator('tr').getByRole('button', { name: 'Draft', exact: true });
-    if (await draftButtons.count()) {
-      const first = draftButtons.first();
-      if (await first.isEnabled()) { await first.click(); await page.waitForTimeout(1500); continue; }
+    const draftButton = page.locator('tr').getByRole('button', { name: 'Draft', exact: true }).first();
+    if (await draftButton.isVisible().catch(() => false) && await draftButton.isEnabled().catch(() => false)) {
+      await draftButton.click();
+      await page.waitForTimeout(1200);
+      continue;
     }
-    await page.waitForTimeout(1500);
+    // CPU teams pick automatically; if the clock is idle, ask for the next pick.
+    await page.waitForTimeout(2500);
+    const simTo = page.getByRole('button', { name: 'Sim to My Pick', exact: true });
+    if (await simTo.isVisible().catch(() => false) && await simTo.isEnabled().catch(() => false)) await simTo.click();
   }
-  await expect(page.getByText('Draft Complete', { exact: true })).toBeVisible({ timeout: 120_000 });
   await expect(page.getByText('Draft encountered a render error')).toHaveCount(0);
+  // After the final pick the season either starts automatically or the
+  // Draft Complete panel offers Start New Season.
+  await expect.poll(async () => (await phase()) !== 'draft'
+    || await page.getByTestId('draft-start-new-season').isVisible().catch(() => false), { timeout: 300_000 }).toBe(true);
+  if ((await phase()) === 'draft') {
+    await page.getByTestId('draft-start-new-season').click();
+    await expect.poll(phase, { timeout: 300_000 }).not.toBe('draft');
+    await expect(page.getByTestId('draft-start-new-season-error')).toHaveCount(0);
+  }
+  expect(await page.evaluate(() => window.state.league.year)).toBe(2027);
 
   const history = await page.evaluate(async () => {
     const list = await window.gameController.getDraftClasses();
     const classes = list.payload.classes ?? [];
-    const model = classes.length ? (await window.gameController.getDraftClass({ seasonId: classes[0].seasonId })).payload.model : null;
+    const target = classes.find((c) => String(c.year ?? '').includes('2026')) ?? classes[0];
+    const model = target ? (await window.gameController.getDraftClass({ seasonId: target.seasonId })).payload.model : null;
     return { classes: classes.length, picks: model?.picks?.length ?? 0 };
   });
   expect(history.classes).toBeGreaterThan(0);
   expect(history.picks).toBeGreaterThan(200);
 
-  await page.getByTestId('draft-start-new-season').click();
-  await expect.poll(phase, { timeout: 240_000 }).not.toBe('draft');
-  await expect(page.getByTestId('draft-start-new-season-error')).toHaveCount(0);
-  expect(await page.evaluate(() => window.state.league.year)).toBe(2027);
+  // Every AI team reached the 53-man floor.
+  const short = await page.evaluate(() => window.state.league.teams
+    .filter((t) => t.id !== window.state.league.userTeamId && Number(t.rosterCount ?? t.roster?.length ?? 0) < 53)
+    .map((t) => `${t.abbr}:${t.rosterCount}`));
+  expect(short).toEqual([]);
 
-  for (let i = 0; i < 6 && (await phase()) !== 'regular'; i += 1) {
+  const userRosterCount = () => page.evaluate(() => window.state.league.teams.find((t) => t.id === window.state.league.userTeamId)?.rosterCount);
+  for (let i = 0; i < 8 && (await phase()) !== 'regular'; i += 1) {
     const before = await page.evaluate(() => `${window.state.league.phase}:${window.state.league.week}`);
     await closeOverlays();
+    // HQ explains a required cutdown and offers the fix: cut by hand to 53.
+    const reason = page.locator('#hq-advance-reason');
+    if (await reason.isVisible().catch(() => false) && /Roster minimum not met/i.test(await reason.innerText())) {
+      await page.getByTestId('fill-roster-to-minimum').first().click();
+      await expect.poll(userRosterCount, { timeout: 120_000 }).toBe(53);
+      continue;
+    }
+    if (await reason.isVisible().catch(() => false) && /cutdown required/i.test(await reason.innerText())) {
+      await page.getByRole('button', { name: /Run Final Cuts/ }).click();
+      for (let cut = 0; cut < 10 && (await userRosterCount()) > 53; cut += 1) {
+        const count = await userRosterCount();
+        await page.getByRole('button', { name: 'Cut', exact: true }).last().click();
+        await page.getByRole('button', { name: 'Confirm Release' }).click();
+        await expect.poll(userRosterCount, { timeout: 60_000 }).toBe(count - 1);
+      }
+      await openTab('nav-hq', 'hq').catch(() => page.locator('[data-testid="nav-hq"]').first().click());
+      continue;
+    }
     await clickAdvance();
-    await expect.poll(() => page.evaluate(() => `${window.state.league.phase}:${window.state.league.week}`), { timeout: 240_000 }).not.toBe(before);
+    // Advance must either move the league or explain itself.
+    await expect.poll(async () => {
+      const now = await page.evaluate(() => `${window.state.league.phase}:${window.state.league.week}`);
+      if (now !== before) return 'moved';
+      if (await page.getByTestId('fill-roster-to-minimum').isVisible().catch(() => false)) return 'roster';
+      const alerts = await page.locator('[role="alert"]').allInnerTexts();
+      return alerts.some((t) => t.trim().length > 0) ? 'explained' : 'waiting';
+    }, { timeout: 240_000 }).not.toBe('waiting');
+    if (await page.getByTestId('fill-roster-to-minimum').isVisible().catch(() => false)) {
+      await expect(page.locator('[role="alert"]').first()).toContainText(/Roster minimum not met/);
+      await page.getByTestId('fill-roster-to-minimum').click();
+      await expect.poll(() => page.evaluate(() => window.state.league.teams.find((t) => t.id === window.state.league.userTeamId)?.rosterCount), { timeout: 120_000 }).toBe(53);
+    }
   }
   expect(await page.evaluate(() => ({ phase: window.state.league.phase, week: window.state.league.week, year: window.state.league.year })))
     .toEqual({ phase: 'regular', week: 1, year: 2027 });

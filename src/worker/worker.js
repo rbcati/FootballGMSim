@@ -11145,7 +11145,11 @@ async function handleStartDraft(payload, id) {
     );
     return count + teamCompPicks.length;
   }, 0);
-  const classSize = (ROUNDS * teams.length) + compensatoryPickCount;
+  // Four extra prospects per team go undrafted; at the season rollover they
+  // become undrafted free agents (minimum-salary camp bodies), the league's
+  // natural source of 53-man roster depth.
+  const UNDRAFTED_PROSPECTS_PER_TEAM = 4;
+  const classSize = (ROUNDS * teams.length) + compensatoryPickCount + (UNDRAFTED_PROSPECTS_PER_TEAM * teams.length);
 
   // Build elite name set from existing players to avoid collisions
   const eliteNames = new Set(cache.getAllPlayers().filter(p => p.ovr > 80).map(p => p.name));
@@ -12852,6 +12856,168 @@ function emitFaCompetitionEvents(day, preBidPlayerIds, aiCountByPlayerId) {
   }
 }
 
+// ── Handler: FILL_ROSTER_TO_MINIMUM ──────────────────────────────────────────
+// One-click action offered when Advance refuses because the user's roster is
+// below 53: signs the cheapest fitting free agents (same canonical minimum
+// offers the AI uses) and reports every signing by name.
+async function handleFillRosterToMinimum({ teamId } = {}, id) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const resolvedTeamId = teamId ?? meta?.userTeamId;
+  if (String(resolvedTeamId) !== String(meta?.userTeamId)) {
+    post(toUI.ERROR, { message: 'Only your own roster can be filled from here.' }, id);
+    return;
+  }
+  const minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON;
+  const before = new Set(cache.getPlayersByTeam(resolvedTeamId).map((p) => String(p.id)));
+  if (before.size >= minimum) {
+    post(toUI.STATE_UPDATE, { ...buildViewState(), fillResult: { signed: [], rosterCount: before.size } }, id);
+    return;
+  }
+  await AiLogic.fillRosterToMinimumGreedy(resolvedTeamId, { minimum, source: 'user_roster_fill', veteranMinimumFallback: true });
+  if (cache.getPlayersByTeam(resolvedTeamId).length < minimum) {
+    generateUndraftedFreeAgents(minimum - cache.getPlayersByTeam(resolvedTeamId).length + 2, meta);
+    await AiLogic.fillRosterToMinimumGreedy(resolvedTeamId, { minimum, source: 'user_roster_fill', veteranMinimumFallback: true });
+  }
+  recalculateTeamCap(resolvedTeamId);
+  ensureTeamDepthChart(resolvedTeamId, { phase: cache.getPhase() });
+  const signed = cache.getPlayersByTeam(resolvedTeamId).filter((p) => !before.has(String(p.id)));
+  const rosterCount = cache.getPlayersByTeam(resolvedTeamId).length;
+  await flushDirty();
+  post(toUI.NOTIFICATION, {
+    level: rosterCount >= minimum ? 'info' : 'warn',
+    message: signed.length
+      ? `Signed ${signed.length} minimum-contract player${signed.length === 1 ? '' : 's'} (${rosterCount}/${minimum}): ${signed.map((p) => `${p.name} (${p.pos})`).join(', ')}.`
+      : `No affordable free agents fit your cap room (${rosterCount}/${minimum}). Release or restructure a contract, then retry.`,
+  });
+  post(toUI.STATE_UPDATE, { ...buildViewState(), fillResult: { signed: signed.map((p) => ({ id: p.id, name: p.name, pos: p.pos })), rosterCount } }, id);
+}
+
+// ── Undrafted free agents ────────────────────────────────────────────────────
+// Prospects still undrafted when the draft is over become free agents.
+function isCompletedDraft(meta) {
+  const draftState = meta?.draftState;
+  return !!draftState && Number(draftState.currentPickIndex ?? 0) >= Number(draftState.picks?.length ?? Infinity);
+}
+
+function releaseUndraftedProspects(meta) {
+  const draftState = meta?.draftState;
+  const draftDone = draftState && Number(draftState.currentPickIndex ?? 0) >= Number(draftState.picks?.length ?? 0);
+  if (!draftDone) return 0;
+  let released = 0;
+  for (const player of cache.getAllPlayers()) {
+    if (player?.status !== 'draft_eligible') continue;
+    cache.updatePlayer(player.id, { status: 'free_agent', teamId: null, offers: [], undraftedFreeAgent: true });
+    released += 1;
+  }
+  return released;
+}
+
+// ── AI roster floor ──────────────────────────────────────────────────────────
+// Greedy per-team fill before the exhaustive shared search, so the season
+// rollover guarantees 53 whenever the pool and cap allow it (the search alone
+// gives up on large deficits). The interactive user team is never touched.
+// The greedy + cap-managed fill above leaves at most a small residual gap;
+// cap the exhaustive search so a hopeless case fails in seconds, not minutes.
+const ROLLOVER_COMPLETION_SEARCH_STATES = Object.freeze({ affordable: 250, recovery: 250 });
+
+async function greedyFillUnderfilledTeams({
+  includeUserTeam = false,
+  transactionSink = null,
+  restructureProvenanceByTeam = null,
+  releasedPlayerIdsByTeam = null,
+  notify = true,
+  allowUndraftedRescue = false,
+} = {}) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON;
+  const underfilled = () => cache.getAllTeams()
+    .filter((team) => includeUserTeam || Number(team.id) !== Number(meta?.userTeamId))
+    .filter((team) => cache.getPlayersByTeam(team.id).length < minimum)
+    .sort((a, b) => stableIdCompare(a?.id, b?.id));
+  for (const team of underfilled()) {
+    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink });
+  }
+  // Cap-limited teams: let the AI cap manager create exactly the room the
+  // cheapest real completion needs (restructures before releases), then fill.
+  const shortTeams = underfilled();
+  if (shortTeams.length === 0) return;
+  const reserveByTeam = new Map();
+  const candidatesByTeam = new Map();
+  for (const team of shortTeams) {
+    const completion = AiLogic.cheapestRosterCompletion(team.id, { minimum });
+    if (completion.cost != null) reserveByTeam.set(team.id, completion.cost);
+    candidatesByTeam.set(team.id, completion.candidateIds);
+  }
+  await AiLogic.executeAICapManagement({
+    autoManageUserCap: includeUserTeam,
+    teamIds: shortTeams.map((team) => team.id),
+    rosterCompletionReserveByTeam: reserveByTeam,
+    rosterCompletionCandidateIdsByTeam: candidatesByTeam,
+    transactionSink,
+    restructureProvenanceByTeam,
+    releasedPlayerIdsByTeam,
+  });
+  for (const team of underfilled()) {
+    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink });
+  }
+  // Last resort: unsigned depth veterans (never elite players) accept a
+  // one-year league-minimum deal. Logged as transactions the user can see.
+  const repaired = [];
+  for (const team of underfilled()) {
+    const result = await AiLogic.fillRosterToMinimumGreedy(team.id, {
+      minimum, transactionSink, veteranMinimumFallback: true, source: 'roster_floor_auto_repair',
+    });
+    if (result.signed > 0) repaired.push(`${team.abbr ?? team.id} +${result.signed}`);
+  }
+  // Exhausted pool (e.g. a save whose draft class had no undrafted players):
+  // the league signs undrafted rookies, generated at replacement level.
+  // Only for a draft that actually completed (a pre-fix save whose class had
+  // no undrafted players). Without a completed draft an empty pool is a real
+  // failure and the rollover must refuse atomically.
+  const stillShort = allowUndraftedRescue ? underfilled() : [];
+  if (stillShort.length) {
+    const missing = stillShort.reduce((sum, team) => sum + Math.max(0, minimum - cache.getPlayersByTeam(team.id).length), 0);
+    const created = generateUndraftedFreeAgents(missing + stillShort.length * 2, meta);
+    for (const team of underfilled()) {
+      const result = await AiLogic.fillRosterToMinimumGreedy(team.id, {
+        minimum, transactionSink, veteranMinimumFallback: true, source: 'roster_floor_auto_repair',
+      });
+      if (result.signed > 0) repaired.push(`${team.abbr ?? team.id} +${result.signed}`);
+    }
+    if (created > 0) console.info(`[Worker] Roster floor: generated ${created} undrafted free agents for an exhausted pool.`);
+  }
+  if (repaired.length && notify) {
+    post(toUI.NOTIFICATION, { level: 'info', message: `Roster floor auto-repair: ${repaired.join(', ')} signed league-minimum depth to reach 53.` });
+  }
+}
+
+/** Replacement-level undrafted rookies for an exhausted free-agent pool. */
+function generateUndraftedFreeAgents(count, meta) {
+  const needed = Math.max(0, Math.round(Number(count) || 0));
+  if (needed === 0) return 0;
+  const eliteNames = new Set(cache.getAllPlayers().filter((p) => p.ovr > 80).map((p) => p.name));
+  // Generate a larger class and keep its bottom end: undrafted players are the
+  // lowest-rated prospects, which the contract market prices at the minimum.
+  const pool = generateDraftClass(meta?.year, { classSize: needed * 3, eliteNames })
+    .sort((a, b) => (Number(a?.ovr ?? 0) - Number(b?.ovr ?? 0)) || stableIdCompare(a?.id, b?.id))
+    .slice(0, needed);
+  for (const p of pool) {
+    cache.setPlayer({ ...p, teamId: null, status: 'free_agent', offers: [], undraftedFreeAgent: true, trueOvr: p.ovr });
+  }
+  return pool.length;
+}
+
+// ── AI roster floor at free-agency close ─────────────────────────────────────
+async function fillAiRostersAtFreeAgencyClose() {
+  try {
+    await greedyFillUnderfilledTeams({ includeUserTeam: false });
+  } catch (err) {
+    console.warn('[Worker] AI roster fill at free-agency close failed (non-fatal; rollover will retry):', err?.message);
+  }
+  for (const team of cache.getAllTeams()) recalculateTeamCap(team.id);
+  validateAndRepairAllTeamDepthCharts('post-fa-roster-floor');
+}
+
 // ── Handler: ADVANCE_FREE_AGENCY_DAY ──────────────────────────────────────────
 
 async function handleAdvanceFreeAgencyDay(payload, id) {
@@ -13013,6 +13179,13 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
               .join(', ');
             post(toUI.NOTIFICATION, { level: 'info', message: `Comp picks awarded for ${meta.year} draft: ${preview}${compAwards.length > 4 ? '…' : ''}.` });
         }
+        // AI teams leave free agency with a legal 53-man floor. Expiring
+        // contracts now really empty rosters, and the season rollover's
+        // shared multi-team completion search is only meant for small
+        // emergency deficits (it is combinatorial in the number of open
+        // slots). Fill one team at a time here with the same canonical
+        // minimum-contract offers (AiLogic.fillRosterToMinimumGreedy).
+        await fillAiRostersAtFreeAgencyClose();
         updates.phase = 'draft_combine';
         updates.combineInvitesLeft = 6;
         updates.combineProspectsReady = false;
@@ -13886,10 +14059,12 @@ async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSea
       }),
     });
 
+    await greedyFillUnderfilledTeams({ includeUserTeam, transactionSink: stagedTransactions, restructureProvenanceByTeam: restructureProvenance, releasedPlayerIdsByTeam, notify: false, allowUndraftedRescue: isCompletedDraft(meta) });
     let reconciliation = await AiLogic.ensureMinimumRosters({
       includeUserTeam,
       transactionSink: stagedTransactions,
       releasedPlayerIdsByTeam,
+      searchMaxStates: ROLLOVER_COMPLETION_SEARCH_STATES,
     });
     if (reconciliation.failures.length > 0) {
       await AiLogic.executeAICapManagement({
@@ -13936,6 +14111,7 @@ async function handleStartNewSeason(payload, id) {
   const rolloverBatchSim = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
   const rolloverSnapshot = snapshotLifecyclePersistenceState();
   try {
+  releaseUndraftedProspects(meta);
   const preflight = await preflightStartNewSeasonRosters({
     meta,
     newYear,
@@ -13946,6 +14122,7 @@ async function handleStartNewSeason(payload, id) {
   });
   if (preflight.failures.length > 0) {
     const detail = preflight.failures[0];
+    restoreLifecyclePersistenceState(rolloverSnapshot);
     post(toUI.ERROR, {
       message: `Team ${detail.teamId} cannot enter preseason below the 53-player minimum (${detail.rosterCount}/53).`,
       rosterLegalityFailure: detail,
@@ -14133,10 +14310,12 @@ async function handleStartNewSeason(payload, id) {
   const rolloverTransactions = [];
   const rolloverRestructureProvenance = new Map();
   const rolloverReleasedPlayerIds = new Map();
+  await greedyFillUnderfilledTeams({ includeUserTeam: rolloverBatchSim, transactionSink: rolloverTransactions, restructureProvenanceByTeam: rolloverRestructureProvenance, releasedPlayerIdsByTeam: rolloverReleasedPlayerIds, allowUndraftedRescue: isCompletedDraft(meta) });
   let rolloverReconciliation = await AiLogic.ensureMinimumRosters({
     includeUserTeam: rolloverBatchSim,
     transactionSink: rolloverTransactions,
     releasedPlayerIdsByTeam: rolloverReleasedPlayerIds,
+    searchMaxStates: ROLLOVER_COMPLETION_SEARCH_STATES,
   });
   if (rolloverReconciliation.failures.length > 0) {
     // Only underfilled teams enter this cap-planning retry. Oversized preseason
@@ -15131,6 +15310,7 @@ async function handleMessage(event) {
       case toWorker.REMOVE_FROM_TRADE_BLOCK: return await handleRemoveFromTradeBlock(payload, id);
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.GET_EXTENSION_QUOTE: return await handleGetExtensionQuote(payload, id);
+      case toWorker.FILL_ROSTER_TO_MINIMUM: return await handleFillRosterToMinimum(payload, id);
       case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);
       case toWorker.RESTRUCTURE_CONTRACT:     return await handleRestructureContract(payload, id);
       case toWorker.GET_RESTRUCTURE_SUMMARY:  return handleGetRestructureSummary(payload, id);

@@ -442,7 +442,15 @@ export function useWorker() {
           lastAcceptedEpochRef.current = acceptedScope.stateEpoch;
           acceptedSimulationLeagueIdRef.current = acceptedScope.activeLeagueId;
           acceptedFranchiseGenerationIdRef.current = acceptedScope.franchiseGenerationId;
-          dispatch({ type: 'STATE_UPDATE', payload: merged, messageType: type });
+          // Dispatch only the delta so the reducer merges it into the CURRENT
+          // league. leagueRef is refreshed by an effect after render, so two
+          // deltas arriving back-to-back (e.g. EXTEND_CONTRACT's update then the
+          // chronicle save's update) used to merge the second into a stale
+          // league and silently revert the first one's rosters/decisions.
+          // applyLeagueDelta is a plain key replacement, so this is equivalent.
+          const { _isDelta: _deltaMarker, _stateEpoch: _deltaEpoch, ...deltaFields } = payload ?? {};
+          leagueRef.current = merged;
+          dispatch({ type: 'STATE_UPDATE', payload: deltaFields, messageType: type });
           break;
         }
         case toUI.ERROR:
@@ -786,6 +794,10 @@ export function useWorker() {
     /** Get contract extension demand from AI (returns Promise). */
     getExtensionAsk: (playerId) =>
       request(toWorker.GET_EXTENSION_ASK, { playerId }, { silent: true }),
+
+    /** Sign minimum-contract free agents until the user roster reaches 53. */
+    fillRosterToMinimum: (teamId) =>
+      request(toWorker.FILL_ROSTER_TO_MINIMUM, { teamId }, { timeoutMs: 120000 }),
 
     /** Worker-authoritative extension terms (or the reason none can commit). */
     getExtensionQuote: (playerId, teamId) =>

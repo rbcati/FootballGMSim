@@ -82,6 +82,7 @@ export const toWorker = Object.freeze({
   /** Contracts */
   GET_EXTENSION_ASK:  'GET_EXTENSION_ASK', // { playerId }
   GET_EXTENSION_QUOTE: 'GET_EXTENSION_QUOTE', // { playerId, teamId } → committable terms or block reason
+  FILL_ROSTER_TO_MINIMUM: 'FILL_ROSTER_TO_MINIMUM', // { teamId } user-requested minimum-contract fill to 53
   EXTEND_CONTRACT:    'EXTEND_CONTRACT',   // { playerId, teamId, contract }
   RESTRUCTURE_CONTRACT: 'RESTRUCTURE_CONTRACT',
   GET_RESTRUCTURE_SUMMARY: 'GET_RESTRUCTURE_SUMMARY', // { playerId, teamId }
