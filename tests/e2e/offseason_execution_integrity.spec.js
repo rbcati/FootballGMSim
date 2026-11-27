@@ -287,7 +287,11 @@ test('Free Agency → Draft (page renders, picks by hand, history logs) → 2027
     // CPU teams pick automatically; if the clock is idle, ask for the next pick.
     await page.waitForTimeout(2500);
     const simTo = page.getByRole('button', { name: 'Sim to My Pick', exact: true });
-    if (await simTo.isVisible().catch(() => false) && await simTo.isEnabled().catch(() => false)) await simTo.click();
+    // Optional nudge: the loop retries, so a transiently covered button
+    // (CPU pick animation) must not fail the run.
+    if (await simTo.isVisible().catch(() => false) && await simTo.isEnabled().catch(() => false)) {
+      await simTo.click({ timeout: 5000 }).catch(() => {});
+    }
   }
   await expect(page.getByText('Draft encountered a render error')).toHaveCount(0);
   // After the final pick the season either starts automatically or the
