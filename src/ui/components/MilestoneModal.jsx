@@ -562,6 +562,12 @@ export default function MilestoneModal({
     }
   }, [league?.phase, league?.championTeamId]);
 
+  // The splash belongs to the re-signing window; once the offseason moves on
+  // (e.g. advanced without pressing "Proceed"), it must not cover later screens.
+  useEffect(() => {
+    if (showChampion && league?.phase && league.phase !== "offseason_resign") setShowChampion(false);
+  }, [league?.phase, showChampion]);
+
   return (
     <>
       {showPlayoffs && (
