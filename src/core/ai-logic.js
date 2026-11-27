@@ -1009,7 +1009,9 @@ class AiLogic {
                     pick = { player, contract, hit: minHit };
                 }
             }
-            if (!pick) pick = cheapest.find((offer) => offer.hit <= capRoom + 0.01) ?? null;
+            // Last market fallback keeps the league minimum for every other
+            // open slot, so a later replacement-level signing can still fit.
+            if (!pick) pick = cheapest.find((offer) => offer.hit + minHit * (deficit - 1) <= capRoom + 0.01) ?? null;
             if (!pick) break;
             tried.add(String(pick.player.id));
             const beforePlayer = JSON.parse(JSON.stringify(pick.player));

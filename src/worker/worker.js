@@ -13057,7 +13057,19 @@ async function greedyFillUnderfilledTeams({
   // Cap-limited teams: let the AI cap manager create exactly the room the
   // cheapest real completion needs (restructures before releases), then fill.
   const shortTeams = capManagement ? underfilled() : [];
-  if (shortTeams.length === 0) return;
+  if (shortTeams.length > 0) await manageCapForRosterCompletion(shortTeams, {
+    minimum, includeUserTeam, transactionSink, restructureProvenanceByTeam, releasedPlayerIdsByTeam,
+  });
+  const repaired = [];
+  await finishRosterFloorFill({ underfilled, minimum, transactionSink, repaired, allowUndraftedRescue, meta });
+  if (repaired.length && notify) {
+    post(toUI.NOTIFICATION, { level: 'info', message: `Roster floor auto-repair: ${repaired.join(', ')} signed league-minimum depth to reach 53.` });
+  }
+}
+
+async function manageCapForRosterCompletion(shortTeams, {
+  minimum, includeUserTeam, transactionSink, restructureProvenanceByTeam, releasedPlayerIdsByTeam,
+}) {
   const reserveByTeam = new Map();
   const candidatesByTeam = new Map();
   for (const team of shortTeams) {
@@ -13076,23 +13088,24 @@ async function greedyFillUnderfilledTeams({
     restructureProvenanceByTeam,
     releasedPlayerIdsByTeam,
   });
+}
+
+async function finishRosterFloorFill({ underfilled, minimum, transactionSink, repaired, allowUndraftedRescue, meta }) {
   for (const team of underfilled()) {
     await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true });
   }
   // Last resort: unsigned depth veterans (never elite players) accept a
   // one-year league-minimum deal. Logged as transactions the user can see.
-  const repaired = [];
   for (const team of underfilled()) {
     const result = await AiLogic.fillRosterToMinimumGreedy(team.id, {
       minimum, transactionSink, veteranMinimumFallback: true, source: 'roster_floor_auto_repair',
     });
     if (result.signed > 0) repaired.push(`${team.abbr ?? team.id} +${result.signed}`);
   }
-  // Exhausted pool (e.g. a save whose draft class had no undrafted players):
-  // the league signs undrafted rookies, generated at replacement level.
-  // Only for a draft that actually completed (a pre-fix save whose class had
-  // no undrafted players). Without a completed draft an empty pool is a real
-  // failure and the rollover must refuse atomically.
+  // Exhausted pool of affordable players: the league signs replacement-level
+  // street free agents. Callers enable this at free-agency close and, at the
+  // rollover, only for a draft that actually completed (without one an empty
+  // pool is a real failure and the rollover must refuse atomically).
   const stillShort = allowUndraftedRescue ? underfilled() : [];
   if (stillShort.length) {
     const missing = stillShort.reduce((sum, team) => sum + Math.max(0, minimum - cache.getPlayersByTeam(team.id).length), 0);
@@ -13104,9 +13117,6 @@ async function greedyFillUnderfilledTeams({
       if (result.signed > 0) repaired.push(`${team.abbr ?? team.id} +${result.signed}`);
     }
     if (created > 0) console.info(`[Worker] Roster floor: generated ${created} undrafted free agents for an exhausted pool.`);
-  }
-  if (repaired.length && notify) {
-    post(toUI.NOTIFICATION, { level: 'info', message: `Roster floor auto-repair: ${repaired.join(', ')} signed league-minimum depth to reach 53.` });
   }
 }
 
@@ -13136,6 +13146,9 @@ async function fillAiRostersAtFreeAgencyClose() {
       includeUserTeam: false,
       minimum: Constants.ROSTER_LIMITS.REGULAR_SEASON - DRAFT_CLASS_ROSTER_ALLOWANCE,
       capManagement: false,
+      // An exhausted pool of replacement-level players is refilled with
+      // street free agents so every AI team can leave free agency fillable.
+      allowUndraftedRescue: true,
     });
   } catch (err) {
     console.warn('[Worker] AI roster fill at free-agency close failed (non-fatal; rollover will retry):', err?.message);
