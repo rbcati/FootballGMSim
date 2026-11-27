@@ -13071,7 +13071,9 @@ async function greedyFillUnderfilledTeams({
   const candidatesByTeam = new Map();
   for (const team of shortTeams) {
     const completion = AiLogic.cheapestRosterCompletion(team.id, { minimum });
-    if (completion.cost != null) reserveByTeam.set(team.id, completion.cost);
+    // The AI cap manager projects player contracts only; the team's real cap
+    // also carries staff salaries, so they are part of the room to create.
+    if (completion.cost != null) reserveByTeam.set(team.id, completion.cost + teamStaffPayroll(team));
     candidatesByTeam.set(team.id, completion.candidateIds);
   }
   await AiLogic.executeAICapManagement({
