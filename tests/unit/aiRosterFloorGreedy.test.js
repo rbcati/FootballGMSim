@@ -80,4 +80,13 @@ describe('AiLogic.fillRosterToMinimumGreedy', () => {
     h.state.store = store({ rosterSize: 53 });
     expect(await AiLogic.fillRosterToMinimumGreedy(4)).toMatchObject({ signed: 0, rosterCount: 53 });
   });
+
+  it('rosterFloorCapReserve keeps the minimum for open slots, capped at half the room', () => {
+    expect(AiLogic.rosterFloorCapReserve(53, 40)).toBe(0);
+    expect(AiLogic.rosterFloorCapReserve(43, 100)).toBeCloseTo(10 * 0.75, 5);
+    expect(AiLogic.rosterFloorCapReserve(1, 30)).toBe(15);
+    expect(AiLogic.rosterFloorCapReserve(20, -5)).toBe(0);
+    // At acceptance the full reserve applies regardless of current room.
+    expect(AiLogic.rosterFloorCapReserve(1, 30, { capAtHalfRoom: false })).toBeCloseTo(52 * 0.75, 5);
+  });
 });

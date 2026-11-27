@@ -217,6 +217,18 @@ function restoreMinimumRosterPlayerPatch(snapshot = {}) {
     return patch;
 }
 
+/**
+ * Cap used by the greedy roster-floor fill: never more than the team's own
+ * current capTotal. Before the rollover the economy already carries next
+ * season's (higher) cap while team.capTotal is still this season's, and
+ * spending against the economy figure would push the team over its real cap.
+ */
+function resolveFillCap(team = {}, meta = {}) {
+    const live = resolveLiveCapForMinimumRoster(team, meta);
+    const own = Number(team?.capTotal);
+    return Number.isFinite(own) && own > 0 ? Math.min(live, own) : live;
+}
+
 function resolveLiveCapForMinimumRoster(team = {}, meta = {}) {
     const economyCap = Number(meta?.economy?.currentSalaryCap);
     if (Number.isFinite(economyCap) && economyCap > 0) return economyCap;
@@ -833,7 +845,7 @@ class AiLogic {
         const roster = cache.getPlayersByTeam(teamId);
         const deficit = Math.max(0, minimum - roster.length);
         if (!team || deficit === 0) return { deficit, cost: 0, candidateIds: [] };
-        const legalCap = resolveLiveCapForMinimumRoster(team, meta);
+        const legalCap = resolveFillCap(team, meta);
         const cap = buildTeamCapSnapshot({ team, roster, salaryCap: legalCap });
         const strategy = buildAiTeamStrategy({ team, roster, league: { year: meta?.year, phase: meta?.phase }, phase: meta?.phase, year: meta?.year });
         const offers = cache.getAllPlayers()
@@ -866,6 +878,21 @@ class AiLogic {
      *
      * @returns {{ teamId, signed: number, rosterCount: number }}
      */
+    /**
+     * Cap room an AI team keeps aside so it can still reach the 53-man floor
+     * at league-minimum salaries: the minimum for every other open slot.
+     * When placing bids (`capAtHalfRoom`) it never exceeds half of the current
+     * room, so stars still draw offers; at acceptance — the binding moment —
+     * the full reserve applies, otherwise it decays toward zero as the room
+     * shrinks and a team can spend itself below a fillable roster.
+     */
+    static rosterFloorCapReserve(rosterCountAfterSigning, capRoom, { capAtHalfRoom = true } = {}) {
+        const open = Math.max(0, Constants.ROSTER_LIMITS.REGULAR_SEASON - Number(rosterCountAfterSigning || 0));
+        const reserve = open * Number(Constants.SALARY_CAP.MIN_CONTRACT ?? 0.75);
+        if (!capAtHalfRoom) return reserve;
+        return Math.max(0, Math.min(reserve, Math.max(0, Number(capRoom) || 0) * 0.5));
+    }
+
     static async fillRosterToMinimumGreedy(teamId, {
         minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON,
         transactionSink = null,
@@ -876,15 +903,15 @@ class AiLogic {
         const minHit = minimumRosterCapHit();
         let signed = 0;
         const tried = new Set();
-        for (let guard = 0; guard < minimum; guard += 1) {
+        for (let guard = 0; guard < minimum * 3; guard += 1) {
             const team = cache.getTeam(teamId);
             if (!team) break;
             const roster = cache.getPlayersByTeam(teamId);
             const deficit = minimum - roster.length;
             if (deficit <= 0) break;
-            const legalCap = resolveLiveCapForMinimumRoster(team, meta);
+            const legalCap = resolveFillCap(team, meta);
             const cap = buildTeamCapSnapshot({ team, roster, salaryCap: legalCap });
-            const capRoom = Number(cap.capRoom ?? 0);
+            const capRoom = Math.min(Number(cap.capRoom ?? 0), Number(team.capRoom ?? Infinity));
             if (capRoom + 0.01 < minHit) break;
             const needs = AiLogic.calculateTeamNeedsFromRoster(team, roster, meta);
             const neededPositions = Object.keys(needs)
@@ -921,12 +948,12 @@ class AiLogic {
                 return taken >= deficit - 1 ? sum : Number.POSITIVE_INFINITY;
             };
             let pick = offers.find((offer) => offer.hit + reserveExcluding(offer) <= capRoom + 0.01) ?? null;
-            // The full deficit is not affordable: sign the cheapest offer that
-            // fits so later cap management only has a small gap to close.
-            if (!pick) pick = cheapest.find((offer) => offer.hit <= capRoom + 0.01) ?? null;
-            // Last-resort auto-repair: an unsigned depth veteran (OVR < 75,
-            // never an elite player) takes a one-year league-minimum deal.
-            if (!pick && veteranMinimumFallback && capRoom + 0.01 >= minHit) {
+            // The full deficit is not affordable at market prices. Unsigned
+            // depth veterans (OVR < 75, never an elite player) take a one-year
+            // league-minimum deal — the cheapest way to keep every slot
+            // fillable — before falling back to the cheapest market offer.
+            const minimumDealFits = capRoom + 0.01 >= minHit * deficit || capRoom + 0.01 >= minHit;
+            if (!pick && veteranMinimumFallback && minimumDealFits) {
                 const depth = pool.filter((player) => Number(player?.ovr ?? 0) < 75);
                 if (depth.length) {
                     const player = depth[0];
@@ -942,15 +969,19 @@ class AiLogic {
                     pick = { player, contract, hit: minHit };
                 }
             }
+            if (!pick) pick = cheapest.find((offer) => offer.hit <= capRoom + 0.01) ?? null;
             if (!pick) break;
             tried.add(String(pick.player.id));
             const beforePlayer = JSON.parse(JSON.stringify(pick.player));
             const beforeTeam = JSON.parse(JSON.stringify(team));
             cache.updatePlayer(pick.player.id, { ...minimumRosterSigningPatch(pick.contract), teamId });
             const capResult = AiLogic.updateTeamCap(teamId);
-            if (capResult?.ok === false) {
+            // The team's own recalculated cap is the authority: a projection
+            // that disagrees must never take the team over its real cap.
+            if (capResult?.ok === false || Number(cache.getTeam(teamId)?.capRoom ?? 0) < -0.01) {
                 cache.updatePlayer(pick.player.id, restoreMinimumRosterPlayerPatch(beforePlayer));
                 cache.updateTeam(teamId, beforeTeam);
+                AiLogic.updateTeamCap(teamId);
                 continue;
             }
             const signingTransaction = {
@@ -1566,6 +1597,20 @@ class AiLogic {
 
         for (const { player, contract } of extensions) {
             const newContract = { ...contract, startYear: meta?.year };
+            // Roster floor: keep the league minimum for every slot that will
+            // be empty once this window's expiring contracts run out.
+            {
+                const fresh = cache.getTeam(teamId);
+                const committedNextSeason = cache.getPlayersByTeam(teamId).filter((p) => {
+                    if (String(p.id) === String(player?.id)) return false;
+                    const years = Number(p?.contract?.years ?? p?.contract?.yearsRemaining ?? 0);
+                    return years > 1 || ['extended', 'tagged', 'franchise_tagged', 'rfa_tendered'].includes(String(p?.extensionDecision ?? ''));
+                }).length;
+                const reserve = AiLogic.rosterFloorCapReserve(committedNextSeason + 1, fresh?.capRoom, { capAtHalfRoom: false });
+                const newHit = Number(getActiveCapHit({ contract: newContract }) ?? 0);
+                const oldHit = Number(getActiveCapHit(player) ?? 0);
+                if (Number(fresh?.capRoom ?? 0) - (newHit - oldHit) < reserve - 0.001) continue;
+            }
 
             cache.updatePlayer(player.id, {
                 contract: newContract,
@@ -1976,8 +2021,11 @@ class AiLogic {
                     if (!qbException) continue;
                 }
 
-                // Check Cap
-                if ((team.capRoom ?? 0) > (capHit + 1)) {
+                // Check Cap — keep the league minimum for every other open
+                // slot up to the 53-man floor (rosters emptied by expiring
+                // contracts must stay fillable).
+                const rosterFloorReserve = AiLogic.rosterFloorCapReserve(roster.length + 1, team.capRoom);
+                if ((team.capRoom ?? 0) > (capHit + 1 + rosterFloorReserve)) {
                     // MAKE OFFER
                     const offer = {
                         teamId,
@@ -2056,7 +2104,10 @@ class AiLogic {
                 const team = cache.getTeam(teamId);
                 const capHit = offer.contract.baseAnnual + (offer.contract.signingBonus / offer.contract.yearsTotal);
 
-                if (team && team.capRoom >= capHit) {
+                const acceptFloorReserve = team && Number(teamId) !== Number(cache.getMeta()?.userTeamId)
+                    ? AiLogic.rosterFloorCapReserve(cache.getPlayersByTeam(teamId).length + 1, team.capRoom, { capAtHalfRoom: false })
+                    : 0;
+                if (team && team.capRoom - capHit >= acceptFloorReserve - 0.001) {
                     const oldTeamId = player.teamId;
                     const priorContract = player.contract;
                     const priorTeamId = player.teamId;

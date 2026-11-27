@@ -197,7 +197,8 @@ import {
   computeTeamSchemeFits, schemeOvrBonus, recalcTeamSchemeFit,
   OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES,
 } from '../core/scheme-core.js';
-import AiLogic from '../core/ai-logic.js';
+import AiLogic, { buildMinimumRosterContract } from '../core/ai-logic.js';
+import { getActiveCapHit as getContractCapHit } from '../core/contracts/contractObligations.js';
 import NewsEngine, { createNewsItem, addNewsItem } from '../core/news-engine.js';
 import { parseWeeklyHeadlines } from '../core/history/NewsEngine.ts';
 import { calculateAwardRaces, selectProBowlers } from '../core/awards-logic.js';
@@ -3344,6 +3345,7 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
       includeUserTeam: batchSim,
       transactionSink: preseasonTransactions,
       releasedPlayerIdsByTeam: preseasonReleasedPlayerIds,
+      searchMaxStates: rolloverCompletionSearchBudget(batchSim),
     });
 
     // AI cap management: bring every AI team legally under the LIVE cap using the
@@ -3379,6 +3381,7 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
         includeUserTeam: batchSim,
         transactionSink: preseasonTransactions,
         releasedPlayerIdsByTeam: preseasonReleasedPlayerIds,
+        searchMaxStates: rolloverCompletionSearchBudget(batchSim),
       });
     }
     if (reconciliation.failures.length > 0) {
@@ -12080,11 +12083,88 @@ function runAiStaffCarousel(meta, teams) {
  * All mutations are flushed to IndexedDB before the UI is notified.
  */
 /**
+ * True when an AI extension at `newCapHit` still leaves the league minimum for
+ * every roster slot that will be empty once this window's expiring contracts
+ * run out (players under contract next season = years > 1 or re-committed).
+ */
+function aiExtensionKeepsRosterFloor(teamId, player, newCapHit) {
+  const team = cache.getTeam(teamId);
+  if (!team) return false;
+  const committedNextSeason = cache.getPlayersByTeam(teamId).filter((p) => {
+    if (String(p.id) === String(player?.id)) return false;
+    const years = Number(p?.contract?.years ?? p?.contract?.yearsRemaining ?? 0);
+    return years > 1 || ['extended', 'tagged', 'franchise_tagged', 'rfa_tendered'].includes(String(p?.extensionDecision ?? ''));
+  }).length;
+  const reserve = AiLogic.rosterFloorCapReserve(committedNextSeason + 1, team.capRoom, { capAtHalfRoom: false });
+  const currentHit = Number(getContractCapHit(player) ?? 0);
+  return Number(team.capRoom ?? 0) - (Number(newCapHit) - currentHit) >= reserve - 0.001;
+}
+
+/**
  * Apply the re-signing → free-agency contract lifecycle to every team.
  * Returns the release plan so callers/tests can inspect what happened.
  */
+/**
+ * An AI roster that would collapse when its expiring contracts run out
+ * re-signs its best expiring depth players with the canonical minimum-roster
+ * offer, keeping enough room to fill every other slot at the league minimum,
+ * up to 53 minus a draft allowance. Removes the re-signed rows from
+ * plan.releases. The interactive user's own decisions are never overridden;
+ * the user team is included only in headless batch mode, where it is already
+ * auto-managed.
+ */
+const DRAFT_CLASS_ROSTER_ALLOWANCE = 7;
+function retainAiDepthAtExpiry(plan, meta) {
+  const batch = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
+  const minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON;
+  const target = minimum - DRAFT_CLASS_ROSTER_ALLOWANCE;
+  const minHit = Number(Constants.SALARY_CAP.MIN_CONTRACT ?? 0.75);
+  const byTeam = new Map();
+  for (const row of plan.releases) {
+    const key = String(row.teamId);
+    if (!byTeam.has(key)) byTeam.set(key, []);
+    byTeam.get(key).push(row);
+  }
+  const resigned = [];
+  const kept = new Set();
+  for (const [teamKey, rows] of byTeam) {
+    const team = cache.getTeam(Number(teamKey)) ?? cache.getTeam(teamKey);
+    if (!team) continue;
+    const isUser = String(team.id) === String(meta?.userTeamId);
+    if (isUser && !batch) continue;
+    const roster = cache.getPlayersByTeam(team.id);
+    let rosterAfter = roster.length - rows.length;
+    if (rosterAfter >= target) continue;
+    const expiringIds = new Set(rows.map((r) => String(r.playerId)));
+    const expiringHit = roster
+      .filter((p) => expiringIds.has(String(p.id)))
+      .reduce((sum, p) => sum + Number(getContractCapHit(p) ?? 0), 0);
+    let room = Number(team.capRoom ?? 0) + expiringHit;
+    const candidates = rows
+      .filter((r) => r.reason !== 'let_walk')
+      .map((r) => cache.getPlayer(r.playerId))
+      .filter(Boolean)
+      .sort((a, b) => (Number(b?.ovr ?? 0) - Number(a?.ovr ?? 0)) || stableIdCompare(a?.id, b?.id));
+    for (const player of candidates) {
+      if (rosterAfter >= target) break;
+      const contract = buildMinimumRosterContract(player, team, { year: meta?.year, capRoom: room });
+      if (!contract) continue;
+      const hit = Number(getContractCapHit({ contract }) ?? 0);
+      const reserve = Math.max(0, minimum - (rosterAfter + 1)) * minHit;
+      if (room - hit < reserve) continue;
+      room -= hit;
+      rosterAfter += 1;
+      kept.add(String(player.id));
+      resigned.push({ playerId: player.id, teamId: team.id, contract });
+    }
+  }
+  if (kept.size) plan.releases = plan.releases.filter((r) => !kept.has(String(r.playerId)));
+  return resigned;
+}
+
 async function executeContractExpiry(meta) {
   const plan = planContractExpiry(cache.getAllPlayers().slice().sort((a, b) => stableIdCompare(a?.id, b?.id)));
+  const depthResigns = retainAiDepthAtExpiry(plan, meta);
   const touchedTeams = new Set();
   const transactionRows = [];
   for (const row of plan.releases) {
@@ -12102,11 +12182,22 @@ async function executeContractExpiry(meta) {
       seasonId: meta?.currentSeasonId,
       week: meta?.currentWeek ?? 0,
       teamId: row.teamId,
-      details: { playerId: row.playerId, reason: row.reason, name: row.name, pos: row.pos },
+      details: { playerId: row.playerId, reason: row.reason, name: row.name, pos: row.pos, disposition: 'free_agent' },
     });
   }
   for (const row of plan.decrements) {
     cache.updatePlayer(row.playerId, { contract: row.contract });
+  }
+  for (const row of depthResigns) {
+    cache.updatePlayer(row.playerId, { contract: row.contract, negotiationStatus: 'SIGNED' });
+    touchedTeams.add(row.teamId);
+    transactionRows.push({
+      type: 'EXTEND',
+      seasonId: meta?.currentSeasonId,
+      week: meta?.currentWeek ?? 0,
+      teamId: row.teamId,
+      details: { playerId: row.playerId, contract: row.contract, source: 'ai_depth_resign' },
+    });
   }
   // A new decision cycle starts next offseason; clear this window's markers
   // (re-committed contracts keep their new terms, only the marker resets).
@@ -12215,6 +12306,10 @@ async function handleAdvanceOffseason(payload, id) {
         const accepted = willPlayerAcceptAIExtension(player, offer, adjustedDemand, moraleSummary);
 
         if (!accepted) continue;
+
+        // Roster floor: after expiring contracts run out the team must still be
+        // able to fill every empty slot at the league minimum.
+        if (!aiExtensionKeepsRosterFloor(aiTeam.id, player, Number(offer.amount) + (Number(offer.signingBonus ?? 0) / Math.max(1, Number(offer.years ?? 1))))) continue;
 
         // Apply contract (immutable-style: update player fields)
         const newContract = {
@@ -12718,6 +12813,7 @@ async function injectAIFaBids(day) {
   // to the ledger would push it past MAX_LEDGER_ENTRIES and prune the user's
   // pending offer from the front of the list.
   const aiReservedCapByTeam = new Map(); // teamId → total $M reserved this pass
+  const aiBidCountByTeam = new Map(); // teamId → bids placed this pass (roster-floor reserve)
 
   for (const [teamId, candidates] of aiTargetMap) {
     if (Number(teamId) === userTeamId) continue;
@@ -12745,9 +12841,15 @@ async function injectAIFaBids(day) {
       const adjustedDemand = demandSnapshot.baseAnnual;
       if (!adjustedDemand || adjustedDemand <= 0) continue;
 
-      // Effective cap = team cap − AI reservations accumulated this pass
+      // Effective cap = team cap − AI reservations accumulated this pass −
+      // the league minimum for every OTHER open slot up to the 53-man floor.
+      // Without this reserve, a team emptied by expiring contracts could spend
+      // its whole cap on a few stars and be unable to field a legal roster.
       const alreadyReserved = aiReservedCapByTeam.get(Number(teamId)) ?? 0;
-      const effectiveCap = Math.max(0, Number(team.capRoom ?? 0) - alreadyReserved);
+      const bidsThisPass = aiBidCountByTeam.get(Number(teamId)) ?? 0;
+      const capAfterReservations = Math.max(0, Number(team.capRoom ?? 0) - alreadyReserved);
+      const rosterFloorReserve = AiLogic.rosterFloorCapReserve(cache.getPlayersByTeam(teamId).length + bidsThisPass + 1, capAfterReservations);
+      const effectiveCap = Math.max(0, capAfterReservations - rosterFloorReserve);
 
       const context = { posture, season, week, scheme };
       if (!shouldAITeamPursuePlayer(team, player, adjustedDemand, effectiveCap, context)) continue;
@@ -12766,6 +12868,7 @@ async function injectAIFaBids(day) {
 
       // Update in-memory cap reservation for this AI team
       aiReservedCapByTeam.set(Number(teamId), alreadyReserved + capHit);
+      aiBidCountByTeam.set(Number(teamId), bidsThisPass + 1);
 
       // Inject into player.offers only (not into the pending ledger)
       const freshPlayer = cache.getPlayer(player.id);
@@ -12918,7 +13021,23 @@ function releaseUndraftedProspects(meta) {
 // gives up on large deficits). The interactive user team is never touched.
 // The greedy + cap-managed fill above leaves at most a small residual gap;
 // cap the exhaustive search so a hopeless case fails in seconds, not minutes.
-const ROLLOVER_COMPLETION_SEARCH_STATES = Object.freeze({ affordable: 250, recovery: 250 });
+/**
+ * Each search state re-prices the whole free-agent pool for every short team,
+ * so a large residual (after the greedy + cap-managed passes) makes the search
+ * run for minutes without a better answer. Only small residual gaps get the
+ * full budget; larger ones fail fast with the explicit 53-man message.
+ */
+function rolloverCompletionSearchBudget(includeUserTeam) {
+  const meta = cache.getMeta();
+  const minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON;
+  const short = cache.getAllTeams()
+    .filter((team) => includeUserTeam || Number(team.id) !== Number(meta?.userTeamId))
+    .map((team) => Math.max(0, minimum - cache.getPlayersByTeam(team.id).length))
+    .filter((deficit) => deficit > 0);
+  const total = short.reduce((sum, d) => sum + d, 0);
+  // null = the search's own default budget (unchanged behavior for small gaps).
+  return short.length <= 2 && total <= 4 ? null : { affordable: 3, recovery: 0 };
+}
 
 async function greedyFillUnderfilledTeams({
   includeUserTeam = false,
@@ -12927,19 +13046,20 @@ async function greedyFillUnderfilledTeams({
   releasedPlayerIdsByTeam = null,
   notify = true,
   allowUndraftedRescue = false,
+  minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON,
+  capManagement = true,
 } = {}) {
   const meta = ensureDynastyMeta(cache.getMeta());
-  const minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON;
   const underfilled = () => cache.getAllTeams()
     .filter((team) => includeUserTeam || Number(team.id) !== Number(meta?.userTeamId))
     .filter((team) => cache.getPlayersByTeam(team.id).length < minimum)
     .sort((a, b) => stableIdCompare(a?.id, b?.id));
   for (const team of underfilled()) {
-    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink });
+    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true });
   }
   // Cap-limited teams: let the AI cap manager create exactly the room the
   // cheapest real completion needs (restructures before releases), then fill.
-  const shortTeams = underfilled();
+  const shortTeams = capManagement ? underfilled() : [];
   if (shortTeams.length === 0) return;
   const reserveByTeam = new Map();
   const candidatesByTeam = new Map();
@@ -12958,7 +13078,7 @@ async function greedyFillUnderfilledTeams({
     releasedPlayerIdsByTeam,
   });
   for (const team of underfilled()) {
-    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink });
+    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true });
   }
   // Last resort: unsigned depth veterans (never elite players) accept a
   // one-year league-minimum deal. Logged as transactions the user can see.
@@ -13010,7 +13130,14 @@ function generateUndraftedFreeAgents(count, meta) {
 // ── AI roster floor at free-agency close ─────────────────────────────────────
 async function fillAiRostersAtFreeAgencyClose() {
   try {
-    await greedyFillUnderfilledTeams({ includeUserTeam: false });
+    // Before the draft, fill only to 53 minus the draft allowance: rookies take
+    // the remaining spots, and filling to 53 first would leave no cap room for
+    // their contracts. The rollover guarantees the full 53.
+    await greedyFillUnderfilledTeams({
+      includeUserTeam: false,
+      minimum: Constants.ROSTER_LIMITS.REGULAR_SEASON - DRAFT_CLASS_ROSTER_ALLOWANCE,
+      capManagement: false,
+    });
   } catch (err) {
     console.warn('[Worker] AI roster fill at free-agency close failed (non-fatal; rollover will retry):', err?.message);
   }
@@ -14064,7 +14191,7 @@ async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSea
       includeUserTeam,
       transactionSink: stagedTransactions,
       releasedPlayerIdsByTeam,
-      searchMaxStates: ROLLOVER_COMPLETION_SEARCH_STATES,
+      searchMaxStates: rolloverCompletionSearchBudget(includeUserTeam),
     });
     if (reconciliation.failures.length > 0) {
       await AiLogic.executeAICapManagement({
@@ -14080,6 +14207,7 @@ async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSea
         includeUserTeam,
         transactionSink: stagedTransactions,
         releasedPlayerIdsByTeam,
+        searchMaxStates: rolloverCompletionSearchBudget(includeUserTeam),
       });
     }
     return reconciliation;
@@ -14315,7 +14443,7 @@ async function handleStartNewSeason(payload, id) {
     includeUserTeam: rolloverBatchSim,
     transactionSink: rolloverTransactions,
     releasedPlayerIdsByTeam: rolloverReleasedPlayerIds,
-    searchMaxStates: ROLLOVER_COMPLETION_SEARCH_STATES,
+    searchMaxStates: rolloverCompletionSearchBudget(rolloverBatchSim),
   });
   if (rolloverReconciliation.failures.length > 0) {
     // Only underfilled teams enter this cap-planning retry. Oversized preseason
@@ -14333,6 +14461,7 @@ async function handleStartNewSeason(payload, id) {
       includeUserTeam: rolloverBatchSim,
       transactionSink: rolloverTransactions,
       releasedPlayerIdsByTeam: rolloverReleasedPlayerIds,
+      searchMaxStates: rolloverCompletionSearchBudget(rolloverBatchSim),
     });
   }
   if (rolloverReconciliation.failures.length > 0) {
