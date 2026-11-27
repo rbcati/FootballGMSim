@@ -644,6 +644,9 @@ function AppContent() {
     // (the Super Bowl advance flips straight to offseason_resign, whose final
     // score the Season Complete splash shows), never open one or keep it open.
     if (!isWeeklyResultPhase) {
+      // Also invalidate a briefing still loading its box score (showBriefing
+      // is async and would otherwise open it after the phase flip).
+      skipStoryRequestRef.current += 1;
       setSkipGameSummary(null);
       return;
     }
