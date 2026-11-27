@@ -49,6 +49,20 @@ describe('useWorker reducer keeps the Super Bowl result across the phase flip', 
     state = workerReducer(state, { type: 'STATE_UPDATE', payload: { phase: 'preseason' } });
     expect(state.seasonFinale).toBeNull();
   });
+  it('clears weekly results on an offseason delta that carries no phase field', () => {
+    let state = { ...INITIAL_WORKER_STATE, league: { seasonId: 's1', phase: 'offseason_resign', week: 0, teams } };
+    state = { ...state, lastResults: [sbResult], lastSimWeek: 22 };
+    // STATE_UPDATE dispatches only the delta (e.g. a roster change), not the phase.
+    state = workerReducer(state, { type: 'STATE_UPDATE', payload: { teams } });
+    expect(state.lastResults).toEqual([]);
+    expect(state.lastSimWeek).toBeNull();
+  });
+  it('keeps weekly results on an in-season delta without a phase field', () => {
+    let state = { ...INITIAL_WORKER_STATE, league: { seasonId: 's1', phase: 'regular', week: 5, teams } };
+    state = { ...state, lastResults: [sbResult], lastSimWeek: 4 };
+    state = workerReducer(state, { type: 'STATE_UPDATE', payload: { teams } });
+    expect(state.lastResults).toEqual([sbResult]);
+  });
   it('does not treat a normal week as a finale', () => {
     const state = workerReducer({ ...INITIAL_WORKER_STATE, league: { seasonId: 's1' } }, { type: 'WEEK_COMPLETE', week: 20, results: [sbResult], nextWeek: 21, phase: 'playoffs', isSeasonOver: false });
     expect(state.seasonFinale).toBeNull();

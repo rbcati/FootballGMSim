@@ -185,19 +185,23 @@ export function workerReducer(state, action) {
         lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType,
       };
     }
-    case 'STATE_UPDATE':
+    case 'STATE_UPDATE': {
       // Also clear busy: send()-based actions (releasePlayer, setUserTeam)
       // respond with STATE_UPDATE and have no other mechanism to clear the flag.
+      // The payload may be a delta without `phase`; judge the MERGED league's
+      // phase so weekly results never linger into the offseason.
+      const league = { ...(state.league ?? {}), ...action.payload };
       return {
         ...state,
         busy: false,
         lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType,
-        league: { ...(state.league ?? {}), ...action.payload },
-        ...(action.payload?.phase && !isWeeklyResultsPhase(action.payload.phase)
+        league,
+        ...(league?.phase && !isWeeklyResultsPhase(league.phase)
           ? { lastResults: [], lastSimWeek: null, gameEvents: [] }
           : {}),
         ...(['preseason', 'regular'].includes(action.payload?.phase) ? { seasonFinale: null } : {}),
       };
+    }
     case 'PROMPT_USER_GAME':
       return { ...state, busy: false, simulating: false, simProgress: 0, promptUserGame: true, userGameLogs: null };
     case 'PLAY_LOGS':
