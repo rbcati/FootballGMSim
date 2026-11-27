@@ -898,9 +898,13 @@ class AiLogic {
         transactionSink = null,
         source = 'ai_roster_floor',
         veteranMinimumFallback = false,
+        // Cap commitments the roster-only projection does not see (staff
+        // salaries the worker's authoritative cap includes).
+        capCommittedOutsideRoster = 0,
     } = {}) {
         const meta = cache.getMeta();
         const minHit = minimumRosterCapHit();
+        const outside = Math.max(0, Number(capCommittedOutsideRoster) || 0);
         let signed = 0;
         const tried = new Set();
         for (let guard = 0; guard < minimum * 3; guard += 1) {
@@ -911,7 +915,7 @@ class AiLogic {
             if (deficit <= 0) break;
             const legalCap = resolveFillCap(team, meta);
             const cap = buildTeamCapSnapshot({ team, roster, salaryCap: legalCap });
-            const capRoom = Math.min(Number(cap.capRoom ?? 0), Number(team.capRoom ?? Infinity));
+            const capRoom = Math.min(Number(cap.capRoom ?? 0) - outside, Number(team.capRoom ?? Infinity));
             if (capRoom + 0.01 < minHit) break;
             const needs = AiLogic.calculateTeamNeedsFromRoster(team, roster, meta);
             const neededPositions = Object.keys(needs)
@@ -978,7 +982,7 @@ class AiLogic {
             const capResult = AiLogic.updateTeamCap(teamId);
             // The team's own recalculated cap is the authority: a projection
             // that disagrees must never take the team over its real cap.
-            if (capResult?.ok === false || Number(cache.getTeam(teamId)?.capRoom ?? 0) < -0.01) {
+            if (capResult?.ok === false || Number(cache.getTeam(teamId)?.capRoom ?? 0) - outside < -0.01) {
                 cache.updatePlayer(pick.player.id, restoreMinimumRosterPlayerPatch(beforePlayer));
                 cache.updateTeam(teamId, beforeTeam);
                 AiLogic.updateTeamCap(teamId);

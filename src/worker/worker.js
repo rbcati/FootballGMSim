@@ -9949,17 +9949,23 @@ async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId
 
 // ── Cap helper ────────────────────────────────────────────────────────────────
 
+/** Staff salaries the team's cap carries (see recalculateTeamCap). */
+function teamStaffPayroll(team) {
+  if (!team) return 0;
+  const staff = ensureTeamStaff(team, { year: Number(getSafeMeta()?.year ?? 2025) });
+  return Object.keys(staff).reduce((sum, key) => {
+    const member = staff?.[key];
+    if (!member || typeof member !== 'object' || !member.roleKey) return sum;
+    return sum + Number(member?.contract?.annualSalary ?? member?.annualSalary ?? 0);
+  }, 0);
+}
+
 function recalculateTeamCap(teamId, { debugReason = '' } = {}) {
   const players = cache.getPlayersByTeam(teamId);
   const team = cache.getTeam(teamId);
   if (!team) return;
 
-  const staff = ensureTeamStaff(team, { year: Number(getSafeMeta()?.year ?? 2025) });
-  const staffCap = Object.keys(staff).reduce((sum, key) => {
-    const member = staff?.[key];
-    if (!member || typeof member !== 'object' || !member.roleKey) return sum;
-    return sum + Number(member?.contract?.annualSalary ?? member?.annualSalary ?? 0);
-  }, 0);
+  const staffCap = teamStaffPayroll(team);
 
   const deadCap = Number(team.deadCap || 0);
   const deadMoneyNextYear = Number(team.deadMoneyNextYear || 0);
@@ -13055,7 +13061,7 @@ async function greedyFillUnderfilledTeams({
     .filter((team) => cache.getPlayersByTeam(team.id).length < minimum)
     .sort((a, b) => stableIdCompare(a?.id, b?.id));
   for (const team of underfilled()) {
-    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true });
+    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true, capCommittedOutsideRoster: teamStaffPayroll(team) });
   }
   // Cap-limited teams: let the AI cap manager create exactly the room the
   // cheapest real completion needs (restructures before releases), then fill.
@@ -13078,7 +13084,7 @@ async function greedyFillUnderfilledTeams({
     releasedPlayerIdsByTeam,
   });
   for (const team of underfilled()) {
-    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true });
+    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true, capCommittedOutsideRoster: teamStaffPayroll(team) });
   }
   // Last resort: unsigned depth veterans (never elite players) accept a
   // one-year league-minimum deal. Logged as transactions the user can see.
@@ -13086,6 +13092,7 @@ async function greedyFillUnderfilledTeams({
   for (const team of underfilled()) {
     const result = await AiLogic.fillRosterToMinimumGreedy(team.id, {
       minimum, transactionSink, veteranMinimumFallback: true, source: 'roster_floor_auto_repair',
+      capCommittedOutsideRoster: teamStaffPayroll(team),
     });
     if (result.signed > 0) repaired.push(`${team.abbr ?? team.id} +${result.signed}`);
   }
@@ -13101,6 +13108,7 @@ async function greedyFillUnderfilledTeams({
     for (const team of underfilled()) {
       const result = await AiLogic.fillRosterToMinimumGreedy(team.id, {
         minimum, transactionSink, veteranMinimumFallback: true, source: 'roster_floor_auto_repair',
+        capCommittedOutsideRoster: teamStaffPayroll(team),
       });
       if (result.signed > 0) repaired.push(`${team.abbr ?? team.id} +${result.signed}`);
     }
