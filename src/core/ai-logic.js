@@ -926,6 +926,14 @@ class AiLogic {
         return room >= reserve - 0.001;
     }
 
+    /**
+     * Expiring contracts empty rosters only in the offseason; that is the
+     * window in which free-agent spending must keep the roster fillable.
+     */
+    static isRosterFloorWindow(phase = cache.getMeta()?.phase) {
+        return ['offseason_resign', 'offseason', 'free_agency', 'draft_combine', 'draft'].includes(String(phase ?? ''));
+    }
+
     static rosterFloorCapReserve(rosterCountAfterSigning, capRoom, { capAtHalfRoom = true } = {}) {
         const open = Math.max(0, Constants.ROSTER_LIMITS.REGULAR_SEASON - Number(rosterCountAfterSigning || 0));
         const reserve = open * minimumRosterCapHit();
@@ -2055,7 +2063,9 @@ class AiLogic {
                 // Check Cap — keep the league minimum for every other open
                 // slot up to the 53-man floor (rosters emptied by expiring
                 // contracts must stay fillable).
-                const rosterFloorReserve = AiLogic.rosterFloorCapReserve(roster.length + 1, team.capRoom);
+                const rosterFloorReserve = AiLogic.isRosterFloorWindow()
+                    ? AiLogic.rosterFloorCapReserve(roster.length + 1, team.capRoom)
+                    : 0;
                 if ((team.capRoom ?? 0) > (capHit + 1 + rosterFloorReserve)) {
                     // MAKE OFFER
                     const offer = {
@@ -2135,7 +2145,7 @@ class AiLogic {
                 const team = cache.getTeam(teamId);
                 const capHit = offer.contract.baseAnnual + (offer.contract.signingBonus / offer.contract.yearsTotal);
 
-                const isAiTeam = team && Number(teamId) !== Number(cache.getMeta()?.userTeamId);
+                const isAiTeam = team && Number(teamId) !== Number(cache.getMeta()?.userTeamId) && AiLogic.isRosterFloorWindow();
                 const acceptFloorReserve = isAiTeam
                     ? AiLogic.rosterFloorCapReserve(cache.getPlayersByTeam(teamId).length + 1, team.capRoom, { capAtHalfRoom: false })
                     : 0;

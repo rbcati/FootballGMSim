@@ -62,6 +62,13 @@ const { default: AiLogic } = await import('../ai-logic.js');
 const { Transactions } = await import('../../db/index.js');
 const { default: NewsEngine } = await import('../news-engine.js');
 
+// A signing team with a realistic, nearly full roster (no QB): during the
+// offseason window AI spending keeps the league minimum for every empty slot
+// up to 53, so an empty mocked roster would reserve almost all of its room.
+const nearlyFullRosterWithoutQb = (teamId) => Array.from({ length: 52 }, (_, i) => ({
+  id: `r${teamId}_${i}`, teamId, pos: ['OL', 'DL', 'WR', 'LB', 'CB', 'S', 'RB', 'TE'][i % 8], ovr: 60, age: 26, contract: { years: 2 },
+}));
+
 describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -223,6 +230,7 @@ describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
     };
     const team = { id: 1, name: 'Test Team', capRoom: 15 };
     const userTeam = { id: 99, name: 'User Team', capRoom: 15 };
+    mockCache.getPlayersByTeam.mockImplementation((id) => (Number(id) === 1 ? nearlyFullRosterWithoutQb(1) : []));
     const cheapDemand = { years: 2, yearsTotal: 2, baseAnnual: 5, signingBonus: 2 };
 
     mockCache.getMeta.mockReturnValue({ year: 2026, userTeamId: 99, currentSeasonId: 's1', currentWeek: 1, phase: 'free_agency' });
@@ -528,6 +536,7 @@ describe('AiLogic.makeFreeAgencyOffers stale contract handling', () => {
     };
     const team = { id: 1, name: 'Signing Team', capRoom: 15 };
     const userTeam = { id: 99, name: 'User Team', capRoom: 15 };
+    mockCache.getPlayersByTeam.mockImplementation((id) => (Number(id) === 1 ? nearlyFullRosterWithoutQb(1) : []));
     mockCache.getMeta.mockReturnValue({ year: 2026, userTeamId: 99, currentSeasonId: 's1', currentWeek: 1, phase: 'free_agency' });
     mockCache.getAllPlayers.mockReturnValue([fa]);
     mockCache.getAllTeams.mockReturnValue([team, userTeam]);
