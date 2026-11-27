@@ -13142,8 +13142,11 @@ async function fillAiRostersAtFreeAgencyClose() {
     // Before the draft, fill only to 53 minus the draft allowance: rookies take
     // the remaining spots, and filling to 53 first would leave no cap room for
     // their contracts. The rollover guarantees the full 53.
+    // Headless batch sims auto-manage the user team like an AI team (as the
+    // expiry depth re-sign and the rollover already do).
+    const batch = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
     await greedyFillUnderfilledTeams({
-      includeUserTeam: false,
+      includeUserTeam: batch,
       minimum: Constants.ROSTER_LIMITS.REGULAR_SEASON - DRAFT_CLASS_ROSTER_ALLOWANCE,
       capManagement: false,
       // An exhausted pool of replacement-level players is refilled with
