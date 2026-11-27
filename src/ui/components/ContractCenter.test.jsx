@@ -30,7 +30,7 @@ describe('ContractCenter re-signing mode', () => {
   it('renders dedicated re-signing management table during offseason_resign', () => {
     const html = renderToString(<ContractCenter league={league} actions={{}} onNavigate={() => {}} />);
     expect(html).toContain('Re-signing Center');
-    expect(html).toContain('Projected cap room (pending)');
+    expect(html).toContain('Cap room (committed)');
     expect(html).toContain('Premium positions at risk');
     expect(html).toContain('Core QB');
     expect(html).toContain('Elite starter');

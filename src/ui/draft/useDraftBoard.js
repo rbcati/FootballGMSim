@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { applyAdvancedPlayerFilters, allFilters } from "../../core/footballAdvancedFilters";
 import { usePlayerCompare } from "../utils/playerCompare.js";
 import { DRAFT_ROOM_PHASES, buildPickOrder, filterDraftProspectsForView } from "./draftShared.js";
@@ -57,20 +57,33 @@ export function useDraftBoard({ draftState, onDraftPlayer, onSimToMyPick, league
     else setDraftPhase(DRAFT_ROOM_PHASES.CPU_PICKING);
   }, [currentPick, isUserPick, isDraftComplete]);
 
+  // The pick flash shows PICK_MADE for 700ms, then returns to the live phase.
+  // Previously `pickFlash?.overall` was a dependency: setting the flash re-ran
+  // the effect, whose cleanup cancelled the timer, so the room stayed in
+  // PICK_MADE forever (Draft buttons disabled, CPU picks stalled). The timer
+  // now survives re-renders and reads the latest pick state when it fires.
+  const lastFlashedOverallRef = useRef(null);
+  const flashTimerRef = useRef(null);
+  const liveRoomRef = useRef({ isDraftComplete, isUserPick });
+  liveRoomRef.current = { isDraftComplete, isUserPick };
+  useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
   useEffect(() => {
     if (!completedPicks.length) return;
     const lastPick = completedPicks[completedPicks.length - 1];
-    if (!lastPick || lastPick.overall === pickFlash?.overall) return;
+    if (!lastPick || lastPick.overall === lastFlashedOverallRef.current) return;
+    lastFlashedOverallRef.current = lastPick.overall;
     setPickFlash(lastPick);
     setDraftPhase(DRAFT_ROOM_PHASES.PICK_MADE);
-    const timer = setTimeout(() => {
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = setTimeout(() => {
+      flashTimerRef.current = null;
       setPickFlash(null);
-      if (isDraftComplete) setDraftPhase(DRAFT_ROOM_PHASES.DRAFT_COMPLETE);
-      else if (isUserPick) setDraftPhase(DRAFT_ROOM_PHASES.ON_THE_CLOCK);
+      const live = liveRoomRef.current;
+      if (live.isDraftComplete) setDraftPhase(DRAFT_ROOM_PHASES.DRAFT_COMPLETE);
+      else if (live.isUserPick) setDraftPhase(DRAFT_ROOM_PHASES.ON_THE_CLOCK);
       else setDraftPhase(DRAFT_ROOM_PHASES.CPU_PICKING);
     }, 700);
-    return () => clearTimeout(timer);
-  }, [completedPicks, isDraftComplete, isUserPick, pickFlash?.overall]);
+  }, [completedPicks]);
 
   const sortedByOvr = useMemo(
     () => [...prospects].sort((a, b) => (b?.ovr ?? 0) - (a?.ovr ?? 0)),
@@ -100,15 +113,28 @@ export function useDraftBoard({ draftState, onDraftPlayer, onSimToMyPick, league
     return () => clearInterval(timer);
   }, [draftPhase, isUserPick, isDraftComplete, userAutoPick, sortedByOvr, onDraftPlayer]);
 
+  // CPU picks on the clock. Same stale-effect trap as the pick flash: with
+  // `cpuPending` in the deps, setting it re-ran the effect and the cleanup
+  // cancelled the timer before it fired, so the draft never started on its own.
+  const cpuTimerRef = useRef(null);
+  const cpuInFlightRef = useRef(false);
+  const simToMyPickRef = useRef(onSimToMyPick);
+  simToMyPickRef.current = onSimToMyPick;
+  useEffect(() => () => { if (cpuTimerRef.current) clearTimeout(cpuTimerRef.current); }, []);
   useEffect(() => {
-    if (draftPhase !== DRAFT_ROOM_PHASES.CPU_PICKING || isUserPick || isDraftComplete || cpuPending) return undefined;
+    if (draftPhase !== DRAFT_ROOM_PHASES.CPU_PICKING || isUserPick || isDraftComplete) return;
+    if (cpuInFlightRef.current || cpuTimerRef.current) return;
     setCpuPending(true);
     const delay = 400 + Math.random() * 800;
-    const timer = setTimeout(async () => {
-      try { await onSimToMyPick(); } finally { setCpuPending(false); }
+    cpuTimerRef.current = setTimeout(async () => {
+      cpuTimerRef.current = null;
+      cpuInFlightRef.current = true;
+      try { await simToMyPickRef.current?.(); } finally {
+        cpuInFlightRef.current = false;
+        setCpuPending(false);
+      }
     }, delay);
-    return () => { clearTimeout(timer); setCpuPending(false); };
-  }, [draftPhase, isUserPick, isDraftComplete, cpuPending, onSimToMyPick]);
+  }, [draftPhase, isUserPick, isDraftComplete, cpuPending]);
 
   const toggleSort = useCallback((key) => {
     if (sortKey === key) setSortDir((d) => -d);

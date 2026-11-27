@@ -78,4 +78,41 @@ describe("useDraftBoard", () => {
     );
     expect(result.current.draftPhase).toBe(DRAFT_ROOM_PHASES.DRAFT_COMPLETE);
   });
+
+  it("returns to ON_THE_CLOCK after the pick flash (no stuck PICK_MADE)", () => {
+    vi.useFakeTimers();
+    try {
+      const state = {
+        ...emptyDraftState,
+        currentPick: { overall: 8, round: 1, teamId: 1 },
+        isUserPick: true,
+        completedPicks: [{ overall: 7, round: 1, teamId: 3, playerName: "A", playerOvr: 70 }],
+      };
+      const { result, rerender } = renderHook((props) => useDraftBoard(props), {
+        initialProps: { draftState: state, onDraftPlayer: vi.fn(), onSimToMyPick: vi.fn(), league: { userTeamId: 1, teams: [] } },
+      });
+      expect(result.current.draftPhase).toBe(DRAFT_ROOM_PHASES.PICK_MADE);
+      // A re-render with an equivalent state must not cancel the flash timer.
+      rerender({ draftState: { ...state, completedPicks: [...state.completedPicks] }, onDraftPlayer: vi.fn(), onSimToMyPick: vi.fn(), league: { userTeamId: 1, teams: [] } });
+      act(() => { vi.advanceTimersByTime(800); });
+      expect(result.current.draftPhase).toBe(DRAFT_ROOM_PHASES.ON_THE_CLOCK);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("starts CPU picking on its own when the draft opens on a CPU pick", async () => {
+    vi.useFakeTimers();
+    try {
+      const onSimToMyPick = vi.fn(async () => {});
+      const state = { ...emptyDraftState, currentPick: { overall: 1, round: 1, teamId: 9 }, isUserPick: false };
+      renderHook((props) => useDraftBoard(props), {
+        initialProps: { draftState: state, onDraftPlayer: vi.fn(), onSimToMyPick, league: { userTeamId: 1, teams: [] } },
+      });
+      await act(async () => { vi.advanceTimersByTime(1500); });
+      expect(onSimToMyPick).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

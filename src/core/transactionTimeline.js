@@ -11,6 +11,8 @@ export const TRANSACTION_TIMELINE_SCHEMA_VERSION = 1;
 const INTERNAL_TO_BUCKET = {
   SIGN: 'signing',
   RELEASE: 'release',
+  // Expiring contract that ran out when the re-signing window closed.
+  CONTRACT_EXPIRED: 'release',
   TRADE: 'trade',
   EXTEND: 'extension',
   RESTRUCTURE: 'restructure',

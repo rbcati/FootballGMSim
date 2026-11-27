@@ -68,10 +68,43 @@ function summarizePerformanceNeeds(userTeam) {
   return summary.slice(0, 3);
 }
 
+/**
+ * Canonical "key expiring player" predicate. The Advance gate, the Re-signing
+ * Center's "Unresolved key expirings" card and the Offseason hub must all use
+ * this one definition; they previously disagreed (OVR 74 vs 82), so the center
+ * could read 0 while Advance still refused.
+ */
+export function isKeyExpiringPlayer(p) {
+  return toNumber(p?.ovr, 0) >= 74 || ['QB', 'LT', 'EDGE', 'CB'].includes(String(p?.pos ?? '').toUpperCase());
+}
+
+export function isUnresolvedExpiringDecision(p) {
+  return !['extended', 'let_walk', 'tagged'].includes(String(p?.extensionDecision ?? 'pending'));
+}
+
+/**
+ * Names every user expiring player the re-signing → free-agency transition
+ * will release because no extension/tag/Let Walk was committed.
+ */
+export function buildResignAdvanceGate(league) {
+  const userTeam = (league?.teams ?? []).find((t) => String(t?.id) === String(league?.userTeamId));
+  const roster = Array.isArray(userTeam?.roster) ? userTeam.roster : [];
+  const unresolved = roster.filter((p) => toNumber(p?.contract?.years, 0) <= 1 && isUnresolvedExpiringDecision(p));
+  const describe = (p) => `${p?.name ?? 'Unknown'} (${p?.pos ?? '?'}${String(p?.extensionDecision ?? '') === 'deferred' ? ', Decide Later' : ''})`;
+  const key = unresolved.filter(isKeyExpiringPlayer);
+  const other = unresolved.filter((p) => !isKeyExpiringPlayer(p));
+  return {
+    key,
+    other,
+    total: unresolved.length,
+    keyNames: key.map(describe),
+    otherNames: other.map(describe),
+  };
+}
+
 function deriveExpiringPriority(expiring = []) {
-  const unresolved = expiring.filter((p) => !['extended', 'let_walk', 'tagged'].includes(String(p?.extensionDecision ?? 'pending')));
-  const key = unresolved
-    .filter((p) => toNumber(p?.ovr, 0) >= 74 || ['QB', 'LT', 'EDGE', 'CB'].includes(String(p?.pos ?? '').toUpperCase()));
+  const unresolved = expiring.filter(isUnresolvedExpiringDecision);
+  const key = unresolved.filter(isKeyExpiringPlayer);
   const premiumUnresolved = unresolved.filter((p) => ['QB', 'LT', 'EDGE', 'CB'].includes(String(p?.pos ?? '').toUpperCase()));
   const projectedCapDelta = unresolved
     .filter((p) => String(p?.extensionDecision ?? '') === 'deferred')

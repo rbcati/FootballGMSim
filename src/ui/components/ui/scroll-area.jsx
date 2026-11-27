@@ -1,39 +1,35 @@
 import * as React from "react";
-import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import { cn } from "@/lib/utils";
 
-const ScrollArea = React.forwardRef(({ className, children, ...props }, ref) => (
-  <ScrollAreaPrimitive.Root
+/**
+ * Native scroll container with the same API as the previous Radix ScrollArea
+ * wrapper (`<ScrollArea className style>{children}</ScrollArea>`).
+ *
+ * Why not Radix: under React 19, @radix-ui/react-scroll-area sets state from
+ * ref callbacks and from its ResizeObserver-driven scrollbar visibility. When a
+ * list's content height sits near the container's max height (e.g. the Draft
+ * page's "Pick Order" list), the scrollbar mount/unmount reflows the content,
+ * which flips the overflow state again and React aborts with error #185
+ * ("Maximum update depth exceeded"). A plain overflow container has no
+ * render-time state, so it cannot loop. Whether a page crashed depended on how
+ * many rows the list held, which is why the Draft page opened on one save and
+ * crashed on another.
+ */
+const ScrollArea = React.forwardRef(({ className, style, children, ...props }, ref) => (
+  <div
     ref={ref}
-    className={cn("relative overflow-hidden", className)}
+    data-scroll-area=""
+    className={cn("relative", className)}
+    style={{ overflowY: "auto", overflowX: "hidden", ...style }}
     {...props}
   >
-    <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">
-      {children}
-    </ScrollAreaPrimitive.Viewport>
-    <ScrollBar />
-    <ScrollAreaPrimitive.Corner />
-  </ScrollAreaPrimitive.Root>
+    {children}
+  </div>
 ));
-ScrollArea.displayName = ScrollAreaPrimitive.Root.displayName;
+ScrollArea.displayName = "ScrollArea";
 
-const ScrollBar = React.forwardRef(({ className, orientation = "vertical", ...props }, ref) => (
-  <ScrollAreaPrimitive.ScrollAreaScrollbar
-    ref={ref}
-    orientation={orientation}
-    className={cn(
-      "flex touch-none select-none transition-colors",
-      orientation === "vertical" &&
-        "h-full w-2.5 border-l border-l-transparent p-[1px]",
-      orientation === "horizontal" &&
-        "h-2.5 flex-col border-t border-t-transparent p-[1px]",
-      className
-    )}
-    {...props}
-  >
-    <ScrollAreaPrimitive.ScrollAreaThumb className="relative flex-1 rounded-full bg-[color:var(--hairline)] hover:bg-[color:var(--hairline-strong)]" />
-  </ScrollAreaPrimitive.ScrollAreaScrollbar>
-));
-ScrollBar.displayName = ScrollAreaPrimitive.ScrollAreaScrollbar.displayName;
+/** Kept for API compatibility; native scrollbars need no separate element. */
+const ScrollBar = React.forwardRef(() => null);
+ScrollBar.displayName = "ScrollBar";
 
 export { ScrollArea, ScrollBar };

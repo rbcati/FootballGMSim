@@ -50,7 +50,7 @@ function getFaPayload(page) {
 function getLedgerRow(page, playerId) {
   return page.evaluate(async (pid) => {
     const res = await window.gameController.getFreeAgents();
-    const row = (res.payload.pendingOffers ?? []).find((r) => Number(r.playerId) === Number(pid)) ?? null;
+    const row = (res.payload.pendingOffers ?? []).find((r) => String(r.playerId) === String(pid)) ?? null;
     return row ? { status: row.status, feedback: row.feedback ?? [] } : null;
   }, playerId);
 }
@@ -200,18 +200,17 @@ test('offseason FA loop: submit → reserve cap → withdraw → strong offer �
     resolution = await page.evaluate(async (pid) => {
       const res = await window.gameController.getFreeAgents();
       const p = res.payload;
-      const row = (p.pendingOffers ?? []).find((r) => Number(r.playerId) === Number(pid)) ?? null;
+      const row = (p.pendingOffers ?? []).find((r) => String(r.playerId) === String(pid)) ?? null;
       const league = window?.state?.league;
-      const userTeam = league?.teams?.find((t) => t.id === league.userTeamId);
+      // Committed roster from the worker, not the client's team summary.
+      const roster = await window.gameController.getRoster(league?.userTeamId);
+      const rosterPlayers = roster?.payload?.players ?? [];
       return {
         status: row?.status ?? null,
         feedback: row?.feedback ?? [],
         reserved: Number(p.capSummary?.reservedPendingCap ?? 0),
-        inPool: (p.freeAgents ?? []).some((fa) => Number(fa.id) === Number(pid)),
-        onRoster: Boolean(
-          (userTeam?.roster ?? []).some((rp) => Number(rp?.id) === Number(pid))
-          || (userTeam?.rosterIds ?? []).map(Number).includes(Number(pid)),
-        ),
+        inPool: (p.freeAgents ?? []).some((fa) => String(fa.id) === String(pid)),
+        onRoster: rosterPlayers.some((rp) => String(rp?.id) === String(pid)),
         phase: p.phase,
       };
     }, target.id);

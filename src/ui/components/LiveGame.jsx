@@ -714,12 +714,26 @@ export default function LiveGame({
   const numericUserTeamId = Number(userTeamId);
 
   // All resolved game events — then filtered to user's game only for the scoreboard.
-  const resolvedEvents = gameEvents ?? [];
+  const liveEvents = gameEvents ?? [];
+  // When live events were not retained (e.g. the Super Bowl advance also flips
+  // the phase, which clears them), fall back to the authoritative WEEK_COMPLETE
+  // results so the panel reports the games that actually resolved.
+  const teamAbbrById = (id) => (league?.teams ?? []).find((t) => Number(t?.id) === Number(id))?.abbr;
+  const resolvedEvents = liveEvents.length > 0 ? liveEvents : (!simulating ? (lastResults ?? []).map((r) => ({
+    gameId: r.gameId,
+    homeId: r.homeId,
+    awayId: r.awayId,
+    homeAbbr: teamAbbrById(r.homeId) ?? r.homeName?.slice(0, 3) ?? '???',
+    awayAbbr: teamAbbrById(r.awayId) ?? r.awayName?.slice(0, 3) ?? '???',
+    homeScore: r.homeScore,
+    awayScore: r.awayScore,
+    recapText: r.recapText ?? null,
+  })) : []);
   const userResolvedEvents = resolvedEvents.filter(
     (e) => Number(e.homeId) === numericUserTeamId || Number(e.awayId) === numericUserTeamId,
   );
   const isFinished = !simulating && (lastResults?.length ?? 0) > 0;
-  const totalWeekGames = weekGames.length;
+  const totalWeekGames = Math.max(weekGames.length, simulating ? 0 : resolvedEvents.length);
   const resolvedCount = resolvedEvents.length;
   const simStatusLabel = simulating
     ? skipping

@@ -79,6 +79,7 @@ import {
   clearAllData, openDB, bulkWrite,
   Saves, configureActiveLeague, deleteLeagueDB, openGlobalDB, getActiveLeagueId,
   setReloadRequiredCallback,
+  beginDirectWriteStaging, endDirectWriteStaging, takeStagedDirectWrites,
 } from '../db/index.js';
 import { reconcileLegacyTeamRosters } from '../db/teamPersistence.js';
 import { makeLeague }     from '../core/league.js';
@@ -110,6 +111,7 @@ import {
 } from '../core/contract-market.js';
 import { getTeamContextForNegotiation } from '../core/teamContext/negotiationContext.js';
 import { evaluateContractOffer } from '../core/contracts/negotiation.js';
+import { planContractExpiry } from '../core/contracts/contractExpiry.js';
 import {
   hydratePlayerAgent,
   evaluateAgentNegotiation,
@@ -195,7 +197,8 @@ import {
   computeTeamSchemeFits, schemeOvrBonus, recalcTeamSchemeFit,
   OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES,
 } from '../core/scheme-core.js';
-import AiLogic from '../core/ai-logic.js';
+import AiLogic, { buildMinimumRosterContract } from '../core/ai-logic.js';
+import { getActiveCapHit as getContractCapHit } from '../core/contracts/contractObligations.js';
 import NewsEngine, { createNewsItem, addNewsItem } from '../core/news-engine.js';
 import { parseWeeklyHeadlines } from '../core/history/NewsEngine.ts';
 import { calculateAwardRaces, selectProBowlers } from '../core/awards-logic.js';
@@ -449,6 +452,10 @@ function shouldForceFreshBaseline(nextPayload, prevPayload) {
  * Telemetry: logs serialization + total postMessage latency in dev mode
  * or whenever a message takes longer than 5 ms.
  */
+function postMessageToUI(type, payload = {}, id = null) {
+  return post(type, payload, id);
+}
+
 function post(type, payload = {}, id = null) {
   const t0 = performance.now();
 
@@ -1999,6 +2006,11 @@ async function createUniqueLeagueId() {
  *   "Failed to store record in an IDBObjectStore: Evaluating the object store's
  *    key path did not yield a value."
  */
+/** >0 while an all-or-nothing lifecycle transition is running. */
+let atomicTransitionDepth = 0;
+/** Message of the most recent START_NEW_SEASON refusal (null on success). */
+let lastStartNewSeasonError = null;
+
 export async function flushDirty(forceFlush = false, {
   transactions = [], seasons = [], archivedPlayerStats = [], news = [],
   deferManifestUntilAfterCommit = false,
@@ -2030,6 +2042,14 @@ export async function flushDirty(forceFlush = false, {
       pendingBatchDirty = queueDirtySnapshot(pendingBatchDirty, cache.drainDirty());
       globalThis.__DYNASTY_SOAK_PENDING_DIRTY__ = pendingBatchDirty;
     }
+    return;
+  }
+
+  // Atomic lifecycle transition (see runAtomicSeasonTransition): hold every
+  // write until the rollover commits, so a failure can roll back to a save
+  // that was never touched.
+  if (atomicTransitionDepth > 0 && !forceFlush) {
+    if (cache.isDirty()) pendingBatchDirty = queueDirtySnapshot(pendingBatchDirty, cache.drainDirty());
     return;
   }
 
@@ -3325,6 +3345,7 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
       includeUserTeam: batchSim,
       transactionSink: preseasonTransactions,
       releasedPlayerIdsByTeam: preseasonReleasedPlayerIds,
+      searchMaxStates: rolloverCompletionSearchBudget(batchSim),
     });
 
     // AI cap management: bring every AI team legally under the LIVE cap using the
@@ -3360,6 +3381,7 @@ async function handleAdvanceWeek(payload, id, operationScope = null) {
         includeUserTeam: batchSim,
         transactionSink: preseasonTransactions,
         releasedPlayerIdsByTeam: preseasonReleasedPlayerIds,
+        searchMaxStates: rolloverCompletionSearchBudget(batchSim),
       });
     }
     if (reconciliation.failures.length > 0) {
@@ -5602,6 +5624,9 @@ async function handleSimToPhase({ targetPhase }, id) {
     simulationScope,
   };
   postScoped(toUI.SIM_BATCH_STATUS, { status: 'running', targetPhase, stage: meta.phase }, simulationScope);
+  const simSessionBeforeBatch = Object.prototype.hasOwnProperty.call(meta, 'simSession')
+    ? { present: true, value: JSON.parse(JSON.stringify(meta.simSession ?? null)) }
+    : { present: false, value: undefined };
   await persistSimSession({
     ...(buildSimSessionPatch({ targetPhase, stage: meta.phase, checkpoint: 'start' }).simSession),
   });
@@ -5667,6 +5692,14 @@ async function handleSimToPhase({ targetPhase }, id) {
           iterations,
           { force: true },
         );
+        // The draft stage ends with the season rollover. Run both as one
+        // all-or-nothing transition: if the rollover refuses (e.g. a team is
+        // below the 53-player minimum) nothing from the auto-draft is kept.
+        const atomicDraftSnapshot = snapshotLifecyclePersistenceState();
+        atomicTransitionDepth += 1;
+        beginDirectWriteStaging();
+        let atomicDraftCommitted = false;
+        try {
         await offseasonProfiler.measure('stage.draft.ensure-state', {}, () => handleStartDraft({}, null));
         validateLeagueFlowState({ stage: 'draft_setup', requireDraftState: true });
         await maybePersistSimSession(
@@ -5707,6 +5740,22 @@ async function handleSimToPhase({ targetPhase }, id) {
           return;
         }
         validateLeagueFlowState({ stage: 'draft_execution', requireDraftState: false });
+        if (cache.getMeta()?.phase === 'draft') {
+          const reason = lastStartNewSeasonError ?? 'The season rollover did not complete.';
+          const rollbackError = new Error(`${reason} The draft and rollover were rolled back; your save is unchanged.`);
+          rollbackError.atomicRollback = true;
+          throw rollbackError;
+        }
+        atomicDraftCommitted = true;
+        } catch (atomicErr) {
+          restoreLifecyclePersistenceState(atomicDraftSnapshot);
+          endDirectWriteStaging();
+          if (!atomicErr?.atomicRollback) atomicErr.atomicRollback = true;
+          throw atomicErr;
+        } finally {
+          atomicTransitionDepth = Math.max(0, atomicTransitionDepth - 1);
+          if (atomicDraftCommitted) endDirectWriteStaging();
+        }
       } else {
         // Unknown phase — break to prevent infinite loop
         break;
@@ -5731,18 +5780,34 @@ async function handleSimToPhase({ targetPhase }, id) {
     recordDynastySoakBatchProfile(iterations, isTarget(cache.getMeta()));
     post(toUI.FULL_STATE, buildViewState(), id);
   } catch (error) {
-    await persistSimSession({
-      status: 'failed',
-      targetPhase,
-      stage: cache.getMeta()?.phase ?? null,
-      checkpoint: 'error',
-      lastError: error?.message ?? 'Unknown simulation error',
-    });
+    // A rolled-back atomic transition leaves the save exactly as it was, so
+    // it must not persist the sim-session failure marker either.
+    if (!error?.atomicRollback) {
+      await persistSimSession({
+        status: 'failed',
+        targetPhase,
+        stage: cache.getMeta()?.phase ?? null,
+        checkpoint: 'error',
+        lastError: error?.message ?? 'Unknown simulation error',
+      });
+    }
     if (typeof globalThis !== 'undefined' && globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__) {
       await flushDirty(true);
     }
     postScoped(toUI.SIM_BATCH_STATUS, { status: 'failed', targetPhase, stage: cache.getMeta()?.phase ?? null }, simulationScope);
-    post(toUI.NOTIFICATION, { level: 'warn', message: `Simulation paused: ${error?.message ?? 'unknown error'}. You can retry or cancel.` });
+    post(toUI.NOTIFICATION, { level: 'warn', message: error?.atomicRollback
+      ? `Sim to Season stopped: ${error?.message ?? 'the rollover failed'}`
+      : `Simulation paused: ${error?.message ?? 'unknown error'}. You can retry or cancel.` });
+    // Surface the refusal as an explicit error banner; the FULL_STATE below
+    // resynchronises the UI with the restored (unchanged) save.
+    if (error?.atomicRollback) {
+      // The batch's own progress marker is not league state: put it back the
+      // way it was so the rolled-back save is identical to the pre-attempt one.
+      if (simSessionBeforeBatch.present) cache.setMeta({ simSession: simSessionBeforeBatch.value });
+      else cache.deleteMetaKey('simSession');
+      try { await flushDirty(true); } catch (restoreErr) { console.warn('[Worker] rollback marker restore failed:', restoreErr?.message); }
+      post(toUI.ERROR, { message: error.message, atomicRollback: true });
+    }
     recordDynastySoakBatchProfile(iterations, isTarget(cache.getMeta()));
     post(toUI.FULL_STATE, buildViewState(), id);
   } finally {
@@ -8717,17 +8782,34 @@ async function handleGetExtensionAsk({ playerId }, id) {
   post(toUI.EXTENSION_ASK, { ask }, id);
 }
 
-async function handleExtendContract({ playerId, teamId, contract }, id) {
-  const teamCtx = resolveTeamContext(teamId);
-  if (!teamCtx.ok) { post(toUI.ERROR, { message: teamCtx.message }, id); return; }
-  const { teamId: resolvedTeamId, team } = teamCtx;
-
-  const player = cache.getPlayer(playerId);
-  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
-
-  const meta = ensureDynastyMeta(cache.getMeta());
+/**
+ * Single authority for whether the worker will accept a set of extension
+ * terms. Pure with respect to the cache (it never writes); both the preview
+ * quote (GET_EXTENSION_QUOTE) and the commit (EXTEND_CONTRACT) use it, so the
+ * terms the Re-signing Center shows are exactly the terms that will commit.
+ */
+// calculateExtensionDemand() draws its term length and market value from the
+// global RNG, so every call returned a different "requested" contract. The
+// Re-signing Center quote and the Confirm click therefore evaluated different
+// demands and identical terms could be accepted once and refused the next
+// time. One demand is now fixed per player for the current season and ratings
+// (the valuation itself is unchanged).
+const extensionDemandMemo = new Map();
+function getExtensionDemand(player, meta) {
   const inflationMult = getSalaryInflationMultiplier(meta?.economy ?? {});
-  const requested = inflateContract(calculateExtensionDemand(player, meta?.difficulty ?? 'Normal') ?? {}, inflationMult);
+  const key = [
+    String(player?.id), meta?.currentSeasonId ?? meta?.season ?? '', meta?.phase === 'offseason_resign' ? 'resign' : 'season',
+    player?.ovr ?? '', player?.age ?? '', player?.pos ?? '', meta?.difficulty ?? 'Normal', inflationMult,
+  ].join('|');
+  if (!extensionDemandMemo.has(key)) {
+    if (extensionDemandMemo.size > 5000) extensionDemandMemo.clear();
+    extensionDemandMemo.set(key, inflateContract(calculateExtensionDemand(player, meta?.difficulty ?? 'Normal') ?? {}, inflationMult));
+  }
+  return { ...extensionDemandMemo.get(key) };
+}
+
+function evaluateExtensionTerms({ player, team, resolvedTeamId, contract, meta }) {
+  const requested = getExtensionDemand(player, meta);
   const offeredAnnual = Number(contract?.baseAnnual ?? 0);
   const offeredYears = Number(contract?.yearsTotal ?? contract?.years ?? 0);
   const offeredGuarantee = Number(contract?.guaranteedPct ?? 0);
@@ -8740,52 +8822,140 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
   if ((team?.wins ?? 0) >= 10) reasons.push('contender status');
   if ((player.schemeFit ?? 60) < 55) reasons.push('scheme uncertainty');
 
-  const inSeason = ['regular', 'preseason', 'playoffs'].includes(ensureDynastyMeta(cache.getMeta())?.phase);
+  const base = { requested, reasons, offeredAnnual, offeredYears, offeredGuarantee, annualGap, agentResult: null };
+  const inSeason = ['regular', 'preseason', 'playoffs'].includes(meta?.phase);
   const contractPersonality = contractPersonalityModifier(player.personalityProfile ?? ensurePersonalityProfile(player));
   if (inSeason && ((player.personality?.moneyPriority ?? 0.6) > 0.75 || contractPersonality.inSeasonNegotiationPenalty > 0)) {
-    post(toUI.EXTENSION_RESPONSE, { status: 'declined', reason: 'Won\'t negotiate in-season', reasons }, id);
-    return;
+    return { ...base, status: 'declined', code: 'IN_SEASON', reason: 'Won\'t negotiate in-season' };
   }
 
   // ── Agent negotiation overlay ─────────────────────────────────────────────
-  {
-    const agentSeason   = Number(meta?.currentSeasonId ?? meta?.season ?? 0);
-    const allTeams      = cache.getAllTeams();
-    const sortedTeams   = [...allTeams].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
-    const rankIdx       = sortedTeams.findIndex(t => Number(t.id) === Number(resolvedTeamId));
-    const teamPowerRank = rankIdx >= 0 ? rankIdx + 1 : 16;
-    const agentResult   = evaluateAgentNegotiation({
-      player,
-      offer:              { salary: offeredAnnual },
-      baseFairMarketValue: Number(requested?.baseAnnual ?? 0),
-      teamContext:        { teamPowerRankPosition: teamPowerRank },
-      currentSeason:      agentSeason,
-    });
-    if (agentResult.updatedPlayer?.negotiationState !== player?.negotiationState) {
-      cache.updatePlayer(playerId, { negotiationState: agentResult.updatedPlayer.negotiationState });
-    }
-    if (!agentResult.accepted) {
-      post(toUI.EXTENSION_RESPONSE, {
-        status:       'declined',
-        reason:       agentResult.feedbackText ?? 'Agent rejected the offer',
-        reasons:      [agentResult.rationale ?? ''].filter(Boolean),
-        rejectionCode: agentResult.rejectionCode,
-        agentFeedback: agentResult.feedbackText,
-      }, id);
-      return;
-    }
+  const agentSeason   = Number(meta?.currentSeasonId ?? meta?.season ?? 0);
+  const sortedTeams   = [...cache.getAllTeams()].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
+  const rankIdx       = sortedTeams.findIndex(t => Number(t.id) === Number(resolvedTeamId));
+  const teamPowerRank = rankIdx >= 0 ? rankIdx + 1 : 16;
+  const agentResult   = evaluateAgentNegotiation({
+    player,
+    offer:              { salary: offeredAnnual },
+    baseFairMarketValue: Number(requested?.baseAnnual ?? 0),
+    teamContext:        { teamPowerRankPosition: teamPowerRank },
+    currentSeason:      agentSeason,
+  });
+  base.agentResult = agentResult;
+  if (!agentResult.accepted) {
+    return {
+      ...base,
+      status: 'declined',
+      code: agentResult.rejectionCode ?? 'AGENT_REJECTED',
+      reason: agentResult.feedbackText ?? 'Agent rejected the offer',
+      agentReasons: [agentResult.rationale ?? ''].filter(Boolean),
+    };
   }
-  // ── End agent overlay ─────────────────────────────────────────────────────
 
   if (annualGap >= -0.2 && yearsGap >= -1 && offeredGuarantee >= 0.45) {
     const newCapHit = (contract.baseAnnual || 0) + ((contract.signingBonus || 0) / (contract.yearsTotal || 1));
     const currentCapHit = player.contract ? ((player.contract.baseAnnual || 0) + ((player.contract.signingBonus || 0) / (player.contract.yearsTotal || 1))) : 0;
     const diff = newCapHit - currentCapHit;
     if (diff > (team.capRoom || 0)) {
-      post(toUI.EXTENSION_RESPONSE, { status: 'declined', reason: `Cap room short by $${diff.toFixed(1)}M`, reasons }, id);
-      return;
+      return {
+        ...base,
+        status: 'declined',
+        code: 'CAP_ROOM',
+        capHitDelta: diff,
+        reason: `Cap room short by $${(diff - (team.capRoom || 0)).toFixed(1)}M (extension adds $${diff.toFixed(1)}M, room is $${Number(team.capRoom || 0).toFixed(1)}M)`,
+      };
     }
+    return { ...base, status: 'accepted', capHitDelta: diff };
+  }
+  return { ...base, status: 'counter' };
+}
 
+// ── Handler: GET_EXTENSION_QUOTE ─────────────────────────────────────────────
+// Returns the cheapest terms (at or above the player's extension demand) that
+// evaluateExtensionTerms will accept right now, or the exact reason no terms
+// can be committed (cap room, frozen negotiations, ring-chaser refusal, …).
+async function handleGetExtensionQuote({ playerId, teamId }, id) {
+  const teamCtx = resolveTeamContext(teamId);
+  if (!teamCtx.ok) { post(toUI.ERROR, { message: teamCtx.message }, id); return; }
+  const { teamId: resolvedTeamId, team } = teamCtx;
+  const player = cache.getPlayer(playerId);
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+  if (String(player.teamId) !== String(resolvedTeamId)) {
+    post(toUI.EXTENSION_QUOTE, { playerId, canCommit: false, blockReason: `${player.name ?? 'This player'} is no longer on your roster.` }, id);
+    return;
+  }
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const requested = getExtensionDemand(player, meta);
+  const years = Math.max(1, Math.round(Number(requested?.yearsTotal ?? requested?.years ?? 2)));
+  let terms = {
+    years,
+    yearsTotal: years,
+    baseAnnual: Math.ceil(Number(requested?.baseAnnual ?? 1) * 10) / 10,
+    signingBonus: Math.round(Number(requested?.signingBonus ?? 0) * 10) / 10,
+    guaranteedPct: Math.max(0.45, Number(requested?.guaranteedPct ?? 0.5)),
+  };
+  let evaluation = null;
+  for (let step = 0; step < 80; step += 1) {
+    evaluation = evaluateExtensionTerms({ player, team, resolvedTeamId, contract: terms, meta });
+    if (evaluation.status === 'accepted') break;
+    if (evaluation.status === 'declined' && evaluation.code === 'BELOW_EXPECTED') {
+      const nextAnnual = Math.max(terms.baseAnnual + 0.1, Number(evaluation.agentResult?.expectedSalary ?? 0), terms.baseAnnual * 1.03);
+      terms = { ...terms, baseAnnual: Math.ceil(nextAnnual * 10) / 10 };
+      continue;
+    }
+    if (evaluation.status === 'counter') {
+      terms = { ...terms, baseAnnual: Math.ceil((Math.max(terms.baseAnnual, Number(requested?.baseAnnual ?? 0)) + 0.1) * 10) / 10 };
+      continue;
+    }
+    break;
+  }
+  const canCommit = evaluation?.status === 'accepted';
+  post(toUI.EXTENSION_QUOTE, {
+    playerId,
+    canCommit,
+    terms,
+    capHitDelta: evaluation?.capHitDelta ?? null,
+    capRoom: Number(team.capRoom ?? 0),
+    blockReason: canCommit ? null : (evaluation?.reason ?? 'The player will not extend right now.'),
+    blockCode: canCommit ? null : (evaluation?.code ?? null),
+  }, id);
+}
+
+async function handleExtendContract({ playerId, teamId, contract }, id) {
+  const teamCtx = resolveTeamContext(teamId);
+  if (!teamCtx.ok) { post(toUI.ERROR, { message: teamCtx.message }, id); return; }
+  const { teamId: resolvedTeamId, team } = teamCtx;
+
+  const player = cache.getPlayer(playerId);
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+
+  const meta = ensureDynastyMeta(cache.getMeta());
+  // Idempotency: a repeated confirm for terms that already committed this
+  // window must not write a second EXTEND transaction.
+  if (player.extensionDecision === 'extended' && contract
+    && Number(player.contract?.baseAnnual) === Number(contract.baseAnnual)
+    && Number(player.contract?.yearsTotal ?? player.contract?.years) === Number(contract.yearsTotal ?? contract.years)) {
+    post(toUI.EXTENSION_RESPONSE, { status: 'accepted', reason: 'Extension already committed', reasons: [], alreadyCommitted: true }, id);
+    return;
+  }
+  const evaluation = evaluateExtensionTerms({ player, team, resolvedTeamId, contract, meta });
+  const { requested, reasons, offeredAnnual, offeredYears, offeredGuarantee, annualGap } = evaluation;
+  const agentResult = evaluation.agentResult;
+  if (agentResult && agentResult.updatedPlayer?.negotiationState !== player?.negotiationState) {
+    cache.updatePlayer(playerId, { negotiationState: agentResult.updatedPlayer.negotiationState });
+  }
+  if (evaluation.status === 'declined') {
+    post(toUI.EXTENSION_RESPONSE, {
+      status:       'declined',
+      reason:       evaluation.reason,
+      reasons:      evaluation.agentReasons ?? reasons,
+      rejectionCode: agentResult && !agentResult.accepted ? agentResult.rejectionCode : evaluation.code,
+      agentFeedback: agentResult && !agentResult.accepted ? agentResult.feedbackText : undefined,
+    }, id);
+    return;
+  }
+
+  if (evaluation.status === 'accepted') {
     cache.updatePlayer(playerId, { contract, negotiationStatus: 'SIGNED', extensionDecision: 'extended' });
     recalculateTeamCap(resolvedTeamId);
     await Transactions.add({
@@ -9779,17 +9949,23 @@ async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId
 
 // ── Cap helper ────────────────────────────────────────────────────────────────
 
+/** Staff salaries the team's cap carries (see recalculateTeamCap). */
+function teamStaffPayroll(team) {
+  if (!team) return 0;
+  const staff = ensureTeamStaff(team, { year: Number(getSafeMeta()?.year ?? 2025) });
+  return Object.keys(staff).reduce((sum, key) => {
+    const member = staff?.[key];
+    if (!member || typeof member !== 'object' || !member.roleKey) return sum;
+    return sum + Number(member?.contract?.annualSalary ?? member?.annualSalary ?? 0);
+  }, 0);
+}
+
 function recalculateTeamCap(teamId, { debugReason = '' } = {}) {
   const players = cache.getPlayersByTeam(teamId);
   const team = cache.getTeam(teamId);
   if (!team) return;
 
-  const staff = ensureTeamStaff(team, { year: Number(getSafeMeta()?.year ?? 2025) });
-  const staffCap = Object.keys(staff).reduce((sum, key) => {
-    const member = staff?.[key];
-    if (!member || typeof member !== 'object' || !member.roleKey) return sum;
-    return sum + Number(member?.contract?.annualSalary ?? member?.annualSalary ?? 0);
-  }, 0);
+  const staffCap = teamStaffPayroll(team);
 
   const deadCap = Number(team.deadCap || 0);
   const deadMoneyNextYear = Number(team.deadMoneyNextYear || 0);
@@ -10325,8 +10501,14 @@ function _executeDraftPick(pickIndex, playerId, teamId) {
 async function logDraftPickTransaction(meta, pickSlot, playerIdResolved) {
   if (!meta?.currentSeasonId || !pickSlot || playerIdResolved == null) return;
   try {
-    const pid = Number(playerIdResolved);
-    if (!Number.isFinite(pid)) return;
+    // Preserve both id formats: numeric legacy ids stay numbers, opaque ids
+    // (e.g. "128whni1gwtf") stay strings. Coercing with Number() dropped every
+    // opaque-id pick, which left Draft History empty after a full auto-draft.
+    const numericPid = Number(playerIdResolved);
+    const pid = (typeof playerIdResolved === 'number' || (String(playerIdResolved).trim() !== '' && Number.isFinite(numericPid) && String(numericPid) === String(playerIdResolved).trim()))
+      ? numericPid
+      : String(playerIdResolved);
+    if (pid === '') return;
     await Transactions.add({
       type: 'DRAFT',
       seasonId: meta.currentSeasonId,
@@ -10972,7 +11154,11 @@ async function handleStartDraft(payload, id) {
     );
     return count + teamCompPicks.length;
   }, 0);
-  const classSize = (ROUNDS * teams.length) + compensatoryPickCount;
+  // Four extra prospects per team go undrafted; at the season rollover they
+  // become undrafted free agents (minimum-salary camp bodies), the league's
+  // natural source of 53-man roster depth.
+  const UNDRAFTED_PROSPECTS_PER_TEAM = 4;
+  const classSize = (ROUNDS * teams.length) + compensatoryPickCount + (UNDRAFTED_PROSPECTS_PER_TEAM * teams.length);
 
   // Build elite name set from existing players to avoid collisions
   const eliteNames = new Set(cache.getAllPlayers().filter(p => p.ovr > 80).map(p => p.name));
@@ -11902,6 +12088,139 @@ function runAiStaffCarousel(meta, teams) {
  * record and can be read by the UI via the next ROSTER_DATA response.
  * All mutations are flushed to IndexedDB before the UI is notified.
  */
+/**
+ * True when an AI extension at `newCapHit` still leaves the league minimum for
+ * every roster slot that will be empty once this window's expiring contracts
+ * run out (players under contract next season = years > 1 or re-committed).
+ */
+function aiExtensionKeepsRosterFloor(teamId, player, newCapHit) {
+  return AiLogic.extensionKeepsRosterFloor(teamId, player, newCapHit);
+}
+
+/**
+ * Apply the re-signing → free-agency contract lifecycle to every team.
+ * Returns the release plan so callers/tests can inspect what happened.
+ */
+/**
+ * An AI roster that would collapse when its expiring contracts run out
+ * re-signs its best expiring depth players with the canonical minimum-roster
+ * offer, keeping enough room to fill every other slot at the league minimum,
+ * up to 53 minus a draft allowance. Removes the re-signed rows from
+ * plan.releases. The interactive user's own decisions are never overridden;
+ * the user team is included only in headless batch mode, where it is already
+ * auto-managed.
+ */
+const DRAFT_CLASS_ROSTER_ALLOWANCE = 7;
+function retainAiDepthAtExpiry(plan, meta) {
+  const batch = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
+  const minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON;
+  const target = minimum - DRAFT_CLASS_ROSTER_ALLOWANCE;
+  const byTeam = new Map();
+  for (const row of plan.releases) {
+    const key = String(row.teamId);
+    if (!byTeam.has(key)) byTeam.set(key, []);
+    byTeam.get(key).push(row);
+  }
+  const resigned = [];
+  const kept = new Set();
+  for (const [teamKey, rows] of byTeam) {
+    const team = cache.getTeam(Number(teamKey)) ?? cache.getTeam(teamKey);
+    if (!team) continue;
+    const isUser = String(team.id) === String(meta?.userTeamId);
+    if (isUser && !batch) continue;
+    const roster = cache.getPlayersByTeam(team.id);
+    let rosterAfter = roster.length - rows.length;
+    if (rosterAfter >= target) continue;
+    const expiringIds = new Set(rows.map((r) => String(r.playerId)));
+    const expiringHit = roster
+      .filter((p) => expiringIds.has(String(p.id)))
+      .reduce((sum, p) => sum + Number(getContractCapHit(p) ?? 0), 0);
+    // Real cap (staff and dead money included), after the releases.
+    let room = AiLogic.authoritativeCapRoom(team.id) + expiringHit;
+    const candidates = rows
+      .filter((r) => r.reason !== 'let_walk')
+      .map((r) => cache.getPlayer(r.playerId))
+      .filter(Boolean)
+      .sort((a, b) => (Number(b?.ovr ?? 0) - Number(a?.ovr ?? 0)) || stableIdCompare(a?.id, b?.id));
+    for (const player of candidates) {
+      if (rosterAfter >= target) break;
+      const contract = buildMinimumRosterContract(player, team, { year: meta?.year, capRoom: room });
+      if (!contract) continue;
+      const hit = Number(getContractCapHit({ contract }) ?? 0);
+      const reserve = AiLogic.rosterFloorCapReserve(rosterAfter + 1, room, { capAtHalfRoom: false });
+      if (room - hit < reserve) continue;
+      room -= hit;
+      rosterAfter += 1;
+      kept.add(String(player.id));
+      resigned.push({ playerId: player.id, teamId: team.id, contract });
+    }
+  }
+  if (kept.size) plan.releases = plan.releases.filter((r) => !kept.has(String(r.playerId)));
+  return resigned;
+}
+
+async function executeContractExpiry(meta) {
+  const plan = planContractExpiry(cache.getAllPlayers().slice().sort((a, b) => stableIdCompare(a?.id, b?.id)));
+  const depthResigns = retainAiDepthAtExpiry(plan, meta);
+  const touchedTeams = new Set();
+  const transactionRows = [];
+  for (const row of plan.releases) {
+    cache.updatePlayer(row.playerId, {
+      teamId: null,
+      status: 'free_agent',
+      offers: [],
+      lastTeamId: row.teamId,
+      extensionDecision: null,
+      contractExpiredFromTeamId: row.teamId,
+    });
+    touchedTeams.add(row.teamId);
+    transactionRows.push({
+      type: 'CONTRACT_EXPIRED',
+      seasonId: meta?.currentSeasonId,
+      week: meta?.currentWeek ?? 0,
+      teamId: row.teamId,
+      details: { playerId: row.playerId, reason: row.reason, name: row.name, pos: row.pos, disposition: 'free_agent' },
+    });
+  }
+  for (const row of plan.decrements) {
+    cache.updatePlayer(row.playerId, { contract: row.contract });
+  }
+  for (const row of depthResigns) {
+    cache.updatePlayer(row.playerId, { contract: row.contract, negotiationStatus: 'SIGNED' });
+    touchedTeams.add(row.teamId);
+    transactionRows.push({
+      type: 'EXTEND',
+      seasonId: meta?.currentSeasonId,
+      week: meta?.currentWeek ?? 0,
+      teamId: row.teamId,
+      details: { playerId: row.playerId, contract: row.contract, source: 'ai_depth_resign' },
+    });
+  }
+  // A new decision cycle starts next offseason; clear this window's markers
+  // (re-committed contracts keep their new terms, only the marker resets).
+  for (const player of cache.getAllPlayers()) {
+    if (player?.teamId != null && player?.extensionDecision) {
+      cache.updatePlayer(player.id, { extensionDecision: null });
+    }
+  }
+  for (const teamId of touchedTeams) {
+    recalculateTeamCap(teamId);
+    ensureTeamDepthChart(teamId, { phase: cache.getPhase() });
+  }
+  if (transactionRows.length > 0) await Transactions.addBulk(transactionRows);
+  const userTeamId = meta?.userTeamId;
+  const userReleases = plan.releases.filter((r) => String(r.teamId) === String(userTeamId));
+  if (userReleases.length > 0) {
+    const names = userReleases.slice(0, 6).map((r) => r.name).filter(Boolean).join(', ');
+    const more = userReleases.length > 6 ? ` and ${userReleases.length - 6} more` : '';
+    post(toUI.NOTIFICATION, {
+      level: 'info',
+      message: `${userReleases.length} expiring contract${userReleases.length === 1 ? '' : 's'} ran out and entered free agency: ${names}${more}.`,
+    });
+  }
+  return plan;
+}
+
 async function handleAdvanceOffseason(payload, id) {
   const meta = ensureDynastyMeta(cache.getMeta());
   // Accept both new 'offseason_resign' phase and legacy 'offseason' for save compatibility.
@@ -11984,6 +12303,10 @@ async function handleAdvanceOffseason(payload, id) {
         const accepted = willPlayerAcceptAIExtension(player, offer, adjustedDemand, moraleSummary);
 
         if (!accepted) continue;
+
+        // Roster floor: after expiring contracts run out the team must still be
+        // able to fill every empty slot at the league minimum.
+        if (!aiExtensionKeepsRosterFloor(aiTeam.id, player, Number(offer.amount) + (Number(offer.signingBonus ?? 0) / Math.max(1, Number(offer.years ?? 1))))) continue;
 
         // Apply contract (immutable-style: update player fields)
         const newContract = {
@@ -12399,6 +12722,14 @@ async function handleAdvanceOffseason(payload, id) {
     );
   }
 
+  // ── Step 4a: Contract expiry (re-signing window closes) ─────────────────
+  // Executes the decisions recorded in the Re-signing Center: expiring
+  // contracts that were not extended/tagged/tendered run out and the player
+  // enters the free-agent pool (Let Walk, Decide Later and unresolved alike);
+  // every other contract that was not re-written this window ticks down one
+  // season. See src/core/contracts/contractExpiry.js for the contract.
+  await executeContractExpiry(meta);
+
   // ── Step 4b: AI Offseason Roster Cuts ────────────────────────────────────
   // AI teams with projected cap room below $15M evaluate releasing veterans
   // whose dead-cap penalty is less than their active cap hit.  Only runs for
@@ -12479,6 +12810,7 @@ async function injectAIFaBids(day) {
   // to the ledger would push it past MAX_LEDGER_ENTRIES and prune the user's
   // pending offer from the front of the list.
   const aiReservedCapByTeam = new Map(); // teamId → total $M reserved this pass
+  const aiBidCountByTeam = new Map(); // teamId → bids placed this pass (roster-floor reserve)
 
   for (const [teamId, candidates] of aiTargetMap) {
     if (Number(teamId) === userTeamId) continue;
@@ -12506,9 +12838,15 @@ async function injectAIFaBids(day) {
       const adjustedDemand = demandSnapshot.baseAnnual;
       if (!adjustedDemand || adjustedDemand <= 0) continue;
 
-      // Effective cap = team cap − AI reservations accumulated this pass
+      // Effective cap = team cap − AI reservations accumulated this pass −
+      // the league minimum for every OTHER open slot up to the 53-man floor.
+      // Without this reserve, a team emptied by expiring contracts could spend
+      // its whole cap on a few stars and be unable to field a legal roster.
       const alreadyReserved = aiReservedCapByTeam.get(Number(teamId)) ?? 0;
-      const effectiveCap = Math.max(0, Number(team.capRoom ?? 0) - alreadyReserved);
+      const bidsThisPass = aiBidCountByTeam.get(Number(teamId)) ?? 0;
+      const capAfterReservations = Math.max(0, Number(team.capRoom ?? 0) - alreadyReserved);
+      const rosterFloorReserve = AiLogic.rosterFloorCapReserve(cache.getPlayersByTeam(teamId).length + bidsThisPass + 1, capAfterReservations);
+      const effectiveCap = Math.max(0, capAfterReservations - rosterFloorReserve);
 
       const context = { posture, season, week, scheme };
       if (!shouldAITeamPursuePlayer(team, player, adjustedDemand, effectiveCap, context)) continue;
@@ -12527,6 +12865,7 @@ async function injectAIFaBids(day) {
 
       // Update in-memory cap reservation for this AI team
       aiReservedCapByTeam.set(Number(teamId), alreadyReserved + capHit);
+      aiBidCountByTeam.set(Number(teamId), bidsThisPass + 1);
 
       // Inject into player.offers only (not into the pending ledger)
       const freshPlayer = cache.getPlayer(player.id);
@@ -12615,6 +12954,210 @@ function emitFaCompetitionEvents(day, preBidPlayerIds, aiCountByPlayerId) {
       }, ...existingPulse].slice(0, 200) });
     }
   }
+}
+
+// ── Handler: FILL_ROSTER_TO_MINIMUM ──────────────────────────────────────────
+// One-click action offered when Advance refuses because the user's roster is
+// below 53: signs the cheapest fitting free agents (same canonical minimum
+// offers the AI uses) and reports every signing by name.
+async function handleFillRosterToMinimum({ teamId } = {}, id) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const resolvedTeamId = teamId ?? meta?.userTeamId;
+  if (String(resolvedTeamId) !== String(meta?.userTeamId)) {
+    post(toUI.ERROR, { message: 'Only your own roster can be filled from here.' }, id);
+    return;
+  }
+  const minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON;
+  const before = new Set(cache.getPlayersByTeam(resolvedTeamId).map((p) => String(p.id)));
+  if (before.size >= minimum) {
+    post(toUI.STATE_UPDATE, { ...buildViewState(), fillResult: { signed: [], rosterCount: before.size } }, id);
+    return;
+  }
+  await AiLogic.fillRosterToMinimumGreedy(resolvedTeamId, { minimum, source: 'user_roster_fill', veteranMinimumFallback: true });
+  if (cache.getPlayersByTeam(resolvedTeamId).length < minimum) {
+    generateUndraftedFreeAgents(minimum - cache.getPlayersByTeam(resolvedTeamId).length + 2, meta);
+    await AiLogic.fillRosterToMinimumGreedy(resolvedTeamId, { minimum, source: 'user_roster_fill', veteranMinimumFallback: true });
+  }
+  recalculateTeamCap(resolvedTeamId);
+  ensureTeamDepthChart(resolvedTeamId, { phase: cache.getPhase() });
+  const signed = cache.getPlayersByTeam(resolvedTeamId).filter((p) => !before.has(String(p.id)));
+  const rosterCount = cache.getPlayersByTeam(resolvedTeamId).length;
+  await flushDirty();
+  post(toUI.NOTIFICATION, {
+    level: rosterCount >= minimum ? 'info' : 'warn',
+    message: signed.length
+      ? `Signed ${signed.length} minimum-contract player${signed.length === 1 ? '' : 's'} (${rosterCount}/${minimum}): ${signed.map((p) => `${p.name} (${p.pos})`).join(', ')}.`
+      : `No affordable free agents fit your cap room (${rosterCount}/${minimum}). Release or restructure a contract, then retry.`,
+  });
+  post(toUI.STATE_UPDATE, { ...buildViewState(), fillResult: { signed: signed.map((p) => ({ id: p.id, name: p.name, pos: p.pos })), rosterCount } }, id);
+}
+
+// ── Undrafted free agents ────────────────────────────────────────────────────
+// Prospects still undrafted when the draft is over become free agents.
+function isCompletedDraft(meta) {
+  const draftState = meta?.draftState;
+  return !!draftState && Number(draftState.currentPickIndex ?? 0) >= Number(draftState.picks?.length ?? Infinity);
+}
+
+function releaseUndraftedProspects(meta) {
+  const draftState = meta?.draftState;
+  const draftDone = draftState && Number(draftState.currentPickIndex ?? 0) >= Number(draftState.picks?.length ?? 0);
+  if (!draftDone) return 0;
+  let released = 0;
+  for (const player of cache.getAllPlayers()) {
+    if (player?.status !== 'draft_eligible') continue;
+    cache.updatePlayer(player.id, { status: 'free_agent', teamId: null, offers: [], undraftedFreeAgent: true });
+    released += 1;
+  }
+  return released;
+}
+
+// ── AI roster floor ──────────────────────────────────────────────────────────
+// Greedy per-team fill before the exhaustive shared search, so the season
+// rollover guarantees 53 whenever the pool and cap allow it (the search alone
+// gives up on large deficits). The interactive user team is never touched.
+// The greedy + cap-managed fill above leaves at most a small residual gap;
+// cap the exhaustive search so a hopeless case fails in seconds, not minutes.
+/**
+ * Each search state re-prices the whole free-agent pool for every short team,
+ * so a large residual (after the greedy + cap-managed passes) makes the search
+ * run for minutes without a better answer. Only small residual gaps get the
+ * full budget; larger ones fail fast with the explicit 53-man message.
+ */
+function rolloverCompletionSearchBudget(includeUserTeam) {
+  const meta = cache.getMeta();
+  const minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON;
+  const short = cache.getAllTeams()
+    .filter((team) => includeUserTeam || Number(team.id) !== Number(meta?.userTeamId))
+    .map((team) => Math.max(0, minimum - cache.getPlayersByTeam(team.id).length))
+    .filter((deficit) => deficit > 0);
+  const total = short.reduce((sum, d) => sum + d, 0);
+  // null = the search's own default budget (unchanged behavior for small gaps).
+  return short.length <= 2 && total <= 4 ? null : { affordable: 3, recovery: 0 };
+}
+
+async function greedyFillUnderfilledTeams({
+  includeUserTeam = false,
+  transactionSink = null,
+  restructureProvenanceByTeam = null,
+  releasedPlayerIdsByTeam = null,
+  notify = true,
+  allowUndraftedRescue = false,
+  minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON,
+  capManagement = true,
+} = {}) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const underfilled = () => cache.getAllTeams()
+    .filter((team) => includeUserTeam || Number(team.id) !== Number(meta?.userTeamId))
+    .filter((team) => cache.getPlayersByTeam(team.id).length < minimum)
+    .sort((a, b) => stableIdCompare(a?.id, b?.id));
+  for (const team of underfilled()) {
+    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true });
+  }
+  // Cap-limited teams: let the AI cap manager create exactly the room the
+  // cheapest real completion needs (restructures before releases), then fill.
+  const shortTeams = capManagement ? underfilled() : [];
+  if (shortTeams.length > 0) await manageCapForRosterCompletion(shortTeams, {
+    minimum, includeUserTeam, transactionSink, restructureProvenanceByTeam, releasedPlayerIdsByTeam,
+  });
+  const repaired = [];
+  await finishRosterFloorFill({ underfilled, minimum, transactionSink, repaired, allowUndraftedRescue, meta });
+  if (repaired.length && notify) {
+    post(toUI.NOTIFICATION, { level: 'info', message: `Roster floor auto-repair: ${repaired.join(', ')} signed league-minimum depth to reach 53.` });
+  }
+}
+
+async function manageCapForRosterCompletion(shortTeams, {
+  minimum, includeUserTeam, transactionSink, restructureProvenanceByTeam, releasedPlayerIdsByTeam,
+}) {
+  const reserveByTeam = new Map();
+  const candidatesByTeam = new Map();
+  for (const team of shortTeams) {
+    const completion = AiLogic.cheapestRosterCompletion(team.id, { minimum });
+    // The AI cap manager projects player contracts only; the team's real cap
+    // also carries staff salaries, so they are part of the room to create.
+    if (completion.cost != null) reserveByTeam.set(team.id, completion.cost + teamStaffPayroll(team));
+    candidatesByTeam.set(team.id, completion.candidateIds);
+  }
+  await AiLogic.executeAICapManagement({
+    autoManageUserCap: includeUserTeam,
+    teamIds: shortTeams.map((team) => team.id),
+    rosterCompletionReserveByTeam: reserveByTeam,
+    rosterCompletionCandidateIdsByTeam: candidatesByTeam,
+    transactionSink,
+    restructureProvenanceByTeam,
+    releasedPlayerIdsByTeam,
+  });
+}
+
+async function finishRosterFloorFill({ underfilled, minimum, transactionSink, repaired, allowUndraftedRescue, meta }) {
+  for (const team of underfilled()) {
+    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true });
+  }
+  // Last resort: unsigned depth veterans (never elite players) accept a
+  // one-year league-minimum deal. Logged as transactions the user can see.
+  for (const team of underfilled()) {
+    const result = await AiLogic.fillRosterToMinimumGreedy(team.id, {
+      minimum, transactionSink, veteranMinimumFallback: true, source: 'roster_floor_auto_repair',
+    });
+    if (result.signed > 0) repaired.push(`${team.abbr ?? team.id} +${result.signed}`);
+  }
+  // Exhausted pool of affordable players: the league signs replacement-level
+  // street free agents. Callers enable this at free-agency close and, at the
+  // rollover, only for a draft that actually completed (without one an empty
+  // pool is a real failure and the rollover must refuse atomically).
+  const stillShort = allowUndraftedRescue ? underfilled() : [];
+  if (stillShort.length) {
+    const missing = stillShort.reduce((sum, team) => sum + Math.max(0, minimum - cache.getPlayersByTeam(team.id).length), 0);
+    const created = generateUndraftedFreeAgents(missing + stillShort.length * 2, meta);
+    for (const team of underfilled()) {
+      const result = await AiLogic.fillRosterToMinimumGreedy(team.id, {
+        minimum, transactionSink, veteranMinimumFallback: true, source: 'roster_floor_auto_repair',
+      });
+      if (result.signed > 0) repaired.push(`${team.abbr ?? team.id} +${result.signed}`);
+    }
+    if (created > 0) console.info(`[Worker] Roster floor: generated ${created} undrafted free agents for an exhausted pool.`);
+  }
+}
+
+/** Replacement-level undrafted rookies for an exhausted free-agent pool. */
+function generateUndraftedFreeAgents(count, meta) {
+  const needed = Math.max(0, Math.round(Number(count) || 0));
+  if (needed === 0) return 0;
+  const eliteNames = new Set(cache.getAllPlayers().filter((p) => p.ovr > 80).map((p) => p.name));
+  // Generate a larger class and keep its bottom end: undrafted players are the
+  // lowest-rated prospects, which the contract market prices at the minimum.
+  const pool = generateDraftClass(meta?.year, { classSize: needed * 3, eliteNames })
+    .sort((a, b) => (Number(a?.ovr ?? 0) - Number(b?.ovr ?? 0)) || stableIdCompare(a?.id, b?.id))
+    .slice(0, needed);
+  for (const p of pool) {
+    cache.setPlayer({ ...p, teamId: null, status: 'free_agent', offers: [], undraftedFreeAgent: true, trueOvr: p.ovr });
+  }
+  return pool.length;
+}
+
+// ── AI roster floor at free-agency close ─────────────────────────────────────
+async function fillAiRostersAtFreeAgencyClose() {
+  try {
+    // Before the draft, fill only to 53 minus the draft allowance: rookies take
+    // the remaining spots, and filling to 53 first would leave no cap room for
+    // their contracts. The rollover guarantees the full 53.
+    // Headless batch sims auto-manage the user team like an AI team (as the
+    // expiry depth re-sign and the rollover already do).
+    const batch = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
+    await greedyFillUnderfilledTeams({
+      includeUserTeam: batch,
+      minimum: Constants.ROSTER_LIMITS.REGULAR_SEASON - DRAFT_CLASS_ROSTER_ALLOWANCE,
+      capManagement: false,
+      // An exhausted pool of replacement-level players is refilled with
+      // street free agents so every AI team can leave free agency fillable.
+      allowUndraftedRescue: true,
+    });
+  } catch (err) {
+    console.warn('[Worker] AI roster fill at free-agency close failed (non-fatal; rollover will retry):', err?.message);
+  }
+  for (const team of cache.getAllTeams()) recalculateTeamCap(team.id);
+  validateAndRepairAllTeamDepthCharts('post-fa-roster-floor');
 }
 
 // ── Handler: ADVANCE_FREE_AGENCY_DAY ──────────────────────────────────────────
@@ -12778,6 +13321,13 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
               .join(', ');
             post(toUI.NOTIFICATION, { level: 'info', message: `Comp picks awarded for ${meta.year} draft: ${preview}${compAwards.length > 4 ? '…' : ''}.` });
         }
+        // AI teams leave free agency with a legal 53-man floor. Expiring
+        // contracts now really empty rosters, and the season rollover's
+        // shared multi-team completion search is only meant for small
+        // emergency deficits (it is combinatorial in the number of open
+        // slots). Fill one team at a time here with the same canonical
+        // minimum-contract offers (AiLogic.fillRosterToMinimumGreedy).
+        await fillAiRostersAtFreeAgencyClose();
         updates.phase = 'draft_combine';
         updates.combineInvitesLeft = 6;
         updates.combineProspectsReady = false;
@@ -13651,10 +14201,12 @@ async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSea
       }),
     });
 
+    await greedyFillUnderfilledTeams({ includeUserTeam, transactionSink: stagedTransactions, restructureProvenanceByTeam: restructureProvenance, releasedPlayerIdsByTeam, notify: false, allowUndraftedRescue: isCompletedDraft(meta) });
     let reconciliation = await AiLogic.ensureMinimumRosters({
       includeUserTeam,
       transactionSink: stagedTransactions,
       releasedPlayerIdsByTeam,
+      searchMaxStates: rolloverCompletionSearchBudget(includeUserTeam),
     });
     if (reconciliation.failures.length > 0) {
       await AiLogic.executeAICapManagement({
@@ -13670,6 +14222,7 @@ async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSea
         includeUserTeam,
         transactionSink: stagedTransactions,
         releasedPlayerIdsByTeam,
+        searchMaxStates: rolloverCompletionSearchBudget(includeUserTeam),
       });
     }
     return reconciliation;
@@ -13679,6 +14232,11 @@ async function preflightStartNewSeasonRosters({ meta, newYear, newSeason, newSea
 }
 
 async function handleStartNewSeason(payload, id) {
+  lastStartNewSeasonError = null;
+  const post = (type, data, requestId) => {
+    if (type === toUI.ERROR) lastStartNewSeasonError = data?.message ?? 'The new season could not start.';
+    return postMessageToUI(type, data, requestId);
+  };
   const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
@@ -13696,6 +14254,7 @@ async function handleStartNewSeason(payload, id) {
   const rolloverBatchSim = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
   const rolloverSnapshot = snapshotLifecyclePersistenceState();
   try {
+  releaseUndraftedProspects(meta);
   const preflight = await preflightStartNewSeasonRosters({
     meta,
     newYear,
@@ -13706,6 +14265,7 @@ async function handleStartNewSeason(payload, id) {
   });
   if (preflight.failures.length > 0) {
     const detail = preflight.failures[0];
+    restoreLifecyclePersistenceState(rolloverSnapshot);
     post(toUI.ERROR, {
       message: `Team ${detail.teamId} cannot enter preseason below the 53-player minimum (${detail.rosterCount}/53).`,
       rosterLegalityFailure: detail,
@@ -13893,10 +14453,12 @@ async function handleStartNewSeason(payload, id) {
   const rolloverTransactions = [];
   const rolloverRestructureProvenance = new Map();
   const rolloverReleasedPlayerIds = new Map();
+  await greedyFillUnderfilledTeams({ includeUserTeam: rolloverBatchSim, transactionSink: rolloverTransactions, restructureProvenanceByTeam: rolloverRestructureProvenance, releasedPlayerIdsByTeam: rolloverReleasedPlayerIds, allowUndraftedRescue: isCompletedDraft(meta) });
   let rolloverReconciliation = await AiLogic.ensureMinimumRosters({
     includeUserTeam: rolloverBatchSim,
     transactionSink: rolloverTransactions,
     releasedPlayerIdsByTeam: rolloverReleasedPlayerIds,
+    searchMaxStates: rolloverCompletionSearchBudget(rolloverBatchSim),
   });
   if (rolloverReconciliation.failures.length > 0) {
     // Only underfilled teams enter this cap-planning retry. Oversized preseason
@@ -13914,6 +14476,7 @@ async function handleStartNewSeason(payload, id) {
       includeUserTeam: rolloverBatchSim,
       transactionSink: rolloverTransactions,
       releasedPlayerIdsByTeam: rolloverReleasedPlayerIds,
+      searchMaxStates: rolloverCompletionSearchBudget(rolloverBatchSim),
     });
   }
   if (rolloverReconciliation.failures.length > 0) {
@@ -13950,11 +14513,14 @@ async function handleStartNewSeason(payload, id) {
   // A failed commit therefore leaves neither half-advanced state nor orphan
   // transaction rows, and the in-memory snapshot remains safe to retry.
   if (isNflStructure(teamDefs)) assertNflSchedule(cache.getMeta().schedule, teamDefs, scheduleInputs);
+  // Rows held during an atomic transition (auto-draft picks, draft news)
+  // commit in this same league transaction as the rollover itself.
+  const heldDirectWrites = takeStagedDirectWrites();
   await flushDirty(true, {
-    transactions: rolloverTransactions,
+    transactions: [...heldDirectWrites.transactions, ...rolloverTransactions],
     seasons: stagedArchive.seasons,
     archivedPlayerStats: stagedArchive.playerStats,
-    news: stagedArchive.news,
+    news: [...heldDirectWrites.news, ...stagedArchive.news],
     deferManifestUntilAfterCommit: true,
   });
   } catch (error) {
@@ -14887,6 +15453,8 @@ async function handleMessage(event) {
       case toWorker.INITIATE_TRADE_BLOCK:    return await handleInitiateTradeBlock(payload, id);
       case toWorker.REMOVE_FROM_TRADE_BLOCK: return await handleRemoveFromTradeBlock(payload, id);
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
+      case toWorker.GET_EXTENSION_QUOTE: return await handleGetExtensionQuote(payload, id);
+      case toWorker.FILL_ROSTER_TO_MINIMUM: return await handleFillRosterToMinimum(payload, id);
       case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);
       case toWorker.RESTRUCTURE_CONTRACT:     return await handleRestructureContract(payload, id);
       case toWorker.GET_RESTRUCTURE_SUMMARY:  return handleGetRestructureSummary(payload, id);

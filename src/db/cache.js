@@ -247,6 +247,8 @@ export const cache = {
 
   getMeta:           ()    => _meta,
   setMeta:           (m)   => { _meta = { ..._meta, ...m }; _dirty.meta = true; },
+  /** Remove one top-level meta field (used to restore a pre-transition meta exactly). */
+  deleteMetaKey:     (key) => { if (_meta && Object.prototype.hasOwnProperty.call(_meta, key)) { const { [key]: _removed, ...rest } = _meta; _meta = rest; _dirty.meta = true; } },
   getCurrentSeasonId:()    => _meta?.currentSeasonId ?? null,
   getCurrentWeek:    ()    => _meta?.currentWeek ?? 1,
   getPhase:          ()    => _meta?.phase ?? 'regular',

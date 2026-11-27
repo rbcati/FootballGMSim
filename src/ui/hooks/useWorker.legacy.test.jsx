@@ -46,3 +46,30 @@ it('exposes intent-specific Legacy actions and refreshes TeamHub from worker upd
   expect(hook.state.league.retiredNumbers).toEqual([12]);
   expect(hook.state.busy).toBe(false);
 });
+
+it('applies back-to-back STATE_UPDATE deltas cumulatively (no stale-ref revert)', () => {
+  let worker;
+  class TestWorker {
+    constructor() { worker = this; }
+    postMessage = vi.fn();
+    terminate = vi.fn();
+    emit(type, payload) { this.onmessage({ data: { type, payload } }); }
+  }
+  vi.stubGlobal('Worker', TestWorker);
+  let hook;
+  function Harness() { hook = useWorker(); return null; }
+  render(<Harness />);
+  const player = { id: 'p1', name: 'Darnell Brown', contract: { years: 1, baseAnnual: 8.8 }, extensionDecision: null };
+  const league = { activeLeagueId: 'save_slot_1', franchiseGenerationId: 'g', phase: 'offseason_resign', year: 2026, week: 0, userTeamId: 0, teams: [{ id: 0, abbr: 'BUF', capUsed: 200, roster: [player] }], franchiseChronicle: [] };
+  act(() => worker.emit(toUI.FULL_STATE, league));
+  const extended = { ...league, teams: [{ id: 0, abbr: 'BUF', capUsed: 201, roster: [{ ...player, contract: { years: 1, baseAnnual: 9.6 }, extensionDecision: 'extended' }] }] };
+  const chronicled = { ...extended, franchiseChronicle: [{ id: 'c1', headline: 'Darnell Brown signs extension' }] };
+  // Both deltas arrive before React re-renders.
+  act(() => {
+    worker.emit(toUI.STATE_UPDATE, serializeLeagueDelta(extended, league).delta);
+    worker.emit(toUI.STATE_UPDATE, serializeLeagueDelta(chronicled, extended).delta);
+  });
+  const roster = hook.state.league.teams[0].roster;
+  expect(roster[0]).toMatchObject({ extensionDecision: 'extended', contract: { baseAnnual: 9.6 } });
+  expect(hook.state.league.franchiseChronicle).toHaveLength(1);
+});
