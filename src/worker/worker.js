@@ -12094,16 +12094,7 @@ function runAiStaffCarousel(meta, teams) {
  * run out (players under contract next season = years > 1 or re-committed).
  */
 function aiExtensionKeepsRosterFloor(teamId, player, newCapHit) {
-  const team = cache.getTeam(teamId);
-  if (!team) return false;
-  const committedNextSeason = cache.getPlayersByTeam(teamId).filter((p) => {
-    if (String(p.id) === String(player?.id)) return false;
-    const years = Number(p?.contract?.years ?? p?.contract?.yearsRemaining ?? 0);
-    return years > 1 || ['extended', 'tagged', 'franchise_tagged', 'rfa_tendered'].includes(String(p?.extensionDecision ?? ''));
-  }).length;
-  const reserve = AiLogic.rosterFloorCapReserve(committedNextSeason + 1, team.capRoom, { capAtHalfRoom: false });
-  const currentHit = Number(getContractCapHit(player) ?? 0);
-  return Number(team.capRoom ?? 0) - (Number(newCapHit) - currentHit) >= reserve - 0.001;
+  return AiLogic.extensionKeepsRosterFloor(teamId, player, newCapHit);
 }
 
 /**
@@ -12124,7 +12115,6 @@ function retainAiDepthAtExpiry(plan, meta) {
   const batch = typeof globalThis !== 'undefined' && !!globalThis.__FOOTBALL_GM_LITE_BATCH_SIM__;
   const minimum = Constants.ROSTER_LIMITS.REGULAR_SEASON;
   const target = minimum - DRAFT_CLASS_ROSTER_ALLOWANCE;
-  const minHit = Number(Constants.SALARY_CAP.MIN_CONTRACT ?? 0.75);
   const byTeam = new Map();
   for (const row of plan.releases) {
     const key = String(row.teamId);
@@ -12145,7 +12135,8 @@ function retainAiDepthAtExpiry(plan, meta) {
     const expiringHit = roster
       .filter((p) => expiringIds.has(String(p.id)))
       .reduce((sum, p) => sum + Number(getContractCapHit(p) ?? 0), 0);
-    let room = Number(team.capRoom ?? 0) + expiringHit;
+    // Real cap (staff and dead money included), after the releases.
+    let room = AiLogic.authoritativeCapRoom(team.id) + expiringHit;
     const candidates = rows
       .filter((r) => r.reason !== 'let_walk')
       .map((r) => cache.getPlayer(r.playerId))
@@ -12156,7 +12147,7 @@ function retainAiDepthAtExpiry(plan, meta) {
       const contract = buildMinimumRosterContract(player, team, { year: meta?.year, capRoom: room });
       if (!contract) continue;
       const hit = Number(getContractCapHit({ contract }) ?? 0);
-      const reserve = Math.max(0, minimum - (rosterAfter + 1)) * minHit;
+      const reserve = AiLogic.rosterFloorCapReserve(rosterAfter + 1, room, { capAtHalfRoom: false });
       if (room - hit < reserve) continue;
       room -= hit;
       rosterAfter += 1;
@@ -13061,7 +13052,7 @@ async function greedyFillUnderfilledTeams({
     .filter((team) => cache.getPlayersByTeam(team.id).length < minimum)
     .sort((a, b) => stableIdCompare(a?.id, b?.id));
   for (const team of underfilled()) {
-    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true, capCommittedOutsideRoster: teamStaffPayroll(team) });
+    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true });
   }
   // Cap-limited teams: let the AI cap manager create exactly the room the
   // cheapest real completion needs (restructures before releases), then fill.
@@ -13086,7 +13077,7 @@ async function greedyFillUnderfilledTeams({
     releasedPlayerIdsByTeam,
   });
   for (const team of underfilled()) {
-    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true, capCommittedOutsideRoster: teamStaffPayroll(team) });
+    await AiLogic.fillRosterToMinimumGreedy(team.id, { minimum, transactionSink, veteranMinimumFallback: true });
   }
   // Last resort: unsigned depth veterans (never elite players) accept a
   // one-year league-minimum deal. Logged as transactions the user can see.
@@ -13094,7 +13085,6 @@ async function greedyFillUnderfilledTeams({
   for (const team of underfilled()) {
     const result = await AiLogic.fillRosterToMinimumGreedy(team.id, {
       minimum, transactionSink, veteranMinimumFallback: true, source: 'roster_floor_auto_repair',
-      capCommittedOutsideRoster: teamStaffPayroll(team),
     });
     if (result.signed > 0) repaired.push(`${team.abbr ?? team.id} +${result.signed}`);
   }
@@ -13110,7 +13100,6 @@ async function greedyFillUnderfilledTeams({
     for (const team of underfilled()) {
       const result = await AiLogic.fillRosterToMinimumGreedy(team.id, {
         minimum, transactionSink, veteranMinimumFallback: true, source: 'roster_floor_auto_repair',
-        capCommittedOutsideRoster: teamStaffPayroll(team),
       });
       if (result.signed > 0) repaired.push(`${team.abbr ?? team.id} +${result.signed}`);
     }

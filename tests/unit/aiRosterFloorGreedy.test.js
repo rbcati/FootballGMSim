@@ -83,10 +83,10 @@ describe('AiLogic.fillRosterToMinimumGreedy', () => {
 
   it('rosterFloorCapReserve keeps the minimum for open slots, capped at half the room', () => {
     expect(AiLogic.rosterFloorCapReserve(53, 40)).toBe(0);
-    expect(AiLogic.rosterFloorCapReserve(43, 100)).toBeCloseTo(10 * 0.75, 5);
+    expect(AiLogic.rosterFloorCapReserve(43, 100)).toBeCloseTo(10 * 0.8, 5);
     expect(AiLogic.rosterFloorCapReserve(1, 30)).toBe(15);
     expect(AiLogic.rosterFloorCapReserve(20, -5)).toBe(0);
     // At acceptance the full reserve applies regardless of current room.
-    expect(AiLogic.rosterFloorCapReserve(1, 30, { capAtHalfRoom: false })).toBeCloseTo(52 * 0.75, 5);
+    expect(AiLogic.rosterFloorCapReserve(1, 30, { capAtHalfRoom: false })).toBeCloseTo(52 * 0.8, 5);
   });
 });
