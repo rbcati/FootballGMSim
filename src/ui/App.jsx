@@ -640,6 +640,13 @@ function AppContent() {
   // Show a PostGameSummary overlay so the user sees the final score.
   useEffect(() => {
     if (simulating) return;
+    // A weekly briefing belongs to a game week. Once the season has moved on
+    // (the Super Bowl advance flips straight to offseason_resign, whose final
+    // score the Season Complete splash shows), never open one or keep it open.
+    if (!isWeeklyResultPhase) {
+      setSkipGameSummary(null);
+      return;
+    }
     if (!Array.isArray(lastResults) || lastResults.length === 0) return;
     if (userGameLogs) return; // watch mode handles its own PostGameScreen
     if (postGameResult) return; // watch-mode overlay already up
@@ -738,7 +745,7 @@ function AppContent() {
       });
     };
     showBriefing();
-  }, [simulating, lastResults, lastSimWeek, userGameLogs, postGameResult, league, actions.getBoxScore]);
+  }, [simulating, isWeeklyResultPhase, lastResults, lastSimWeek, userGameLogs, postGameResult, league, actions.getBoxScore]);
 
   // ── Auto-dismiss routine info notices ─────────────────────────────────────
   // Post-sim info notices ("Weekly simulation ran…", "development updated…")
